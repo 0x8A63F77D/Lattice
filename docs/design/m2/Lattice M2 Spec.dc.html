@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/radius.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/shadows.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/motion.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/base.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/icons.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/styles.css">
+  <script src="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/_ds_bundle.js"></script>
+  <style>
+    body{margin:0;background:#f0eee9;font-family:"Segoe UI",system-ui,sans-serif}
+    .dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+    .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 20px}
+    .dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1a1a1a;color:#fff;border-radius:4px;text-decoration:none}
+    .dv-tname{font:600 13px/1.2 "Segoe UI",system-ui,sans-serif;color:#1a1a1a}
+    .dv-opts{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
+    .dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+    .dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1a1a1a;border-radius:5px;text-decoration:none}
+    .dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 "Segoe UI",system-ui,sans-serif;color:rgba(0,0,0,.55)}
+    .dv-card{max-width:100%;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden}
+    .dv-opt:target .dv-oid{background:#2a78d6;color:#fff}
+    .dv-next{margin:22px 0 0;font:12px/1.5 "Segoe UI",system-ui,sans-serif;color:rgba(0,0,0,.5)}
+    .an{width:1180px;max-width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:8px 20px;padding:12px 14px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;font:12px/1.55 "Segoe UI",system-ui,sans-serif;color:#3a3a3a}
+    .an b{color:#111}
+    .an .ctl{font:600 10.5px ui-monospace,Menlo,monospace;color:#0F6CBD;background:#EBF3FC;border-radius:3px;padding:1px 5px;white-space:nowrap}
+  </style>
+</helmet>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">其余视图 — 全部基于 <a class="dv-oid" href="#1c">1c</a> shell:Projects · Transfers · Event log(合并流 + Host 列)· Settings</span></div>
+<div class="dv-opts">
+
+<!-- ═══════ 2a Projects ═══════ -->
+<div class="dv-opt" id="2a">
+  <div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a>Projects 视图 — 密度优先的行式布局(非卡片);All hosts 聚合按项目合并,展开显示各主机明细</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:520px;background:#FAFAFA">
+      <div style="flex:none;width:260px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_task_list_square_ltr_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Tasks</span><span style="font-size:12px;color:#616161">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_grid_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Transfers</span><span style="font-size:12px;color:#616161">2</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="height:1px;background:#E0E0E0;margin:10px 4px"></div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;padding:4px 12px 6px">Hosts</div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#EBF3FC;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i><div style="flex:1"><div style="font:600 13px 'Segoe UI',sans-serif;color:#0F548C">All hosts</div><div style="font-size:11px;color:#616161">3 of 5 connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:11px;color:#616161">Connected · 24 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1"><div style="font-size:13px;color:#242424">mini-01</div><div style="font-size:11px;color:#616161">Connected · 11 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#B85C00"></i><div style="flex:1"><div style="font-size:13px;color:#242424">nas-box</div><div style="font-size:11px;color:#B85C00">Retrying in 12s</div></div></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-right:8px">Projects</span>
+          <div style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:4px;font:600 13px 'Segoe UI',sans-serif;color:#BDBDBD"><i class="icon-ic_fluent_pause_16_regular" style="font-size:16px"></i>Suspend project</div>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:#616161">Updated 3s ago</span>
+          <i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+        </div>
+        <div style="flex:1;background:#fff;padding:0 12px">
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 8px">
+            <span></span><span>Project</span><span>Hosts</span><span>Resource share</span><span>Avg credit <i class="icon-ic_fluent_arrow_sort_down_16_regular" style="font-size:11px;color:#242424"></i></span><span>Total credit</span><span>Status</span>
+          </div>
+          <!-- expanded row -->
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:40px;align-items:center;font-size:14px;color:#242424;padding:0 8px;background:#F5F5F5">
+            <i class="icon-ic_fluent_chevron_down_16_regular" style="font-size:12px;color:#616161"></i>
+            <span style="font-weight:600">Einstein@Home</span>
+            <span style="color:#616161">3 hosts</span>
+            <span style="font-size:12px;color:#616161">Varies · 50–100</span>
+            <span style="font-variant-numeric:tabular-nums">12,480</span><span style="font-variant-numeric:tabular-nums">8,412,930</span>
+            <span style="display:flex;align-items:center;gap:6px;min-width:0;font-size:12px;color:#424242"><i class="icon-ic_fluent_more_horizontal_16_regular" style="font-size:14px;color:#616161;flex:none"></i><span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Mixed · 1 suspended · 1 no new tasks</span></span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:32px;align-items:center;font-size:12px;color:#616161;padding:0 8px;background:#FAFAFA;border-bottom:1px solid #F0F0F0">
+            <span></span><span style="padding-left:20px">tr-3990x</span><span>18 tasks</span><span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:50%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:11px;font-variant-numeric:tabular-nums">100</span></span><span style="font-variant-numeric:tabular-nums">9,120</span><span style="font-variant-numeric:tabular-nums">6,204,112</span><span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_checkmark_circle_16_regular" style="font-size:13px;color:#107C10"></i>Active</span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:32px;align-items:center;font-size:12px;color:#616161;padding:0 8px;background:#FAFAFA;border-bottom:1px solid #F0F0F0">
+            <span></span><span style="padding-left:20px">mini-01</span><span>4 tasks</span><span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:50%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:11px;font-variant-numeric:tabular-nums">100</span></span><span style="font-variant-numeric:tabular-nums">2,140</span><span style="font-variant-numeric:tabular-nums">1,411,559</span><span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_pause_16_regular" style="font-size:13px;color:#616161"></i>Suspended</span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:32px;align-items:center;font-size:12px;color:#616161;padding:0 8px;background:#FAFAFA;border-bottom:1px solid #F0F0F0">
+            <span></span><span style="padding-left:20px">mbair-m2</span><span>2 tasks</span><span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:25%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:11px;font-variant-numeric:tabular-nums">50</span></span><span style="font-variant-numeric:tabular-nums">1,220</span><span style="font-variant-numeric:tabular-nums">797,259</span><span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_hand_right_16_regular" style="font-size:13px;color:#616161"></i>No new tasks</span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:40px;align-items:center;font-size:14px;color:#242424;padding:0 8px;border-bottom:1px solid #F0F0F0">
+            <i class="icon-ic_fluent_chevron_right_16_regular" style="font-size:12px;color:#616161"></i>
+            <span style="font-weight:600">Rosetta@home</span>
+            <span style="color:#616161">2 hosts</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:25%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">50</span></span>
+            <span style="font-variant-numeric:tabular-nums">4,861</span><span style="font-variant-numeric:tabular-nums">2,092,441</span>
+            <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:#424242"><i class="icon-ic_fluent_checkmark_circle_16_regular" style="font-size:14px;color:#107C10"></i>Active on all hosts</span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:40px;align-items:center;font-size:14px;color:#242424;padding:0 8px;border-bottom:1px solid #F0F0F0">
+            <i class="icon-ic_fluent_chevron_right_16_regular" style="font-size:12px;color:#616161"></i>
+            <span style="font-weight:600">World Community Grid</span>
+            <span style="color:#616161">2 hosts</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:25%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">50</span></span>
+            <span style="font-variant-numeric:tabular-nums">3,004</span><span style="font-variant-numeric:tabular-nums">5,310,882</span>
+            <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:#424242"><i class="icon-ic_fluent_pause_16_regular" style="font-size:14px;color:#616161"></i>Suspended · 1/2 hosts</span>
+          </div>
+          <div style="display:grid;grid-template-columns:24px 200px 110px 140px 100px 110px 1fr;height:40px;align-items:center;font-size:14px;color:#242424;padding:0 8px;border-bottom:1px solid #F0F0F0">
+            <i class="icon-ic_fluent_chevron_right_16_regular" style="font-size:12px;color:#616161"></i>
+            <span style="font-weight:600">MilkyWay@home</span>
+            <span style="color:#616161">1 host</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:64px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:13%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">25</span></span>
+            <span style="font-variant-numeric:tabular-nums">912</span><span style="font-variant-numeric:tabular-nums">633,180</span>
+            <span style="display:flex;align-items:center;gap:6px;white-space:nowrap;font-size:12px;color:#424242"><i class="icon-ic_fluent_hand_right_16_regular" style="font-size:14px;color:#616161"></i>No new tasks</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;height:28px;padding:0 16px;border-top:1px solid #E0E0E0;background:#FAFAFA;font-size:12px;color:#616161">
+          <span>4 projects across 3 reachable hosts</span><div style="flex:1"></div><span>Polling every 5s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>结构</b> → 主行 = 项目聚合(跨主机合并,MasterUrl 为键);chevron 展开 → 该项目在各主机的明细子行(RAC / 总分 / 任务数)。实现为 <span class="ctl">DataGrid 分层行</span> 或 <span class="ctl">Expander</span> 列表;数据源自 get_state 的 Project 记录(UserTotalCredit / UserExpavgCredit / HostTotalCredit / ResourceShare)</div>
+    <div><b>Resource share 与 Status 都是主机级事实</b>,只在子行呈现条形/图标;聚合主行仅做汇总:份额各主机一致时显示单值 + 条形(如 Rosetta),不一致时显示 "Varies · min–max" 文本(如 Einstein,点开看明细);状态汇总为计数文案("Suspended · 1/2 hosts",单行不折行),具体哪台看子行。Status 呈现规则:<b>主行与子行统一图标 + 文字,不用胶囊</b>,状态文字一律 12px 辅助字号。聚合三档:各主机一致 → "Active on all hosts";仅一种偏离 → "Suspended · 1/2 hosts";多种混合 → "Mixed · 1 suspended · 1 no new tasks"(more 图标,截断加 tooltip,展开子行看明细)。Suspended / No new tasks 用中性图标(配置状态不是故障,不用警示色)。默认排序 Avg credit ↓</div>
+    <div><b>单主机作用域</b>:隐藏 Hosts 列与子行,直接显示该主机数值。空态:"No projects attached — attach via the BOINC client on the host"(M2 只读,不提供 attach)</div>
+  </div>
+</div>
+
+<!-- ═══════ 2b Transfers ═══════ -->
+<div class="dv-opt" id="2b">
+  <div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a>Transfers 视图 — 活动传输 + 重试/卡滞状态;空态见 <a class="dv-oid" href="#1e">1e</a>(本视图最常见的状态)</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:400px;background:#FAFAFA">
+      <div style="flex:none;width:260px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_task_list_square_ltr_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Tasks</span><span style="font-size:12px;color:#616161">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_arrow_swap_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif;flex:1">Transfers</span><span style="font-size:12px;color:#616161">3</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="height:1px;background:#E0E0E0;margin:10px 4px"></div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;padding:4px 12px 6px">Hosts</div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#EBF3FC;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i><div style="flex:1"><div style="font:600 13px 'Segoe UI',sans-serif;color:#0F548C">All hosts</div><div style="font-size:11px;color:#616161">3 of 5 connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:11px;color:#616161">Connected</div></div></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-right:8px">Transfers</span>
+          <div style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:4px;font:600 13px 'Segoe UI',sans-serif;color:#BDBDBD"><i class="icon-ic_fluent_arrow_clockwise_16_regular" style="font-size:16px"></i>Retry now</div>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:#616161">Updated 3s ago</span>
+          <i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+        </div>
+        <div style="flex:1;background:#fff;padding:0 12px">
+          <div style="display:grid;grid-template-columns:1fr 140px 80px 190px 90px 210px 80px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 8px">
+            <span>File</span><span>Project</span><span>Direction</span><span>Progress</span><span>Speed</span><span>Status</span><span>Host</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 140px 80px 190px 90px 210px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_..._1_r1859038947_0</span><span>Einstein@Home</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_arrow_upload_16_regular" style="font-size:14px;color:#0F6CBD"></i>Up</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:66%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161;font-variant-numeric:tabular-nums">34.2 / 51.7 MB</span></span>
+            <span style="font-variant-numeric:tabular-nums">2.1 MB/s</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_arrow_sync_16_regular" style="font-size:13px;color:#107C10"></i>Active</span><span style="color:#616161">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 140px 80px 190px 90px 210px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px;background:#FFF9F5">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">rb_07_02_25__auto_flu_..._318_0_r3_0</span><span>Rosetta@home</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_arrow_upload_16_regular" style="font-size:14px;color:#0F6CBD"></i>Up</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:8%;height:100%;border-radius:2px;background:#616161"></span></span><span style="font-size:12px;color:#616161;font-variant-numeric:tabular-nums">0.9 / 11.4 MB</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span>
+            <span style="display:flex;align-items:center;gap:6px;color:#BC4B09;font-weight:600"><i class="icon-ic_fluent_arrow_clockwise_16_regular" style="font-size:13px"></i>Retry in 02:41 (attempt 3)</span><span style="color:#616161">mbair-m2</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 140px 80px 190px 90px 210px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">MCM1_0221660_3391.txt</span><span>WCG</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_arrow_download_16_regular" style="font-size:14px;color:#0F6CBD"></i>Down</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161;font-variant-numeric:tabular-nums">0 / 2.3 MB</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:13px;color:#616161"></i>Queued</span><span style="color:#616161">mini-01</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;height:28px;padding:0 16px;border-top:1px solid #E0E0E0;background:#FAFAFA;font-size:12px;color:#616161">
+          <span>3 transfers · 1 active · 1 retrying · 1 queued</span><div style="flex:1"></div><span>Polling every 5s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>行状态</b>:Active = success 同步图标 + 实时速度;Retrying = warning 行 tint + 倒计时 mm:ss + attempt 计数(每秒更新,同 <a class="dv-oid" href="#1e">1e</a> 主机重试模式);Queued = 中性时钟。progress 文本用 "已传 / 总量",比裸百分比对传输更有用</div>
+    <div><b>命令栏</b>:"Retry now" 灰显占位(M3 控制动作)。空态(最常见)= <a class="dv-oid" href="#1e">1e</a> 的居中空态,导航项计数徽标归零时消失</div>
+    <div><b>控件</b> → <span class="ctl">DataGrid</span> 同 Tasks;File 列 1fr 截断 + tooltip。传输完成的行淡出移除(200ms fade,<span class="ctl">motion curve accelerate</span>)</div>
+  </div>
+</div>
+
+<!-- ═══════ 2c Event log ═══════ -->
+<div class="dv-opt" id="2c">
+  <div class="dv-olabel"><a class="dv-oid" href="#2c">2c</a>Event log — 跟随左栏主机作用域;All hosts 为合并流 + Host 列;优先级过滤 + 跟随滚动;消息列 Consolas 等宽</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:440px;background:#FAFAFA">
+      <div style="flex:none;width:260px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_task_list_square_ltr_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Tasks</span><span style="font-size:12px;color:#616161">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Transfers</span><span style="font-size:12px;color:#616161">2</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_document_text_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="height:1px;background:#E0E0E0;margin:10px 4px"></div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;padding:4px 12px 6px">Hosts</div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#EBF3FC;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i><div style="flex:1"><div style="font:600 13px 'Segoe UI',sans-serif;color:#0F548C">All hosts</div><div style="font-size:11px;color:#616161">3 of 5 connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:11px;color:#616161">Connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#C50F1F"></i><div style="flex:1"><div style="font-size:13px;color:#242424">office-pc</div><div style="font-size:11px;color:#C50F1F">Unreachable</div></div></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-right:8px">Event log</span>
+          <span style="font-size:12px;color:#616161">All hosts · merged stream</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid #F0F0F0;background:#fff">
+          <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:#EBF3FC;border:1px solid #B4D6FA;font-size:12px;color:#0F548C"><i class="icon-ic_fluent_checkmark_16_regular" style="font-size:12px"></i>Info</div>
+          <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:#EBF3FC;border:1px solid #B4D6FA;font-size:12px;color:#0F548C"><i class="icon-ic_fluent_checkmark_16_regular" style="font-size:12px"></i>Warning</div>
+          <div style="display:flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;background:#EBF3FC;border:1px solid #B4D6FA;font-size:12px;color:#0F548C"><i class="icon-ic_fluent_checkmark_16_regular" style="font-size:12px"></i>Error</div>
+          <div style="display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:12px;color:#616161;width:200px"><i class="icon-ic_fluent_search_16_regular" style="font-size:13px"></i>Search messages</div>
+          <div style="flex:1"></div>
+          <div style="display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:4px;background:#EBF3FC;font:600 12px 'Segoe UI',sans-serif;color:#0F548C"><i class="icon-ic_fluent_arrow_down_16_regular" style="font-size:13px"></i>Following</div>
+          <i class="icon-ic_fluent_copy_20_regular" style="font-size:17px;color:#616161;padding:5px"></i>
+        </div>
+        <div style="flex:1;background:#fff;padding:4px 12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:128px 84px 140px 20px 1fr;height:26px;align-items:center;padding:0 8px;font-size:12px;border-bottom:1px solid #FAFAFA">
+            <span style="font-family:Consolas,ui-monospace,monospace;color:#616161">07-04 14:32:08</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tr-3990x</span><span style="color:#616161">Einstein@Home</span><i class="icon-ic_fluent_info_16_regular" style="font-size:13px;color:#616161"></i><span style="font-family:Consolas,ui-monospace,monospace;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Computation for task LATeah4021L08_1156 finished</span>
+          </div>
+          <div style="display:grid;grid-template-columns:128px 84px 140px 20px 1fr;height:26px;align-items:center;padding:0 8px;font-size:12px;border-bottom:1px solid #FAFAFA">
+            <span style="font-family:Consolas,ui-monospace,monospace;color:#616161">07-04 14:32:09</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tr-3990x</span><span style="color:#616161">Einstein@Home</span><i class="icon-ic_fluent_info_16_regular" style="font-size:13px;color:#616161"></i><span style="font-family:Consolas,ui-monospace,monospace;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Started upload of LATeah4021L08_1156.0_..._0_r1859038947_0</span>
+          </div>
+          <div style="display:grid;grid-template-columns:128px 84px 140px 20px 1fr;height:26px;align-items:center;padding:0 8px;font-size:12px;border-bottom:1px solid #FAFAFA;background:#FFF9F5">
+            <span style="font-family:Consolas,ui-monospace,monospace;color:#616161">07-04 14:30:44</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">mbair-m2</span><span style="color:#616161">Rosetta@home</span><i class="icon-ic_fluent_warning_16_filled" style="font-size:13px;color:#BC4B09"></i><span style="font-family:Consolas,ui-monospace,monospace;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Temporarily failed upload of rb_07_02_25_..._318_0_r3_0: transient HTTP error</span>
+          </div>
+          <div style="display:grid;grid-template-columns:128px 84px 140px 20px 1fr;height:26px;align-items:center;padding:0 8px;font-size:12px;border-bottom:1px solid #FAFAFA;background:#FDF3F4">
+            <span style="font-family:Consolas,ui-monospace,monospace;color:#616161">07-04 14:28:12</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">mini-01</span><span style="color:#616161">—</span><i class="icon-ic_fluent_error_circle_16_filled" style="font-size:13px;color:#C50F1F"></i><span style="font-family:Consolas,ui-monospace,monospace;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Task de_modfit_84_..._1520210_0 exited with zero status but no 'finished' file</span>
+          </div>
+          <div style="display:grid;grid-template-columns:128px 84px 140px 20px 1fr;height:26px;align-items:center;padding:0 8px;font-size:12px;border-bottom:1px solid #FAFAFA">
+            <span style="font-family:Consolas,ui-monospace,monospace;color:#616161">07-04 14:25:03</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">mini-01</span><span style="color:#616161">WCG</span><i class="icon-ic_fluent_info_16_regular" style="font-size:13px;color:#616161"></i><span style="font-family:Consolas,ui-monospace,monospace;color:#242424;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Scheduler request completed: got 2 new tasks</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px;height:28px;padding:0 16px;border-top:1px solid #E0E0E0;background:#FAFAFA;font-size:12px;color:#616161">
+          <span>412 messages · 3 reachable hosts · showing all priorities</span><div style="flex:1"></div><span>Following live</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>作用域</b>:与其他视图一致,<b>由左栏 Hosts 区统一切换</b>,不做视图内的主机 Tab(避免双重导航)。All hosts = 按时间合并的单一流 + 独立 <b>Host 列</b>(84px);选中单主机时隐藏 Host 列,标题副文本显示当前主机名。未读 error/warning 汇总仍走导航项 <span class="ctl">InfoBadge</span></div>
+    <div><b>过滤</b>:Info/Warning/Error 三个可切换 pill(选中 = brand 淡底,类 <span class="ctl">ToggleButton</span>)+ 搜索框。"Following" = 自动滚到最新(类终端 tail),用户向上滚动即暂停并变为 "Resume following" 按钮</div>
+    <div><b>行</b>:26px,时间戳 + 消息用 <b>Consolas 等宽 12px</b>(BOINC 消息本质是日志文本);Warning/Error 行加 tint 底 + filled 图标。MessagePriority 枚举映射:Info=1 中性 / UserAlert=2 warning / InternalError=3 danger。虚拟化列表,保留最近 5,000 条/主机</div>
+  </div>
+</div>
+
+<!-- ═══════ 2d Settings ═══════ -->
+<div class="dv-opt" id="2d">
+  <div class="dv-olabel"><a class="dv-oid" href="#2d">2d</a>Settings — SettingsExpander 主机管理 + 轮询间隔;右侧为 Add host 对话框(含 auth 失败态)</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:520px;background:#FAFAFA">
+      <div style="flex:none;width:260px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_task_list_square_ltr_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Tasks</span><span style="font-size:12px;color:#616161">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Transfers</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;color:#242424"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Event log</span></div>
+        <div style="flex:1"></div>
+        <div style="height:1px;background:#E0E0E0;margin:8px 4px"></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_settings_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif">Settings</span></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;gap:24px;padding:16px 24px;overflow:hidden">
+        <div style="flex:1;min-width:0;max-width:640px">
+          <div style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-bottom:14px">Settings</div>
+          <div style="display:flex;align-items:center;margin-bottom:8px"><span style="font:600 13px 'Segoe UI',sans-serif;color:#242424;flex:1">Hosts</span><div style="height:28px;padding:0 12px;border-radius:4px;background:#0F6CBD;color:#fff;font:600 12px/28px 'Segoe UI',sans-serif;display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_add_16_regular" style="font-size:13px"></i>Add host</div></div>
+          <!-- collapsed host -->
+          <div style="background:#fff;border:1px solid #E0E0E0;border-radius:6px;margin-bottom:6px;display:flex;align-items:center;gap:12px;padding:12px 14px">
+            <i class="icon-ic_fluent_server_20_regular" style="font-size:19px;color:#616161"></i>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:12px;color:#616161">192.168.1.40:31416 · <span style="color:#107C10">Connected</span></div></div>
+            <i class="icon-ic_fluent_chevron_down_16_regular" style="font-size:13px;color:#616161"></i>
+          </div>
+          <!-- expanded host -->
+          <div style="background:#fff;border:1px solid #E0E0E0;border-radius:6px;margin-bottom:6px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #F0F0F0">
+              <i class="icon-ic_fluent_server_20_regular" style="font-size:19px;color:#616161"></i>
+              <div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">office-pc</div><div style="font-size:12px;color:#616161">10.0.0.12:31416 · <span style="color:#C50F1F">Wrong password</span></div></div>
+              <i class="icon-ic_fluent_chevron_up_16_regular" style="font-size:13px;color:#616161"></i>
+            </div>
+            <div style="padding:14px;display:flex;flex-direction:column;gap:10px;background:#FAFAFA">
+              <div style="display:grid;grid-template-columns:1fr 110px;gap:10px">
+                <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Address</div><div style="height:30px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#242424;line-height:30px;padding:0 10px">10.0.0.12</div></div>
+                <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Port</div><div style="height:30px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#242424;line-height:30px;padding:0 10px">31416</div></div>
+              </div>
+              <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Password</div><div style="height:30px;border:1px solid #C50F1F;border-radius:4px;background:#fff;font-size:13px;color:#242424;line-height:30px;padding:0 10px;display:flex;align-items:center;justify-content:space-between">••••••••<i class="icon-ic_fluent_eye_16_regular" style="font-size:14px;color:#616161"></i></div>
+              <div style="display:flex;align-items:center;gap:5px;font-size:12px;color:#C50F1F;margin-top:4px"><i class="icon-ic_fluent_error_circle_16_filled" style="font-size:13px"></i>The host refused this password. Check the gui_rpc_auth.cfg on office-pc.</div></div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <div style="height:30px;padding:0 12px;border:1px solid #D1D1D1;border-radius:4px;background:#fff;font:600 12px/30px 'Segoe UI',sans-serif;color:#242424">Test connection</div>
+                <div style="height:30px;padding:0 12px;border-radius:4px;background:#0F6CBD;color:#fff;font:600 12px/30px 'Segoe UI',sans-serif">Save</div>
+                <div style="flex:1"></div>
+                <span style="font:600 12px 'Segoe UI',sans-serif;color:#C50F1F">Remove host</span>
+              </div>
+            </div>
+          </div>
+          <div style="font:600 13px 'Segoe UI',sans-serif;color:#242424;margin:16px 0 8px">Polling</div>
+          <div style="background:#fff;border:1px solid #E0E0E0;border-radius:6px;display:flex;align-items:center;gap:12px;padding:12px 14px">
+            <i class="icon-ic_fluent_timer_20_regular" style="font-size:19px;color:#616161"></i>
+            <div style="flex:1"><div style="font-size:13px;color:#242424">Polling interval</div><div style="font-size:12px;color:#616161">How often Lattice asks each host for updates</div></div>
+            <div style="display:flex;align-items:center;gap:8px;height:30px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#242424">5 seconds <i class="icon-ic_fluent_chevron_down_16_regular" style="font-size:12px;color:#616161"></i></div>
+          </div>
+        </div>
+        <!-- dialog -->
+        <div style="flex:none;width:380px;display:flex;flex-direction:column;gap:8px">
+          <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161">Add host 对话框(ContentDialog)</div>
+          <div style="background:#fff;border-radius:8px;box-shadow:0 8px 16px rgba(0,0,0,.14),0 0 2px rgba(0,0,0,.12);padding:20px">
+            <div style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-bottom:12px">Add a host</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Name <span style="color:#8a8a8a">(optional)</span></div><div style="height:30px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;font-size:13px;color:#8a8a8a;line-height:30px;padding:0 10px">Defaults to the address</div></div>
+              <div style="display:grid;grid-template-columns:1fr 100px;gap:10px">
+                <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Address</div><div style="height:30px;border:1px solid #D1D1D1;border-bottom:2px solid #0F6CBD;border-radius:4px;font-size:13px;color:#242424;line-height:30px;padding:0 10px">192.168.1.55</div></div>
+                <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Port</div><div style="height:30px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;font-size:13px;color:#242424;line-height:30px;padding:0 10px">31416</div></div>
+              </div>
+              <div><div style="font-size:12px;color:#424242;margin-bottom:4px">Password</div><div style="height:30px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;font-size:13px;color:#8a8a8a;line-height:30px;padding:0 10px">From gui_rpc_auth.cfg</div></div>
+              <div style="display:flex;gap:8px;align-items:flex-start;padding:8px 10px;background:#F5F5F5;border-radius:4px"><i class="icon-ic_fluent_info_16_regular" style="font-size:14px;color:#616161;margin-top:1px"></i><span style="font-size:12px;color:#424242;line-height:1.5">Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg.</span></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+              <div style="height:32px;padding:0 14px;border:1px solid #D1D1D1;border-radius:4px;font:600 13px/32px 'Segoe UI',sans-serif;color:#242424">Cancel</div>
+              <div style="height:32px;padding:0 14px;border-radius:4px;background:#0F6CBD;color:#fff;font:600 13px/32px 'Segoe UI',sans-serif">Add host</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>主机管理</b> → <span class="ctl">SettingsExpander</span> 每主机一项:标题 = 名称,副文本 = address:port + 连接状态(彩色文字仅作辅助);展开 = Address/Port/Password 表单 + Test connection + Save + Remove(danger 文字按钮,点击弹 <span class="ctl">ContentDialog</span> 确认)。auth-failed 主机自动展开并聚焦密码框,错误文案给出可行动的修复指引</div>
+    <div><b>Add host</b> → <span class="ctl">ContentDialog</span>:Address 必填(accent 焦点下划线),Port 预填 31416,提示条说明 remote_hosts.cfg 前置条件。"Add host" 在 Address 为空时禁用;提交时按钮内嵌 ProgressRing,失败则 InfoBar 呈现错误。首次运行空态(<a class="dv-oid" href="#1e">1e</a>)的 "Add a host" 直达此对话框</div>
+    <div><b>Polling</b> → <span class="ctl">SettingsExpander</span> + <span class="ctl">ComboBox</span>(2/5/10/30/60s,默认 5s)。M3 再加 Appearance(主题/密度)分组,当前留白不做</div>
+  </div>
+</div>
+
+<!-- ═══════ 2e Motion ═══════ -->
+<div class="dv-opt" id="2e">
+  <div class="dv-olabel"><a class="dv-oid" href="#2e">2e</a>动效规格 — token 级;全局规则:100–300ms,进场 decelerate / 退场 accelerate,无弹跳、无循环(spinner 除外),动画永不阻塞数据更新</div>
+  <div class="dv-card" style="width:1180px;padding:20px;font:12px/1.6 'Segoe UI',sans-serif;color:#3a3a3a">
+    <div style="display:grid;grid-template-columns:150px 190px 1fr 180px 1fr;gap:0;border:1px solid #E0E0E0;border-radius:6px;overflow:hidden">
+      <div style="display:contents">
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;background:#FAFAFA;padding:8px 12px;border-bottom:1px solid #E0E0E0">交互</div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;background:#FAFAFA;padding:8px 12px;border-bottom:1px solid #E0E0E0">触发</div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;background:#FAFAFA;padding:8px 12px;border-bottom:1px solid #E0E0E0">动画属性</div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;background:#FAFAFA;padding:8px 12px;border-bottom:1px solid #E0E0E0">时长 / 曲线</div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;background:#FAFAFA;padding:8px 12px;border-bottom:1px solid #E0E0E0">备注</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">视图切换</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">点导航项 / Ctrl+1..4</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">内容区 opacity 0→1 + translateY 8px→0</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">150ms · decelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">导航选中竖条用 NavigationView 自带 pill 滑动(~200ms),不另做</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">行进入</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">轮询发现新任务/传输/日志</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">opacity 0→1,无高度展开</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">100ms · decelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">日志 Following 状态下新行<b>不动画</b>(高频);单次 diff &gt;10 行时整批直接重排</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">行移除</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">任务上报完成 / 传输结束</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">opacity 1→0,随后移除重排</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">150ms · accelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">下方行位移不做 FLIP,直接重排——密度工具,快 &gt; 炫</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">进度条更新</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">轮询返回新 fraction_done</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">width 过渡到新值</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">200ms · easyEase</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">百分比文字直接跳变不插值;fraction 未知时不用 indeterminate,显示 "—"</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">InfoBar 进出场</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">partial 出现 / 用户关闭</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">高度 0→auto + opacity</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">进 200ms decelerateMax · 出 150ms accelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">表格随高度变化同步位移(同一过渡内,不二次跳动)</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">ContentDialog</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">Add host / Remove 确认</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">scrim opacity 0→.4 + 面板 opacity、scale 0.96→1</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">进 200ms decelerateMax · 出 150ms accelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">FluentAvalonia ContentDialog 默认行为即符合,不自定义</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">Expander 展开</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">项目子行 / SettingsExpander</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">chevron 旋转 180° + 内容高度展开</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">chevron 100ms · 高度 200ms decelerateMid</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">2a 子行同规格;收起 150ms accelerate</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-weight:600;color:#242424">连接中指示</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">connecting / 首次抓取</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0">arrow_sync 图标旋转 / ProgressRing</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0;font-family:ui-monospace,Menlo,monospace;font-size:11px">1.5s/圈 · linear · 循环</div>
+        <div style="padding:8px 12px;border-bottom:1px solid #F0F0F0"><b>唯一允许的循环动画</b>;骨架 shimmer 用 ProgressRing 替代亦可</div>
+      </div>
+      <div style="display:contents">
+        <div style="padding:8px 12px;font-weight:600;color:#242424">不做动画</div>
+        <div style="padding:8px 12px">每秒刷新的文本</div>
+        <div style="padding:8px 12px">重试倒计时、"Updated Ns ago"、经过/剩余时间、排序重排</div>
+        <div style="padding:8px 12px;font-family:ui-monospace,Menlo,monospace;font-size:11px">—</div>
+        <div style="padding:8px 12px">纯文本替换;高频小变化上动画只会制造噪声</div>
+      </div>
+    </div>
+    <div style="margin-top:12px"><b style="color:#111">降级规则</b>:系统"减少动态效果"(Windows 动画开关 / macOS Reduce Motion)开启时,除 spinner/ProgressRing 外全部时长归零;所有动画不得延迟数据呈现——先更新值,动画只是过渡。曲线 token 对应 <span class="ctl">--curveDecelerateMid/Max · --curveAccelerateMid · --curveEasyEase</span>,时长对应 <span class="ctl">--durationFaster(100) · --durationFast(150) · --durationNormal(200)</span></div>
+  </div>
+</div>
+
+<!-- ═══════ 2f Responsive ═══════ -->
+<div class="dv-opt" id="2f">
+  <div class="dv-olabel"><a class="dv-oid" href="#2f">2f</a>响应式规格 — 最小窗口 1000×700 实机模拟(导航折叠 48px + 列递减),下附断点总表</div>
+  <div class="dv-card" style="width:1000px">
+    <div style="display:flex;height:700px;background:#FAFAFA">
+      <!-- collapsed rail 48px -->
+      <div style="flex:none;width:48px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:2px">
+        <div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif;margin-bottom:8px">L</div>
+        <div style="width:40px;height:36px;border-radius:4px;background:#EBEBEB;display:grid;place-items:center;position:relative"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_task_list_square_ltr_20_filled" style="font-size:20px;color:#0F6CBD"></i></div>
+        <div style="width:40px;height:36px;border-radius:4px;display:grid;place-items:center"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i></div>
+        <div style="width:40px;height:36px;border-radius:4px;display:grid;place-items:center"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i></div>
+        <div style="width:40px;height:36px;border-radius:4px;display:grid;place-items:center;position:relative"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="position:absolute;top:4px;right:5px;min-width:14px;height:14px;border-radius:7px;background:#C50F1F;color:#fff;font:600 9px/14px 'Segoe UI',sans-serif;text-align:center;padding:0 3px">3</span></div>
+        <div style="width:32px;height:1px;background:#E0E0E0;margin:8px 0"></div>
+        <div style="width:40px;height:36px;border-radius:4px;background:#EBF3FC;display:grid;place-items:center;position:relative"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i></div>
+        <div style="width:40px;height:32px;display:grid;place-items:center"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i></div>
+        <div style="width:40px;height:32px;display:grid;place-items:center"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i></div>
+        <div style="width:40px;height:32px;display:grid;place-items:center"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i></div>
+        <div style="width:40px;height:32px;display:grid;place-items:center"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#B85C00"></i></div>
+        <div style="width:40px;height:32px;display:grid;place-items:center"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#C50F1F"></i></div>
+        <div style="flex:1"></div>
+        <div style="width:40px;height:36px;border-radius:4px;display:grid;place-items:center"><i class="icon-ic_fluent_settings_20_regular" style="font-size:20px;color:#616161"></i></div>
+      </div>
+      <!-- content -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-right:4px">Tasks</span>
+          <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#616161;width:160px"><i class="icon-ic_fluent_search_20_regular" style="font-size:16px"></i>Filter</div>
+          <div style="width:32px;height:32px;border:1px solid #D1D1D1;border-radius:4px;background:#fff;display:grid;place-items:center"><i class="icon-ic_fluent_filter_20_regular" style="font-size:17px;color:#616161"></i></div>
+          <div style="flex:1"></div>
+          <i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#616161;padding:5px"></i>
+          <i class="icon-ic_fluent_more_horizontal_20_regular" style="font-size:18px;color:#616161;padding:5px"></i>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:#FFF9F5;border-bottom:1px solid #FDCFB4">
+          <i class="icon-ic_fluent_warning_16_filled" style="font-size:15px;color:#BC4B09"></i>
+          <span style="font-size:12px;color:#242424"><b style="font-weight:600">Partial results.</b> 2 of 5 hosts aren't reachable.</span>
+          <span style="font:600 12px 'Segoe UI',sans-serif;color:#0F6CBD">Retry now</span>
+          <div style="flex:1"></div>
+          <i class="icon-ic_fluent_dismiss_16_regular" style="font-size:13px;color:#616161"></i>
+        </div>
+        <div style="flex:1;background:#fff;padding:0 10px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 6px">
+            <span>Project</span><span>Task</span><span>Progress</span><span>Remaining</span><span style="color:#242424">Deadline <i class="icon-ic_fluent_arrow_sort_up_16_regular" style="font-size:11px"></i></span><span>State</span><span>Host</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 6px;background:#FFF9F5">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">LHC@home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">ATLAS_2361573_1740593_31_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:12%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">12.1%</span></span>
+            <span style="font-variant-numeric:tabular-nums">09:12:00</span>
+            <span style="display:flex;align-items:center;gap:4px;color:#BC4B09;font-weight:600;font-variant-numeric:tabular-nums;font-size:12px"><i class="icon-ic_fluent_warning_16_filled" style="font-size:12px"></i>Jul 5 08:00</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">mini-01</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 6px;background:#EBF3FC;position:relative">
+            <div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#D6E4F2;display:block"><span style="display:block;width:73%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">73.4%</span></span>
+            <span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums;font-size:12px">Jul 6 14:00</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 6px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">h1_0437.80_O3aC01Cl1In0__O3AS1a_437.90Hz_19_2</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:88%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">88.2%</span></span>
+            <span style="font-variant-numeric:tabular-nums">00:57:21</span><span style="font-variant-numeric:tabular-nums;font-size:12px">Jul 6 19:12</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 6px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Rosetta@home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">rb_07_02_25__auto_flu_binder_SAVE_ALL_OUT_2861132_318_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:100%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">100%</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums;font-size:12px">Jul 8 02:11</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_arrow_upload_16_regular" style="font-size:14px;color:#0F6CBD"></i>Uploading</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">mbair-m2</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#616161;border-bottom:1px solid #F0F0F0;padding:0 6px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">MilkyWay@home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">de_modfit_84_bundle4_4s_south4s_bgset_2_1520210_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:45%;height:100%;border-radius:2px;background:#616161"></span></span><span style="font-size:12px;color:#616161">45.0%</span></span>
+            <span style="font-variant-numeric:tabular-nums">01:04:00</span><span style="font-variant-numeric:tabular-nums;font-size:12px">Jul 10 11:45</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_pause_16_regular" style="font-size:14px;color:#616161"></i>Suspended</span><span>mini-01</span>
+          </div>
+          <div style="display:grid;grid-template-columns:104px 1fr 108px 72px 96px 106px 72px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 6px">
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">WCG</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">MCM1_0221657_9281_2</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:52px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161">—</span></span>
+            <span style="font-variant-numeric:tabular-nums">03:58:00</span><span style="font-variant-numeric:tabular-nums;font-size:12px">Jul 11 21:34</span>
+            <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:14px;color:#616161"></i>Waiting</span><span style="color:#616161;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">tr-3990x</span>
+          </div>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;height:28px;padding:0 12px;border-top:1px solid #E0E0E0;background:#FAFAFA;font-size:12px;color:#616161">
+          <span>47 tasks · 8 running</span>
+          <div style="flex:1"></div>
+          <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_warning_16_regular" style="font-size:13px;color:#BC4B09"></i>1 at risk</span>
+          <span>5s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an" style="width:1000px">
+    <div><b>断点</b>(窗口宽):<b>≥1280</b> 完整导航 260px + 全部列 · <b>1100–1279</b> 导航自动折叠 48px(NavigationView LeftCompact),列不变 · <b>1000–1099</b> 再隐藏 Elapsed → Application(进溢出菜单可手动开)。列宽用户可拖拽,拖拽值持久化并优先于断点默认</div>
+    <div><b>折叠导航</b>:主机仅显示 20px 状态图标,名称与副文本(含重试倒计时)移入 <span class="ctl">Tooltip</span>;All hosts 保持选中态浅底。命令栏:"Updated Ns ago" 与密度切换移入 <span class="ctl">more</span> 溢出菜单,State 过滤降级为图标按钮</div>
+    <div><b>纵向</b>:命令栏 / InfoBar / 表头 / 状态栏固定,仅表格体滚动;700px 高时约可见 12 行(中等密度)。<b>大屏(≥1600)</b>:不设内容最大宽,Task 星号列吸收全部富余;未来 charts 面板(M4)以底部 <span class="ctl">Expander</span> 停靠,不与表格争宽度</div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">下一步:"Event log 深色版" · "把 <a class="dv-oid" href="#2d">2d</a> 的 Remove 确认对话框画出来" · "导出整份 PDF"</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Lattice M2 — Shell 方案 ×3 + Tasks 视图规格(浅色为主,深色平行规格见 <a class="dv-oid" href="#1f">1f</a>)</span></div>
+
+<div style="width:1180px;max-width:100%;margin:0 0 24px;padding:14px 16px;background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:8px;font:12.5px/1.6 'Segoe UI',system-ui,sans-serif;color:#3a3a3a">
+  <b style="color:#111">假设与设计推理</b> — 数据模型取自代码库 <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px">Lattice.Boinc.GuiRpc</span>(Result / Project / Message / ConnectionState);M2 只读,工具栏为 M3 控制动作预留禁用位。分组决策:All hosts 聚合采用<b>平铺表格 + Host 列</b>(可排序过滤)而非分组头——电源用户跨主机按 deadline / progress 排序是核心场景,分组头会打断排序;M3 可加分组开关。行密度默认中等 36px,工具栏提供密度切换(紧凑 28px)。所有状态传达均为<b>图标 + 文字</b>,不依赖颜色。三个 shell 的差异只在"主机 × 视图"如何共享导航;推荐 <a class="dv-oid" href="#1c">1c</a>。
+</div>
+
+<div class="dv-opts">
+
+<!-- ═══════════════ 1a Shell A ═══════════════ -->
+<div class="dv-opt" id="1a">
+  <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Shell A — 左栏 = 视图;主机是内容区的过滤下拉。最简单,但主机状态不常驻可见</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:560px;background:#FAFAFA">
+      <!-- rail -->
+      <div style="flex:none;width:220px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 14px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_task_list_square_ltr_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif">Tasks</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Transfers</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="flex:1"></div>
+        <div style="height:1px;background:#E0E0E0;margin:8px 4px"></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_settings_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Settings</span></div>
+      </div>
+      <!-- content -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#242424"><i class="icon-ic_fluent_server_20_regular" style="font-size:16px;color:#616161"></i>All hosts (5) <i class="icon-ic_fluent_chevron_down_16_regular" style="font-size:12px;color:#616161"></i></div>
+          <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#616161;width:200px"><i class="icon-ic_fluent_search_20_regular" style="font-size:16px"></i>Filter tasks</div>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:#616161">Updated 3s ago</span>
+          <i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+        </div>
+        <div style="flex:1;background:#fff;padding:8px 12px;font-size:12px;color:#616161">
+          <div style="display:grid;grid-template-columns:110px 120px 1fr 110px 70px 70px 100px 110px 80px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 8px">
+            <span>Project</span><span>Application</span><span>Task</span><span>Progress</span><span>Elapsed</span><span>Remaining</span><span>Deadline ▲</span><span>State</span><span>Host</span>
+          </div>
+          <div style="display:grid;grid-template-columns:110px 120px 1fr 110px 70px 70px 100px 110px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:73%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">73.4%</span></span>
+            <span style="font-variant-numeric:tabular-nums">04:12:33</span><span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums">Jul 6 14:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:110px 120px 1fr 110px 70px 70px 100px 110px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>Rosetta@home</span><span>Rosetta 4.20</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">rb_07_02_25__auto_flu_binder_SAVE_ALL_OUT_2861132_318_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:31%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">31.0%</span></span>
+            <span style="font-variant-numeric:tabular-nums">01:02:10</span><span style="font-variant-numeric:tabular-nums">02:19:44</span><span style="font-variant-numeric:tabular-nums">Jul 8 02:11</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">mini-01</span>
+          </div>
+          <div style="display:grid;grid-template-columns:110px 120px 1fr 110px 70px 70px 100px 110px 80px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>WCG</span><span>MCM1 7.61</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">MCM1_0221657_9communication281_2</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161">—</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums">03:58:00</span><span style="font-variant-numeric:tabular-nums">Jul 9 21:34</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:14px;color:#616161"></i>Waiting</span><span style="color:#616161">mbair-m2</span>
+          </div>
+          <div style="padding:14px 8px;color:#8a8a8a;font-size:12px">… 与 <a class="dv-oid" href="#1c">1c</a> 相同的完整表格规格(此方案仅演示 shell 结构)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>左栏</b> → <span class="ctl">NavigationView</span> (LeftCompact 可折叠为 48px 图标栏);选中项 = 3px accent 竖条 + 填充图标 + semibold。Event log 上的红点数字 → <span class="ctl">InfoBadge</span>(未读 warning/error 数)</div>
+    <div><b>主机下拉</b> → <span class="ctl">ComboBox/DropDownButton</span>,含 All hosts + 各主机(带状态图标)。<b>缺点:</b>主机连接状态只有展开下拉才可见,违背"扫一眼"目标——需在下拉按钮上叠加聚合状态点,弱</div>
+    <div><b>工具栏</b> → <span class="ctl">CommandBar</span>:过滤框 <span class="ctl">AutoSuggestBox</span> + 刷新 + "Updated Ns ago" 轮询指示。左端预留 M3 动作位</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1b Shell B ═══════════════ -->
+<div class="dv-opt" id="1b">
+  <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Shell B — 左栏 = 主机(BOINCTasks 心智模型);视图用顶部 TabView 切换。主机状态常驻,但视图切换降为二级</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:560px;background:#FAFAFA">
+      <!-- rail: hosts -->
+      <div style="flex:none;width:248px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#616161;padding:4px 12px 6px">Hosts</div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i><div style="flex:1;min-width:0"><div style="font:600 13px 'Segoe UI',sans-serif;color:#242424">All hosts</div><div style="font-size:11px;color:#616161">3 of 5 connected · 47 tasks</div></div><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">2</span></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:11px;color:#616161">Connected · 24 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">mini-01</div><div style="font-size:11px;color:#616161">Connected · 11 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">mbair-m2</div><div style="font-size:11px;color:#616161">Connected · 12 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#B85C00"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">nas-box</div><div style="font-size:11px;color:#B85C00">Retrying in 12s (attempt 3)</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#C50F1F"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">office-pc</div><div style="font-size:11px;color:#C50F1F">Unreachable</div></div></div>
+        <div style="flex:1"></div>
+        <div style="height:1px;background:#E0E0E0;margin:8px 4px"></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_settings_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Settings</span></div>
+      </div>
+      <!-- content -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:flex-end;gap:4px;padding:8px 16px 0;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <div style="padding:8px 14px 9px;background:#fff;border:1px solid #E0E0E0;border-bottom:none;border-radius:6px 6px 0 0;font:600 13px 'Segoe UI',sans-serif;color:#242424">Tasks <span style="font-weight:400;color:#616161">47</span></div>
+          <div style="padding:8px 14px 9px;font-size:13px;color:#616161">Projects</div>
+          <div style="padding:8px 14px 9px;font-size:13px;color:#616161">Transfers</div>
+          <div style="padding:8px 14px 9px;font-size:13px;color:#616161;display:flex;gap:6px;align-items:center">Event log <span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        </div>
+        <div style="flex:1;background:#fff;padding:8px 12px;font-size:12px;color:#8a8a8a">
+          <div style="display:grid;grid-template-columns:110px 120px 1fr 110px 70px 100px 110px 80px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 8px">
+            <span>Project</span><span>Application</span><span>Task</span><span>Progress</span><span>Remaining</span><span>Deadline ▲</span><span>State</span><span>Host</span>
+          </div>
+          <div style="padding:14px 8px">表格规格与 <a class="dv-oid" href="#1c">1c</a> 完全一致,此处省略 — 差异仅在导航模型</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>左栏</b> → <span class="ctl">NavigationView</span>,项 = 主机,双行(名称 + 状态副文本)。状态永远可见——这是 B 的最大优点。All hosts 聚合项置顶,副文本承担"partial"信息(3 of 5 connected)</div>
+    <div><b>视图切换</b> → <span class="ctl">TabView</span>(固定 4 tab,不可关闭)。<b>缺点:</b>视图是使用频率最高的切换(Tasks 占 80%),放到二级后 Projects/Transfers/Log 的可达性变差;且 tab 在主机间切换时保持选中,心智负担略高</div>
+    <div><b>状态副文本</b>:retrying 带倒计时秒数(每秒刷新),unreachable/auth-failed 红色文字 + 图标,均不只靠颜色</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1c Shell C (recommended) ═══════════════ -->
+<div class="dv-opt" id="1c">
+  <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a><b>Shell C(推荐)</b> — 两层左栏:视图在上(一级),Hosts 作用域区在下(常驻可见 + 充当全局过滤)。Tasks 视图完整规格,含 partial InfoBar、选中行、风险行、全部行状态</div>
+  <div class="dv-card" style="width:1180px">
+    <div style="display:flex;height:680px;background:#FAFAFA">
+      <!-- rail -->
+      <div style="flex:none;width:260px;background:#F5F5F5;border-right:1px solid #E0E0E0;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#0F6CBD;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#242424">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#EBEBEB;position:relative;color:#242424"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_task_list_square_ltr_20_filled" style="font-size:20px;color:#0F6CBD"></i><span style="font:600 13px 'Segoe UI',sans-serif;flex:1">Tasks</span><span style="font-size:12px;color:#616161">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_arrow_swap_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Transfers</span><span style="font-size:12px;color:#616161">2</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#C50F1F;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="height:1px;background:#E0E0E0;margin:10px 4px"></div>
+        <div style="display:flex;align-items:center;padding:4px 12px 6px"><span style="font:600 11px 'Segoe UI',sans-serif;color:#616161;flex:1">Hosts</span><i class="icon-ic_fluent_add_16_regular" style="font-size:14px;color:#616161"></i></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#EBF3FC;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#0F6CBD"></i><div style="flex:1;min-width:0"><div style="font:600 13px 'Segoe UI',sans-serif;color:#0F548C">All hosts</div><div style="font-size:11px;color:#616161">3 of 5 connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">tr-3990x</div><div style="font-size:11px;color:#616161">Connected · 24 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">mini-01</div><div style="font-size:11px;color:#616161">Connected · 11 tasks</div></div><span style="min-width:16px;height:16px;border-radius:8px;background:#B85C00;color:#fff;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">1</span></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">mbair-m2</div><div style="font-size:11px;color:#616161">Connected · 12 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#B85C00"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">nas-box</div><div style="font-size:11px;color:#B85C00">Retrying in 12s (attempt 3)</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#C50F1F"></i><div style="flex:1;min-width:0"><div style="font-size:13px;color:#242424">office-pc</div><div style="font-size:11px;color:#C50F1F">Unreachable</div></div></div>
+        <div style="flex:1"></div>
+        <div style="height:1px;background:#E0E0E0;margin:8px 4px"></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;color:#242424"><i class="icon-ic_fluent_settings_20_regular" style="font-size:20px;color:#616161"></i><span style="font-size:13px">Settings</span></div>
+      </div>
+      <!-- content -->
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <!-- command bar -->
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #E0E0E0;background:#FAFAFA">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#242424;margin-right:8px">Tasks</span>
+          <div style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:4px;font:600 13px 'Segoe UI',sans-serif;color:#BDBDBD"><i class="icon-ic_fluent_pause_16_regular" style="font-size:16px"></i>Suspend</div>
+          <div style="display:flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:4px;font:600 13px 'Segoe UI',sans-serif;color:#BDBDBD"><i class="icon-ic_fluent_dismiss_circle_16_regular" style="font-size:16px"></i>Abort</div>
+          <div style="width:1px;height:20px;background:#E0E0E0"></div>
+          <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#616161;width:220px"><i class="icon-ic_fluent_search_20_regular" style="font-size:16px"></i>Filter by name or project</div>
+          <div style="display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border:1px solid #D1D1D1;border-bottom-color:#616161;border-radius:4px;background:#fff;font-size:13px;color:#242424">State: All <i class="icon-ic_fluent_chevron_down_16_regular" style="font-size:12px;color:#616161"></i></div>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:#616161">Updated 3s ago</span>
+          <i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+          <i class="icon-ic_fluent_text_line_spacing_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+          <i class="icon-ic_fluent_more_horizontal_20_regular" style="font-size:18px;color:#616161;padding:6px"></i>
+        </div>
+        <!-- partial infobar -->
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#FFF9F5;border-bottom:1px solid #FDCFB4">
+          <i class="icon-ic_fluent_warning_16_filled" style="font-size:16px;color:#BC4B09"></i>
+          <span style="font-size:13px;color:#242424"><b style="font-weight:600">Partial results.</b> 2 of 5 hosts aren't reachable — tasks below cover 3 hosts.</span>
+          <span style="font:600 13px 'Segoe UI',sans-serif;color:#0F6CBD;margin-left:4px">Retry now</span>
+          <div style="flex:1"></div>
+          <i class="icon-ic_fluent_dismiss_16_regular" style="font-size:14px;color:#616161"></i>
+        </div>
+        <!-- table -->
+        <div style="flex:1;background:#fff;padding:0 12px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#616161;border-bottom:1px solid #E0E0E0;padding:0 8px;position:sticky;top:0;background:#fff">
+            <span>Project</span><span>Application</span><span>Task</span><span>Progress</span><span>Elapsed</span><span>Remaining</span><span style="color:#242424">Deadline <i class="icon-ic_fluent_arrow_sort_up_16_regular" style="font-size:11px"></i></span><span>State</span><span>Host</span>
+          </div>
+          <!-- at risk -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px;background:#FFF9F5">
+            <span>LHC@home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">ATLAS 3.01</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">ATLAS_2361573_1740593_31_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:12%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">12.1%</span></span>
+            <span style="font-variant-numeric:tabular-nums">00:41:02</span><span style="font-variant-numeric:tabular-nums">09:12:00</span>
+            <span style="display:flex;align-items:center;gap:5px;color:#BC4B09;font-weight:600;font-variant-numeric:tabular-nums"><i class="icon-ic_fluent_warning_16_filled" style="font-size:13px"></i>Jul 5 08:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">mini-01</span>
+          </div>
+          <!-- selected -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px;background:#EBF3FC;position:relative">
+            <div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#0F6CBD"></div>
+            <span>Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#D6E4F2;display:block"><span style="display:block;width:73%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">73.4%</span></span>
+            <span style="font-variant-numeric:tabular-nums">04:12:33</span><span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums">Jul 6 14:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">tr-3990x</span>
+          </div>
+          <!-- running -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">O3AS 1.07</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">h1_0437.80_O3aC01Cl1In0__O3AS1a_437.90Hz_19_2</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:88%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">88.2%</span></span>
+            <span style="font-variant-numeric:tabular-nums">07:55:10</span><span style="font-variant-numeric:tabular-nums">00:57:21</span><span style="font-variant-numeric:tabular-nums">Jul 6 19:12</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">tr-3990x</span>
+          </div>
+          <!-- uploading -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>Rosetta@home</span><span>Rosetta 4.20</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">rb_07_02_25__auto_flu_binder_SAVE_ALL_OUT_2861132_318_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:100%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">100%</span></span>
+            <span style="font-variant-numeric:tabular-nums">03:22:48</span><span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums">Jul 8 02:11</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_arrow_upload_16_regular" style="font-size:14px;color:#0F6CBD"></i>Uploading</span><span style="color:#616161">mbair-m2</span>
+          </div>
+          <!-- suspended -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#616161;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>MilkyWay@home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Separation 1.46</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">de_modfit_84_bundle4_4s_south4s_bgset_2_1520210_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:45%;height:100%;border-radius:2px;background:#616161"></span></span><span style="font-size:12px;color:#616161">45.0%</span></span>
+            <span style="font-variant-numeric:tabular-nums">00:52:11</span><span style="font-variant-numeric:tabular-nums">01:04:00</span><span style="font-variant-numeric:tabular-nums">Jul 10 11:45</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_pause_16_regular" style="font-size:14px;color:#616161"></i>Suspended</span><span>mini-01</span>
+          </div>
+          <!-- waiting rows -->
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>WCG</span><span>MCM1 7.61</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">MCM1_0221657_9281_2</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161">—</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums">03:58:00</span><span style="font-variant-numeric:tabular-nums">Jul 11 21:34</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:14px;color:#616161"></i>Waiting</span><span style="color:#616161">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>WCG</span><span>MCM1 7.61</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">MCM1_0221658_0114_1</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161">—</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums">04:02:00</span><span style="font-variant-numeric:tabular-nums">Jul 11 21:34</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:14px;color:#616161"></i>Waiting</span><span style="color:#616161">mbair-m2</span>
+          </div>
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;border-bottom:1px solid #F0F0F0;padding:0 8px">
+            <span>Einstein@Home</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1180.0_0_0.0_28321011_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"></span><span style="font-size:12px;color:#616161">—</span></span>
+            <span style="font-variant-numeric:tabular-nums">—</span><span style="font-variant-numeric:tabular-nums">05:40:00</span><span style="font-variant-numeric:tabular-nums">Jul 12 14:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_clock_16_regular" style="font-size:14px;color:#616161"></i>Waiting</span><span style="color:#616161">tr-3990x</span>
+          </div>
+        </div>
+        <!-- status bar -->
+        <div style="display:flex;align-items:center;gap:16px;height:28px;padding:0 16px;border-top:1px solid #E0E0E0;background:#FAFAFA;font-size:12px;color:#616161">
+          <span>47 tasks · 8 running · 2 uploading · 1 suspended</span>
+          <div style="flex:1"></div>
+          <span style="display:flex;align-items:center;gap:5px"><i class="icon-ic_fluent_warning_16_regular" style="font-size:13px;color:#BC4B09"></i>1 deadline at risk</span>
+          <span>Polling every 5s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>shell</b> → <span class="ctl">NavigationView</span> Left 模式,MenuItems = 视图,FooterMenuItems = Settings;Hosts 区 = 自定义 NavigationViewItem 双行模板(名称 + 状态副文本)。选中主机即全局作用域,切换视图时保持。窗口 &lt;1280px 时折叠为 48px 图标栏,主机仅显示状态图标 + tooltip</div>
+    <div><b>Hosts 区</b>:All hosts 选中态用品牌浅底 #EBF3FC + accent 竖条;每主机 40px 双行;"+"= 快捷添加主机(跳 Settings)。InfoBadge:主机级告警数(如 mini-01 有 1 条 deadline 风险)。行副文本承载连接状态文字 — 图标 + 文字双通道</div>
+    <div><b>命令栏</b> → <span class="ctl">CommandBar</span>:Suspend/Abort 灰显占位(M3);<span class="ctl">AutoSuggestBox</span> 过滤;State 下拉 <span class="ctl">ComboBox</span>;右侧刷新 / 密度切换 / 溢出菜单 <span class="ctl">CommandBarFlyout</span>。"Updated Ns ago" = 轮询健康指示,轮询失败时变 warning 色 + 图标</div>
+    <div><b>Partial 状态</b> → <span class="ctl">InfoBar</span> severity=Warning,可关闭,带 "Retry now" 动作链接。仅在 All hosts 聚合且有主机不可达时出现</div>
+    <div><b>表格</b> → <span class="ctl">DataGrid</span>(虚拟化,500+ 行)。行高 36px(紧凑 28px);表头 32px semibold 11px;数字列 tabular-nums、全表统一左对齐;Task 列 1fr 截断 + tooltip 全名。排序:单列,默认 Deadline ↑</div>
+    <div><b>行状态</b>:选中 = #EBF3FC + 3px accent 条;风险行 = 整行 #FFF9F5 淡底,Deadline 单元格 warning 图标 + semibold #BC4B09 文字(不只靠颜色);Suspended 整行文字降为 #616161、进度条转灰;Uploading 状态图标为蓝色上传箭头</div>
+    <div><b>状态栏</b>:聚合计数 + 风险数 + 轮询间隔。自定义 28px 条(无 stock 控件,成本极低,<b>标记:custom control required</b> — 仅此一处)</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1d row anatomy ═══════════════ -->
+<div class="dv-opt" id="1d">
+  <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Tasks 行解剖 — 密度、字号、列宽策略(token 化)</div>
+  <div class="dv-card" style="width:1180px;padding:20px;display:flex;flex-direction:column;gap:16px">
+    <div>
+      <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;margin-bottom:8px">中等密度(默认)— 行高 36px,body 13px,进度条 3px</div>
+      <div style="border:1px solid #E0E0E0;border-radius:4px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#242424;padding:0 8px">
+          <span>Einstein@Home</span><span>FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#E0E0E0;display:block"><span style="display:block;width:73%;height:100%;border-radius:2px;background:#0F6CBD"></span></span><span style="font-size:12px;color:#616161">73.4%</span></span>
+          <span style="font-variant-numeric:tabular-nums">04:12:33</span><span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums">Jul 6 14:00</span>
+          <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#107C10"></i>Running</span><span style="color:#616161">tr-3990x</span>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;margin-bottom:8px">紧凑密度(工具栏切换)— 行高 28px,body 12px,进度条 2px</div>
+      <div style="border:1px solid #E0E0E0;border-radius:4px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 68px 74px 100px 112px 76px;height:28px;align-items:center;font-size:12px;color:#242424;padding:0 8px">
+          <span>Einstein@Home</span><span>FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#424242">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+          <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:2px;border-radius:1px;background:#E0E0E0;display:block"><span style="display:block;width:73%;height:100%;border-radius:1px;background:#0F6CBD"></span></span><span style="font-size:11px;color:#616161">73.4%</span></span>
+          <span style="font-variant-numeric:tabular-nums">04:12:33</span><span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums">Jul 6 14:00</span>
+          <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:13px;color:#107C10"></i>Running</span><span style="color:#616161">tr-3990x</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;font:12px/1.6 'Segoe UI',sans-serif;color:#3a3a3a">
+      <div>
+        <b style="color:#111">列宽策略(1000px 窗口起可用)</b><br>
+        固定列:Project 108 · Application 118 · Progress 112 · Elapsed 68 · Remaining 74 · Deadline 100 · State 112 · Host 76;Task = 星号列(最小 160,截断 + tooltip)。&lt;1100px 时先隐藏 Elapsed,再隐藏 Application(列可见性入溢出菜单)。单主机作用域时隐藏 Host 列。
+      </div>
+      <div>
+        <b style="color:#111">字体 ramp 用法</b><br>
+        行 body = Base300 之下的 13px(密度定制,标注为 caption+);表头 = Caption1 Strong 11px semibold;页标题 = Subtitle2 16px semibold;副文本/计数 = Caption1 12px #616161。数字列一律 tabular-nums,对齐与文本列统一为左对齐。
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1e states ═══════════════ -->
+<div class="dv-opt" id="1e">
+  <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>状态矩阵 — 主机连接 ×5 · 视图级 populated/empty/loading/partial · 首次运行</div>
+  <div class="dv-card" style="width:1180px;padding:20px;display:flex;flex-direction:column;gap:20px">
+    <div>
+      <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;margin-bottom:10px">主机连接状态(导航栏渲染,图标 + 文字,绝不只靠颜色)</div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+        <div style="border:1px solid #E0E0E0;border-radius:6px;padding:10px 12px"><div style="display:flex;align-items:center;gap:8px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#107C10"></i><span style="font-size:13px;color:#242424">tr-3990x</span></div><div style="font-size:11px;color:#616161;margin:2px 0 6px 26px">Connected · 24 tasks</div><div style="font-size:10.5px;color:#8a8a8a;font-family:ui-monospace,Menlo,monospace">checkmark_circle · SuccessFg</div></div>
+        <div style="border:1px solid #E0E0E0;border-radius:6px;padding:10px 12px"><div style="display:flex;align-items:center;gap:8px"><i class="icon-ic_fluent_arrow_sync_20_regular" style="font-size:18px;color:#0F6CBD"></i><span style="font-size:13px;color:#242424">nas-box</span></div><div style="font-size:11px;color:#616161;margin:2px 0 6px 26px">Connecting…</div><div style="font-size:10.5px;color:#8a8a8a;font-family:ui-monospace,Menlo,monospace">arrow_sync 旋转 · BrandFg</div></div>
+        <div style="border:1px solid #E0E0E0;border-radius:6px;padding:10px 12px"><div style="display:flex;align-items:center;gap:8px"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#B85C00"></i><span style="font-size:13px;color:#242424">nas-box</span></div><div style="font-size:11px;color:#B85C00;margin:2px 0 6px 26px">Retrying in 12s (attempt 3)</div><div style="font-size:10.5px;color:#8a8a8a;font-family:ui-monospace,Menlo,monospace">arrow_clockwise · WarningFg,倒计时每秒更新</div></div>
+        <div style="border:1px solid #E0E0E0;border-radius:6px;padding:10px 12px"><div style="display:flex;align-items:center;gap:8px"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#C50F1F"></i><span style="font-size:13px;color:#242424">office-pc</span></div><div style="font-size:11px;color:#C50F1F;margin:2px 0 6px 26px">Unreachable</div><div style="font-size:10.5px;color:#8a8a8a;font-family:ui-monospace,Menlo,monospace">dismiss_circle · DangerFg;tooltip 给最后错误</div></div>
+        <div style="border:1px solid #E0E0E0;border-radius:6px;padding:10px 12px"><div style="display:flex;align-items:center;gap:8px"><i class="icon-ic_fluent_key_20_regular" style="font-size:18px;color:#C50F1F"></i><span style="font-size:13px;color:#242424">office-pc</span></div><div style="font-size:11px;color:#C50F1F;margin:2px 0 6px 26px">Wrong password</div><div style="font-size:10.5px;color:#8a8a8a;font-family:ui-monospace,Menlo,monospace">key · DangerFg;点击直达 Settings 该主机</div></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+      <div style="border:1px solid #E0E0E0;border-radius:6px;overflow:hidden">
+        <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;padding:10px 12px;border-bottom:1px solid #F0F0F0">Loading(首次连接,全量 get_state 可达数秒)</div>
+        <div style="padding:14px 12px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border:2px solid #E0E0E0;border-top-color:#0F6CBD;border-radius:50%"></div><span style="font-size:13px;color:#616161">Fetching state from tr-3990x…</span></div>
+          <div style="height:12px;border-radius:3px;background:linear-gradient(90deg,#F0F0F0,#FAFAFA,#F0F0F0)"></div>
+          <div style="height:12px;border-radius:3px;background:linear-gradient(90deg,#F0F0F0,#FAFAFA,#F0F0F0);width:88%"></div>
+          <div style="height:12px;border-radius:3px;background:linear-gradient(90deg,#F0F0F0,#FAFAFA,#F0F0F0);width:94%"></div>
+          <div style="font-size:11px;color:#8a8a8a">ProgressRing + 3 行 shimmer 骨架;已连主机的数据先行渲染,不阻塞</div>
+        </div>
+      </div>
+      <div style="border:1px solid #E0E0E0;border-radius:6px;overflow:hidden">
+        <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;padding:10px 12px;border-bottom:1px solid #F0F0F0">Empty(有主机、无任务/无传输)</div>
+        <div style="padding:22px 12px;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <i class="icon-ic_fluent_arrow_swap_24_regular" style="font-size:26px;color:#BDBDBD"></i>
+          <span style="font:600 13px 'Segoe UI',sans-serif;color:#242424">No active transfers</span>
+          <span style="font-size:12px;color:#616161;text-align:center">Uploads and downloads will appear here while in progress.</span>
+          <div style="font-size:11px;color:#8a8a8a;margin-top:4px">图标 24 regular #BDBDBD + Body semibold + Caption;无按钮(无可做动作)</div>
+        </div>
+      </div>
+      <div style="border:1px solid #E0E0E0;border-radius:6px;overflow:hidden">
+        <div style="font:600 12px 'Segoe UI',sans-serif;color:#616161;padding:10px 12px;border-bottom:1px solid #F0F0F0">First run(尚未配置主机)</div>
+        <div style="padding:18px 12px;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <i class="icon-ic_fluent_server_24_regular" style="font-size:26px;color:#BDBDBD"></i>
+          <span style="font:600 13px 'Segoe UI',sans-serif;color:#242424">Connect your first host</span>
+          <span style="font-size:12px;color:#616161;text-align:center">Lattice monitors BOINC clients over GUI RPC (port 31416).</span>
+          <div style="height:32px;padding:0 14px;border-radius:4px;background:#0F6CBD;color:#fff;font:600 13px/32px 'Segoe UI',sans-serif">Add a host</div>
+          <div style="font-size:11px;color:#8a8a8a">唯一 accent 主按钮 → 打开 Settings 的 Add host 表单;导航栏此时隐藏 Hosts 区</div>
+        </div>
+      </div>
+    </div>
+    <div style="font:12px/1.6 'Segoe UI',sans-serif;color:#3a3a3a">
+      <b style="color:#111">Partial(3/5 可达)传达三层:</b>① 导航 All hosts 副文本 "3 of 5 connected" ② 内容区顶部 warning <span class="ctl">InfoBar</span>(见 <a class="dv-oid" href="#1c">1c</a>,可关闭,每次可达集合变化时重现)③ 状态栏计数只统计可达主机。绝不静默丢数据。
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1f dark ═══════════════ -->
+<div class="dv-opt" id="1f">
+  <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>深色主题平行规格 — Shell C 同构;仅 token 替换,无布局差异</div>
+  <div class="dv-card" style="width:1180px;background:#1F1F1F;border-color:#3D3D3D">
+    <div style="display:flex;height:430px">
+      <div style="flex:none;width:260px;background:#202020;border-right:1px solid #3D3D3D;display:flex;flex-direction:column;padding:8px">
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px 12px"><div style="width:20px;height:20px;border-radius:4px;background:#115EA3;color:#fff;display:grid;place-items:center;font:600 11px 'Segoe UI',sans-serif">L</div><span style="font:600 14px 'Segoe UI',sans-serif;color:#fff">Lattice</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px;border-radius:4px;background:#383838;position:relative"><div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#479EF5"></div><i class="icon-ic_fluent_task_list_square_ltr_20_filled" style="font-size:20px;color:#479EF5"></i><span style="font:600 13px 'Segoe UI',sans-serif;color:#fff;flex:1">Tasks</span><span style="font-size:12px;color:#ADADAD">47</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px"><i class="icon-ic_fluent_grid_20_regular" style="font-size:20px;color:#ADADAD"></i><span style="font-size:13px;color:#D6D6D6">Projects</span></div>
+        <div style="display:flex;align-items:center;gap:12px;height:36px;padding:0 12px"><i class="icon-ic_fluent_document_text_20_regular" style="font-size:20px;color:#ADADAD"></i><span style="font-size:13px;color:#D6D6D6;flex:1">Event log</span><span style="min-width:16px;height:16px;border-radius:8px;background:#E37D80;color:#242424;font:600 10px/16px 'Segoe UI',sans-serif;text-align:center;padding:0 4px">3</span></div>
+        <div style="height:1px;background:#3D3D3D;margin:10px 4px"></div>
+        <div style="font:600 11px 'Segoe UI',sans-serif;color:#ADADAD;padding:4px 12px 6px">Hosts</div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px;border-radius:4px;background:#123B5C;position:relative"><div style="position:absolute;left:0;top:12px;width:3px;height:16px;border-radius:2px;background:#479EF5"></div><i class="icon-ic_fluent_apps_list_20_filled" style="font-size:20px;color:#479EF5"></i><div style="flex:1"><div style="font:600 13px 'Segoe UI',sans-serif;color:#EBF3FC">All hosts</div><div style="font-size:11px;color:#ADADAD">3 of 5 connected</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_checkmark_circle_20_regular" style="font-size:18px;color:#9FD89F"></i><div style="flex:1"><div style="font-size:13px;color:#D6D6D6">tr-3990x</div><div style="font-size:11px;color:#ADADAD">Connected · 24 tasks</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_arrow_clockwise_20_regular" style="font-size:18px;color:#FAA06B"></i><div style="flex:1"><div style="font-size:13px;color:#D6D6D6">nas-box</div><div style="font-size:11px;color:#FAA06B">Retrying in 12s (attempt 3)</div></div></div>
+        <div style="display:flex;align-items:center;gap:10px;height:40px;padding:0 12px"><i class="icon-ic_fluent_dismiss_circle_20_regular" style="font-size:18px;color:#E37D80"></i><div style="flex:1"><div style="font-size:13px;color:#D6D6D6">office-pc</div><div style="font-size:11px;color:#E37D80">Unreachable</div></div></div>
+      </div>
+      <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 16px;border-bottom:1px solid #3D3D3D;background:#1F1F1F">
+          <span style="font:600 16px 'Segoe UI',sans-serif;color:#fff;margin-right:8px">Tasks</span>
+          <div style="flex:1"></div>
+          <span style="font-size:12px;color:#ADADAD">Updated 3s ago</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px 16px;background:#411200;border-bottom:1px solid #714224">
+          <i class="icon-ic_fluent_warning_16_filled" style="font-size:16px;color:#FAA06B"></i>
+          <span style="font-size:13px;color:#fff"><b style="font-weight:600">Partial results.</b> 2 of 5 hosts aren't reachable.</span>
+          <span style="font:600 13px 'Segoe UI',sans-serif;color:#479EF5">Retry now</span>
+        </div>
+        <div style="flex:1;background:#292929;padding:0 12px">
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 74px 100px 112px 76px;height:32px;align-items:center;font:600 11px 'Segoe UI',sans-serif;color:#ADADAD;border-bottom:1px solid #3D3D3D;padding:0 8px">
+            <span>Project</span><span>Application</span><span>Task</span><span>Progress</span><span>Remaining</span><span style="color:#fff">Deadline ▲</span><span>State</span><span>Host</span>
+          </div>
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#fff;border-bottom:1px solid #333;padding:0 8px;background:#3A2A1E">
+            <span>LHC@home</span><span>ATLAS 3.01</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#D6D6D6">ATLAS_2361573_1740593_31_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#484644;display:block"><span style="display:block;width:12%;height:100%;border-radius:2px;background:#479EF5"></span></span><span style="font-size:12px;color:#ADADAD">12.1%</span></span>
+            <span style="font-variant-numeric:tabular-nums">09:12:00</span>
+            <span style="display:flex;align-items:center;gap:5px;color:#FAA06B;font-weight:600;font-variant-numeric:tabular-nums"><i class="icon-ic_fluent_warning_16_filled" style="font-size:13px"></i>Jul 5 08:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#9FD89F"></i>Running</span><span style="color:#ADADAD">mini-01</span>
+          </div>
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#fff;border-bottom:1px solid #333;padding:0 8px;background:#123B5C;position:relative">
+            <div style="position:absolute;left:0;top:10px;width:3px;height:16px;border-radius:2px;background:#479EF5"></div>
+            <span>Einstein@Home</span><span>FGRPB1G 1.22</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#D6D6D6">LATeah4021L08_1156.0_0_0.0_28320890_1</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#2E4B66;display:block"><span style="display:block;width:73%;height:100%;border-radius:2px;background:#479EF5"></span></span><span style="font-size:12px;color:#ADADAD">73.4%</span></span>
+            <span style="font-variant-numeric:tabular-nums">01:31:07</span><span style="font-variant-numeric:tabular-nums">Jul 6 14:00</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_play_16_regular" style="font-size:14px;color:#9FD89F"></i>Running</span><span style="color:#ADADAD">tr-3990x</span>
+          </div>
+          <div style="display:grid;grid-template-columns:108px 118px 1fr 112px 74px 100px 112px 76px;height:36px;align-items:center;font-size:13px;color:#ADADAD;border-bottom:1px solid #333;padding:0 8px">
+            <span>MilkyWay@home</span><span>Separation 1.46</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">de_modfit_84_bundle4_4s_south4s_bgset_2_1520210_0</span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:56px;height:3px;border-radius:2px;background:#484644;display:block"><span style="display:block;width:45%;height:100%;border-radius:2px;background:#ADADAD"></span></span><span style="font-size:12px;color:#ADADAD">45.0%</span></span>
+            <span style="font-variant-numeric:tabular-nums">01:04:00</span><span style="font-variant-numeric:tabular-nums">Jul 10 11:45</span>
+            <span style="display:flex;align-items:center;gap:6px"><i class="icon-ic_fluent_pause_16_regular" style="font-size:14px;color:#ADADAD"></i>Suspended</span><span>mini-01</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="an">
+    <div><b>token 映射</b>:画布 #1F1F1F(NeutralBackground2)· 表面 #292929(NeutralBackground1)· 导航 #202020 · 描边/分隔 #3D3D3D/#333 · 一级文字 #FFFFFF · 二级 #D6D6D6 · 三级 #ADADAD</div>
+    <div><b>语义色(暗)</b>:accent #479EF5(BrandFg dark)· success #9FD89F · warning #FAA06B · danger #E37D80;选中/风险行底 #123B5C / #3A2A1E(对应 tint 加深)。系统 accent 色可替换 brand ramp — 两主题都从系统取色,只锁 fg 对比度 ≥ 4.5:1</div>
+    <div><b>Mica</b>:Windows 上导航栏与命令栏区域用 Mica 材质,#202020 为 macOS/Linux 及电池模式的 solid fallback;内容表面始终不透明</div>
+  </div>
+</div>
+
+<!-- ═══════════════ 1g tokens ═══════════════ -->
+<div class="dv-opt" id="1g">
+  <div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Token 与语义色总表(浅 / 深)+ 键盘与响应式要点</div>
+  <div class="dv-card" style="width:1180px;padding:20px;display:grid;grid-template-columns:1fr 1fr;gap:20px;font:12px/1.7 'Segoe UI',sans-serif;color:#3a3a3a">
+    <div>
+      <b style="color:#111">语义色 by 角色(浅 → 深)</b>
+      <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:#0F6CBD"></span><span style="width:14px;height:14px;border-radius:3px;background:#479EF5"></span>Accent(选中、链接、进度)— 跟随系统 accent,#0F6CBD / #479EF5 为默认</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:#107C10"></span><span style="width:14px;height:14px;border-radius:3px;background:#9FD89F"></span>Success — 仅 Connected 图标与 Running 图标;从不做底色</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:#BC4B09"></span><span style="width:14px;height:14px;border-radius:3px;background:#FAA06B"></span>Warning — retrying、deadline 风险、partial InfoBar;淡底 #FFF9F5 / #411200</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:#C50F1F"></span><span style="width:14px;height:14px;border-radius:3px;background:#E37D80"></span>Danger — unreachable、auth-failed、error 日志、InfoBadge</div>
+        <div style="display:flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:3px;background:#616161;"></span><span style="width:14px;height:14px;border-radius:3px;background:#ADADAD"></span>Neutral — waiting/suspended 状态、全部次级文字</div>
+      </div>
+      <div style="margin-top:10px"><b style="color:#111">规则:</b>状态语义永远 图标+文字+色 三通道;彩色底(行 tint)只用于"风险 / 选中"两种,同屏最多两层强调。</div>
+    </div>
+    <div>
+      <b style="color:#111">间距/尺寸 token</b><br>
+      导航宽 260(折叠 48)· 导航项 36 / 主机项 40 · 命令栏 52 · 表头 32 · 行 36/28 · 状态栏 28 · 表面圆角 8 · 控件圆角 4 · 页边距 16 · 元素间距 8
+      <div style="margin-top:10px"><b style="color:#111">键盘</b>:↑↓ 行导航 · Ctrl+F 过滤框 · F5 立即刷新 · Ctrl+1..4 切视图 · 表头 Space 排序 · 全部控件 Tab 可达,焦点 = 2px 黑描边(FocusStroke2)</div>
+      <div style="margin-top:10px"><b style="color:#111">响应式</b>:≥1280 全导航;1000–1280 导航折叠 48px 图标栏(主机=状态图标+tooltip);列按 1d 优先级递减。最小 1000×700 下所有视图无横向滚动。</div>
+      <div style="margin-top:10px"><b style="color:#111">图表预留</b>:内容区底部可插入可折叠 <span class="ctl">Expander</span> "History" 面板(M4),不影响现有布局。</div>
+    </div>
+  </div>
+</div>
+
+</div>
+<p class="dv-next">下一步:"按 <a class="dv-oid" href="#1c">1c</a> 继续做 Projects / Transfers / Event log / Settings" · "看 <a class="dv-oid" href="#1c">1c</a> 的紧凑密度整屏" · "Shell 换成 <a class="dv-oid" href="#1b">1b</a> 再细化"</p>
+</section>
+
+</x-dc>
+</body>
+</html>
