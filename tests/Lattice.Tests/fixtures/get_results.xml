@@ -1,0 +1,42 @@
+<boinc_gui_rpc_reply>
+<results>
+<result>
+    <name>h1_0437.60_O3aC01Cl1In0__O3MDFV2g_G34731_437.70Hz_19_1</name>
+    <wu_name>h1_0437.60_O3aC01Cl1In0__O3MDFV2g_G34731_437.70Hz_19</wu_name>
+    <platform>x86_64-pc-linux-gnu</platform>
+    <version_num>218</version_num>
+    <project_url>https://einsteinathome.org/</project_url>
+    <final_cpu_time>0.000000</final_cpu_time>
+    <final_elapsed_time>0.000000</final_elapsed_time>
+    <exit_status>0</exit_status>
+    <state>2</state>
+    <report_deadline>1752800000.000000</report_deadline>
+    <received_time>1751590000.000000</received_time>
+    <estimated_cpu_time_remaining>19000.000000</estimated_cpu_time_remaining>
+    <active_task>
+        <active_task_state>1</active_task_state>
+        <app_version_num>218</app_version_num>
+        <slot>0</slot>
+        <pid>12345</pid>
+        <scheduler_state>2</scheduler_state>
+        <checkpoint_cpu_time>3600.000000</checkpoint_cpu_time>
+        <fraction_done>0.421000</fraction_done>
+        <current_cpu_time>3700.000000</current_cpu_time>
+        <elapsed_time>3800.000000</elapsed_time>
+        <swap_size>250000000.000000</swap_size>
+        <working_set_size>200000000.000000</working_set_size>
+    </active_task>
+</result>
+<result>
+    <name>wu_finished_1</name>
+    <wu_name>wu_finished</wu_name>
+    <project_url>https://www.worldcommunitygrid.org/</project_url>
+    <final_cpu_time>12000.500000</final_cpu_time>
+    <exit_status>0</exit_status>
+    <state>5</state>
+    <report_deadline>1752900000.000000</report_deadline>
+    <ready_to_report/>
+    <suspended_via_gui/>
+</result>
+</results>
+</boinc_gui_rpc_reply>

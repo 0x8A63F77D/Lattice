@@ -1,0 +1,24 @@
+using System.Text;
+using System.Text.RegularExpressions;
+
+namespace Lattice.Boinc.GuiRpc;
+
+internal static partial class XmlSanitizer
+{
+    internal static string Sanitize(string raw)
+    {
+        // Some RPCs emit an illegal mid-document encoding declaration (BOINC bug #1509).
+        raw = raw.Replace("<?xml version=\"1.0\" encoding=\"ISO-8859-1\" ?>", string.Empty);
+
+        var sb = new StringBuilder(raw.Length);
+        foreach (var c in raw.Where(c => c is '\t' or '\n' or '\r' or >= '\x20'))
+            sb.Append(c);
+
+        return BareAmpersand().Replace(sb.ToString(), "&amp;");
+    }
+
+    // Only XML's five predefined entities and numeric references survive; anything
+    // else (e.g. "&foo;" in an unescaped message body) would make XElement.Parse throw.
+    [GeneratedRegex(@"&(?!(?:amp|lt|gt|apos|quot|#[0-9]+|#x[0-9A-Fa-f]+);)")]
+    private static partial Regex BareAmpersand();
+}
