@@ -11,12 +11,12 @@ internal sealed class RpcConnection : IAsyncDisposable
     private static readonly Encoding LenientUtf8 = Encoding.GetEncoding(
         "utf-8", EncoderFallback.ReplacementFallback, DecoderFallback.ReplacementFallback);
 
-    private readonly Stream stream;
-    private readonly TcpClient? tcpClient;
+    private readonly Stream _stream;
+    private readonly TcpClient? _tcpClient;
 
-    internal RpcConnection(Stream stream) => this.stream = stream;
+    internal RpcConnection(Stream stream) => _stream = stream;
 
-    private RpcConnection(TcpClient tcpClient) : this(tcpClient.GetStream()) => this.tcpClient = tcpClient;
+    private RpcConnection(TcpClient tcpClient) : this(tcpClient.GetStream()) => _tcpClient = tcpClient;
 
     internal static async Task<RpcConnection> ConnectAsync(string host, int port, CancellationToken ct)
     {
@@ -39,13 +39,13 @@ internal sealed class RpcConnection : IAsyncDisposable
         byte[] sendBuffer = Encoding.ASCII.GetBytes(request);
         try
         {
-            await stream.WriteAsync(sendBuffer, ct).ConfigureAwait(false);
+            await _stream.WriteAsync(sendBuffer, ct).ConfigureAwait(false);
 
             using var reply = new MemoryStream();
             byte[] buffer = new byte[8192];
             while (true)
             {
-                int read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false);
+                int read = await _stream.ReadAsync(buffer, ct).ConfigureAwait(false);
                 if (read == 0)
                     throw new BoincConnectionException("Connection closed before the reply terminator arrived.");
 
@@ -69,7 +69,7 @@ internal sealed class RpcConnection : IAsyncDisposable
 
     public ValueTask DisposeAsync()
     {
-        tcpClient?.Dispose();
-        return stream.DisposeAsync();
+        _tcpClient?.Dispose();
+        return _stream.DisposeAsync();
     }
 }

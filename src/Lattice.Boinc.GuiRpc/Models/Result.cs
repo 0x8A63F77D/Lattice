@@ -39,5 +39,5 @@ public sealed record Result(
         ParseHelpers.GetBool(e, "suspended_via_gui"),
         ParseHelpers.GetDouble(e, "final_cpu_time"),
         ParseHelpers.GetInt(e, "exit_status"),
-        e.Element("active_task") is XElement at ? ActiveTask.Parse(at) : null);
+        e.Element("active_task") is { } at ? ActiveTask.Parse(at) : null);
 }

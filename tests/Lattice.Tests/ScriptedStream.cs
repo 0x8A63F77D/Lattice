@@ -5,13 +5,13 @@ namespace Lattice.Tests;
 /// <summary>In-memory duplex stream: Read serves scripted chunks in order; Write records into Written.</summary>
 internal sealed class ScriptedStream : Stream
 {
-    private readonly Queue<byte[]> chunks;
-    private byte[]? current;
-    private int pos;
+    private readonly Queue<byte[]> _chunks;
+    private byte[]? _current;
+    private int _pos;
 
     public MemoryStream Written { get; } = new();
 
-    public ScriptedStream(params byte[][] chunks) => this.chunks = new Queue<byte[]>(chunks);
+    public ScriptedStream(params byte[][] chunks) => _chunks = new Queue<byte[]>(chunks);
 
     /// <summary>One chunk per reply, each with the 0x03 terminator appended.</summary>
     public static ScriptedStream FromReplies(params string[] replies) =>
@@ -19,14 +19,14 @@ internal sealed class ScriptedStream : Stream
 
     public override int Read(Span<byte> buffer)
     {
-        if (current is null || pos >= current.Length)
+        if (_current is null || _pos >= _current.Length)
         {
-            if (!chunks.TryDequeue(out current)) return 0;
-            pos = 0;
+            if (!_chunks.TryDequeue(out _current)) return 0;
+            _pos = 0;
         }
-        int n = Math.Min(buffer.Length, current.Length - pos);
-        current.AsSpan(pos, n).CopyTo(buffer);
-        pos += n;
+        int n = Math.Min(buffer.Length, _current.Length - _pos);
+        _current.AsSpan(_pos, n).CopyTo(buffer);
+        _pos += n;
         return n;
     }
 

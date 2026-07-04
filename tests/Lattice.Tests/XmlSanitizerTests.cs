@@ -20,7 +20,7 @@ public class XmlSanitizerTests
     [Fact]
     public void Strips_control_characters_but_keeps_legal_whitespace()
     {
-        string sanitized = XmlSanitizer.Sanitize("<a>\x01hi\x1F\t\r\n</a>");
+        string sanitized = XmlSanitizer.Sanitize("<a>\x01" + "hi\x1F" + "\t\r\n</a>");
         Assert.Equal("<a>hi\t\r\n</a>", sanitized);
     }
 

@@ -20,7 +20,7 @@ internal static class RpcReplyParser
 
         if (throwOnUnauthorized && reply.Element("unauthorized") is not null)
             throw new BoincUnauthorizedException();
-        if (reply.Element("error") is XElement error)
+        if (reply.Element("error") is { } error)
             throw new BoincRpcException(((string)error).Trim());
 
         return reply;

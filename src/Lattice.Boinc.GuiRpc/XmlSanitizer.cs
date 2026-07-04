@@ -11,9 +11,8 @@ internal static partial class XmlSanitizer
         raw = raw.Replace("<?xml version=\"1.0\" encoding=\"ISO-8859-1\" ?>", string.Empty);
 
         var sb = new StringBuilder(raw.Length);
-        foreach (char c in raw)
-            if (c == '\t' || c == '\n' || c == '\r' || c >= '\x20')
-                sb.Append(c);
+        foreach (var c in raw.Where(c => c is '\t' or '\n' or '\r' or >= '\x20'))
+            sb.Append(c);
 
         return BareAmpersand().Replace(sb.ToString(), "&amp;");
     }

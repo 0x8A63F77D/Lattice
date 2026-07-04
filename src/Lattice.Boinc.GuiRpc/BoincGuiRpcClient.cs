@@ -15,8 +15,8 @@ namespace Lattice.Boinc.GuiRpc;
 /// </summary>
 public sealed class BoincGuiRpcClient : IAsyncDisposable
 {
-    private readonly SemaphoreSlim gate = new(1, 1);
-    private RpcConnection? connection;
+    private readonly SemaphoreSlim _gate = new(1, 1);
+    private RpcConnection? _connection;
 
     /// <summary>
     /// The current connection state.
@@ -35,7 +35,7 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
 
     internal BoincGuiRpcClient(RpcConnection connection)
     {
-        this.connection = connection;
+        _connection = connection;
         State = ConnectionState.Connected;
     }
 
@@ -44,9 +44,9 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
     /// </summary>
     public async Task ConnectAsync(string host, int port = 31416, CancellationToken ct = default)
     {
-        if (connection is not null)
+        if (_connection is not null)
             throw new InvalidOperationException("Already connected. Create a new client to reconnect.");
-        connection = await RpcConnection.ConnectAsync(host, port, ct).ConfigureAwait(false);
+        _connection = await RpcConnection.ConnectAsync(host, port, ct).ConfigureAwait(false);
         State = ConnectionState.Connected;
     }
 
@@ -85,7 +85,7 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
     public async Task<CcState> GetStateAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_state/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        if (reply.Element("client_state") is not XElement clientState)
+        if (reply.Element("client_state") is not { } clientState)
             throw new BoincProtocolException("get_state reply is missing <client_state>.", reply.ToString());
         return CcState.Parse(clientState);
     }
@@ -117,18 +117,18 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
 
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
     {
-        if (connection is null)
+        if (_connection is null)
             throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
 
-        await gate.WaitAsync(ct).ConfigureAwait(false);
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
         string raw;
         try
         {
-            raw = await connection.PerformRpcAsync(body, ct).ConfigureAwait(false);
+            raw = await _connection.PerformRpcAsync(body, ct).ConfigureAwait(false);
         }
         finally
         {
-            gate.Release();
+            _gate.Release();
         }
         return RpcReplyParser.Parse(raw, throwOnUnauthorized);
     }
@@ -138,9 +138,9 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
     /// </summary>
     public async ValueTask DisposeAsync()
     {
-        if (connection is not null)
-            await connection.DisposeAsync().ConfigureAwait(false);
+        if (_connection is not null)
+            await _connection.DisposeAsync().ConfigureAwait(false);
         State = ConnectionState.Disconnected;
-        gate.Dispose();
+        _gate.Dispose();
     }
 }

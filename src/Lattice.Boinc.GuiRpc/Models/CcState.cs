@@ -17,7 +17,7 @@ public sealed record CcState(
             ParseHelpers.GetInt(e, "core_client_major_version"),
             ParseHelpers.GetInt(e, "core_client_minor_version"),
             ParseHelpers.GetInt(e, "core_client_release")),
-        e.Element("host_info") is XElement host ? HostInfo.Parse(host) : null,
+        e.Element("host_info") is { } host ? HostInfo.Parse(host) : null,
         [.. e.Elements("project").Select(Project.Parse)],
         [.. e.Elements("app").Select(App.Parse)],
         [.. e.Elements("app_version").Select(AppVersion.Parse)],
