@@ -10,5 +10,6 @@ public sealed record VersionInfo(int Major, int Minor, int Release)
         ParseHelpers.GetInt(e, "minor"),
         ParseHelpers.GetInt(e, "release"));
 
+    /// <summary>Formats as "major.minor.release", e.g. "8.0.4".</summary>
     public override string ToString() => $"{Major}.{Minor}.{Release}";
 }

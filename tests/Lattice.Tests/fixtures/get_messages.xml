@@ -1,0 +1,22 @@
+<boinc_gui_rpc_reply>
+<msgs>
+<msg>
+ <project></project>
+ <pri>1</pri>
+ <seqno>1</seqno>
+ <body>
+Starting BOINC client version 8.0.4 for x86_64-pc-linux-gnu
+</body>
+ <time>1751600000.000000</time>
+</msg>
+<msg>
+ <project>Einstein@Home</project>
+ <pri>2</pri>
+ <seqno>2</seqno>
+ <body>
+Task h1_0437.60 exited with zero status but no 'finished' file
+</body>
+ <time>1751600100.000000</time>
+</msg>
+</msgs>
+</boinc_gui_rpc_reply>
