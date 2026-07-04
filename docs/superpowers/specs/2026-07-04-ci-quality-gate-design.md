@@ -1,66 +1,68 @@
-# CI 与质量门禁设计（M2 之前）
+# CI and Quality Gate Design (pre-M2)
 
-日期：2026-07-04
-状态：已批准
+Date: 2026-07-04
+Status: approved
 
-## 目标
+## Goal
 
-在 M2 开发开始前，为 GitHub 仓库 `0x8A63F77D/Lattice` 配置持续集成与合并门禁：每个进入 `main` 的变更都必须通过完整构建（零警告）与全部测试。
+Before M2 development starts, set up continuous integration and merge gating for the GitHub repository `0x8A63F77D/Lattice`: every change reaching `main` must pass a full build (zero warnings) and the entire test suite.
 
-## 决策记录
+## Decision record
 
-| 问题 | 决策 | 理由 |
+| Question | Decision | Rationale |
 |---|---|---|
-| 范围 | 仅 CI + 门禁，不含发布流水线 | M2 是 UI 开发，短期无发包需求；NuGet 发布等有需求时再加（YAGNI） |
-| 门禁强度 | `main` 仅 PR 合并 + required check，无管理员豁免 | 流程本来就走 PR（含 Codex Review）；逃生门 = 临时 disable ruleset |
-| 运行平台 | 仅 `ubuntu-latest`，matrix 形式预留扩展 | 协议库纯托管代码；本地开发即 Windows，CI 补 Linux 侧；M2 出现平台相关代码再扩 |
-| 检查内容 | Release 构建 `-warnaserror` + 全部测试 | 锁住当前零警告状态；格式检查/覆盖率阈值暂不加，被咬到再说 |
-| 保护机制 | Repository ruleset（非老式 branch protection） | GitHub 当前推荐形态，可配置项更全，公开仓库免费 |
+| Scope | CI + gate only, no release pipeline | M2 is UI work with no packaging needs in the near term; add NuGet publishing when an actual release calls for it (YAGNI) |
+| Gate strictness | `main` accepts PR merges only + required check, no admin bypass | The workflow already goes through PRs (including Codex Review); escape hatch = temporarily disabling the ruleset |
+| Runner platform | `ubuntu-latest` only, matrix-shaped for future expansion | The protocol library is pure managed code; local development already covers Windows, CI covers the Linux side; widen the matrix when M2 introduces platform-specific code |
+| Checks | Release build with `-warnaserror` + full test suite | Locks in the current zero-warning state; formatting checks / coverage thresholds deferred until they earn their keep |
+| Protection mechanism | Repository ruleset (not legacy branch protection) | GitHub's current recommended form, richer configuration, free for public repos |
 
-## 第 1 节：CI 工作流
+## Section 1: CI workflow
 
-文件：`.github/workflows/ci.yml`
+File: `.github/workflows/ci.yml`
 
-- **触发**：`pull_request`（目标 `main`）+ `push`（`main` 分支）。合并后在 `main` 上再跑一次，防止 merge 产物与 PR 头部不一致。
-- **Job：`build-test`**，`strategy.matrix.os: [ubuntu-latest]`。matrix 只有一项是有意的：M2 扩平台时加一行即可，job 显示名保持 `build-test` 稳定，required check 不需要重配。
-- **步骤**：
+- **Triggers**: `pull_request` (targeting `main`) + `push` (`main` branch). Running again on `main` after merge guards against the merge result differing from the PR head.
+- **Job `build-test`** with `strategy.matrix.os: [ubuntu-latest]`. The single-entry matrix is deliberate: expanding platforms in M2 is a one-line change, and the job display name stays a stable `build-test` so the required check does not need reconfiguring.
+- **Steps**:
   1. `actions/checkout`
-  2. `actions/setup-dotnet`，SDK 版本 `10.0.x`
+  2. `actions/setup-dotnet`, SDK version `10.0.x`
   3. `dotnet build Lattice.sln -c Release -warnaserror`
   4. `dotnet test Lattice.sln -c Release --no-build`
-- **并发**：`concurrency: ci-${{ github.ref }}`，`cancel-in-progress: true`——同分支推新 commit 时取消旧运行。
-- 用 Release 配置构建与测试，与未来发包口径一致。`-warnaserror` 只在 CI 生效，本地构建不受影响。
+- **Concurrency**: `concurrency: ci-${{ github.ref }}` with `cancel-in-progress: true` — pushing a new commit to the same branch cancels the stale run.
+- Build and test in Release configuration, matching the future packaging configuration. `-warnaserror` applies in CI only; local builds are unaffected.
 
-## 第 2 节：分支保护（ruleset）
+**Implementation note (observed during rollout):** even with an explicit job `name`, GitHub appends the matrix value to the check run name, so the actual required-check context is `build-test (ubuntu-latest)`. When the matrix widens, each leg becomes its own context and the ruleset's required checks must be updated in the same change.
 
-对 `main` 启用一条 repository ruleset：
+## Section 2: Branch protection (ruleset)
 
-- 必须通过 PR 合并（`pull_request` 规则，approve 数 0——单人仓库要求 approve 会卡死流程）
-- required status check：`build-test`
-- 禁止 force push、禁止删除分支
-- 不配置任何 bypass actor（管理员同样受约束）
+One repository ruleset on `main`:
 
-逃生门：紧急情况下在 Settings → Rules 里临时将 ruleset 切为 disabled，事后恢复。这是显式操作，留有审计痕迹。
+- Merges via PR only (`pull_request` rule with 0 required approvals — requiring approvals would deadlock a single-maintainer repo)
+- Required status check: `build-test (ubuntu-latest)`
+- Force pushes and branch deletion forbidden
+- No bypass actors (admins are bound too)
 
-## 第 3 节：落地顺序
+Escape hatch: in an emergency, temporarily switch the ruleset to disabled under Settings → Rules and restore afterwards. It is an explicit action that leaves an audit trail.
 
-1. 从 `main` 拉分支提交 CI 工作流，开独立 PR（PR #2），合并进 `main`
-2. 合并后启用 ruleset（顺序不能反：ruleset 先行会让 PR #2 因 required check 尚不存在而无法合并）
-3. 在 PR #1（M1 分支）上重新触发 CI（推送空提交或 re-run），使其同样经过门禁后合并
+## Section 3: Rollout order
 
-## 测试策略
+1. Commit the CI workflow on a branch off `main`, open a dedicated PR, merge it into `main`
+2. Enable the ruleset only after that merge (in the reverse order, the CI PR would be stuck behind a required check that does not exist yet)
+3. Trigger CI on any PR opened before the workflow existed (empty commit or re-run) so it passes the gate before merging
 
-门禁本身需要验证一次真的拦得住：
+## Test strategy
 
-- 推一个带编译警告的临时分支开 PR → 预期 CI 红（`-warnaserror` 生效）
-- 推一个带失败测试的临时分支开 PR → 预期 CI 红
-- 验证 `main` 无法直推（git push 被 ruleset 拒绝）
-- 验证 CI 红的 PR 合并按钮被禁用
-- 验证完删除临时分支
+The gate itself gets verified once, for real:
 
-## 完成定义
+- Push a temporary branch with a compiler warning, open a PR → expect CI red (`-warnaserror` works)
+- Push a temporary branch with a failing test, open a PR → expect CI red
+- Verify `main` rejects direct pushes (git push refused by the ruleset)
+- Verify the merge button is disabled while CI is red
+- Delete the temporary branches afterwards
 
-- [ ] `ci.yml` 合并进 `main`，PR 与 `main` push 均触发
-- [ ] ruleset 生效：`main` 禁直推、禁 force push，PR 必须 `build-test` 绿才能合并
-- [ ] 门禁拦截行为按测试策略验证通过
-- [ ] PR #1 在新门禁下 CI 绿
+## Definition of done
+
+- [x] `ci.yml` merged into `main`, triggered by both PRs and `main` pushes
+- [x] Ruleset active: no direct pushes or force pushes to `main`; PRs must have `build-test (ubuntu-latest)` green to merge
+- [x] Gate behavior verified per the test strategy
+- [x] Pre-existing PRs pass the gate (PR #1 was merged before the workflow landed; the gate applies from M2 onward)
