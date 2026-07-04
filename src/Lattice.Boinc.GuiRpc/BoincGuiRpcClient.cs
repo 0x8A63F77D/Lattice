@@ -78,6 +78,40 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
         return version;
     }
 
+    /// <summary>Full state snapshot. Several MB on busy hosts — call once per connection, then poll deltas.</summary>
+    public async Task<CcState> GetStateAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<get_state/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        if (reply.Element("client_state") is not XElement clientState)
+            throw new BoincProtocolException("get_state reply is missing <client_state>.", reply.ToString());
+        return CcState.Parse(clientState);
+    }
+
+    /// <summary>Returns the core client status: task mode, network status, suspend reasons.</summary>
+    public async Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<get_cc_status/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        return CcStatus.Parse(reply.Element("cc_status") ?? reply);
+    }
+
+    /// <summary>Returns the list of results (tasks) on the core client.</summary>
+    public async Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default)
+    {
+        string body = $"<get_results>\n<active_only>{(activeOnly ? 1 : 0)}</active_only>\n</get_results>";
+        XElement reply = await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        XElement container = reply.Element("results") ?? reply;
+        return [.. container.Elements("result").Select(Result.Parse)];
+    }
+
+    /// <summary>Returns messages with seqno greater than the given value. Seqno is monotonic.</summary>
+    public async Task<IReadOnlyList<Message>> GetMessagesAsync(int seqno = 0, CancellationToken ct = default)
+    {
+        string body = $"<get_messages>\n<seqno>{seqno}</seqno>\n</get_messages>";
+        XElement reply = await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        XElement container = reply.Element("msgs") ?? reply;
+        return [.. container.Elements("msg").Select(Message.Parse)];
+    }
+
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
     {
         if (connection is null)
