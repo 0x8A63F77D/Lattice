@@ -34,10 +34,21 @@ public class XmlSanitizerTests
     [Theory]
     [InlineData("<a>a &amp; b</a>")]
     [InlineData("<a>&lt;tag&gt;</a>")]
+    [InlineData("<a>&apos;&quot;</a>")]
     [InlineData("<a>&#38;</a>")]
     [InlineData("<a>&#x26;</a>")]
     public void Leaves_valid_entities_untouched(string xml)
     {
         Assert.Equal(xml, XmlSanitizer.Sanitize(xml));
+    }
+
+    [Theory]
+    [InlineData("<a>&foo;</a>", "<a>&amp;foo;</a>")]
+    [InlineData("<a>&nbsp;</a>", "<a>&amp;nbsp;</a>")]
+    public void Escapes_undeclared_named_entities(string input, string expected)
+    {
+        string sanitized = XmlSanitizer.Sanitize(input);
+        Assert.Equal(expected, sanitized);
+        XElement.Parse(sanitized); // must not throw
     }
 }

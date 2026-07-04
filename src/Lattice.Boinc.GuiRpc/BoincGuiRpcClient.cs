@@ -55,18 +55,28 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
     /// </summary>
     public async Task<bool> AuthorizeAsync(string password, CancellationToken ct = default)
     {
-        XElement reply1 = await PerformRpcAsync("<auth1/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        string nonce = ParseHelpers.GetString(reply1, "nonce");
+        // The daemon keeps one pending nonce per connection, so the gate must span
+        // both RPCs: an interleaved auth1 from another caller would invalidate this nonce.
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            XElement reply1 = await PerformRpcLockedAsync("<auth1/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+            string nonce = ParseHelpers.GetString(reply1, "nonce");
 
-        // UTF-8 matches the raw bytes the C++ client hashes; ASCII would corrupt non-ASCII passwords.
-        string hash = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(nonce + password)));
-        XElement reply2 = await PerformRpcAsync(
-            $"<auth2>\n<nonce_hash>{hash}</nonce_hash>\n</auth2>", throwOnUnauthorized: false, ct).ConfigureAwait(false);
+            // UTF-8 matches the raw bytes the C++ client hashes; ASCII would corrupt non-ASCII passwords.
+            string hash = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(nonce + password)));
+            XElement reply2 = await PerformRpcLockedAsync(
+                $"<auth2>\n<nonce_hash>{hash}</nonce_hash>\n</auth2>", throwOnUnauthorized: false, ct).ConfigureAwait(false);
 
-        bool authorized = reply2.Element("authorized") is not null;
-        if (authorized)
-            State = ConnectionState.Authorized;
-        return authorized;
+            bool authorized = reply2.Element("authorized") is not null;
+            if (authorized)
+                State = ConnectionState.Authorized;
+            return authorized;
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     /// <summary>
@@ -117,19 +127,24 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
 
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
     {
-        if (_connection is null)
-            throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
-
         await _gate.WaitAsync(ct).ConfigureAwait(false);
-        string raw;
         try
         {
-            raw = await _connection.PerformRpcAsync(body, ct).ConfigureAwait(false);
+            return await PerformRpcLockedAsync(body, throwOnUnauthorized, ct).ConfigureAwait(false);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    // Callers must hold _gate.
+    private async Task<XElement> PerformRpcLockedAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
+    {
+        if (_connection is null)
+            throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
+
+        string raw = await _connection.PerformRpcAsync(body, ct).ConfigureAwait(false);
         return RpcReplyParser.Parse(raw, throwOnUnauthorized);
     }
 

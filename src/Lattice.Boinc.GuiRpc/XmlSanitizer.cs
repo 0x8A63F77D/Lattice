@@ -17,6 +17,8 @@ internal static partial class XmlSanitizer
         return BareAmpersand().Replace(sb.ToString(), "&amp;");
     }
 
-    [GeneratedRegex(@"&(?!(?:[A-Za-z][A-Za-z0-9]*|#[0-9]+|#x[0-9A-Fa-f]+);)")]
+    // Only XML's five predefined entities and numeric references survive; anything
+    // else (e.g. "&foo;" in an unescaped message body) would make XElement.Parse throw.
+    [GeneratedRegex(@"&(?!(?:amp|lt|gt|apos|quot|#[0-9]+|#x[0-9A-Fa-f]+);)")]
     private static partial Regex BareAmpersand();
 }
