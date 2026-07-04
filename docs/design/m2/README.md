@@ -8,7 +8,7 @@ This package specifies the app shell + 5 views + all states, with an approved sh
 
 ## About the Design Files
 
-`Lattice M2 Spec.dc.html` is a **design reference created in HTML** — a spec document with pixel-accurate mockups and annotations, NOT production code. The task is to **recreate these designs natively in Avalonia XAML with FluentAvalonia controls**, following the control mapping below. Do not port any HTML/CSS.
+`Lattice M2 Spec.html` is a **design reference created in HTML** — a spec document with pixel-accurate mockups and annotations, NOT production code. The task is to **recreate these designs natively in Avalonia XAML with FluentAvalonia controls**, following the control mapping below. Do not port any HTML/CSS.
 
 Open the file in a browser to view. Sections are labeled: 1a/1b/1c (shell options — **1c is the approved direction**), 1d (row anatomy), 1e (state matrix), 1f (dark theme), 1g (tokens), 2a Projects, 2b Transfers, 2c Event log, 2d Settings, 2e Motion, 2f Responsive.
 
@@ -21,11 +21,16 @@ Open the file in a browser to view. Sections are labeled: 1a/1b/1c (shell option
 Column and field names split into what exists today vs. what the M2 milestone must add to the RPC/Core layers:
 
 **(a) Available in current `Lattice.Boinc.GuiRpc` models:**
-- `Result` — task state, fraction_done, elapsed/remaining, deadline
-- `Project` — UserTotalCredit, UserExpavgCredit, SuspendedViaGui, DontRequestMoreWork
+- `Result` — task state, fraction_done, elapsed time, deadline
+- `Project` — UserTotalCredit, UserExpavgCredit, HostTotalCredit, HostExpavgCredit, SuspendedViaGui, DontRequestMoreWork
 - `Message` — MessagePriority: Info=1, UserAlert=2, InternalError=3
 
+**Credit-field mapping (Projects view):** per-host child rows use `HostExpavgCredit` (RAC) and `HostTotalCredit`; the aggregate parent row **sums the host-level values across hosts** — never repeat account-level `User*` totals per host.
+
+**Application-column derivation (Tasks view):** `Result` carries no application name. Application = join `Result.WorkunitName` → `Workunit.AppName` → `App.UserFriendlyName`, falling back to `AppName` when the friendly name is absent, using the cached `get_state` snapshot.
+
 **(b) New M2 data requirements (standard BOINC GUI RPC fields — to be added in M2, not yet implemented):**
+- Remaining/ETA: parse `estimated_cpu_time_remaining` from `<active_task>` in `get_results`
 - `Project.ResourceShare` (from get_state / get_project_status)
 - `FileTransfer` model + `get_file_transfers` RPC (Transfers view)
 - Per-host connection-state machine in the Core layer: `connected / connecting / retrying(backoff, attempt) / unreachable / auth-failed`
@@ -154,7 +159,7 @@ Metric note: DejaVu Sans Mono is wider and has taller vertical metrics than Cons
 | Content surface | #FFFFFF | #292929 |
 | Nav surface | #F5F5F5 | #202020 |
 | Stroke / divider | #E0E0E0 / #F0F0F0 | #3D3D3D / #333333 |
-| Text primary / secondary / tertiary | #242424 / #616161 / #8A8A8A | #FFFFFF / #D6D6D6 / #ADADAD |
+| Text primary / secondary / tertiary | #242424 / #616161 / #767676 | #FFFFFF / #D6D6D6 / #ADADAD |
 | Accent (selection, links, progress) | #0F6CBD | #479EF5 |
 | Selected row / brand tint | #EBF3FC | #123B5C |
 | Success (icons only, never bg) | #107C10 | #9FD89F |
@@ -166,7 +171,7 @@ Metric note: DejaVu Sans Mono is wider and has taller vertical metrics than Cons
 
 Rule: state semantics always icon + text + color (three channels). Row background tints only for **selection and state-severity, never decoration** — allowed set: selected, deadline-at-risk, transfer-retrying, log-warning, log-error.
 
-Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their surface. **Disabled text (#BDBDBD light / #5C5C5C dark) is explicitly exempt**, per the WCAG 1.4.3 exception for inactive UI components — do not lighten it to pass.
+Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their surface. Light tertiary was darkened from #8A8A8A (~3.45:1 on white, below the floor) to **#767676 (≥4.5:1); #8A8A8A is retired for text and may only appear as a decorative/non-text value**; the dark tertiary #ADADAD already passes on #292929 and is unchanged. **Disabled text (#BDBDBD light / #5C5C5C dark) is explicitly exempt**, per the WCAG 1.4.3 exception for inactive UI components — do not lighten it to pass.
 
 **Mica**: Windows 11 — Mica on nav + command bar regions; solid fallbacks above for macOS/Linux/battery. Content surfaces always opaque.
 
