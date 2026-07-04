@@ -18,7 +18,17 @@ Open the file in a browser to view. Sections are labeled: 1a/1b/1c (shell option
 
 ## Data model
 
-Column and field names map to the existing `Lattice.Boinc.GuiRpc` models: `Result` (task state, fraction_done, elapsed/remaining, deadline), `Project` (UserTotalCredit, UserExpavgCredit, ResourceShare, SuspendedViaGui, DontRequestMoreWork), `FileTransfer`, `Message` (MessagePriority: Info=1, UserAlert=2, InternalError=3), plus a per-host connection-state machine: `connected / connecting / retrying(backoff, attempt) / unreachable / auth-failed`.
+Column and field names split into what exists today vs. what the M2 milestone must add to the RPC/Core layers:
+
+**(a) Available in current `Lattice.Boinc.GuiRpc` models:**
+- `Result` — task state, fraction_done, elapsed/remaining, deadline
+- `Project` — UserTotalCredit, UserExpavgCredit, SuspendedViaGui, DontRequestMoreWork
+- `Message` — MessagePriority: Info=1, UserAlert=2, InternalError=3
+
+**(b) New M2 data requirements (standard BOINC GUI RPC fields — to be added in M2, not yet implemented):**
+- `Project.ResourceShare` (from get_state / get_project_status)
+- `FileTransfer` model + `get_file_transfers` RPC (Transfers view)
+- Per-host connection-state machine in the Core layer: `connected / connecting / retrying(backoff, attempt) / unreachable / auth-failed`
 
 ## App shell (approved: option 1c)
 
@@ -112,6 +122,7 @@ Columns: File * (ellipsis+tooltip) · Project 140 · Direction 80 · Progress 19
 | InfoBar in/out | height+opacity | in 200ms decelerateMax / out 150ms accelerateMid |
 | ContentDialog | scrim 0→.4, panel opacity+scale .96→1 | FluentAvalonia defaults |
 | Expander | chevron 100ms; height 200ms decelerateMid, collapse 150ms |
+| Completed transfer row | opacity 1→0 then remove | 150ms accelerateMid (same as row remove) |
 | NOT animated | retry countdowns, "Updated Ns ago", elapsed/remaining ticks, sort reflow | — |
 
 - Reduce-motion (Windows animation toggle / macOS Reduce Motion): all durations → 0 except spinners/ProgressRing.
@@ -153,7 +164,9 @@ Metric note: DejaVu Sans Mono is wider and has taller vertical metrics than Cons
 | Neutral state fg | #616161 | #ADADAD |
 | Disabled | #BDBDBD | #5C5C5C |
 
-Rule: state semantics always icon + text + color (three channels). Row background tints only for "at risk" and "selected"; max two emphasis layers on screen.
+Rule: state semantics always icon + text + color (three channels). Row background tints only for **selection and state-severity, never decoration** — allowed set: selected, deadline-at-risk, transfer-retrying, log-warning, log-error.
+
+Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their surface. **Disabled text (#BDBDBD light / #5C5C5C dark) is explicitly exempt**, per the WCAG 1.4.3 exception for inactive UI components — do not lighten it to pass.
 
 **Mica**: Windows 11 — Mica on nav + command bar regions; solid fallbacks above for macOS/Linux/battery. Content surfaces always opaque.
 
@@ -178,7 +191,8 @@ Rule: state semantics always icon + text + color (three channels). Row backgroun
 
 ## Files
 
-- `Lattice M2 Spec.dc.html` — the full spec document (open in browser; requires the `_ds/` folder alongside if viewing from the original project; standalone rendering may lose icon fonts but all annotations remain readable).
+- `Lattice M2 Spec.html` — the full spec document, **fully self-contained** (all runtime scripts, styles, and icon fonts inlined; opens offline from a plain checkout with no network access and no sibling folders required).
+- `support.js` — runtime library used by the original editable source document in the design workspace; not needed to view the bundled spec (kept for package-structure continuity).
 
 ## Decision log (from review)
 
