@@ -908,7 +908,7 @@
   </div>
   <div class="an">
     <div><b>token 映射</b>:画布 #1F1F1F(NeutralBackground2)· 表面 #292929(NeutralBackground1)· 导航 #202020 · 描边/分隔 #3D3D3D/#333 · 一级文字 #FFFFFF · 二级 #D6D6D6 · 三级 #ADADAD</div>
-    <div><b>语义色(暗)</b>:accent #479EF5(BrandFg dark)· success #9FD89F · warning #FAA06B · danger #E37D80;选中/风险行底 #123B5C / #3A2A1E(对应 tint 加深)。系统 accent 色可替换 brand ramp — 两主题都从系统取色,只锁 fg 对比度 ≥ 4.5:1</div>
+    <div><b>语义色(暗)</b>:accent #479EF5(BrandFg dark)· success #9FD89F · warning #FAA06B · danger #E37D80;选中/风险行底 #123B5C / #3A2A1E,error 行底 #3A1E20,disabled 前景 #5C5C5C(对应 tint 加深)。系统 accent 色可替换 brand ramp — 两主题都从系统取色,只锁 fg 对比度 ≥ 4.5:1</div>
     <div><b>Mica</b>:Windows 上导航栏与命令栏区域用 Mica 材质,#202020 为 macOS/Linux 及电池模式的 solid fallback;内容表面始终不透明</div>
   </div>
 </div>
@@ -931,6 +931,7 @@
     <div>
       <b style="color:#111">间距/尺寸 token</b><br>
       导航宽 260(折叠 48)· 导航项 36 / 主机项 40 · 命令栏 52 · 表头 32 · 行 36/28 · 状态栏 28 · 表面圆角 8 · 控件圆角 4 · 页边距 16 · 元素间距 8
+      <div style="margin-top:10px"><b style="color:#111">字体回退栈(跨平台)</b>:UI = Segoe UI → SF Pro Text(macOS)→ Ubuntu / Noto Sans(Linux)→ system-ui;等宽(日志)= Consolas → SF Mono / Menlo(macOS)→ DejaVu Sans Mono(Linux)。DejaVu 字面更宽更高:日志行高 26px 用固定行高实现(不随字体度量),字号锁 12px,时间戳列宽按 DejaVu 最宽情形校验(128px 已留余量)。</div>
       <div style="margin-top:10px"><b style="color:#111">键盘</b>:↑↓ 行导航 · Ctrl+F 过滤框 · F5 立即刷新 · Ctrl+1..4 切视图 · 表头 Space 排序 · 全部控件 Tab 可达,焦点 = 2px 黑描边(FocusStroke2)</div>
       <div style="margin-top:10px"><b style="color:#111">响应式</b>:≥1280 全导航;1000–1280 导航折叠 48px 图标栏(主机=状态图标+tooltip);列按 1d 优先级递减。最小 1000×700 下所有视图无横向滚动。</div>
       <div style="margin-top:10px"><b style="color:#111">图表预留</b>:内容区底部可插入可折叠 <span class="ctl">Expander</span> "History" 面板(M4),不影响现有布局。</div>

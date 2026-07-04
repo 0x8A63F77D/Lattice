@@ -126,7 +126,14 @@ Columns: File * (ellipsis+tooltip) · Project 140 · Direction 80 · Progress 19
 
 **Layout**: nav 260/48 · nav item 36 / host item 40 · command bar 52 · grid header 32 · row 36 (compact 28) · status bar 28 · surface radius 8 · control radius 4 · page padding 16 · gap 8.
 
-**Type** (Segoe UI; Consolas for log): page title 16 semibold · row body 13 (compact 12) · grid header 11 semibold · caption/subtext 12 · nav item 13 · badge 10 semibold. Numeric cells: tabular numerals, left-aligned.
+**Type** (see font fallback below; Consolas-stack for log): page title 16 semibold · row body 13 (compact 12) · grid header 11 semibold · caption/subtext 12 · nav item 13 · badge 10 semibold. Numeric cells: tabular numerals, left-aligned.
+
+**Font fallback stacks (cross-platform — every platform must resolve to a real font):**
+
+- UI: `Segoe UI` (Windows) → `SF Pro Text` (macOS) → `Ubuntu` / `Noto Sans` (Linux) → `system-ui, sans-serif`
+- Monospace (event log timestamps + messages): `Consolas` (Windows) → `SF Mono` / `Menlo` (macOS) → `DejaVu Sans Mono` (Linux) → `monospace`
+
+Metric note: DejaVu Sans Mono is wider and has taller vertical metrics than Consolas. Keep the 26px log row height by setting an explicit row height / line-height (do not derive from font metrics), keep log font size fixed at 12px, and size the timestamp column (128px) for the widest stack — already validated. SF Pro Text and Ubuntu are metrically close enough to Segoe UI that the 36/28px grid rows need no adjustment.
 
 **Color by role — Light / Dark** (prefer FluentAvalonia theme resources; hexes are the reference values; respect system accent — these brand hexes are defaults only, contrast ≥4.5:1 must hold):
 
@@ -142,9 +149,9 @@ Columns: File * (ellipsis+tooltip) · Project 140 · Direction 80 · Progress 19
 | Success (icons only, never bg) | #107C10 | #9FD89F |
 | Warning fg / row tint | #BC4B09 / #FFF9F5 | #FAA06B / #3A2A1E |
 | Warning InfoBar bg/border | #FFF9F5 / #FDCFB4 | #411200 / #714224 |
-| Danger fg / error-row tint | #C50F1F / #FDF3F4 | #E37D80 / (darken tint) |
+| Danger fg / error-row tint | #C50F1F / #FDF3F4 | #E37D80 / #3A1E20 |
 | Neutral state fg | #616161 | #ADADAD |
-| Disabled | #BDBDBD | — |
+| Disabled | #BDBDBD | #5C5C5C |
 
 Rule: state semantics always icon + text + color (three channels). Row background tints only for "at risk" and "selected"; max two emphasis layers on screen.
 
@@ -166,7 +173,7 @@ Rule: state semantics always icon + text + color (three channels). Row backgroun
 
 ## Assets
 
-- Icons: Fluent System Icons (MIT, microsoft/fluentui-system-icons) — regular at rest, filled when selected/active. Names used: task_list_square_ltr, grid, arrow_swap, document_text, settings, apps_list, server, checkmark_circle, arrow_sync, arrow_clockwise, dismiss_circle, key, play, pause, clock, arrow_upload, arrow_download, warning, error_circle, info, more_horizontal, add, search, chevron_down/up/right, timer, hand_right, text_line_spacing, filter, dismiss, copy, eye, arrow_sort_up/down, arrow_down, checkmark, hand_right.
+- Icons: Fluent System Icons (MIT, microsoft/fluentui-system-icons) — regular at rest, filled when selected/active. Names used: task_list_square_ltr, grid, arrow_swap, document_text, settings, apps_list, server, checkmark_circle, arrow_sync, arrow_clockwise, dismiss_circle, key, play, pause, clock, arrow_upload, arrow_download, warning, error_circle, info, more_horizontal, add, search, chevron_down/up/right, timer, hand_right, text_line_spacing, filter, dismiss, copy, eye, arrow_sort_up/down, arrow_down, checkmark.
 - No logo asset; "Lattice" wordmark = 20px accent rounded square with "L" + Segoe UI Semibold text (placeholder).
 
 ## Files
