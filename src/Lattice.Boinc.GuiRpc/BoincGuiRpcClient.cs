@@ -10,6 +10,8 @@ namespace Lattice.Boinc.GuiRpc;
 /// concurrent callers queue on an internal semaphore.
 /// No reconnect/retry policy — when the connection dies, callers see
 /// BoincConnectionException and must create a new client.
+/// Disposing while an RPC is in flight is a caller error; the owner is
+/// expected to stop issuing RPCs before disposing.
 /// </summary>
 public sealed class BoincGuiRpcClient : IAsyncDisposable
 {
@@ -56,7 +58,8 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
         XElement reply1 = await PerformRpcAsync("<auth1/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
         string nonce = ParseHelpers.GetString(reply1, "nonce");
 
-        string hash = Convert.ToHexStringLower(MD5.HashData(Encoding.ASCII.GetBytes(nonce + password)));
+        // UTF-8 matches the raw bytes the C++ client hashes; ASCII would corrupt non-ASCII passwords.
+        string hash = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(nonce + password)));
         XElement reply2 = await PerformRpcAsync(
             $"<auth2>\n<nonce_hash>{hash}</nonce_hash>\n</auth2>", throwOnUnauthorized: false, ct).ConfigureAwait(false);
 

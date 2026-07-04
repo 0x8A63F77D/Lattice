@@ -52,6 +52,8 @@ internal sealed class RpcConnection : IAsyncDisposable
                 int terminator = Array.IndexOf(buffer, Terminator, 0, read);
                 if (terminator >= 0)
                 {
+                    // Bytes past the terminator are discarded: the protocol is strictly
+                    // request-reply with no pipelining, so nothing valid can follow it.
                     reply.Write(buffer, 0, terminator);
                     break;
                 }
