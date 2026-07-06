@@ -24,6 +24,10 @@ public class ResultTests
         Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1752800000), r.ReportDeadline);
         Assert.False(r.ReadyToReport);
         Assert.False(r.SuspendedViaGui);
+        Assert.Equal(19000.0, r.EstimatedCpuTimeRemaining);
+        Assert.Equal(0.0, r.FinalElapsedTime);
+        Assert.Equal(218, r.VersionNum);
+        Assert.Equal("", r.PlanClass);
         Assert.NotNull(r.ActiveTask);
         Assert.Equal(0.421, r.ActiveTask!.FractionDone, precision: 6);
         Assert.Equal(3800.0, r.ActiveTask.ElapsedTime);
@@ -38,5 +42,9 @@ public class ResultTests
         Assert.True(r.SuspendedViaGui);
         Assert.Null(r.ActiveTask);
         Assert.Equal(12000.5, r.FinalCpuTime);
+        Assert.Equal(0.0, r.EstimatedCpuTimeRemaining);
+        Assert.Equal(0.0, r.FinalElapsedTime);
+        Assert.Equal(0, r.VersionNum);
+        Assert.Equal("", r.PlanClass);
     }
 }
