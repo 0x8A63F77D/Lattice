@@ -26,6 +26,10 @@ public sealed record Result(
     bool ReadyToReport,
     bool SuspendedViaGui,
     double FinalCpuTime,
+    double FinalElapsedTime,
+    double EstimatedCpuTimeRemaining,
+    int VersionNum,
+    string PlanClass,
     int ExitStatus,
     ActiveTask? ActiveTask)
 {
@@ -38,6 +42,10 @@ public sealed record Result(
         ParseHelpers.GetBool(e, "ready_to_report"),
         ParseHelpers.GetBool(e, "suspended_via_gui"),
         ParseHelpers.GetDouble(e, "final_cpu_time"),
+        ParseHelpers.GetDouble(e, "final_elapsed_time"),
+        ParseHelpers.GetDouble(e, "estimated_cpu_time_remaining"),
+        ParseHelpers.GetInt(e, "version_num"),
+        ParseHelpers.GetString(e, "plan_class"),
         ParseHelpers.GetInt(e, "exit_status"),
         e.Element("active_task") is { } at ? ActiveTask.Parse(at) : null);
 }
