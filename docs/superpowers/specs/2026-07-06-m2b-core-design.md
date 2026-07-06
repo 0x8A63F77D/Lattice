@@ -1,7 +1,7 @@
 # M2b — Lattice.Core Design
 
 Date: 2026-07-06
-Status: draft (awaiting user review)
+Status: approved
 
 ## Context
 
