@@ -74,7 +74,7 @@ New RPC: `Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationTo
 
 Parsing rule (lenient, mirrors reference): accept every tag above at ANY depth inside `<file_transfer>` — the daemon nests `is_upload`, `num_retries`, `next_request_time`, `time_so_far` inside `<persistent_file_xfer>`, and `bytes_xferred`-family tags inside `<file_xfer>`, but the reference client parses them flatly and so do we (`XElement.Descendants` lookup instead of `Element`).
 
-Derived view states (documented here, implemented in M2b/M2c): Active = `XferActive`; Retrying = `PersXferActive` false with `NextRequestTime` in the future; Queued = otherwise.
+Derived view states (documented here, implemented in M2b/M2c): Active = `XferActive`; Retrying = not active and `NextRequestTime` is in the future; Queued = otherwise. (`PersXferActive` merely means the transfer is pending — it is true in all three states on a live daemon.)
 
 ## Section 4: `IGuiRpcClient` interface
 
