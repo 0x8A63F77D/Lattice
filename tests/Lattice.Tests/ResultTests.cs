@@ -43,8 +43,25 @@ public class ResultTests
         Assert.Null(r.ActiveTask);
         Assert.Equal(12000.5, r.FinalCpuTime);
         Assert.Equal(0.0, r.EstimatedCpuTimeRemaining);
-        Assert.Equal(0.0, r.FinalElapsedTime);
+        Assert.Equal(12000.5, r.FinalElapsedTime); // falls back to final_cpu_time (old-daemon compat)
         Assert.Equal(0, r.VersionNum);
         Assert.Equal("", r.PlanClass);
+    }
+
+    [Fact]
+    public void Falls_back_to_cpu_time_when_elapsed_time_missing()
+    {
+        var e = XElement.Parse("""
+            <result>
+                <name>old_daemon_task</name>
+                <final_cpu_time>100.5</final_cpu_time>
+                <active_task>
+                    <current_cpu_time>42.0</current_cpu_time>
+                </active_task>
+            </result>
+            """);
+        Result r = Result.Parse(e);
+        Assert.Equal(100.5, r.FinalElapsedTime);
+        Assert.Equal(42.0, r.ActiveTask!.ElapsedTime);
     }
 }
