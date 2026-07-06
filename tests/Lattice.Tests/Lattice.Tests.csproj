@@ -14,4 +14,7 @@
     <ProjectReference Include="../../src/Lattice.Boinc.GuiRpc/Lattice.Boinc.GuiRpc.csproj" />
     <Content Include="fixtures/**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Lattice.Core\Lattice.Core.csproj" />
+  </ItemGroup>
 </Project>
