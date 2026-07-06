@@ -1,0 +1,48 @@
+<boinc_gui_rpc_reply>
+<file_transfers>
+<file_transfer>
+    <project_url>https://einsteinathome.org/</project_url>
+    <project_name>Einstein@Home</project_name>
+    <name>h1_0437.60_result_upload_0</name>
+    <nbytes>54198000.000000</nbytes>
+    <status>1</status>
+    <persistent_file_xfer>
+        <num_retries>0</num_retries>
+        <first_request_time>1751600000.000000</first_request_time>
+        <next_request_time>0.000000</next_request_time>
+        <time_so_far>12.500000</time_so_far>
+        <last_bytes_xferred>10000000.000000</last_bytes_xferred>
+        <is_upload>1</is_upload>
+    </persistent_file_xfer>
+    <file_xfer>
+        <bytes_xferred>35862528.000000</bytes_xferred>
+        <file_offset>1048576.000000</file_offset>
+        <xfer_speed>2867200.000000</xfer_speed>
+        <url>https://einsteinathome.org/upload_handler</url>
+    </file_xfer>
+</file_transfer>
+<file_transfer>
+    <project_url>https://www.worldcommunitygrid.org/</project_url>
+    <project_name>World Community Grid</project_name>
+    <name>wcg_input_42.dat</name>
+    <nbytes>2097152.000000</nbytes>
+    <status>0</status>
+    <persistent_file_xfer>
+        <num_retries>3</num_retries>
+        <first_request_time>1751500000.000000</first_request_time>
+        <next_request_time>1999999999.000000</next_request_time>
+        <time_so_far>85.000000</time_so_far>
+        <last_bytes_xferred>524288.000000</last_bytes_xferred>
+    </persistent_file_xfer>
+    <project_backoff>161.000000</project_backoff>
+</file_transfer>
+<file_transfer>
+    <project_url>https://einsteinathome.org/</project_url>
+    <project_name>Einstein@Home</project_name>
+    <name>queued_upload.out</name>
+    <nbytes>1024.000000</nbytes>
+    <status>0</status>
+    <generated_locally/>
+</file_transfer>
+</file_transfers>
+</boinc_gui_rpc_reply>
