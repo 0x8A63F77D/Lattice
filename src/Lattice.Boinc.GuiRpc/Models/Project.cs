@@ -10,6 +10,7 @@ public sealed record Project(
     double UserExpavgCredit,
     double HostTotalCredit,
     double HostExpavgCredit,
+    double ResourceShare,
     bool SuspendedViaGui,
     bool DontRequestMoreWork)
 {
@@ -20,6 +21,7 @@ public sealed record Project(
         ParseHelpers.GetDouble(e, "user_expavg_credit"),
         ParseHelpers.GetDouble(e, "host_total_credit"),
         ParseHelpers.GetDouble(e, "host_expavg_credit"),
+        ParseHelpers.GetDouble(e, "resource_share"),
         ParseHelpers.GetBool(e, "suspended_via_gui"),
         ParseHelpers.GetBool(e, "dont_request_more_work"));
 }
