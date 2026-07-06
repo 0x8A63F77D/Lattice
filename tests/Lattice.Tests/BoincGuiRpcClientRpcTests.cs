@@ -94,4 +94,16 @@ public class BoincGuiRpcClientRpcTests
 
         await Assert.ThrowsAsync<BoincProtocolException>(() => client.GetStateAsync());
     }
+
+    [Fact]
+    public async Task Client_implements_IGuiRpcClient()
+    {
+        var stream = ScriptedStream.FromReplies(Fixture("get_cc_status.xml"));
+        await using BoincGuiRpcClient client = ClientWith(stream);
+
+        IGuiRpcClient viaInterface = client;
+        CcStatus status = await viaInterface.GetCcStatusAsync();
+
+        Assert.Equal(RunMode.Auto, status.TaskMode);
+    }
 }

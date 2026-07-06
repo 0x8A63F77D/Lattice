@@ -13,7 +13,7 @@ namespace Lattice.Boinc.GuiRpc;
 /// Disposing while an RPC is in flight is a caller error; the owner is
 /// expected to stop issuing RPCs before disposing.
 /// </summary>
-public sealed class BoincGuiRpcClient : IAsyncDisposable
+public sealed class BoincGuiRpcClient : IGuiRpcClient
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private RpcConnection? _connection;
