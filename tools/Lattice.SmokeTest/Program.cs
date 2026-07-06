@@ -87,11 +87,14 @@ catch (Exception ex)
 
 static string? ReadPasswordFile()
 {
-    string[] candidates = OperatingSystem.IsWindows()
-        ? [@"C:\ProgramData\BOINC\gui_rpc_auth.cfg", @"D:\BOINCData\gui_rpc_auth.cfg"]
+    List<string> candidates = [];
+    if (Environment.GetEnvironmentVariable("BOINC_DATA_DIR") is { Length: > 0 } dataDir)
+        candidates.Add(Path.Combine(dataDir, "gui_rpc_auth.cfg"));
+    candidates.AddRange(OperatingSystem.IsWindows()
+        ? [@"C:\ProgramData\BOINC\gui_rpc_auth.cfg"]
         : OperatingSystem.IsMacOS()
             ? ["/Library/Application Support/BOINC Data/gui_rpc_auth.cfg"]
-            : ["/var/lib/boinc-client/gui_rpc_auth.cfg", "/var/lib/boinc/gui_rpc_auth.cfg"];
+            : ["/var/lib/boinc-client/gui_rpc_auth.cfg", "/var/lib/boinc/gui_rpc_auth.cfg"]);
 
     foreach (string path in candidates)
         if (File.Exists(path))
