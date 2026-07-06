@@ -13,6 +13,7 @@
 <project>
     <master_url>https://einsteinathome.org/</master_url>
     <project_name>Einstein@Home</project_name>
+    <resource_share>100.000000</resource_share>
     <user_total_credit>1234567.890000</user_total_credit>
     <user_expavg_credit>4321.098765</user_expavg_credit>
     <host_total_credit>234567.890000</host_total_credit>
@@ -21,6 +22,7 @@
 <project>
     <master_url>https://www.worldcommunitygrid.org/</master_url>
     <project_name>World Community Grid</project_name>
+    <resource_share>50.000000</resource_share>
     <user_total_credit>99999.000000</user_total_credit>
     <user_expavg_credit>100.000000</user_expavg_credit>
     <host_total_credit>88888.000000</host_total_credit>

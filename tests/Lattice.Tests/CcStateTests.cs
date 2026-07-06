@@ -64,4 +64,12 @@ public class CcStateTests
         Assert.Null(state.HostInfo);
         Assert.Equal(new VersionInfo(0, 0, 0), state.CoreClientVersion);
     }
+
+    [Fact]
+    public void Parses_project_resource_share()
+    {
+        CcState state = Load();
+        Assert.Equal(100.0, state.Projects[0].ResourceShare);
+        Assert.Equal(50.0, state.Projects[1].ResourceShare);
+    }
 }
