@@ -61,6 +61,19 @@ try
     foreach (Message message in messages.TakeLast(3))
         Console.WriteLine($"  [{message.Timestamp:HH:mm:ss}] {message.Project}: {message.Body}");
 
+    IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync();
+    Console.WriteLine($"Transfers ({transfers.Count}):");
+    foreach (FileTransfer t in transfers)
+    {
+        string direction = t.IsUpload ? "up" : "down";
+        string xferState = t.XferActive
+            ? $"active {t.XferSpeed / 1048576:F2} MB/s"
+            : t.NextRequestTime is { } next && next > DateTimeOffset.UtcNow
+                ? $"retry at {next:HH:mm:ss} (attempt {t.NumRetries})"
+                : "queued";
+        Console.WriteLine($"  {t.Name,-50} {direction,-4} {t.BytesXferred / 1048576.0:F1}/{t.Nbytes / 1048576.0:F1} MB  {xferState}");
+    }
+
     Console.WriteLine("SMOKE TEST PASSED");
     return 0;
 }
@@ -75,7 +88,7 @@ catch (Exception ex)
 static string? ReadPasswordFile()
 {
     string[] candidates = OperatingSystem.IsWindows()
-        ? [@"C:\ProgramData\BOINC\gui_rpc_auth.cfg"]
+        ? [@"C:\ProgramData\BOINC\gui_rpc_auth.cfg", @"D:\BOINCData\gui_rpc_auth.cfg"]
         : OperatingSystem.IsMacOS()
             ? ["/Library/Application Support/BOINC Data/gui_rpc_auth.cfg"]
             : ["/var/lib/boinc-client/gui_rpc_auth.cfg", "/var/lib/boinc/gui_rpc_auth.cfg"];

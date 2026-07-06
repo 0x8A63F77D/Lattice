@@ -5,7 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Lattice.Boinc.GuiRpc</RootNamespace>
     <PackageId>Lattice.Boinc.GuiRpc</PackageId>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Description>Async .NET client for the BOINC GUI RPC protocol. Single-host semantics: connect, authenticate, and read client state over TCP.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
