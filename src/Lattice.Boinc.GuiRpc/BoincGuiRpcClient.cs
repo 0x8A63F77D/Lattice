@@ -125,6 +125,14 @@ public sealed class BoincGuiRpcClient : IAsyncDisposable
         return [.. container.Elements("msg").Select(Message.Parse)];
     }
 
+    /// <summary>Returns in-progress file uploads and downloads.</summary>
+    public async Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<get_file_transfers/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        XElement container = reply.Element("file_transfers") ?? reply;
+        return [.. container.Elements("file_transfer").Select(FileTransfer.Parse)];
+    }
+
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
     {
         await _gate.WaitAsync(ct).ConfigureAwait(false);

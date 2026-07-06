@@ -64,6 +64,20 @@ public class BoincGuiRpcClientRpcTests
     }
 
     [Fact]
+    public async Task GetFileTransfers_returns_typed_transfers()
+    {
+        var stream = ScriptedStream.FromReplies(Fixture("get_file_transfers.xml"));
+        await using var client = ClientWith(stream);
+
+        IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync();
+
+        Assert.Equal(3, transfers.Count);
+        Assert.True(transfers[0].XferActive);
+        string sent = Encoding.ASCII.GetString(stream.Written.ToArray());
+        Assert.Contains("<get_file_transfers/>", sent);
+    }
+
+    [Fact]
     public async Task Unauthorized_reply_on_any_rpc_throws()
     {
         var stream = ScriptedStream.FromReplies("<boinc_gui_rpc_reply>\n<unauthorized/>\n</boinc_gui_rpc_reply>");
