@@ -528,6 +528,17 @@ public sealed class HostMonitor : IAsyncDisposable
 
         HostSnapshot snapshot = SnapshotBuilder.Build(
             HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
+
+        // Build is a pure in-memory call that observes no token, so a config change
+        // landing during it would otherwise slip an old-config snapshot past the guard
+        // above and into the assignment/publish below. A stale-vintage publish here is
+        // harmless-but-confusing (Snapshot deliberately retains last-known data across
+        // reconnects until the new connection's first tick), so this recheck is cheap
+        // correctness polish, not load-bearing machinery.
+        ct.ThrowIfCancellationRequested();
+        if (_configChanged)
+            return state;
+
         Snapshot = snapshot;
         RaiseSafe(SnapshotUpdated, snapshot);
         return state;
