@@ -287,13 +287,7 @@ public sealed class HostMonitor : IAsyncDisposable
         int attempt = 0;
         while (!ct.IsCancellationRequested)
         {
-            HostConfig config;
-            lock (_gate)
-            {
-                config = _config;
-                _configChanged = false;
-            }
-            AttemptOutcome outcome = await RunAttemptAsync(config, attempt, ct).ConfigureAwait(false);
+            AttemptOutcome outcome = await RunAttemptAsync(attempt, ct).ConfigureAwait(false);
 
             if (outcome.Result == AttemptResult.Disposal)
                 break;
@@ -334,19 +328,32 @@ public sealed class HostMonitor : IAsyncDisposable
     }
 
     // One connection attempt, cradle to grave. It owns the entire client lifetime:
-    // it creates the linked _connectionCts (so UpdateConfig can cancel this attempt),
-    // builds the client, walks Connecting→Authorizing→FetchingState→Connected→PollAsync,
-    // and in its finally disposes both the CTS and the client. By the time it returns,
-    // the connection is dead — by scope, not by convention — and every exception has
-    // been folded into an AttemptOutcome, so nothing escapes. The attempt argument is
-    // only for the pre-Connected status publishes (they describe this live attempt);
-    // it is never reset in here — resetting the dispatcher's counter on success is the
-    // dispatcher's job, driven by AttemptOutcome.ReachedConnected (see `connected` below).
-    private async Task<AttemptOutcome> RunAttemptAsync(HostConfig config, int attempt, CancellationToken ct)
+    // it snapshots the config and creates the linked _connectionCts (so UpdateConfig
+    // can cancel this attempt) in ONE _gate acquisition, builds the client, walks
+    // Connecting→Authorizing→FetchingState→Connected→PollAsync, and in its finally
+    // disposes both the CTS and the client. Snapshotting config and clearing
+    // _configChanged in the same lock block that creates _connectionCts is load-bearing:
+    // it is what makes UpdateConfig's "set _config, set _configChanged, cancel
+    // _connectionCts" atomic against this attempt's "read _config, clear _configChanged,
+    // create _connectionCts" — UpdateConfig, serialized by _gate, either fully precedes
+    // this block (the new config is read here) or fully follows it (cancel hits the CTS
+    // just created here). Splitting the snapshot into the dispatcher, one lock
+    // acquisition earlier, reopens a window where _connectionCts is null: UpdateConfig's
+    // cancel becomes a no-op and a stale-config connect can run unabortable until the OS
+    // TCP timeout. By the time RunAttemptAsync returns, the connection is dead — by
+    // scope, not by convention — and every exception has been folded into an
+    // AttemptOutcome, so nothing escapes. The attempt argument is only for the
+    // pre-Connected status publishes (they describe this live attempt); it is never
+    // reset in here — resetting the dispatcher's counter on success is the dispatcher's
+    // job, driven by AttemptOutcome.ReachedConnected (see `connected` below).
+    private async Task<AttemptOutcome> RunAttemptAsync(int attempt, CancellationToken ct)
     {
+        HostConfig config;
         CancellationToken connCt;
         lock (_gate)
         {
+            config = _config;
+            _configChanged = false;
             _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             connCt = _connectionCts.Token;
         }
