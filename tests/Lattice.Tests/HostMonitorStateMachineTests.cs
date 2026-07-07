@@ -213,6 +213,32 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task Throwing_factory_backs_off_instead_of_faulting_the_loop()
+    {
+        // Pre-fix, IGuiRpcClient client = _clientFactory() sat outside the try/catch:
+        // a throwing factory propagated out of RunAsync and faulted the loop task
+        // silently, leaving Status stuck at Connecting forever (this test times out
+        // on Wait.UntilAsync pre-fix instead of observing Retrying).
+        int calls = 0;
+        var fake = new FakeGuiRpcClient();
+        Func<IGuiRpcClient> factory = () =>
+        {
+            calls++;
+            return calls == 1 ? throw new InvalidOperationException("factory boom") : fake;
+        };
+        var time = new FakeTimeProvider();
+        await using var monitor = new HostMonitor(Config(), factory, time, 5);
+        monitor.Start();
+
+        await Wait.UntilAsync(() => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 1 });
+        Assert.Equal("factory boom", monitor.Status.LastError);
+
+        await Wait.AdvanceUntilAsync(time,
+            () => monitor.Status.State == HostConnectionState.Connected,
+            TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
     public async Task Dispose_stops_loop_and_disposes_client()
     {
         var fake = new FakeGuiRpcClient();

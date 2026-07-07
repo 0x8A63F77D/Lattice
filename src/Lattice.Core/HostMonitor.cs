@@ -238,7 +238,12 @@ public sealed class HostMonitor : IAsyncDisposable
                 _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 connCt = _connectionCts.Token;
             }
-            IGuiRpcClient client = _clientFactory();
+            // Declared outside the try (and left null until the factory call inside it
+            // succeeds) so a throwing factory — e.g. a future SSH-tunnel-wrapping
+            // transport that can fail before producing a client — flows into the
+            // generic catch below and reaches Retrying/backoff, instead of propagating
+            // out of RunAsync and faulting the loop task silently.
+            IGuiRpcClient? client = null;
             // Set by the two AuthFailed catch blocks below; the actual park happens
             // AFTER the finally has disposed this iteration's client (see below the
             // try/catch/finally), so a refused password never leaves the GUI RPC TCP
@@ -253,6 +258,7 @@ public sealed class HostMonitor : IAsyncDisposable
             TimeSpan? backoffDelay = null;
             try
             {
+                client = _clientFactory();
                 SetStatus(HostConnectionState.Connecting, attempt);
                 await client.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
 
@@ -326,8 +332,12 @@ public sealed class HostMonitor : IAsyncDisposable
                 }
                 // The connection is being torn down regardless of outcome; a disposal
                 // failure has nowhere meaningful to go and must not fault the loop.
-                try { await client.DisposeAsync().ConfigureAwait(false); }
-                catch { /* ignored: dispose failures do not affect the state machine */ }
+                // client is null when the factory itself threw before producing one.
+                if (client is not null)
+                {
+                    try { await client.DisposeAsync().ConfigureAwait(false); }
+                    catch { /* ignored: dispose failures do not affect the state machine */ }
+                }
             }
             // AuthFailed parking happens here, deliberately AFTER the finally above has
             // already disposed this iteration's client: the TCP connection to a host

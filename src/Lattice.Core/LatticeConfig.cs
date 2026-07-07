@@ -40,7 +40,11 @@ public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<Hos
     /// tmp file (and a freshly created parent directory) are created with user-only
     /// permissions, since the config contains RPC passwords — a plain file create
     /// would otherwise leave the file world-readable under a permissive umask, and
-    /// the rename preserves whatever mode the file was created with.
+    /// the rename preserves whatever mode the file was created with. A stale tmp file
+    /// (e.g. orphaned by an earlier serialize failure) is deleted first: UnixCreateMode
+    /// only applies when the file is actually created, and FileMode.Create on an
+    /// existing file truncates and reuses it without changing its mode — so a stale
+    /// tmp could otherwise carry looser permissions than intended into the rename.
     /// </summary>
     public void Save(string path)
     {
@@ -52,6 +56,7 @@ public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<Hos
                 UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
 
         string tmp = path + ".tmp";
+        File.Delete(tmp); // no-op if missing; race-free under the registry's single-threaded mutation contract
         using (FileStream stream = OperatingSystem.IsWindows()
             ? File.Create(tmp)
             : new FileStream(tmp, new FileStreamOptions
