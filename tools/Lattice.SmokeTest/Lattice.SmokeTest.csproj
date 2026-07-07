@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Lattice.Boinc.GuiRpc/Lattice.Boinc.GuiRpc.csproj" />
+    <ProjectReference Include="..\..\src\Lattice.Core\Lattice.Core.csproj" />
   </ItemGroup>
 
 </Project>
