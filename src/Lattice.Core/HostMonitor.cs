@@ -5,6 +5,9 @@ namespace Lattice.Core;
 /// <summary>Internal signal: authorization was refused; unwind to the AuthFailed state.</summary>
 internal sealed class HostAuthException : Exception { }
 
+/// <summary>Payload of <see cref="HostMonitor.MessagesAdded"/>: only the newly arrived messages.</summary>
+public sealed record MessagesAddedEventArgs(Guid HostId, IReadOnlyList<Message> Messages);
+
 /// <summary>
 /// The per-host actor: one background loop owns one <see cref="IGuiRpcClient"/> and
 /// walks the connection state machine. Events fire on the loop's thread-pool context,
@@ -25,6 +28,13 @@ public sealed class HostMonitor : IAsyncDisposable
     private bool _started;
     private VersionInfo? _daemonVersion;
     private ConnectionStatus _status;
+    private HostSnapshot? _snapshot;
+
+    /// <summary>Message buffer cap: the most recent 5,000 messages are retained per host.</summary>
+    internal const int MessageCapacity = 5000;
+
+    private readonly MessageLog _messages = new(MessageCapacity);
+    private int _lastSeqno;
 
     /// <summary>Creates a monitor; call <see cref="Start"/> to begin connecting.</summary>
     public HostMonitor(HostConfig config, Func<IGuiRpcClient> clientFactory,
@@ -48,8 +58,24 @@ public sealed class HostMonitor : IAsyncDisposable
         private set => Volatile.Write(ref _status, value);
     }
 
+    /// <summary>The latest snapshot, or null before the first successful poll tick.</summary>
+    public HostSnapshot? Snapshot
+    {
+        get => Volatile.Read(ref _snapshot);
+        private set => Volatile.Write(ref _snapshot, value);
+    }
+
+    /// <summary>The retained message buffer (oldest first, capped at 5,000).</summary>
+    public IReadOnlyList<Message> Messages => _messages.Snapshot();
+
     /// <summary>Raised once per state transition, from the monitor's loop context.</summary>
     public event EventHandler<ConnectionStatus>? StatusChanged;
+
+    /// <summary>Raised after every poll tick with the freshly built snapshot.</summary>
+    public event EventHandler<HostSnapshot>? SnapshotUpdated;
+
+    /// <summary>Raised when a tick returns new messages; carries only the new ones.</summary>
+    public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
 
     /// <summary>Starts the background loop. Idempotent.</summary>
     public void Start()
@@ -233,10 +259,57 @@ public sealed class HostMonitor : IAsyncDisposable
         SetStatus(HostConnectionState.Disconnected, 0);
     }
 
-    // Placeholder until the polling-loop task: hold the connection and return only
-    // when the config changes (forcing a reconnect with the new settings).
+    // Steady state: tick immediately on entry (first snapshot right after Connected),
+    // then wait the polling interval between ticks. Returns only on config change.
     private async Task PollAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
     {
-        await WaitForConfigChangeAsync(ct).ConfigureAwait(false);
+        while (true)
+        {
+            try
+            {
+                state = await TickAsync(client, config, state, ct).ConfigureAwait(false);
+            }
+            catch (BoincUnauthorizedException)
+            {
+                // Daemon restarted with a new password, or the session expired:
+                // one silent re-auth, then AuthFailed if still refused.
+                if (config.Password.Length == 0
+                    || !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
+                    throw new HostAuthException();
+                continue;
+            }
+            if (_configChanged)
+                return;
+            await WaitAsync(TimeSpan.FromSeconds(_pollingIntervalSeconds), ct).ConfigureAwait(false);
+            if (_configChanged)
+                return;
+        }
+    }
+
+    private async Task<CcState> TickAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
+    {
+        CcStatus ccStatus = await client.GetCcStatusAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<Result> results = await client.GetResultsAsync(ct: ct).ConfigureAwait(false);
+        IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync(ct).ConfigureAwait(false);
+
+        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(_lastSeqno, ct).ConfigureAwait(false);
+        if (newMessages.Count > 0)
+        {
+            _lastSeqno = newMessages.Max(m => m.Seqno);
+            _messages.Append(newMessages);
+            MessagesAdded?.Invoke(this, new MessagesAddedEventArgs(HostId, newMessages));
+        }
+
+        // A result naming a workunit we haven't cached means new work arrived since
+        // the last get_state: re-fetch the join tables once.
+        HashSet<string> knownWorkunits = [.. state.Workunits.Select(w => w.Name)];
+        if (results.Any(r => !knownWorkunits.Contains(r.WorkunitName)))
+            state = await client.GetStateAsync(ct).ConfigureAwait(false);
+
+        HostSnapshot snapshot = SnapshotBuilder.Build(
+            HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
+        Snapshot = snapshot;
+        SnapshotUpdated?.Invoke(this, snapshot);
+        return state;
     }
 }
