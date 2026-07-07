@@ -1,12 +1,16 @@
 ﻿using Lattice.Boinc.GuiRpc;
+using Lattice.Core;
 
 string host = "localhost";
 int port = 31416;
 string? password = null;
+bool coreMode = false;
 
 foreach (string arg in args)
 {
-    if (arg.StartsWith("--password=", StringComparison.Ordinal))
+    if (arg == "--core")
+        coreMode = true;
+    else if (arg.StartsWith("--password=", StringComparison.Ordinal))
         password = arg["--password=".Length..];
     else if (int.TryParse(arg, out int p))
         port = p;
@@ -20,6 +24,9 @@ if (password is null)
     Console.Error.WriteLine("No password given and no gui_rpc_auth.cfg found. Use --password=<pw>.");
     return 1;
 }
+
+if (coreMode)
+    return await RunCoreModeAsync(host, port, password);
 
 try
 {
@@ -83,6 +90,43 @@ catch (Exception ex)
     if (ex is BoincProtocolException protocolEx)
         Console.Error.WriteLine($"Raw payload:\n{protocolEx.RawPayload}");
     return 1;
+}
+
+static async Task<int> RunCoreModeAsync(string host, int port, string password)
+{
+    var config = new HostConfig(Guid.NewGuid(), "local", host, port, password);
+    var registry = new HostRegistry(
+        new LatticeConfig(5, [config]),
+        Path.Combine(Path.GetTempPath(), $"lattice-smoke-{Guid.NewGuid():N}.json"));
+    await using var manager = new HostMonitorManager(registry, () => new BoincGuiRpcClient(), TimeProvider.System);
+
+    var firstSnapshot = new TaskCompletionSource<HostSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
+    int messageCount = 0;
+    manager.StatusChanged += (_, s) =>
+        Console.WriteLine($"[status] {s.State}" + (s.LastError is { } err ? $" ({err})" : ""));
+    manager.MessagesAdded += (_, m) => Interlocked.Add(ref messageCount, m.Messages.Count);
+    manager.SnapshotUpdated += (_, snap) => firstSnapshot.TrySetResult(snap);
+
+    Console.WriteLine($"Core mode: monitoring {host}:{port} ...");
+    manager.Start();
+
+    Task done = await Task.WhenAny(firstSnapshot.Task, Task.Delay(TimeSpan.FromSeconds(30)));
+    if (done != firstSnapshot.Task)
+    {
+        Console.Error.WriteLine("FAILED: no snapshot within 30 seconds.");
+        return 1;
+    }
+
+    HostSnapshot snapshot = await firstSnapshot.Task;
+    Console.WriteLine($"Snapshot @ {snapshot.Timestamp:HH:mm:ss}: " +
+        $"{snapshot.Tasks.Count} tasks, {snapshot.Transfers.Count} transfers, " +
+        $"{snapshot.Projects.Count} projects, {messageCount} messages buffered");
+    foreach (TaskSnapshot t in snapshot.Tasks.Take(5))
+        Console.WriteLine($"  {t.Result.Name,-60} app={t.ApplicationName} project={t.ProjectName} " +
+            $"elapsed={t.ElapsedSeconds:F0}s atRisk={t.IsDeadlineAtRisk}");
+
+    Console.WriteLine("CORE SMOKE TEST PASSED");
+    return 0;
 }
 
 static string? ReadPasswordFile()
