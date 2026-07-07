@@ -89,6 +89,51 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task Attempt_counter_restarts_at_one_after_a_poll_failure_following_reconnect()
+    {
+        // Regression test for the 97dfb74 restructure: `attempt = 0` moved inside
+        // RunAttemptAsync, where it only mutated that method's local parameter copy
+        // instead of the dispatcher's loop-local counter in RunAsync. Consequence:
+        // fail N connection attempts, connect successfully, then have a LATER poll
+        // tick fail — the dispatcher resumed backoff from attempt N+1 (a much larger
+        // delay) instead of restarting fresh at attempt 1 with a 1s backoff, exactly
+        // as a failure right after Connected should behave.
+        bool failConnect = true;
+        bool failPoll = false;
+        var fake = new FakeGuiRpcClient
+        {
+            OnConnect = (_, _) => failConnect
+                ? throw new BoincConnectionException("down")
+                : Task.CompletedTask,
+            OnGetCcStatus = () => failPoll
+                ? throw new BoincConnectionException("poll boom")
+                : Task.FromResult(FakeGuiRpcClient.DefaultStatus),
+        };
+        var time = new FakeTimeProvider();
+        await using var monitor = new HostMonitor(Config(), () => fake, time, 5);
+        monitor.Start();
+
+        // Two failed connection attempts: reach Retrying at attempt 2.
+        await Wait.UntilAsync(() => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 1 });
+        await Wait.AdvanceUntilAsync(time,
+            () => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 2 },
+            TimeSpan.FromSeconds(1));
+
+        // Let the connection succeed.
+        failConnect = false;
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+
+        // A later poll tick fails: the counter must restart at attempt 1 (1s
+        // backoff), NOT resume at attempt 3 (4s), as if the pre-connect failures
+        // still counted against this brand-new failure.
+        failPoll = true;
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 1 });
+        Assert.Equal(time.GetUtcNow() + TimeSpan.FromSeconds(1), monitor.Status.NextAttemptAt);
+    }
+
+    [Fact]
     public async Task RequestRefresh_skips_remaining_backoff()
     {
         bool fail = true;

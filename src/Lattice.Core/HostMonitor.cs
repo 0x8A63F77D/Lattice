@@ -255,12 +255,18 @@ public sealed class HostMonitor : IAsyncDisposable
         Failed,        // any other failure: Retrying + backoff.
     }
 
-    private readonly record struct AttemptOutcome(AttemptResult Result, string? Error)
+    // ReachedConnected is only meaningful on a Failed outcome: true when the failure
+    // happened AFTER Connected was published (i.e. inside PollAsync/TickAsync — a
+    // healthy connection going bad mid-poll), false for a failure before Connected
+    // was ever reached. The dispatcher uses it to tell "reset the attempt counter,
+    // then count this as attempt 1" apart from "just count another failed attempt".
+    private readonly record struct AttemptOutcome(AttemptResult Result, string? Error, bool ReachedConnected = false)
     {
         public static readonly AttemptOutcome Disposal = new(AttemptResult.Disposal, null);
         public static readonly AttemptOutcome ConfigChanged = new(AttemptResult.ConfigChanged, null);
         public static AttemptOutcome AuthFailed(string error) => new(AttemptResult.AuthFailed, error);
-        public static AttemptOutcome Failed(string error) => new(AttemptResult.Failed, error);
+        public static AttemptOutcome Failed(string error, bool reachedConnected = false) =>
+            new(AttemptResult.Failed, error, reachedConnected);
     }
 
     // The dispatcher. It never holds a client: each iteration hands the whole client
@@ -311,8 +317,12 @@ public sealed class HostMonitor : IAsyncDisposable
             }
 
             // AttemptResult.Failed: back off, then retry. A config change during the wait
-            // short-circuits the attempt count so the reconnect starts fresh.
-            attempt++;
+            // short-circuits the attempt count so the reconnect starts fresh. A failure
+            // that happened AFTER Connected was published resets the counter first (the
+            // prior run of failures is irrelevant once a connection succeeded) and only
+            // then counts this failure, landing on attempt 1 — matching the pre-restructure
+            // behavior where `attempt = 0` ran right before publishing Connected.
+            attempt = outcome.ReachedConnected ? 1 : attempt + 1;
             TimeSpan delay = BackoffDelay(attempt);
             SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + delay, outcome.Error);
             try { await WaitAsync(delay, ct).ConfigureAwait(false); }
@@ -329,7 +339,9 @@ public sealed class HostMonitor : IAsyncDisposable
     // and in its finally disposes both the CTS and the client. By the time it returns,
     // the connection is dead — by scope, not by convention — and every exception has
     // been folded into an AttemptOutcome, so nothing escapes. The attempt argument is
-    // only for the pre-Connected status publishes (they describe this live attempt).
+    // only for the pre-Connected status publishes (they describe this live attempt);
+    // it is never reset in here — resetting the dispatcher's counter on success is the
+    // dispatcher's job, driven by AttemptOutcome.ReachedConnected (see `connected` below).
     private async Task<AttemptOutcome> RunAttemptAsync(HostConfig config, int attempt, CancellationToken ct)
     {
         CancellationToken connCt;
@@ -342,6 +354,10 @@ public sealed class HostMonitor : IAsyncDisposable
         // SSH-tunnel-wrapping transport that can fail before producing a client — folds
         // into the generic catch (→ Failed) instead of escaping this method.
         IGuiRpcClient? client = null;
+        // Tracks whether Connected was published this attempt, so a later failure (from
+        // PollAsync/TickAsync) can tell the dispatcher to reset the attempt counter
+        // instead of continuing to count against the pre-Connected run of failures.
+        bool connected = false;
         try
         {
             client = _clientFactory();
@@ -365,7 +381,6 @@ public sealed class HostMonitor : IAsyncDisposable
             _lastSeqno = 0;
             _messages.Clear();
 
-            attempt = 0;
             // A config change may have landed after the fetch above completed but
             // before Connected is published: never surface Connected (or the
             // snapshot/messages that would follow) for a connection to the OLD
@@ -374,6 +389,7 @@ public sealed class HostMonitor : IAsyncDisposable
             if (_configChanged)
                 return AttemptOutcome.ConfigChanged;
             SetStatus(HostConnectionState.Connected, 0);
+            connected = true;
             await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
             // PollAsync returns only on config change: reconnect immediately.
             return AttemptOutcome.ConfigChanged;
@@ -402,7 +418,7 @@ public sealed class HostMonitor : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            return AttemptOutcome.Failed(ex.Message);
+            return AttemptOutcome.Failed(ex.Message, connected);
         }
         finally
         {
