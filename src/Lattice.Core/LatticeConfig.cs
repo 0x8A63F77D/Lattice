@@ -11,6 +11,9 @@ public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<Hos
     /// <summary>Factory default: 5-second polling, no hosts.</summary>
     public static LatticeConfig Default { get; } = new(5, []);
 
+    /// <summary>The polling intervals the Settings UI offers (seconds).</summary>
+    public static readonly IReadOnlyList<int> AllowedPollingIntervals = [2, 5, 10, 30, 60];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
@@ -24,15 +27,27 @@ public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<Hos
     /// <summary>
     /// Loads the config from <paramref name="path"/>. A missing file yields
     /// <see cref="Default"/>; a corrupt file throws <see cref="JsonException"/> —
-    /// the caller decides how to surface that.
+    /// the caller decides how to surface that. The result is normalized: this is a
+    /// hand-editable file, so a missing or out-of-range <c>pollingIntervalSeconds</c>
+    /// falls back to the 5-second default instead of propagating (e.g. the
+    /// System.Text.Json default of 0 for a missing int, which would otherwise make
+    /// <c>HostMonitor</c> poll in a tight loop), and a missing <c>hosts</c> falls back
+    /// to an empty list instead of null. Individual host entries are not validated or
+    /// dropped here — that is out of scope for Load.
     /// </summary>
     public static LatticeConfig Load(string path)
     {
         if (!File.Exists(path))
             return Default;
         using FileStream stream = File.OpenRead(path);
-        return JsonSerializer.Deserialize<LatticeConfig>(stream, JsonOptions)
+        LatticeConfig config = JsonSerializer.Deserialize<LatticeConfig>(stream, JsonOptions)
             ?? throw new JsonException($"Config file deserialized to null: {path}");
+
+        int interval = AllowedPollingIntervals.Contains(config.PollingIntervalSeconds)
+            ? config.PollingIntervalSeconds
+            : Default.PollingIntervalSeconds;
+        IReadOnlyList<HostConfig> hosts = config.Hosts ?? [];
+        return config with { PollingIntervalSeconds = interval, Hosts = hosts };
     }
 
     /// <summary>

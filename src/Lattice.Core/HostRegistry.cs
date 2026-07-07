@@ -24,7 +24,7 @@ public sealed record RegistryChangedEventArgs(RegistryChangeKind Kind, HostConfi
 public sealed class HostRegistry
 {
     /// <summary>The polling intervals the Settings UI offers (seconds).</summary>
-    public static readonly IReadOnlyList<int> AllowedPollingIntervals = [2, 5, 10, 30, 60];
+    public static readonly IReadOnlyList<int> AllowedPollingIntervals = LatticeConfig.AllowedPollingIntervals;
 
     private readonly string _path;
     private LatticeConfig _config;

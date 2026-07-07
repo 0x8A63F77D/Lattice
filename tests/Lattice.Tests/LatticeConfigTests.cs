@@ -49,6 +49,72 @@ public class LatticeConfigTests
     }
 
     [Fact]
+    public void Load_normalizes_missing_pollingIntervalSeconds_to_default()
+    {
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{\"hosts\":[]}");
+
+        LatticeConfig config = LatticeConfig.Load(path);
+
+        Assert.Equal(5, config.PollingIntervalSeconds);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(7)]
+    public void Load_normalizes_unsupported_pollingIntervalSeconds_to_default(int seconds)
+    {
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, $"{{\"pollingIntervalSeconds\":{seconds},\"hosts\":[]}}");
+
+        LatticeConfig config = LatticeConfig.Load(path);
+
+        Assert.Equal(5, config.PollingIntervalSeconds);
+    }
+
+    [Fact]
+    public void Load_keeps_valid_pollingIntervalSeconds_unchanged()
+    {
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{\"pollingIntervalSeconds\":30,\"hosts\":[]}");
+
+        LatticeConfig config = LatticeConfig.Load(path);
+
+        Assert.Equal(30, config.PollingIntervalSeconds);
+    }
+
+    [Fact]
+    public void Load_normalizes_missing_hosts_to_empty_list()
+    {
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{\"pollingIntervalSeconds\":10}");
+
+        LatticeConfig config = LatticeConfig.Load(path);
+
+        Assert.NotNull(config.Hosts);
+        Assert.Empty(config.Hosts);
+    }
+
+    [Fact]
+    public void Load_normalizes_missing_hosts_and_still_round_trips_after_save()
+    {
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "{\"pollingIntervalSeconds\":10}");
+
+        LatticeConfig loaded = LatticeConfig.Load(path);
+        loaded.Save(path);
+        LatticeConfig reloaded = LatticeConfig.Load(path);
+
+        Assert.Equal(10, reloaded.PollingIntervalSeconds);
+        Assert.Empty(reloaded.Hosts);
+    }
+
+    [Fact]
     public void DisplayName_falls_back_to_address()
     {
         var host = new HostConfig(Guid.NewGuid(), "", "10.0.0.5", 31416, "");
