@@ -124,6 +124,28 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task AuthFailed_disposes_client_while_parked()
+    {
+        var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var time = new FakeTimeProvider();
+        HostConfig config = Config();
+        await using var monitor = new HostMonitor(config, () => fake, time, 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+
+        // The client must be torn down as soon as the loop parks in AuthFailed, not
+        // held open for the entire parked duration: BOINC daemons allow very few
+        // concurrent GUI RPC connections, so a lingering one can lock the user's
+        // official Manager out.
+        Assert.True(fake.Disposed);
+
+        // Revival must still work: a config change un-parks the loop and reconnects.
+        fake.OnAuthorize = _ => Task.FromResult(true);
+        monitor.UpdateConfig(config with { Password = "right" });
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+    }
+
+    [Fact]
     public async Task Unauthorized_thrown_during_authorize_is_auth_failed()
     {
         var fake = new FakeGuiRpcClient { OnAuthorize = _ => throw new BoincUnauthorizedException() };

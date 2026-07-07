@@ -196,6 +196,58 @@ public class HostMonitorPollingTests
     }
 
     [Fact]
+    public async Task Config_change_during_message_fetch_suppresses_stale_publish()
+    {
+        // The SECOND get_messages call simulates a config change landing right after
+        // the RPC completed on the wire but before TickAsync processes the result: the
+        // hook itself calls UpdateConfig as a side effect, then returns a non-empty
+        // batch (seqnos 3,4) that must never be appended/published from this (now
+        // superseded) connection.
+        HostConfig config = Config();
+        HostMonitor? monitor = null;
+        int getMessagesCalls = 0;
+        List<string> connects = [];
+        Func<IGuiRpcClient> factory = () => new FakeGuiRpcClient
+        {
+            OnConnect = (host, port) => { lock (connects) connects.Add($"{host}:{port}"); return Task.CompletedTask; },
+            OnGetMessages = seqno =>
+            {
+                int n = Interlocked.Increment(ref getMessagesCalls);
+                if (n == 1)
+                    return Task.FromResult<IReadOnlyList<Message>>([TestData.MakeMessage(1), TestData.MakeMessage(2)]);
+                if (n == 2)
+                {
+                    monitor!.UpdateConfig(config with { Address = "newhost" });
+                    return Task.FromResult<IReadOnlyList<Message>>([TestData.MakeMessage(3), TestData.MakeMessage(4)]);
+                }
+                // The new connection's batch is empty so leakage of the old batch is
+                // unambiguous: any 3/4 in Messages or a MessagesAdded event can only
+                // have come from the poisoned old-connection tick.
+                return Task.FromResult<IReadOnlyList<Message>>([]);
+            },
+        };
+        monitor = new HostMonitor(config, factory, new FakeTimeProvider(), 5);
+        await using var _ = monitor;
+        List<MessagesAddedEventArgs> added = [];
+        monitor.MessagesAdded += (_, e) => { lock (added) added.Add(e); };
+        monitor.Start();
+
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+        Assert.Equal(2, monitor.Messages.Count);
+
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => { lock (connects) return connects.Contains("newhost:31416"); });
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => getMessagesCalls >= 3);
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        lock (added)
+            Assert.DoesNotContain(added, e => e.Messages.Any(m => m.Seqno is 3 or 4));
+        // The reconnect clears the log and the new connection's batch was empty.
+        Assert.Empty(monitor.Messages);
+    }
+
+    [Fact]
     public async Task Mid_poll_repeated_unauthorized_after_reauth_backs_off_instead_of_spinning()
     {
         int authCalls = 0;

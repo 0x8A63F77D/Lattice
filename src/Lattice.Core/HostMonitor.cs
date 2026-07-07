@@ -239,6 +239,13 @@ public sealed class HostMonitor : IAsyncDisposable
                 connCt = _connectionCts.Token;
             }
             IGuiRpcClient client = _clientFactory();
+            // Set by the two AuthFailed catch blocks below; the actual park happens
+            // AFTER the finally has disposed this iteration's client (see below the
+            // try/catch/finally), so a refused password never leaves the GUI RPC TCP
+            // connection open for the duration of the park — BOINC daemons allow very
+            // few concurrent GUI RPC connections, and a lingering one can lock the
+            // user's official Manager out.
+            bool parkForConfigChange = false;
             try
             {
                 SetStatus(HostConnectionState.Connecting, attempt);
@@ -288,9 +295,7 @@ public sealed class HostMonitor : IAsyncDisposable
             catch (HostAuthException)
             {
                 SetStatus(HostConnectionState.AuthFailed, 0, lastError: "The host refused the password.");
-                try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                attempt = 0;
+                parkForConfigChange = true;
             }
             catch (BoincUnauthorizedException ex)
             {
@@ -299,9 +304,7 @@ public sealed class HostMonitor : IAsyncDisposable
                 // get_state) is unauthorized before Connected is ever reached. Same
                 // terminal handling as a refused password: never spin forever on it.
                 SetStatus(HostConnectionState.AuthFailed, 0, lastError: ex.Message);
-                try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                attempt = 0;
+                parkForConfigChange = true;
             }
             catch (Exception ex)
             {
@@ -324,6 +327,17 @@ public sealed class HostMonitor : IAsyncDisposable
                 // failure has nowhere meaningful to go and must not fault the loop.
                 try { await client.DisposeAsync().ConfigureAwait(false); }
                 catch { /* ignored: dispose failures do not affect the state machine */ }
+            }
+            // AuthFailed parking happens here, deliberately AFTER the finally above has
+            // already disposed this iteration's client: the TCP connection to a host
+            // whose password was refused must not sit open for the entire parked
+            // duration. Only a config change (never RequestRefresh) revives AuthFailed.
+            if (parkForConfigChange)
+            {
+                try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                attempt = 0;
+                continue;
             }
         }
         SetStatus(HostConnectionState.Disconnected, 0);
@@ -380,6 +394,16 @@ public sealed class HostMonitor : IAsyncDisposable
         IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync(ct).ConfigureAwait(false);
 
         IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(_lastSeqno, ct).ConfigureAwait(false);
+
+        // A config change may have landed (and canceled connCt) while get_messages was
+        // in flight: never append/publish messages fetched from the OLD connection.
+        // This mirrors the guard below the state refetch — that one protects the
+        // snapshot, this one protects the message log and MessagesAdded, which would
+        // otherwise be able to fire under this HostId with stale-connection data even
+        // though the snapshot guard has not been reached yet.
+        ct.ThrowIfCancellationRequested();
+        if (_configChanged)
+            return state;
         if (newMessages.Count > 0)
         {
             _lastSeqno = newMessages.Max(m => m.Seqno);
