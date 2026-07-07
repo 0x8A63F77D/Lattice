@@ -140,6 +140,24 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task Dispose_failure_in_client_does_not_stall_the_loop()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnConnect = (_, _) => throw new BoincConnectionException("refused"),
+            OnDispose = () => throw new InvalidOperationException("dispose boom"),
+        };
+        var time = new FakeTimeProvider();
+        await using var monitor = new HostMonitor(Config(), () => fake, time, 5);
+        monitor.Start();
+
+        await Wait.UntilAsync(() => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 1 });
+        await Wait.AdvanceUntilAsync(time,
+            () => monitor.Status is { State: HostConnectionState.Retrying, Attempt: 2 },
+            TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
     public async Task Dispose_stops_loop_and_disposes_client()
     {
         var fake = new FakeGuiRpcClient();

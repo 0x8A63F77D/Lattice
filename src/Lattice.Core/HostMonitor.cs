@@ -24,6 +24,7 @@ public sealed class HostMonitor : IAsyncDisposable
     private Task _loop = Task.CompletedTask;
     private bool _started;
     private VersionInfo? _daemonVersion;
+    private ConnectionStatus _status;
 
     /// <summary>Creates a monitor; call <see cref="Start"/> to begin connecting.</summary>
     public HostMonitor(HostConfig config, Func<IGuiRpcClient> clientFactory,
@@ -34,14 +35,18 @@ public sealed class HostMonitor : IAsyncDisposable
         _time = timeProvider;
         _pollingIntervalSeconds = pollingIntervalSeconds;
         HostId = config.Id;
-        Status = new ConnectionStatus(config.Id, HostConnectionState.Disconnected, 0, null, null, null);
+        _status = new ConnectionStatus(config.Id, HostConnectionState.Disconnected, 0, null, null, null);
     }
 
     /// <summary>Stable identity of the monitored host (never changes across config updates).</summary>
     public Guid HostId { get; }
 
     /// <summary>The latest connection status.</summary>
-    public ConnectionStatus Status { get; private set; }
+    public ConnectionStatus Status
+    {
+        get => Volatile.Read(ref _status);
+        private set => Volatile.Write(ref _status, value);
+    }
 
     /// <summary>Raised once per state transition, from the monitor's loop context.</summary>
     public event EventHandler<ConnectionStatus>? StatusChanged;
@@ -219,7 +224,10 @@ public sealed class HostMonitor : IAsyncDisposable
             }
             finally
             {
-                await client.DisposeAsync().ConfigureAwait(false);
+                // The connection is being torn down regardless of outcome; a disposal
+                // failure has nowhere meaningful to go and must not fault the loop.
+                try { await client.DisposeAsync().ConfigureAwait(false); }
+                catch { /* ignored: dispose failures do not affect the state machine */ }
             }
         }
         SetStatus(HostConnectionState.Disconnected, 0);

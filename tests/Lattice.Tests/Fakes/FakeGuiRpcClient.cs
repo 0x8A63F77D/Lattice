@@ -27,6 +27,7 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public Func<bool, Task<IReadOnlyList<Result>>> OnGetResults { get; set; } = _ => Task.FromResult<IReadOnlyList<Result>>([]);
     public Func<int, Task<IReadOnlyList<Message>>> OnGetMessages { get; set; } = _ => Task.FromResult<IReadOnlyList<Message>>([]);
     public Func<Task<IReadOnlyList<FileTransfer>>> OnGetFileTransfers { get; set; } = () => Task.FromResult<IReadOnlyList<FileTransfer>>([]);
+    public Func<ValueTask>? OnDispose { get; set; }
 
     private void Record(string call) { lock (_gate) _calls.Add(call); }
 
@@ -54,5 +55,9 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
     { Record("get_file_transfers"); return OnGetFileTransfers(); }
 
-    public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }
+    public ValueTask DisposeAsync()
+    {
+        Disposed = true;
+        return OnDispose is null ? ValueTask.CompletedTask : OnDispose();
+    }
 }
