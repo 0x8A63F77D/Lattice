@@ -5,6 +5,15 @@ namespace Lattice.Core;
 /// <summary>Internal signal: authorization was refused; unwind to the AuthFailed state.</summary>
 internal sealed class HostAuthException : Exception { }
 
+/// <summary>
+/// Internal signal: PollAsync deliberately escalated a second consecutive mid-poll
+/// <see cref="BoincUnauthorizedException"/> after an already-successful silent re-auth.
+/// This is a transient-session failure (not a bad password), so it must fall into
+/// RunAsync's generic Retrying/backoff path rather than the pre-Connected
+/// unauthorized-to-AuthFailed mapping.
+/// </summary>
+internal sealed class HostSessionLostException(Exception inner) : Exception(inner.Message, inner) { }
+
 /// <summary>Payload of <see cref="HostMonitor.MessagesAdded"/>: only the newly arrived messages.</summary>
 public sealed record MessagesAddedEventArgs(Guid HostId, IReadOnlyList<Message> Messages);
 
@@ -65,7 +74,11 @@ public sealed class HostMonitor : IAsyncDisposable
         private set => Volatile.Write(ref _snapshot, value);
     }
 
-    /// <summary>The retained message buffer (oldest first, capped at 5,000).</summary>
+    /// <summary>
+    /// The retained message buffer (oldest first, capped at 5,000). Cleared and
+    /// refetched from seqno 0 at the start of every new connection (including
+    /// reconnects), since a restarted daemon's seqno counter may have reset.
+    /// </summary>
     public IReadOnlyList<Message> Messages => _messages.Snapshot();
 
     /// <summary>Raised once per state transition, from the monitor's loop context.</summary>
@@ -74,7 +87,12 @@ public sealed class HostMonitor : IAsyncDisposable
     /// <summary>Raised after every poll tick with the freshly built snapshot.</summary>
     public event EventHandler<HostSnapshot>? SnapshotUpdated;
 
-    /// <summary>Raised when a tick returns new messages; carries only the new ones.</summary>
+    /// <summary>
+    /// Raised when a tick returns new messages; carries only the new ones. Because the
+    /// message buffer resets on every reconnect, the first tick after a reconnect
+    /// re-raises this for the daemon's current buffer from seqno 0, even if some of
+    /// those messages were already seen before the disconnect.
+    /// </summary>
     public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
 
     /// <summary>Starts the background loop. Idempotent.</summary>
@@ -221,6 +239,14 @@ public sealed class HostMonitor : IAsyncDisposable
                 _daemonVersion = await client.ExchangeVersionsAsync(ct).ConfigureAwait(false);
                 CcState state = await client.GetStateAsync(ct).ConfigureAwait(false);
 
+                // A new connection may be talking to a freshly (re)started daemon whose
+                // seqno counter reset to zero: a stale high _lastSeqno would silently
+                // miss every message it now considers new. Reset the cursor and the
+                // retained buffer so the first tick refetches the daemon's current
+                // buffer from scratch (matches official BOINC Manager semantics).
+                _lastSeqno = 0;
+                _messages.Clear();
+
                 attempt = 0;
                 SetStatus(HostConnectionState.Connected, 0);
                 await PollAsync(client, config, state, ct).ConfigureAwait(false);
@@ -234,6 +260,17 @@ public sealed class HostMonitor : IAsyncDisposable
             catch (HostAuthException)
             {
                 SetStatus(HostConnectionState.AuthFailed, 0, lastError: "The host refused the password.");
+                try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                attempt = 0;
+            }
+            catch (BoincUnauthorizedException ex)
+            {
+                // The real client THROWS (rather than returning false) when a remote
+                // host isn't allow-listed, or when a mid-connect RPC (exchange_versions,
+                // get_state) is unauthorized before Connected is ever reached. Same
+                // terminal handling as a refused password: never spin forever on it.
+                SetStatus(HostConnectionState.AuthFailed, 0, lastError: ex.Message);
                 try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
                 attempt = 0;
@@ -271,16 +308,19 @@ public sealed class HostMonitor : IAsyncDisposable
                 state = await TickAsync(client, config, state, ct).ConfigureAwait(false);
                 reauthedSinceLastSuccess = false;
             }
-            catch (BoincUnauthorizedException)
+            catch (BoincUnauthorizedException ex)
             {
                 // Daemon restarted with a new password, or the session expired: one
                 // silent re-auth per successful tick. If we already re-authed since
                 // the last successful tick and are still unauthorized, the daemon is
-                // accepting AuthorizeAsync but refusing RPCs regardless — propagate so
-                // RunAsync's generic handler moves the host to Retrying with backoff
-                // instead of hammering the daemon in a zero-delay loop.
+                // accepting AuthorizeAsync but refusing RPCs regardless — escalate as a
+                // plain (non-BoincUnauthorizedException) failure so RunAsync's generic
+                // handler moves the host to Retrying with backoff, instead of either
+                // hammering the daemon in a zero-delay loop or being mapped to the
+                // pre-Connected unauthorized-to-AuthFailed path (this is a transient
+                // mid-session failure, not a refused password).
                 if (reauthedSinceLastSuccess)
-                    throw;
+                    throw new HostSessionLostException(ex);
                 if (config.Password.Length == 0
                     || !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
                     throw new HostAuthException();

@@ -124,6 +124,39 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task Unauthorized_thrown_during_authorize_is_auth_failed()
+    {
+        var fake = new FakeGuiRpcClient { OnAuthorize = _ => throw new BoincUnauthorizedException() };
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+    }
+
+    [Fact]
+    public async Task Unauthorized_thrown_during_exchange_versions_is_auth_failed()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnExchangeVersions = () => throw new BoincUnauthorizedException(),
+        };
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+    }
+
+    [Fact]
+    public async Task Unauthorized_thrown_during_get_state_is_auth_failed()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => throw new BoincUnauthorizedException(),
+        };
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+    }
+
+    [Fact]
     public async Task UpdateConfig_reconnects_with_new_address()
     {
         List<string> connects = [];

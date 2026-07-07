@@ -120,7 +120,15 @@ public sealed class HostMonitorManager : IAsyncDisposable
                 lock (_gate)
                     _monitors.Remove(e.Host!.Id, out removed);
                 if (removed is not null)
-                    _ = removed.DisposeAsync().AsTask(); // fire-and-forget teardown
+                    // Fire-and-forget teardown: the registry mutation must not block on
+                    // the monitor's shutdown. Core has no logging facility, so there is
+                    // nowhere useful to report a failure — but the continuation still
+                    // observes .Exception so a future change to HostMonitor.DisposeAsync
+                    // can never surface as an unobserved task exception (which crashes
+                    // the process on GC when TaskScheduler.UnobservedTaskException isn't
+                    // suppressed).
+                    removed.DisposeAsync().AsTask()
+                        .ContinueWith(static t => _ = t.Exception, TaskContinuationOptions.OnlyOnFaulted);
                 break;
 
             case RegistryChangeKind.HostUpdated:

@@ -113,6 +113,28 @@ public class SnapshotBuilderTests
     }
 
     [Fact]
+    public void Duplicate_project_and_workunit_keys_do_not_throw_and_first_entry_wins()
+    {
+        CcState state = TestData.MakeState(
+            projects: [
+                TestData.MakeProject("https://dup.org/", "First"),
+                TestData.MakeProject("https://dup.org/", "Second"),
+            ],
+            apps: [new App("app", "App")],
+            workunits: [
+                new Workunit("wu_dup", "app", 0),
+                new Workunit("wu_dup", "app", 0),
+            ]);
+        HostSnapshot snapshot = Build(state, results: [TestData.MakeResult(wuName: "wu_dup", projectUrl: "https://dup.org/")]);
+
+        Assert.Equal("First", snapshot.Tasks[0].ProjectName);
+        Assert.Equal("App", snapshot.Tasks[0].ApplicationName);
+        Assert.Equal(2, snapshot.Projects.Count);
+        Assert.Equal("First", snapshot.Projects[0].Project.ProjectName);
+        Assert.Equal("Second", snapshot.Projects[1].Project.ProjectName);
+    }
+
+    [Fact]
     public void Snapshot_carries_identity_and_timestamp()
     {
         HostSnapshot snapshot = Build();

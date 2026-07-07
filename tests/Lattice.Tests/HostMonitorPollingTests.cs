@@ -153,6 +153,49 @@ public class HostMonitorPollingTests
     }
 
     [Fact]
+    public async Task Reconnect_resets_message_cursor_and_log_after_daemon_restart()
+    {
+        bool failOnce = false;
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetCcStatus = () => failOnce
+                ? Task.FromException<CcStatus>(new BoincConnectionException("daemon restarted"))
+                : Task.FromResult(FakeGuiRpcClient.DefaultStatus),
+            // The daemon's seqno counter reset on restart: both before and after the
+            // simulated restart it serves the same seqno 1..2 from get_messages:0 —
+            // proving the monitor actually re-asks from 0 rather than resuming from a
+            // stale high cursor (which would ask for seqno > 2 and get nothing back).
+            OnGetMessages = seqno => Task.FromResult<IReadOnlyList<Message>>(
+                seqno == 0 ? [TestData.MakeMessage(1), TestData.MakeMessage(2)] : []),
+        };
+        var time = new FakeTimeProvider();
+        await using var monitor = new HostMonitor(Config(), () => fake, time, 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+        Assert.Equal(2, monitor.Messages.Count);
+        Assert.Contains("get_messages:0", fake.Calls);
+
+        // Simulate daemon restart: force a tick failure so the monitor tears down and
+        // reconnects. Without the fix, the reconnect would keep _lastSeqno == 2 and
+        // ask get_messages:2, silently missing the "new" (to the reset daemon) 1..2.
+        failOnce = true;
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Retrying);
+        failOnce = false;
+        await Wait.AdvanceUntilAsync(time,
+            () => monitor.Status.State == HostConnectionState.Connected, TimeSpan.FromSeconds(1));
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        // The reconnect must have re-fetched from seqno 0 and the log must contain
+        // exactly the refetched set (no stale entries carried over, none missed).
+        Assert.Equal(2, monitor.Messages.Count);
+        Assert.Equal(1, monitor.Messages[0].Seqno);
+        Assert.Equal(2, monitor.Messages[1].Seqno);
+        List<string> messageCalls = [.. fake.Calls.Where(c => c.StartsWith("get_messages:"))];
+        Assert.Equal("get_messages:0", messageCalls[^1]);
+    }
+
+    [Fact]
     public async Task Mid_poll_repeated_unauthorized_after_reauth_backs_off_instead_of_spinning()
     {
         int authCalls = 0;

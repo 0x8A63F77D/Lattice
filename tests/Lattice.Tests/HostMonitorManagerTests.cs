@@ -65,6 +65,28 @@ public class HostMonitorManagerTests
     }
 
     [Fact]
+    public async Task Registry_interval_change_reaches_running_monitor()
+    {
+        HostConfig host = NewHost();
+        var registry = new HostRegistry(new LatticeConfig(60, [host]), TempPath());
+        var fake = new FakeGuiRpcClient();
+        var time = new FakeTimeProvider();
+        await using var manager = new HostMonitorManager(registry, () => fake, time);
+        manager.Start();
+        await Wait.UntilAsync(() => manager.Monitors.Count == 1 && manager.Monitors[0].Snapshot is not null);
+
+        int callsAfterFirstTick = fake.Calls.Count(c => c == "get_cc_status");
+        Assert.Equal(1, callsAfterFirstTick);
+
+        // Shrink the interval to 2s. If the change reached the monitor, advancing
+        // fake time by just 2s (far short of the original 60s) triggers another tick.
+        registry.SetPollingInterval(2);
+        await Wait.AdvanceUntilAsync(time,
+            () => fake.Calls.Count(c => c == "get_cc_status") > callsAfterFirstTick,
+            TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
     public async Task TestConnection_reports_success_refusal_and_error()
     {
         TestConnectionResult ok = await HostMonitorManager.TestConnectionAsync(

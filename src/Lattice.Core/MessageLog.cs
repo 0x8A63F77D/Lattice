@@ -26,4 +26,11 @@ internal sealed class MessageLog(int capacity)
         lock (_gate)
             return [.. _messages];
     }
+
+    /// <summary>Discards all retained messages (used when a new connection's seqno counter may have reset).</summary>
+    public void Clear()
+    {
+        lock (_gate)
+            _messages.Clear();
+    }
 }
