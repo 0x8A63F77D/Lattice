@@ -55,4 +55,19 @@ public class LatticeConfigTests
         Assert.Equal("10.0.0.5", host.DisplayName);
         Assert.Equal("named", (host with { Name = "named" }).DisplayName);
     }
+
+    [Fact]
+    public void Save_creates_file_with_user_only_permissions_on_unix()
+    {
+        // Windows has no POSIX mode bits; ACLs there inherit from the user profile
+        // directory instead. This assertion is only meaningful on the ubuntu CI leg.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        string path = TempPath();
+        new LatticeConfig(5, []).Save(path);
+
+        UnixFileMode mode = File.GetUnixFileMode(path);
+        Assert.Equal(UnixFileMode.UserRead | UnixFileMode.UserWrite, mode);
+    }
 }

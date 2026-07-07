@@ -35,12 +35,31 @@ public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<Hos
             ?? throw new JsonException($"Config file deserialized to null: {path}");
     }
 
-    /// <summary>Saves atomically: writes path.tmp, then renames over the target.</summary>
+    /// <summary>
+    /// Saves atomically: writes path.tmp, then renames over the target. On Unix the
+    /// tmp file (and a freshly created parent directory) are created with user-only
+    /// permissions, since the config contains RPC passwords — a plain file create
+    /// would otherwise leave the file world-readable under a permissive umask, and
+    /// the rename preserves whatever mode the file was created with.
+    /// </summary>
     public void Save(string path)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        string dir = Path.GetDirectoryName(path)!;
+        if (OperatingSystem.IsWindows())
+            Directory.CreateDirectory(dir);
+        else
+            Directory.CreateDirectory(dir,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+
         string tmp = path + ".tmp";
-        using (FileStream stream = File.Create(tmp))
+        using (FileStream stream = OperatingSystem.IsWindows()
+            ? File.Create(tmp)
+            : new FileStream(tmp, new FileStreamOptions
+            {
+                Mode = FileMode.Create,
+                Access = FileAccess.Write,
+                UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite,
+            }))
             JsonSerializer.Serialize(stream, this, JsonOptions);
         File.Move(tmp, path, overwrite: true);
     }
