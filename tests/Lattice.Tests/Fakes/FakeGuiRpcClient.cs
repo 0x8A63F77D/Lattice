@@ -31,29 +31,33 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
 
     private void Record(string call) { lock (_gate) _calls.Add(call); }
 
-    public Task ConnectAsync(string host, int port = 31416, CancellationToken ct = default)
-    { Record($"connect:{host}:{port}"); return OnConnect(host, port); }
+    // Every hook awaits via WaitAsync(ct): the real client's socket ops honor their
+    // CancellationToken, so a scripted never-completing Task must be abortable by
+    // cancellation the same way, or tests exercising HostMonitor's cancel-on-config-
+    // change behavior would hang instead of observing the cancellation.
+    public async Task ConnectAsync(string host, int port = 31416, CancellationToken ct = default)
+    { Record($"connect:{host}:{port}"); await OnConnect(host, port).WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<bool> AuthorizeAsync(string password, CancellationToken ct = default)
-    { Record("authorize"); return OnAuthorize(password); }
+    public async Task<bool> AuthorizeAsync(string password, CancellationToken ct = default)
+    { Record("authorize"); return await OnAuthorize(password).WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<VersionInfo> ExchangeVersionsAsync(CancellationToken ct = default)
-    { Record("exchange_versions"); return OnExchangeVersions(); }
+    public async Task<VersionInfo> ExchangeVersionsAsync(CancellationToken ct = default)
+    { Record("exchange_versions"); return await OnExchangeVersions().WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<CcState> GetStateAsync(CancellationToken ct = default)
-    { Record("get_state"); return OnGetState(); }
+    public async Task<CcState> GetStateAsync(CancellationToken ct = default)
+    { Record("get_state"); return await OnGetState().WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default)
-    { Record("get_cc_status"); return OnGetCcStatus(); }
+    public async Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default)
+    { Record("get_cc_status"); return await OnGetCcStatus().WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default)
-    { Record("get_results"); return OnGetResults(activeOnly); }
+    public async Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default)
+    { Record("get_results"); return await OnGetResults(activeOnly).WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<IReadOnlyList<Message>> GetMessagesAsync(int seqno = 0, CancellationToken ct = default)
-    { Record($"get_messages:{seqno}"); return OnGetMessages(seqno); }
+    public async Task<IReadOnlyList<Message>> GetMessagesAsync(int seqno = 0, CancellationToken ct = default)
+    { Record($"get_messages:{seqno}"); return await OnGetMessages(seqno).WaitAsync(ct).ConfigureAwait(false); }
 
-    public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
-    { Record("get_file_transfers"); return OnGetFileTransfers(); }
+    public async Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
+    { Record("get_file_transfers"); return await OnGetFileTransfers().WaitAsync(ct).ConfigureAwait(false); }
 
     public ValueTask DisposeAsync()
     {

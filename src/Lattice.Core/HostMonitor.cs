@@ -31,6 +31,12 @@ public sealed class HostMonitor : IAsyncDisposable
     private readonly object _gate = new();
     private HostConfig _config;
     private volatile bool _configChanged;
+    // Owns cancellation for one connection attempt (connect through steady-state
+    // polling). Linked to the disposal token; UpdateConfig cancels it to abort
+    // in-flight work on the OLD config instead of waiting for it to finish on its
+    // own. Guarded by _gate: created/read at the top of RunAsync's loop iteration,
+    // canceled from UpdateConfig, disposed and nulled in RunAsync's finally.
+    private CancellationTokenSource? _connectionCts;
     private volatile int _pollingIntervalSeconds;
     private TaskCompletionSource _wake = NewWake();
     private Task _loop = Task.CompletedTask;
@@ -113,7 +119,11 @@ public sealed class HostMonitor : IAsyncDisposable
     /// </summary>
     public void RequestRefresh() => Wake();
 
-    /// <summary>Applies a new address/port/password: tears down and reconnects from scratch.</summary>
+    /// <summary>
+    /// Applies a new address/port/password: cancels any in-flight connection work
+    /// (connect, auth, RPC calls, and the current poll tick) for the previous config,
+    /// then tears down and reconnects from scratch.
+    /// </summary>
     public void UpdateConfig(HostConfig config)
     {
         if (config.Id != HostId)
@@ -122,6 +132,7 @@ public sealed class HostMonitor : IAsyncDisposable
         {
             _config = config;
             _configChanged = true;
+            _connectionCts?.Cancel();
         }
         Wake();
     }
@@ -219,25 +230,28 @@ public sealed class HostMonitor : IAsyncDisposable
         while (!ct.IsCancellationRequested)
         {
             HostConfig config;
+            CancellationToken connCt;
             lock (_gate)
             {
                 config = _config;
                 _configChanged = false;
+                _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                connCt = _connectionCts.Token;
             }
             IGuiRpcClient client = _clientFactory();
             try
             {
                 SetStatus(HostConnectionState.Connecting, attempt);
-                await client.ConnectAsync(config.Address, config.Port, ct).ConfigureAwait(false);
+                await client.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
 
                 SetStatus(HostConnectionState.Authorizing, attempt);
                 if (config.Password.Length > 0
-                    && !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
+                    && !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
                     throw new HostAuthException();
 
                 SetStatus(HostConnectionState.FetchingState, attempt);
-                _daemonVersion = await client.ExchangeVersionsAsync(ct).ConfigureAwait(false);
-                CcState state = await client.GetStateAsync(ct).ConfigureAwait(false);
+                _daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
+                CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
 
                 // A new connection may be talking to a freshly (re)started daemon whose
                 // seqno counter reset to zero: a stale high _lastSeqno would silently
@@ -248,14 +262,28 @@ public sealed class HostMonitor : IAsyncDisposable
                 _messages.Clear();
 
                 attempt = 0;
+                // A config change may have landed after the fetch above completed but
+                // before Connected is published: never surface Connected (or the
+                // snapshot/messages that would follow) for a connection to the OLD
+                // config. The finally below tears this client down; the loop
+                // reconnects against the new config on the very next iteration.
+                if (_configChanged)
+                    continue;
                 SetStatus(HostConnectionState.Connected, 0);
-                await PollAsync(client, config, state, ct).ConfigureAwait(false);
+                await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
                 // PollAsync returns only on config change: reconnect immediately.
                 attempt = 0;
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
                 break;
+            }
+            catch (OperationCanceledException)
+            {
+                // Not disposal: UpdateConfig canceled connCt to abort in-flight work on
+                // the old config. Reconnect immediately against the new one, no backoff.
+                attempt = 0;
+                continue;
             }
             catch (HostAuthException)
             {
@@ -287,6 +315,11 @@ public sealed class HostMonitor : IAsyncDisposable
             }
             finally
             {
+                lock (_gate)
+                {
+                    _connectionCts?.Dispose();
+                    _connectionCts = null;
+                }
                 // The connection is being torn down regardless of outcome; a disposal
                 // failure has nowhere meaningful to go and must not fault the loop.
                 try { await client.DisposeAsync().ConfigureAwait(false); }
@@ -298,14 +331,19 @@ public sealed class HostMonitor : IAsyncDisposable
 
     // Steady state: tick immediately on entry (first snapshot right after Connected),
     // then wait the polling interval between ticks. Returns only on config change.
-    private async Task PollAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
+    // connCt cancels RPC calls (including the silent re-auth) when the config changes
+    // mid-tick; ct (the outer disposal token) is used for the interval wait, whose
+    // existing wake/flag mechanism already handles config changes without needing
+    // cancellation — and must not be aborted into a tight retry loop on cancel.
+    private async Task PollAsync(IGuiRpcClient client, HostConfig config, CcState state,
+                                 CancellationToken connCt, CancellationToken ct)
     {
         bool reauthedSinceLastSuccess = false;
         while (true)
         {
             try
             {
-                state = await TickAsync(client, config, state, ct).ConfigureAwait(false);
+                state = await TickAsync(client, config, state, connCt).ConfigureAwait(false);
                 reauthedSinceLastSuccess = false;
             }
             catch (BoincUnauthorizedException ex)
@@ -322,7 +360,7 @@ public sealed class HostMonitor : IAsyncDisposable
                 if (reauthedSinceLastSuccess)
                     throw new HostSessionLostException(ex);
                 if (config.Password.Length == 0
-                    || !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
+                    || !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
                     throw new HostAuthException();
                 reauthedSinceLastSuccess = true;
                 continue;
@@ -354,6 +392,13 @@ public sealed class HostMonitor : IAsyncDisposable
         HashSet<string> knownWorkunits = [.. state.Workunits.Select(w => w.Name)];
         if (results.Any(r => !knownWorkunits.Contains(r.WorkunitName)))
             state = await client.GetStateAsync(ct).ConfigureAwait(false);
+
+        // A config change may have landed (and canceled connCt) while the RPCs above
+        // were in flight: never publish a snapshot that could straddle the old and
+        // new config under this HostId.
+        ct.ThrowIfCancellationRequested();
+        if (_configChanged)
+            return state;
 
         HostSnapshot snapshot = SnapshotBuilder.Build(
             HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);

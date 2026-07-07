@@ -201,4 +201,94 @@ public class HostMonitorStateMachineTests
         Assert.Equal(HostConnectionState.Disconnected, monitor.Status.State);
         Assert.True(fake.Disposed);
     }
+
+    [Fact]
+    public async Task UpdateConfig_aborts_inflight_connect_to_old_address()
+    {
+        // The old address's ConnectAsync never completes on its own — only a
+        // cancellation of the connection's token (triggered by UpdateConfig) can
+        // unstick it. Pre-fix, UpdateConfig only sets a flag/wake and the loop stays
+        // blocked on this connect forever, so the test times out via Wait.UntilAsync.
+        var oldConnectStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var oldConnectGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        List<string> connects = [];
+        Func<IGuiRpcClient> factory = () => new FakeGuiRpcClient
+        {
+            OnConnect = (host, port) =>
+            {
+                lock (connects) connects.Add($"{host}:{port}");
+                if (host == "localhost")
+                {
+                    oldConnectStarted.TrySetResult();
+                    return oldConnectGate.Task;
+                }
+                return Task.CompletedTask;
+            },
+        };
+        HostConfig config = Config();
+        await using var monitor = new HostMonitor(config, factory, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await oldConnectStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        monitor.UpdateConfig(config with { Address = "newhost" });
+
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+        lock (connects)
+            Assert.Contains("newhost:31416", connects);
+        Assert.False(oldConnectGate.Task.IsCompleted);
+    }
+
+    [Fact]
+    public async Task Config_change_during_initial_fetch_suppresses_stale_snapshot()
+    {
+        // The OLD connection's get_state is gated on a TCS we control; the config
+        // change happens while that RPC is still in flight. Releasing the gate AFTER
+        // the config change proves that even a late-completing old-config RPC cannot
+        // surface as a Connected status or a published snapshot for this HostId.
+        var oldGetStateGate = new TaskCompletionSource<CcState>(TaskCreationOptions.RunContinuationsAsynchronously);
+        // A single ordered timeline lets us assert the first snapshot happens AFTER
+        // the connect to the new address, without relying on exactly how many ticks
+        // the (pre-existing, by-design) sticky-wake mechanism fires in a row.
+        List<string> timeline = [];
+        List<HostConnectionState> statuses = [];
+        int clientIndex = 0;
+        Func<IGuiRpcClient> factory = () =>
+        {
+            int idx = Interlocked.Increment(ref clientIndex);
+            return new FakeGuiRpcClient
+            {
+                OnConnect = (host, port) => { lock (timeline) timeline.Add($"connect:{idx}:{host}:{port}"); return Task.CompletedTask; },
+                OnGetState = () => idx == 1
+                    ? oldGetStateGate.Task
+                    : Task.FromResult(FakeGuiRpcClient.EmptyState),
+            };
+        };
+        HostConfig config = Config();
+        await using var monitor = new HostMonitor(config, factory, new FakeTimeProvider(), 5);
+        monitor.StatusChanged += (_, s) => { lock (statuses) statuses.Add(s.State); };
+        monitor.SnapshotUpdated += (_, _) => { lock (timeline) timeline.Add("snapshot"); };
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.FetchingState);
+
+        monitor.UpdateConfig(config with { Address = "newhost" });
+        oldGetStateGate.TrySetResult(FakeGuiRpcClient.EmptyState);
+
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        lock (timeline)
+        {
+            Assert.Contains("connect:1:localhost:31416", timeline);
+            int newConnectIndex = timeline.IndexOf("connect:2:newhost:31416");
+            int firstSnapshotIndex = timeline.IndexOf("snapshot");
+            Assert.True(newConnectIndex >= 0, "the new address must have been connected to");
+            Assert.True(firstSnapshotIndex >= 0, "a snapshot must have been published");
+            Assert.True(newConnectIndex < firstSnapshotIndex,
+                "the first snapshot must be published after the connect to the new address");
+        }
+        // Only the new connection ever reaches Connected: the old one's get_state was
+        // canceled before it could set the daemon version / advance the state machine.
+        lock (statuses)
+            Assert.Equal(1, statuses.Count(s => s == HostConnectionState.Connected));
+    }
 }
