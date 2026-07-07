@@ -239,6 +239,51 @@ public class HostMonitorStateMachineTests
     }
 
     [Fact]
+    public async Task Throwing_status_subscriber_does_not_fault_the_loop()
+    {
+        // Pre-fix, SetStatus invoked subscribers unguarded — including from INSIDE
+        // the catch blocks. A throwing subscriber during the Retrying/AuthFailed
+        // publish escaped RunAsync entirely and faulted the loop task: the actor
+        // died silently and no config update could ever revive it (pre-fix, this
+        // test times out waiting for AuthFailed — the loop dies publishing Retrying).
+        var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        HostConfig config = Config();
+        await using var monitor = new HostMonitor(config, () => fake, new FakeTimeProvider(), 5);
+        monitor.StatusChanged += (_, _) => throw new InvalidOperationException("subscriber boom");
+        monitor.Start();
+
+        // Assert via polling Status only — never via the (throwing) subscriber.
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+
+        fake.OnAuthorize = _ => Task.FromResult(true);
+        monitor.UpdateConfig(config with { Password = "right" });
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+    }
+
+    [Fact]
+    public async Task Throwing_snapshot_subscriber_does_not_tear_down_a_healthy_connection()
+    {
+        // Pre-fix, a throwing SnapshotUpdated subscriber propagated out of TickAsync
+        // into RunAsync's generic catch and needlessly tore down a HEALTHY connection
+        // into Retrying/backoff even though every RPC had succeeded.
+        var fake = new FakeGuiRpcClient();
+        List<HostConnectionState> states = [];
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.StatusChanged += (_, s) => { lock (states) states.Add(s.State); };
+        monitor.SnapshotUpdated += (_, _) => throw new InvalidOperationException("subscriber boom");
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        // The loop must have survived the throw: a refresh still produces a second tick.
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => fake.Calls.Count(c => c == "get_cc_status") >= 2);
+
+        Assert.Equal(HostConnectionState.Connected, monitor.Status.State);
+        lock (states)
+            Assert.DoesNotContain(HostConnectionState.Retrying, states);
+    }
+
+    [Fact]
     public async Task Dispose_stops_loop_and_disposes_client()
     {
         var fake = new FakeGuiRpcClient();

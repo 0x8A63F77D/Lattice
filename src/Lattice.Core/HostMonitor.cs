@@ -87,10 +87,16 @@ public sealed class HostMonitor : IAsyncDisposable
     /// </summary>
     public IReadOnlyList<Message> Messages => _messages.Snapshot();
 
-    /// <summary>Raised once per state transition, from the monitor's loop context.</summary>
+    /// <summary>
+    /// Raised once per state transition, from the monitor's loop context.
+    /// Subscriber exceptions are ignored — they never affect the state machine.
+    /// </summary>
     public event EventHandler<ConnectionStatus>? StatusChanged;
 
-    /// <summary>Raised after every poll tick with the freshly built snapshot.</summary>
+    /// <summary>
+    /// Raised after every poll tick with the freshly built snapshot.
+    /// Subscriber exceptions are ignored — they never affect the state machine.
+    /// </summary>
     public event EventHandler<HostSnapshot>? SnapshotUpdated;
 
     /// <summary>
@@ -98,6 +104,7 @@ public sealed class HostMonitor : IAsyncDisposable
     /// message buffer resets on every reconnect, the first tick after a reconnect
     /// re-raises this for the daemon's current buffer from seqno 0, even if some of
     /// those messages were already seen before the disconnect.
+    /// Subscriber exceptions are ignored — they never affect the state machine.
     /// </summary>
     public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
 
@@ -216,12 +223,25 @@ public sealed class HostMonitor : IAsyncDisposable
         ct.ThrowIfCancellationRequested();
     }
 
+    // All event dispatch goes through here: a buggy subscriber must never affect the
+    // state machine. SetStatus publishes from INSIDE catch blocks (the AuthFailed and
+    // Retrying publishes), where an escaping subscriber exception would propagate out
+    // of RunAsync and fault the loop task silently; TickAsync's publishes would tear
+    // down a healthy connection into Retrying instead. Subscribers marshal to their
+    // own context (see class doc) and there is nowhere meaningful to report their
+    // failures from here, so they are swallowed.
+    private void RaiseSafe<T>(EventHandler<T>? handler, T args)
+    {
+        try { handler?.Invoke(this, args); }
+        catch { /* ignored: subscriber failures must not affect the state machine */ }
+    }
+
     private void SetStatus(HostConnectionState state, int attempt,
                            DateTimeOffset? nextAttemptAt = null, string? lastError = null)
     {
         var status = new ConnectionStatus(HostId, state, attempt, nextAttemptAt, lastError, _daemonVersion);
         Status = status;
-        StatusChanged?.Invoke(this, status);
+        RaiseSafe(StatusChanged, status);
     }
 
     private async Task RunAsync(CancellationToken ct)
@@ -429,7 +449,7 @@ public sealed class HostMonitor : IAsyncDisposable
         {
             _lastSeqno = newMessages.Max(m => m.Seqno);
             _messages.Append(newMessages);
-            MessagesAdded?.Invoke(this, new MessagesAddedEventArgs(HostId, newMessages));
+            RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
         }
 
         // A result naming a workunit we haven't cached means new work arrived since
@@ -448,7 +468,7 @@ public sealed class HostMonitor : IAsyncDisposable
         HostSnapshot snapshot = SnapshotBuilder.Build(
             HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
         Snapshot = snapshot;
-        SnapshotUpdated?.Invoke(this, snapshot);
+        RaiseSafe(SnapshotUpdated, snapshot);
         return state;
     }
 }
