@@ -118,6 +118,36 @@ public class HostMonitorPollingTests
     }
 
     [Fact]
+    public async Task Tick_failure_disposes_client_before_backoff_wait()
+    {
+        bool fail = false;
+        var fake = new FakeGuiRpcClient();
+        fake.OnGetCcStatus = () => fail
+            ? Task.FromException<CcStatus>(new BoincConnectionException("poll died"))
+            : Task.FromResult(FakeGuiRpcClient.DefaultStatus);
+        var time = new FakeTimeProvider();
+        await using var monitor = new HostMonitor(Config(), () => fake, time, 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        fail = true;
+        monitor.RequestRefresh();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Retrying);
+
+        // The stale client must be torn down as soon as the loop enters Retrying, not
+        // held open for the entire backoff wait: BOINC daemons allow very few
+        // concurrent GUI RPC connections. Deliberately do NOT advance fake time before
+        // this assertion — pre-fix, the client was only disposed after the backoff
+        // elapsed, so asserting here with the wait still pending is the red condition.
+        Assert.True(fake.Disposed);
+
+        // Revival must still work after the backoff elapses.
+        fail = false;
+        await Wait.AdvanceUntilAsync(time,
+            () => monitor.Status.State == HostConnectionState.Connected, TimeSpan.FromSeconds(1));
+    }
+
+    [Fact]
     public async Task Mid_poll_unauthorized_reauths_once_and_continues()
     {
         int authCalls = 0;

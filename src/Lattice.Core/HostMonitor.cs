@@ -246,6 +246,11 @@ public sealed class HostMonitor : IAsyncDisposable
             // few concurrent GUI RPC connections, and a lingering one can lock the
             // user's official Manager out.
             bool parkForConfigChange = false;
+            // Set by the generic catch below; the backoff wait happens AFTER the
+            // finally has disposed this iteration's client, for the same reason as
+            // parkForConfigChange above — a stale connection must not sit open for
+            // the whole backoff window (up to 60s) after a post-connect failure.
+            TimeSpan? backoffDelay = null;
             try
             {
                 SetStatus(HostConnectionState.Connecting, attempt);
@@ -309,12 +314,8 @@ public sealed class HostMonitor : IAsyncDisposable
             catch (Exception ex)
             {
                 attempt++;
-                TimeSpan delay = BackoffDelay(attempt);
-                SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + delay, ex.Message);
-                try { await WaitAsync(delay, ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                if (_configChanged)
-                    attempt = 0;
+                backoffDelay = BackoffDelay(attempt);
+                SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + backoffDelay.Value, ex.Message);
             }
             finally
             {
@@ -337,6 +338,16 @@ public sealed class HostMonitor : IAsyncDisposable
                 try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
                 attempt = 0;
+                continue;
+            }
+            // Backoff wait, deliberately AFTER the finally above has already disposed
+            // this iteration's client: see backoffDelay's declaration above.
+            if (backoffDelay is { } delay)
+            {
+                try { await WaitAsync(delay, ct).ConfigureAwait(false); }
+                catch (OperationCanceledException) { break; }
+                if (_configChanged)
+                    attempt = 0;
                 continue;
             }
         }
