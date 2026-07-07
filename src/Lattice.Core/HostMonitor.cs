@@ -263,19 +263,28 @@ public sealed class HostMonitor : IAsyncDisposable
     // then wait the polling interval between ticks. Returns only on config change.
     private async Task PollAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
     {
+        bool reauthedSinceLastSuccess = false;
         while (true)
         {
             try
             {
                 state = await TickAsync(client, config, state, ct).ConfigureAwait(false);
+                reauthedSinceLastSuccess = false;
             }
             catch (BoincUnauthorizedException)
             {
-                // Daemon restarted with a new password, or the session expired:
-                // one silent re-auth, then AuthFailed if still refused.
+                // Daemon restarted with a new password, or the session expired: one
+                // silent re-auth per successful tick. If we already re-authed since
+                // the last successful tick and are still unauthorized, the daemon is
+                // accepting AuthorizeAsync but refusing RPCs regardless — propagate so
+                // RunAsync's generic handler moves the host to Retrying with backoff
+                // instead of hammering the daemon in a zero-delay loop.
+                if (reauthedSinceLastSuccess)
+                    throw;
                 if (config.Password.Length == 0
                     || !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
                     throw new HostAuthException();
+                reauthedSinceLastSuccess = true;
                 continue;
             }
             if (_configChanged)

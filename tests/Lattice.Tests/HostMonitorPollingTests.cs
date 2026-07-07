@@ -151,4 +151,17 @@ public class HostMonitorPollingTests
         monitor.Start();
         await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
     }
+
+    [Fact]
+    public async Task Mid_poll_repeated_unauthorized_after_reauth_backs_off_instead_of_spinning()
+    {
+        int authCalls = 0;
+        var fake = new FakeGuiRpcClient();
+        fake.OnAuthorize = _ => { Interlocked.Increment(ref authCalls); return Task.FromResult(true); };
+        fake.OnGetCcStatus = () => Task.FromException<CcStatus>(new BoincUnauthorizedException());
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Retrying);
+        Assert.Equal(2, authCalls);   // initial auth + exactly one silent re-auth, no more
+    }
 }
