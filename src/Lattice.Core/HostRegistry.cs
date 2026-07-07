@@ -96,8 +96,12 @@ public sealed class HostRegistry
 
     private void Mutate(LatticeConfig next, RegistryChangeKind kind, HostConfig? host)
     {
+        // Persist before swapping the in-memory state: if Save throws (unwritable
+        // directory, full disk), _config must stay at its old value so memory, disk,
+        // and every already-connected monitor's config remain consistent. Swapping
+        // first would leave memory diverged from disk until the next app start.
+        next.Save(_path);
         _config = next;
-        _config.Save(_path);
         Changed?.Invoke(this, new RegistryChangedEventArgs(kind, host));
     }
 }

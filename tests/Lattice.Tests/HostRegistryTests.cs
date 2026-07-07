@@ -98,4 +98,31 @@ public class HostRegistryTests
         Assert.Equal([host], registry.Hosts);
         Assert.Equal(10, registry.PollingIntervalSeconds);
     }
+
+    [Fact]
+    public void Mutation_that_fails_to_save_leaves_registry_state_unchanged()
+    {
+        // Make the config's parent "directory" an existing file, so
+        // Directory.CreateDirectory inside Save throws IOException. If Mutate swaps
+        // _config to the new value before Save succeeds, memory would diverge from
+        // disk (and from every already-connected monitor holding the old config).
+        string bogusParent = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}");
+        File.WriteAllText(bogusParent, "not a directory");
+        string path = Path.Combine(bogusParent, "config.json");
+        try
+        {
+            var registry = new HostRegistry(LatticeConfig.Default, path);
+            List<RegistryChangedEventArgs> events = [];
+            registry.Changed += (_, e) => events.Add(e);
+
+            Assert.ThrowsAny<IOException>(() => registry.AddHost(NewHost()));
+
+            Assert.Empty(registry.Hosts);
+            Assert.Empty(events);
+        }
+        finally
+        {
+            File.Delete(bogusParent);
+        }
+    }
 }
