@@ -34,8 +34,8 @@ public sealed class HostMonitor : IAsyncDisposable
     // Owns cancellation for one connection attempt (connect through steady-state
     // polling). Linked to the disposal token; UpdateConfig cancels it to abort
     // in-flight work on the OLD config instead of waiting for it to finish on its
-    // own. Guarded by _gate: created/read at the top of RunAsync's loop iteration,
-    // canceled from UpdateConfig, disposed and nulled in RunAsync's finally.
+    // own. Guarded by _gate: created at the top of RunAttemptAsync, canceled from
+    // UpdateConfig, disposed and nulled in RunAttemptAsync's finally.
     private CancellationTokenSource? _connectionCts;
     private volatile int _pollingIntervalSeconds;
     private TaskCompletionSource _wake = NewWake();
@@ -244,144 +244,182 @@ public sealed class HostMonitor : IAsyncDisposable
         RaiseSafe(StatusChanged, status);
     }
 
+    // What one connection attempt did, as seen by the dispatcher. RunAttemptAsync folds
+    // every path (including every exception) into one of these so the dispatcher never
+    // touches a live client or an in-flight exception.
+    private enum AttemptResult
+    {
+        Disposal,      // outer disposal token canceled: exit the loop.
+        ConfigChanged, // aborted for a new config (or PollAsync returned): reconnect now.
+        AuthFailed,    // password refused / unauthorized before Connected: park.
+        Failed,        // any other failure: Retrying + backoff.
+    }
+
+    private readonly record struct AttemptOutcome(AttemptResult Result, string? Error)
+    {
+        public static readonly AttemptOutcome Disposal = new(AttemptResult.Disposal, null);
+        public static readonly AttemptOutcome ConfigChanged = new(AttemptResult.ConfigChanged, null);
+        public static AttemptOutcome AuthFailed(string error) => new(AttemptResult.AuthFailed, error);
+        public static AttemptOutcome Failed(string error) => new(AttemptResult.Failed, error);
+    }
+
+    // The dispatcher. It never holds a client: each iteration hands the whole client
+    // lifetime to RunAttemptAsync and only ever sees an AttemptOutcome. Structural
+    // invariants that used to be maintained by hand at every exit path:
+    //  (a) RunAttemptAsync owns the client — when it returns, this iteration's client
+    //      and its linked CTS are already disposed (by scope, in its finally). So every
+    //      park/backoff wait below provably runs with NO GUI RPC connection open. BOINC
+    //      daemons allow very few concurrent GUI RPC connections; a lingering one can
+    //      lock the user's official Manager out.
+    //  (b) RunAttemptAsync cannot throw — its catch set folds every exception into an
+    //      AttemptOutcome — so this loop can never fault the background task.
+    //  (c) The AuthFailed/Retrying publishes below therefore happen after disposal; a
+    //      buggy subscriber can neither escape (RaiseSafe swallows it) nor hold the
+    //      already-closed connection open.
     private async Task RunAsync(CancellationToken ct)
     {
         int attempt = 0;
         while (!ct.IsCancellationRequested)
         {
             HostConfig config;
-            CancellationToken connCt;
             lock (_gate)
             {
                 config = _config;
                 _configChanged = false;
-                _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                connCt = _connectionCts.Token;
             }
-            // Declared outside the try (and left null until the factory call inside it
-            // succeeds) so a throwing factory — e.g. a future SSH-tunnel-wrapping
-            // transport that can fail before producing a client — flows into the
-            // generic catch below and reaches Retrying/backoff, instead of propagating
-            // out of RunAsync and faulting the loop task silently.
-            IGuiRpcClient? client = null;
-            // Set by the two AuthFailed catch blocks below; the actual park happens
-            // AFTER the finally has disposed this iteration's client (see below the
-            // try/catch/finally), so a refused password never leaves the GUI RPC TCP
-            // connection open for the duration of the park — BOINC daemons allow very
-            // few concurrent GUI RPC connections, and a lingering one can lock the
-            // user's official Manager out.
-            bool parkForConfigChange = false;
-            // Set by the generic catch below; the backoff wait happens AFTER the
-            // finally has disposed this iteration's client, for the same reason as
-            // parkForConfigChange above — a stale connection must not sit open for
-            // the whole backoff window (up to 60s) after a post-connect failure.
-            TimeSpan? backoffDelay = null;
-            try
-            {
-                client = _clientFactory();
-                SetStatus(HostConnectionState.Connecting, attempt);
-                await client.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
+            AttemptOutcome outcome = await RunAttemptAsync(config, attempt, ct).ConfigureAwait(false);
 
-                SetStatus(HostConnectionState.Authorizing, attempt);
-                if (config.Password.Length > 0
-                    && !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
-                    throw new HostAuthException();
-
-                SetStatus(HostConnectionState.FetchingState, attempt);
-                _daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
-                CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
-
-                // A new connection may be talking to a freshly (re)started daemon whose
-                // seqno counter reset to zero: a stale high _lastSeqno would silently
-                // miss every message it now considers new. Reset the cursor and the
-                // retained buffer so the first tick refetches the daemon's current
-                // buffer from scratch (matches official BOINC Manager semantics).
-                _lastSeqno = 0;
-                _messages.Clear();
-
-                attempt = 0;
-                // A config change may have landed after the fetch above completed but
-                // before Connected is published: never surface Connected (or the
-                // snapshot/messages that would follow) for a connection to the OLD
-                // config. The finally below tears this client down; the loop
-                // reconnects against the new config on the very next iteration.
-                if (_configChanged)
-                    continue;
-                SetStatus(HostConnectionState.Connected, 0);
-                await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
-                // PollAsync returns only on config change: reconnect immediately.
-                attempt = 0;
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
-            {
+            if (outcome.Result == AttemptResult.Disposal)
                 break;
-            }
-            catch (OperationCanceledException)
+
+            if (outcome.Result == AttemptResult.ConfigChanged)
             {
-                // Not disposal: UpdateConfig canceled connCt to abort in-flight work on
-                // the old config. Reconnect immediately against the new one, no backoff.
                 attempt = 0;
                 continue;
             }
-            catch (HostAuthException)
+
+            if (outcome.Result == AttemptResult.AuthFailed)
             {
-                SetStatus(HostConnectionState.AuthFailed, 0, lastError: "The host refused the password.");
-                parkForConfigChange = true;
-            }
-            catch (BoincUnauthorizedException ex)
-            {
-                // The real client THROWS (rather than returning false) when a remote
-                // host isn't allow-listed, or when a mid-connect RPC (exchange_versions,
-                // get_state) is unauthorized before Connected is ever reached. Same
-                // terminal handling as a refused password: never spin forever on it.
-                SetStatus(HostConnectionState.AuthFailed, 0, lastError: ex.Message);
-                parkForConfigChange = true;
-            }
-            catch (Exception ex)
-            {
-                attempt++;
-                backoffDelay = BackoffDelay(attempt);
-                SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + backoffDelay.Value, ex.Message);
-            }
-            finally
-            {
-                lock (_gate)
-                {
-                    _connectionCts?.Dispose();
-                    _connectionCts = null;
-                }
-                // The connection is being torn down regardless of outcome; a disposal
-                // failure has nowhere meaningful to go and must not fault the loop.
-                // client is null when the factory itself threw before producing one.
-                if (client is not null)
-                {
-                    try { await client.DisposeAsync().ConfigureAwait(false); }
-                    catch { /* ignored: dispose failures do not affect the state machine */ }
-                }
-            }
-            // AuthFailed parking happens here, deliberately AFTER the finally above has
-            // already disposed this iteration's client: the TCP connection to a host
-            // whose password was refused must not sit open for the entire parked
-            // duration. Only a config change (never RequestRefresh) revives AuthFailed.
-            if (parkForConfigChange)
-            {
+                // Terminal until a config change: only UpdateConfig (never RequestRefresh)
+                // revives it. Publishing here — after RunAttemptAsync's finally — is why a
+                // refused-password connection is provably closed for the whole parked wait.
+                SetStatus(HostConnectionState.AuthFailed, 0, lastError: outcome.Error);
                 try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
                 attempt = 0;
                 continue;
             }
-            // Backoff wait, deliberately AFTER the finally above has already disposed
-            // this iteration's client: see backoffDelay's declaration above.
-            if (backoffDelay is { } delay)
-            {
-                try { await WaitAsync(delay, ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                if (_configChanged)
-                    attempt = 0;
-                continue;
-            }
+
+            // AttemptResult.Failed: back off, then retry. A config change during the wait
+            // short-circuits the attempt count so the reconnect starts fresh.
+            attempt++;
+            TimeSpan delay = BackoffDelay(attempt);
+            SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + delay, outcome.Error);
+            try { await WaitAsync(delay, ct).ConfigureAwait(false); }
+            catch (OperationCanceledException) { break; }
+            if (_configChanged)
+                attempt = 0;
         }
         SetStatus(HostConnectionState.Disconnected, 0);
+    }
+
+    // One connection attempt, cradle to grave. It owns the entire client lifetime:
+    // it creates the linked _connectionCts (so UpdateConfig can cancel this attempt),
+    // builds the client, walks Connecting→Authorizing→FetchingState→Connected→PollAsync,
+    // and in its finally disposes both the CTS and the client. By the time it returns,
+    // the connection is dead — by scope, not by convention — and every exception has
+    // been folded into an AttemptOutcome, so nothing escapes. The attempt argument is
+    // only for the pre-Connected status publishes (they describe this live attempt).
+    private async Task<AttemptOutcome> RunAttemptAsync(HostConfig config, int attempt, CancellationToken ct)
+    {
+        CancellationToken connCt;
+        lock (_gate)
+        {
+            _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            connCt = _connectionCts.Token;
+        }
+        // Left null until the factory call succeeds so a throwing factory — e.g. a future
+        // SSH-tunnel-wrapping transport that can fail before producing a client — folds
+        // into the generic catch (→ Failed) instead of escaping this method.
+        IGuiRpcClient? client = null;
+        try
+        {
+            client = _clientFactory();
+            SetStatus(HostConnectionState.Connecting, attempt);
+            await client.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
+
+            SetStatus(HostConnectionState.Authorizing, attempt);
+            if (config.Password.Length > 0
+                && !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
+                throw new HostAuthException();
+
+            SetStatus(HostConnectionState.FetchingState, attempt);
+            _daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
+            CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
+
+            // A new connection may be talking to a freshly (re)started daemon whose
+            // seqno counter reset to zero: a stale high _lastSeqno would silently
+            // miss every message it now considers new. Reset the cursor and the
+            // retained buffer so the first tick refetches the daemon's current
+            // buffer from scratch (matches official BOINC Manager semantics).
+            _lastSeqno = 0;
+            _messages.Clear();
+
+            attempt = 0;
+            // A config change may have landed after the fetch above completed but
+            // before Connected is published: never surface Connected (or the
+            // snapshot/messages that would follow) for a connection to the OLD
+            // config. The finally below tears this client down; the dispatcher
+            // reconnects against the new config on the very next iteration.
+            if (_configChanged)
+                return AttemptOutcome.ConfigChanged;
+            SetStatus(HostConnectionState.Connected, 0);
+            await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
+            // PollAsync returns only on config change: reconnect immediately.
+            return AttemptOutcome.ConfigChanged;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return AttemptOutcome.Disposal;
+        }
+        catch (OperationCanceledException)
+        {
+            // Not disposal: UpdateConfig canceled connCt to abort in-flight work on
+            // the old config. Reconnect immediately against the new one, no backoff.
+            return AttemptOutcome.ConfigChanged;
+        }
+        catch (HostAuthException)
+        {
+            return AttemptOutcome.AuthFailed("The host refused the password.");
+        }
+        catch (BoincUnauthorizedException ex)
+        {
+            // The real client THROWS (rather than returning false) when a remote
+            // host isn't allow-listed, or when a mid-connect RPC (exchange_versions,
+            // get_state) is unauthorized before Connected is ever reached. Same
+            // terminal handling as a refused password: never spin forever on it.
+            return AttemptOutcome.AuthFailed(ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return AttemptOutcome.Failed(ex.Message);
+        }
+        finally
+        {
+            lock (_gate)
+            {
+                _connectionCts?.Dispose();
+                _connectionCts = null;
+            }
+            // The connection is being torn down regardless of outcome; a disposal
+            // failure has nowhere meaningful to go and must not fault the loop.
+            // client is null when the factory itself threw before producing one.
+            if (client is not null)
+            {
+                try { await client.DisposeAsync().ConfigureAwait(false); }
+                catch { /* ignored: dispose failures do not affect the state machine */ }
+            }
+        }
     }
 
     // Steady state: tick immediately on entry (first snapshot right after Connected),
