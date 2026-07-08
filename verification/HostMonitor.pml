@@ -116,10 +116,9 @@ end_loop:
     do
     :: atomic { (ph == Dispatch && outerCanceled) ->
          ph = Exited; status = Disc }
-    :: atomic { (ph == Dispatch && !outerCanceled) ->
-         attemptVersion = curVersion;        /* RED-CHECK: version read split out */
-         ph = Snap }
-    :: atomic { (ph == Snap) ->              /* RED-CHECK: block no longer atomic with the read */
+    :: atomic { (ph == Dispatch && !outerCanceled) -> ph = Snap }
+    :: atomic { (ph == Snap) ->              /* THE atomic snapshot block (rule 1) */
+         attemptVersion = curVersion;
          configChanged = false;
          ctsState = 1;
          injectedFail = false; authRefused = false;
