@@ -255,9 +255,12 @@ public class SweepTests
     //   A2 — Retrying/AuthFailed/Disconnected publishes happen only after the old
     //        client's disposal (AssertA2TerminalStatusesFollowClientDisposal)
     //   A3 — UpdateConfig leads to a connect against the NEW config in bounded time
+    //        (AssertA3NewGenerationConnected)
     //   A5 — Dispose completes, loop task non-faulted, final status Disconnected
+    //        (AssertA5DisposeOutcomeAsync)
     //   RequestRefresh — the loop makes progress and nothing faults (except the
     //        deliberate BeforeParkWait special case: parked stays parked, L3b)
+    //        (AssertRefreshOutcomeAsync)
     // -------------------------------------------------------------------------
 
     public static IEnumerable<object[]> SweepCases() =>
@@ -291,7 +294,7 @@ public class SweepTests
         HostConfig config2 = TestData.MakeHostConfig(id: hostId, name: "gen2", port: 31418);
         int currentGen = 1;
 
-        // ScriptFor(point): the dispatcher points are only reachable through a FAILED
+        // Preamble routing: the dispatcher points are only reachable through a FAILED
         // attempt, so gen1 refuses the TCP connect (FinallyEnter / AfterCtsDispose /
         // BeforeRetryPublish) or refuses the password (BeforeParkWait). All other
         // points ride the happy path. The preamble applies to ALL actions at those
@@ -312,10 +315,15 @@ public class SweepTests
                 {
                     if (gen == 1 && failingConnectPreamble)
                         throw new BoincConnectionException("connect refused");
-                    // A connect racing a config change (client built for a generation
-                    // that is no longer current) never completes on its own: only its
-                    // connection token — already canceled by UpdateConfig, which is
-                    // what made the generation stale — can abort it.
+                    // Structural backstop: a client built for a no-longer-current
+                    // generation must never complete a connect (its payloads would
+                    // mis-stamp A1's evidence). Under this harness's sequencing the
+                    // branch is unreachable — the factory call and OnConnect are
+                    // adjacent with no interleaving gap, and the sweep's single env
+                    // action lands before Release() — but if a future harness change
+                    // opens a gap, the connect parks forever and only the connection
+                    // token (canceled by the UpdateConfig that staled the generation)
+                    // aborts it, turning a silent mis-stamp into a visible A3 failure.
                     return Volatile.Read(ref currentGen) == gen
                         ? Task.CompletedTask
                         : new TaskCompletionSource().Task;
@@ -447,8 +455,11 @@ public class SweepTests
                 // SPECIAL CASE (L3b contract): AuthFailed parking deliberately ignores
                 // refresh wakes — the wake is consumed WITHOUT releasing the park, so
                 // "loop makes progress" is intentionally NOT asserted here. Parked
-                // stays parked (bounded settle: fake-time advances + scheduler yields
-                // give a wrong un-park every chance to manifest as a second connect)...
+                // stays parked. The settle is carried by the scheduler yields (the
+                // park waits purely on the wake TCS and never reads TimeProvider, so
+                // the fake-time advances are inert today — kept as a backstop should
+                // the park ever grow a timer); a wrong un-park would manifest as a
+                // second gen1 connect below...
                 for (int i = 0; i < 25; i++)
                 {
                     time.Advance(TimeSpan.FromMinutes(1));

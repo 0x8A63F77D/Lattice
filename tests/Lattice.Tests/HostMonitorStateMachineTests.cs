@@ -8,7 +8,7 @@ namespace Lattice.Tests;
 public class HostMonitorStateMachineTests
 {
     private static HostConfig Config(string password = "pw") =>
-        new(Guid.NewGuid(), "test", "localhost", 31416, password);
+        TestData.MakeHostConfig(password: password);
 
     [Theory]
     [InlineData(1, 1)]

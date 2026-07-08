@@ -7,7 +7,7 @@ namespace Lattice.Tests;
 
 public class HostMonitorPollingTests
 {
-    private static HostConfig Config() => new(Guid.NewGuid(), "test", "localhost", 31416, "pw");
+    private static HostConfig Config() => TestData.MakeHostConfig();
 
     [Fact]
     public void Message_log_caps_at_capacity()
