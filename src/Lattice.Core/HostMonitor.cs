@@ -75,6 +75,7 @@ public sealed class HostMonitor : IAsyncDisposable
     private TaskCompletionSource _wake = NewWake();
     private Task _loop = Task.CompletedTask;
     private bool _started;
+    private bool _disposed;
     private VersionInfo? _daemonVersion;
     private ConnectionStatus _status;
     private HostSnapshot? _snapshot;
@@ -153,15 +154,19 @@ public sealed class HostMonitor : IAsyncDisposable
     /// </summary>
     public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
 
-    /// <summary>Starts the background loop. Idempotent.</summary>
+    /// <summary>Starts the background loop. Idempotent and inert after disposal.</summary>
     public void Start()
     {
         lock (_gate)
         {
-            if (_started)
+            if (_started || _disposed)
                 return;
             _started = true;
-            _loop = Task.Run(() => RunAsync(_cts.Token), CancellationToken.None);
+            // Token captured under _gate: DisposeAsync sets _disposed under this
+            // same lock BEFORE it ever cancels/disposes _cts, so a Start that got
+            // here holds a token read strictly before any dispose (I5).
+            CancellationToken token = _cts.Token;
+            _loop = Task.Run(() => RunAsync(token), CancellationToken.None);
         }
     }
 
@@ -196,14 +201,31 @@ public sealed class HostMonitor : IAsyncDisposable
         Wake();
     }
 
-    /// <summary>Stops the loop, disposes the client, and settles in Disconnected.</summary>
+    /// <summary>Stops the loop, disposes the client, and settles in Disconnected. Idempotent.</summary>
     public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
-        Wake();
-        try { await _loop.ConfigureAwait(false); }
+        // Exactly one caller wins the _disposed test-and-set under _gate; only that
+        // caller touches _cts (a second Cancel/Dispose would throw ObjectDisposed).
+        // Every caller — winner or not — awaits the SAME loop task read under the
+        // lock, so no DisposeAsync returns before teardown actually finished, and
+        // _cts.Dispose() is sequenced strictly after the loop's last token use.
+        bool first;
+        Task loop;
+        lock (_gate)
+        {
+            first = !_disposed;
+            _disposed = true;
+            loop = _loop;
+        }
+        if (first)
+        {
+            _cts.Cancel();
+            Wake();
+        }
+        try { await loop.ConfigureAwait(false); }
         catch { /* the loop reports failures via Status, never by throwing */ }
-        _cts.Dispose();
+        if (first)
+            _cts.Dispose();
     }
 
     /// <summary>Backoff schedule: 1, 2, 4, 8, 16, 32 then capped at 60 seconds.</summary>
