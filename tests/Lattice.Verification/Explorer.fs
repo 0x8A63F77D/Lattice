@@ -50,10 +50,22 @@ let checkInvariant (r: Reach) (name: string) (ok: S -> bool) : unit =
     | Some bad -> failwithf "INVARIANT %s violated. %s" name (trace r bad)
     | None -> ()
 
+/// Weak fairness is scoped to the LOOP process (spec): env actions are
+/// options, never obligations. Liveness must therefore hold on executions
+/// where the environment goes silent — SCCs and bottomness are computed
+/// over loop-action edges only. (Full-graph bottomness would treat an
+/// always-available EnvDispose as an escape hatch and discharge every
+/// obligation by "the user will eventually dispose".)
+let private isLoopAction = function
+    | LoopStep | LoopStepFail | DelayFires | WakeConsumed -> true
+    | EnvStart | EnvUpdateConfig | EnvWake | EnvDispose -> false
+
 /// Kosaraju SCC (two DFS passes; graph is ~10^4-10^5 states, instant). Iterative —
 /// no recursion, stack-safe.
 let private sccs (r: Reach) : S list list =
-    let succs s = match r.edges.TryGetValue s with | true, es -> es |> List.map snd | _ -> []
+    let succs s = match r.edges.TryGetValue s with
+                  | true, es -> es |> List.filter (fst >> isLoopAction) |> List.map snd
+                  | _ -> []
     // pass 1: finish order
     let visited = HashSet<S>(HashIdentity.Structural)
     let order = ResizeArray<S>()
@@ -68,13 +80,14 @@ let private sccs (r: Reach) : S list list =
                     st.Push(v, true)
                     for w in succs v do
                         if visited.Add w then st.Push(w, false)
-    // reverse graph
+    // reverse graph (loop edges only — see isLoopAction)
     let pred = Dictionary<S, ResizeArray<S>>(HashIdentity.Structural)
     for KeyValue(s, es) in r.edges do
-        for (_, t) in es do
-            match pred.TryGetValue t with
-            | true, l -> l.Add s
-            | false, _ -> let l = ResizeArray<S>() in l.Add s; pred[t] <- l
+        for (a, t) in es do
+            if isLoopAction a then
+                match pred.TryGetValue t with
+                | true, l -> l.Add s
+                | false, _ -> let l = ResizeArray<S>() in l.Add s; pred[t] <- l
     // pass 2: reverse DFS in reverse finish order
     let assigned = HashSet<S>(HashIdentity.Structural)
     let result = ResizeArray<S list>()
@@ -96,7 +109,10 @@ let private sccs (r: Reach) : S list list =
     List.ofSeq result
 
 let bottomSccs (r: Reach) : S list list =
-    let succs s = match r.edges.TryGetValue s with | true, es -> es |> List.map snd | _ -> []
+    // bottomness = no LOOP edge leaves the component (env edges are not escapes)
+    let succs s = match r.edges.TryGetValue s with
+                  | true, es -> es |> List.filter (fst >> isLoopAction) |> List.map snd
+                  | _ -> []
     let all = sccs r
     let sccOf = Dictionary<S, int>(HashIdentity.Structural)
     all |> List.iteri (fun i comp -> for s in comp do sccOf[s] <- i)
@@ -105,6 +121,11 @@ let bottomSccs (r: Reach) : S list list =
             comp |> List.forall (fun s -> succs s |> List.forall (fun t -> sccOf[t] = i)))
         |> List.map snd
 
+/// Liveness rule: finite graph + weak fairness ON THE LOOP means every
+/// execution on which the environment is eventually silent settles into a
+/// bottom loop-SCC and takes every internal loop edge infinitely often;
+/// pending-and-never-goal inside such an SCC is exactly a liveness violation.
+/// Env edges may not serve as escapes because nothing obliges them to fire.
 let checkEventually (r: Reach) (name: string) (pending: S -> bool) (goal: S -> bool) : unit =
     for comp in bottomSccs r do
         match comp |> List.tryFind (fun s -> pending s && not (goal s)) with

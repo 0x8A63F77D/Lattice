@@ -178,19 +178,32 @@ let ``mutant M5 no dispose flag violates I5`` () =
         Explorer.checkInvariant r "I5" (fun s -> not s.faulted))
         Mutants.m5NoDisposeFlag)
 
-// L1 lost wakeup — safety via history variables (spec): a wait never exits by delay
-// while a wake that landed during that wait is still unconsumed.
+// L1 no lost wakeup — sticky-latch liveness: a completed wake is eventually
+// consumed (or the loop is not running: exited, or Idle — never started /
+// disposed before start; with fairness scoped to the loop, a not-yet-started
+// monitor is a loop-only terminal state and the obligation transfers to
+// Start, which the environment never owes). The latch may survive a delay
+// exit (WhenAny race) — the next wait entry consumes it; what must never
+// happen is a wake that sits completed forever while the loop keeps running.
 [<Fact>]
 let ``L1 no lost wakeup`` () =
-    Explorer.checkInvariant reach.Value "L1" (fun s ->
-        not (s.wakeSetDuringWait && s.waitExitedByDelay))
+    Explorer.checkEventually reach.Value "L1"
+        (fun s -> s.wake)
+        (fun s -> not s.wake || s.phase = Model.Exited || s.phase = Model.Idle)
 
-// L2 config convergence.
+// L2 config convergence. Goal discharges at plain Idle for the same reason
+// as L1: Idle = the loop is not running, a loop-only terminal state.
 [<Fact>]
 let ``L2 config change converges`` () =
     Explorer.checkEventually reach.Value "L2"
         (fun s -> s.configChanged)
-        (fun s -> not s.configChanged || s.phase = Model.Exited)
+        (fun s -> not s.configChanged || s.phase = Model.Exited || s.phase = Model.Idle)
+
+[<Fact>]
+let ``L3 disposal terminates the loop`` () =
+    Explorer.checkEventually reach.Value "L3"
+        (fun s -> s.outerCanceled)
+        (fun s -> s.phase = Model.Exited || s.phase = Model.Idle)
 
 // L3b: AuthFailed has no exit but config change or disposal (edge-shaped safety).
 [<Fact>]
@@ -204,27 +217,17 @@ let ``L3b AuthFailed parks until config change or disposal`` () =
 
 module private LivenessMutants =
     open Model
-    // M6: deaf waits — the wake latch is never observed (WaitAsync forgets the
-    // completed-check): lost wakeups become reachable; L1 must catch it.
+    // M6: deaf waits — WaitAsync forgets every completed-latch check (entry AND
+    // post-WhenAny): the wake is never consumed anywhere; L1 must catch the
+    // closed cycle that keeps running with the latch set forever.
     let m6DeafWaits (s: S) (a: Action) =
-        match a with
-        | WakeConsumed -> []  // Don't consume the wake (simulate deaf wait)
-        | DelayFires ->
-            // The mutant's bug: allow delay to fire even though wake is set.
-            // This is possible because the mutant doesn't check for completed wake.
-            // In the healthy model, this is prevented in the step function.
-            match s.phase with
-            | PollWait ->
-                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-                [ { s with phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
-            | BackoffWait ->
-                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-                if s.outerCanceled then [ { s with phase = Exited; loopTask = TaskDone
-                                                   statusState = Lattice.Core.HostConnectionState.Disconnected
-                                                   connLive = false; outerDisposed = true } ]
-                else [ { s with phase = Dispatch
-                                attempt = (if s.configChanged then 0 else s.attempt) } ]
-            | _ -> [ s ]
+        match a, s.phase with
+        | WakeConsumed, _ -> []
+        | LoopStep, SnapPublish ->
+            [ { s with phase = PollWait } ]                    // no entry-consume
+        | LoopStep, RetryDecide ->
+            [ { s with statusState = Lattice.Core.HostConnectionState.Retrying
+                       statusVersion = s.attemptVersion; phase = BackoffWait } ]  // no entry-consume
         | _ -> step s a
     // M7: stuck park — ParkedAuthFailed ignores configChanged; L2 must catch it.
     let m7StuckPark (s: S) (a: Action) =
@@ -236,13 +239,13 @@ module private LivenessMutants =
 [<Fact>]
 let ``mutant M6 deaf waits violates L1`` () =
     Assert.True(violates (fun r ->
-        Explorer.checkInvariant r "L1" (fun s ->
-            not (s.wakeSetDuringWait && s.waitExitedByDelay)))
+        Explorer.checkEventually r "L1" (fun s -> s.wake)
+            (fun s -> not s.wake || s.phase = Model.Exited || s.phase = Model.Idle))
         LivenessMutants.m6DeafWaits)
 
 [<Fact>]
 let ``mutant M7 stuck park violates L2`` () =
     Assert.True(violates (fun r ->
         Explorer.checkEventually r "L2" (fun s -> s.configChanged)
-            (fun s -> not s.configChanged || s.phase = Model.Exited))
+            (fun s -> not s.configChanged || s.phase = Model.Exited || s.phase = Model.Idle))
         LivenessMutants.m7StuckPark)

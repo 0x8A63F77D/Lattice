@@ -68,9 +68,6 @@ type S = {
     logVintage: int option       // same per-attempt stamp discipline for the message log
     logReplacedThisConn: bool
     faulted: bool                // I5 violation marker: any disposed-resource fault
-    // ---- history for L1 (lost wakeup) ----
-    wakeSetDuringWait: bool      // a Wake landed while phase was a wait
-    waitExitedByDelay: bool      // the wait then exited via delay with wake still pending
     // ---- env budgets ----
     updatesLeft: int; wakesLeft: int; failsLeft: int; disposesLeft: int
 }
@@ -87,7 +84,6 @@ let initial (b: Bounds) = {
     statusState = HostConnectionState.Disconnected; statusVersion = 0
     daemonVersionVintage = None; logVintage = None; logReplacedThisConn = false
     faulted = false
-    wakeSetDuringWait = false; waitExitedByDelay = false
     updatesLeft = b.updates; wakesLeft = b.wakes; failsLeft = b.failures; disposesLeft = b.disposes
 }
 
@@ -110,8 +106,8 @@ let private isWaitPhase p = p = PollWait || p = BackoffWait || p = ParkedAuthFai
 let enabled (s: S) : Action list =
     let env =
         [ if not s.started then EnvStart                      // Start any time (idempotent)
-          if s.updatesLeft > 0 && not s.outerDisposed then EnvUpdateConfig  // no config change after dispose
-          if s.wakesLeft > 0 && not s.outerDisposed then EnvWake  // no wake after dispose
+          if s.updatesLeft > 0 then EnvUpdateConfig
+          if s.wakesLeft > 0 then EnvWake
           if s.disposesLeft > 0 then EnvDispose ]
     let loop =
         if s.faulted then []                                  // fault is terminal for the loop
@@ -160,11 +156,9 @@ let step (s: S) (a: Action) : S list =
         // lock { _config=new; _configChanged=true; _connectionCts?.Cancel() } ; Wake()
         let cts' = if s.cts = CtsLive then CtsCanceled else s.cts
         [ { s with curVersion = s.curVersion + 1; configChanged = true; cts = cts'
-                   wake = true; updatesLeft = s.updatesLeft - 1
-                   wakeSetDuringWait = s.wakeSetDuringWait || isWaitPhase s.phase } ]
+                   wake = true; updatesLeft = s.updatesLeft - 1 } ]
     | EnvWake ->
-        [ { s with wake = true; wakesLeft = s.wakesLeft - 1
-                   wakeSetDuringWait = s.wakeSetDuringWait || isWaitPhase s.phase } ]
+        [ { s with wake = true; wakesLeft = s.wakesLeft - 1 } ]
     | EnvDispose ->
         // Rider C: lock { if disposeFlag → (second call: await loop only) ; disposeFlag=true }
         // then Cancel+Wake, await loop, Dispose(_cts).
@@ -174,7 +168,6 @@ let step (s: S) (a: Action) : S list =
         if s.disposeFlag then [ { s with disposesLeft = s.disposesLeft - 1 } ] // idempotent
         else
             [ { s with disposeFlag = true; outerCanceled = true; wake = true
-                       configChanged = false  // clear pending config change at disposal
                        disposesLeft = s.disposesLeft - 1
                        cts = (if s.cts = CtsLive then CtsCanceled else s.cts)
                        outerDisposed = (s.loopTask = TaskInitial || s.phase = Idle
@@ -185,20 +178,17 @@ let step (s: S) (a: Action) : S list =
 
     // ---------------- loop ----------------
     | DelayFires ->
-        // If the wake was already set, WaitAsync returns with the wake, not the delay.
-        // So DelayFires should not succeed if wake=true.
-        if s.wake then []
-        else
-            match s.phase with
-            | PollWait ->
-                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-                [ { s with phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
-            | BackoffWait ->
-                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-                if s.outerCanceled then [ exit' s ]
-                else [ { s with phase = Dispatch
-                                attempt = (if s.configChanged then 0 else s.attempt) } ]
-            | _ -> [ s ]
+        // Sticky latch: the delay CAN win WhenAny while the wake is completed
+        // (WaitAsync branches on the winner, HostMonitor.cs:192-200); the latch
+        // survives and the next wait ENTRY consumes it (SnapPublish/RetryDecide).
+        match s.phase with
+        | PollWait ->
+            [ { s with phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
+        | BackoffWait ->
+            if s.outerCanceled then [ exit' s ]
+            else [ { s with phase = Dispatch
+                            attempt = (if s.configChanged then 0 else s.attempt) } ]
+        | _ -> [ s ]
     | WakeConsumed ->
         // WaitAsync: lock { if wake.completed { renew; return true } } — consumes the latch
         match s.phase with
@@ -285,7 +275,13 @@ let step (s: S) (a: Action) : S list =
             if s.configChanged then [ { s with phase = Teardown } ]
             else [ { s with phase = SnapPublish } ]
         | SnapPublish ->
-            [ { s with phase = PollWait } ]   // snapshot vintage tracked via statusVersion path (I1 checks guard adjacency structurally)
+            // WaitAsync ENTRY consumes a completed latch (HostMonitor.cs:183-187):
+            // entering the poll wait with the wake set returns immediately.
+            // (snapshot vintage tracked via statusVersion path; I1 checks guard adjacency structurally)
+            if s.wake then
+                [ { s with wake = false
+                           phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
+            else [ { s with phase = PollWait } ]
         | PollWait | BackoffWait -> [ s ]   // waits move via DelayFires/WakeConsumed
         | ParkedAuthFailed ->
             // release ONLY on config change or disposal (L3b); stale wakes are
@@ -301,9 +297,13 @@ let step (s: S) (a: Action) : S list =
                            statusState = HostConnectionState.Disconnected
                            outerDisposed = true } ]
             elif s.attempt = -1 then
-                // AuthFailed park (publish AFTER teardown — connection provably closed)
+                // AuthFailed park (publish AFTER teardown — connection provably closed).
+                // WaitForConfigChangeAsync's entry consumes a stale completed latch
+                // (HostMonitor.cs:214-217) unless configChanged releases immediately.
                 [ { s with attempt = 0; statusState = HostConnectionState.AuthFailed
-                           statusVersion = s.attemptVersion; phase = ParkedAuthFailed } ]
+                           statusVersion = s.attemptVersion
+                           wake = (if s.configChanged then s.wake else false)
+                           phase = ParkedAuthFailed } ]
             elif s.configChanged || not s.injectedFail then
                 // ConfigChanged outcome (incl. PollAsync's guard returns): immediate reconnect
                 [ { s with attempt = 0; phase = Dispatch } ]
@@ -312,5 +312,13 @@ let step (s: S) (a: Action) : S list =
                 let a = clampAttempt (if s.reachedConnected then 1 else s.attempt + 1)
                 [ { s with attempt = a; phase = RetryDecide } ]
         | RetryDecide ->
-            [ { s with statusState = HostConnectionState.Retrying
-                       statusVersion = s.attemptVersion; phase = BackoffWait } ]
+            let s = { s with statusState = HostConnectionState.Retrying
+                             statusVersion = s.attemptVersion }
+            // WaitAsync ENTRY consumes a completed latch: entering backoff with the
+            // wake set skips the wait.
+            if s.wake then
+                let s = { s with wake = false }
+                if s.outerCanceled then [ exit' s ]
+                else [ { s with phase = Dispatch
+                                attempt = (if s.configChanged then 0 else s.attempt) } ]
+            else [ { s with phase = BackoffWait } ]
