@@ -148,12 +148,12 @@ let ``mutant M1 split snapshot violates I3`` () =
 [<Fact>]
 let ``mutant M2 no attempt reset violates I4`` () =
     let r = Explorer.explore Mutants.m2NoAttemptReset (Model.initial bounds)
-    let mutable caught = false
-    for KeyValue(s, outs) in r.edges do
-        if s.phase = Model.Teardown && s.reachedConnected && s.injectedFail
-           && not s.outerCanceled && not s.configChanged && s.attempt <> -1 then
-            for (_, s2) in outs do
-                if s2.phase = Model.RetryDecide && s2.attempt <> 1 then caught <- true
+    let caught =
+        r.edges |> Seq.exists (fun (KeyValue (s, outs)) ->
+            s.phase = Model.Teardown && s.reachedConnected && s.injectedFail
+            && not s.outerCanceled && not s.configChanged && s.attempt <> -1
+            && outs |> List.exists (fun (_, s2) ->
+                s2.phase = Model.RetryDecide && s2.attempt <> 1))
     Assert.True(caught, "mutant M2 was not detected by I4")
 
 [<Fact>]

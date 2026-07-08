@@ -60,12 +60,17 @@ let private isLoopAction = function
     | LoopStep | LoopStepFail | DelayFires | WakeConsumed -> true
     | EnvStart | EnvUpdateConfig | EnvWake | EnvDispose -> false
 
+/// Loop-only successor relation — the single definition both SCC computation
+/// and bottomness checking use, so the fairness scoping cannot drift.
+let private loopSuccs (r: Reach) (s: S) : S list =
+    match r.edges.TryGetValue s with
+    | true, es -> es |> List.filter (fst >> isLoopAction) |> List.map snd
+    | _ -> []
+
 /// Kosaraju SCC (two DFS passes; graph is ~10^4-10^5 states, instant). Iterative —
 /// no recursion, stack-safe.
 let private sccs (r: Reach) : S list list =
-    let succs s = match r.edges.TryGetValue s with
-                  | true, es -> es |> List.filter (fst >> isLoopAction) |> List.map snd
-                  | _ -> []
+    let succs = loopSuccs r
     // pass 1: finish order
     let visited = HashSet<S>(HashIdentity.Structural)
     let order = ResizeArray<S>()
@@ -110,9 +115,7 @@ let private sccs (r: Reach) : S list list =
 
 let bottomSccs (r: Reach) : S list list =
     // bottomness = no LOOP edge leaves the component (env edges are not escapes)
-    let succs s = match r.edges.TryGetValue s with
-                  | true, es -> es |> List.filter (fst >> isLoopAction) |> List.map snd
-                  | _ -> []
+    let succs = loopSuccs r
     let all = sccs r
     let sccOf = Dictionary<S, int>(HashIdentity.Structural)
     all |> List.iteri (fun i comp -> for s in comp do sccOf[s] <- i)
