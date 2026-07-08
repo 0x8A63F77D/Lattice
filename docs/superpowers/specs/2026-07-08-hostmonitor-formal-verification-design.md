@@ -27,8 +27,14 @@ interleaving bugs.
   CI re-verifies on every PR (the design layer).
 - A **deterministic interleaving harness** that exercises the real C# code at every
   interleaving point against every environment action (the implementation layer).
-- Fix the one known violation of the target invariants: `_daemonVersion` stamped from
-  unaccepted connection attempts (PR #7 round-9 P2 deferral).
+- Fix the two known violations of the target invariants, both of the same class
+  (user-visible state mutated by a not-yet-accepted connection attempt):
+  `_daemonVersion` stamped mid-attempt (PR #7 round-9 P2 deferral), and the
+  message-log reset (`_lastSeqno = 0` + `_messages.Clear()`) running *before* the
+  pre-Connected `_configChanged` guard (Codex PR #8 round-2 finding) — an aborted
+  attempt destroys the public log, with no self-healing if the new config then
+  fails or parks. Fix: move the reset after the guard, still before the Connected
+  publish and the first tick (semantics unchanged for accepted connections).
 - Verify **lifecycle edges**: `Start`/`DisposeAsync` ordering, double-dispose,
   start-after-dispose. Suspected latent defects (found during this design's
   completeness audit, to be confirmed by red tests first): a second `DisposeAsync`
@@ -64,9 +70,14 @@ interleaving bugs.
 2. Every field of `HostMonitor` must appear in the README's **shared-state
    inventory**: field → protection regime (`_gate` / `volatile` / `Volatile.R/W` /
    single-writer loop-confined) → modeled or excluded, with justification.
-   (E.g. `_lastSeqno` and `_messages` are excluded as single-writer loop-confined —
-   only the loop thread writes them; `MessageLog` is internally thread-safe for
-   readers.) A new field with no inventory row is a review failure.
+   (E.g. `_lastSeqno` and `_messages` are single-writer loop-confined — only the
+   loop thread writes them, so they carry no *data-race* surface — but
+   single-writer does NOT exclude a field from the model: the message-log clear is
+   a user-visible mutation and is modeled under I1's guard discipline. Codex's PR
+   #8 round-2 finding caught exactly this: the original draft excluded these fields
+   on the single-writer argument and thereby hid a real pre-accept clear defect.
+   Exclusion justifications must address vintage/visibility, not just races.)
+   A new field with no inventory row is a review failure.
 3. Any new shared-state touch point in the code requires a probe point (the harness
    drifts too, not just the model): adding a write/read of shared state between two
    existing probe points without adding a probe there is a review failure.
@@ -124,8 +135,10 @@ MSYS2 gcc or CI-only on the Windows dev machine).
 
 Safety (inline assertions / monitor):
 
-- **I1 — guarded publish:** every publish (Connected status, snapshot, message batch)
-  is immediately preceded by a guard step that observed `configChanged == false`, and
+- **I1 — guarded publish/mutation:** every publish (Connected status, snapshot,
+  message batch) **and every user-visible mutation** (the message-log clear — same
+  discipline; a not-yet-accepted attempt must not destroy public state) is
+  immediately preceded by a guard step that observed `configChanged == false`, and
   the vintage it carries equals the version current at *guard* time. (The code
   documents a benign guard-to-publish window — see `HostMonitor.cs` comment at the
   final snapshot recheck; the model encodes exactly this contract, no stronger.)
@@ -188,7 +201,9 @@ freeze the loop at P, execute A on the test thread, release, run to quiescence
 (FakeTimeProvider, no real sleeps), then assert the code-level invariants:
 
 - **A1 (I1):** frozen *before a guard* + UpdateConfig ⇒ the guarded publish must NOT
-  happen. Frozen *between guard and publish* ⇒ the publish may still occur (the gap
+  happen — and neither may the guarded message-log clear: freezing between
+  `GetStateAsync` and the pre-Connected guard, then updating config, must leave the
+  old messages intact (red on current code until the reset moves behind the guard). Frozen *between guard and publish* ⇒ the publish may still occur (the gap
   is physically unclosable without publishing under the lock), but the doctrine and
   assertion differ per publish type (Codex spec-review finding, PR #8 round 1):
   - *Snapshot publish:* benign by the documented retention semantics — an old-vintage
@@ -224,15 +239,22 @@ gate-protected interaction — its interleaving surface is L1's, covered by the
 RequestRefresh sweep arm. Event observations go through a recording
 subscriber; connection identity is tagged by config generation on the fake.
 
-### Code change rider: `_daemonVersion`
+### Code change riders: pre-accept side effects
 
-A1 will genuinely fail on current `main`: `_daemonVersion` is written to the field
-mid-attempt (before Connected is accepted), so a failed attempt pollutes subsequent
-Status publishes with an unaccepted daemon version — exactly PR #7 round-9's P2,
-deferred to this work. Fix (as agreed in the PR thread): keep the exchanged version
-attempt-local; write the field only at the Connected publish (post-guard). Retrying /
-AuthFailed statuses then carry the last *accepted* version. This is in scope because
-the alternative is weakening A1 to excuse a known violation.
+A1 will genuinely fail on current `main` in two places, both the same defect class —
+user-visible state mutated before the attempt is accepted:
+
+1. `_daemonVersion` is written to the field mid-attempt, so a failed attempt pollutes
+   subsequent Status publishes with an unaccepted daemon version (PR #7 round-9 P2,
+   deferred to this work). Fix as agreed in that thread: keep the exchanged version
+   attempt-local; write the field only at the Connected publish (post-guard).
+   Retrying/AuthFailed statuses then carry the last *accepted* version.
+2. The message-log reset (`_lastSeqno = 0` + `_messages.Clear()`) runs before the
+   pre-Connected guard (Codex PR #8 round-2). Fix: move it after the guard, before
+   the Connected publish — accepted-connection semantics unchanged (still precedes
+   the first tick), aborted attempts no longer destroy the public log.
+
+Both are in scope because the alternative is weakening A1 to excuse known violations.
 
 ## Toolchain, layout, CI
 
