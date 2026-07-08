@@ -105,9 +105,17 @@ MSYS2 gcc or CI-only on the Windows dev machine).
   interleave at *instruction* granularity, abstracted to the points where shared
   state is actually touched.
 - **State:** `status` (7-value mtype), `version` (config generation counter),
-  `configChanged`, `connectionCts` (None/Live/Canceled), `attempt`, sticky `wake`
-  flag (modeled with the real TCS protocol: consume-if-completed-else-subscribe),
-  `disposed`, and a published-events vintage log.
+  `configChanged`, `connectionCts` (None/Live/Canceled/Disposed), `attempt`, sticky
+  `wake` flag (modeled with the real TCS protocol:
+  consume-if-completed-else-subscribe), `disposed`, a published-events vintage log,
+  and — load-bearing for I5/A6 (Codex spec-review finding, PR #8 round 1) —
+  `started` plus a `loopTask` publication variable
+  (Initial/Stored/TokenRead/Running/Exited/Faulted): `Start` models
+  store-task-then-lambda-reads-token as separate steps, and `DisposeAsync` models
+  its real read-`_loop` → await → dispose-CTS sequence, so the
+  token-read-after-CTS-dispose fault is a reachable model state. Without this
+  variable, Spin proves I5 vacuously — the Start/Dispose race A6 targets would not
+  be expressible in the model at all.
 - **Bounds (pan constants):** ≤ 2 config updates, ≤ 3 injected connect/poll failures,
   attempt counter capped at 3, ≤ 2 stray wakes. Small enough for exhaustive search in
   seconds.
@@ -180,9 +188,21 @@ freeze the loop at P, execute A on the test thread, release, run to quiescence
 (FakeTimeProvider, no real sleeps), then assert the code-level invariants:
 
 - **A1 (I1):** frozen *before a guard* + UpdateConfig ⇒ the guarded publish must NOT
-  happen. Frozen *between guard and publish* ⇒ the publish MAY happen and carries the
-  old vintage — asserted to match the documented benign-window semantics (snapshot
-  retention), not treated as failure.
+  happen. Frozen *between guard and publish* ⇒ the publish may still occur (the gap
+  is physically unclosable without publishing under the lock), but the doctrine and
+  assertion differ per publish type (Codex spec-review finding, PR #8 round 1):
+  - *Snapshot publish:* benign by the documented retention semantics — an old-vintage
+    snapshot is indistinguishable from the deliberate keep-last-known behavior.
+  - *Messages append / Connected status publish:* NOT blessed as benign — no
+    retention doctrine covers them. Tolerated only as **self-healing transients**
+    (UpdateConfig has already canceled the CTS, so teardown is in flight), and the
+    sweep arm asserts the healing, not mere tolerance: after release and quiescence,
+    the message log has been cleared and refetched from the new config's connection,
+    and the status has progressed through the new connection's states. A regression
+    in the cancel path or in clear-on-reconnect turns this arm red.
+  Both arms also pin structure: guard and its publish must remain one straight-line
+  segment (no awaits between them) — enforced by correspondence rule 3's
+  probe-point requirement plus review.
 - **A2 (I2):** by the time a Retrying/AuthFailed status event is observed, the fake
   client records itself disposed.
 - **A3 (I3):** with the fake's connect scripted to block until canceled: after
