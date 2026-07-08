@@ -57,8 +57,15 @@ interleaving bugs.
 
 | Layer | Artifact | Question it answers | Bug class it catches |
 |---|---|---|---|
-| Design | Promela model + Spin (exhaustive) | Is the protocol itself correct? | design errors, guard placement, lost wakeups, livelocks |
+| Design (primary) | F# executable specification + exhaustive explicit-state explorer (xUnit, all platforms) | Is the protocol itself correct? | design errors, guard placement, missing transitions (compile-time), lost wakeups |
+| Design (double-check) | Promela model + Spin (exhaustive, LTL + weak fairness) | Does an independent formalization agree? | transcription/encoding bugs in either model; authoritative for liveness |
 | Implementation | C# probe-point sweep tests (xUnit, in the normal suite) | Does the code faithfully implement the protocol? | r7-class transplant races, guard misplacement in code |
+
+The two design artifacts share one property list (I1–I5, L1–L3) and both must pass;
+any green/red disagreement between them is itself a finding (a transcription bug in
+one of the two encodings) and blocks. This N-version redundancy is a deliberate,
+user-chosen mitigation of the shared-blind-spot risk: one author, but two foreign
+encodings that fail differently.
 
 **Correspondence rules (the bridge, human-checked at review time), stated in
 `verification/README.md` as the checklist for any PR touching `HostMonitor.cs`:**
@@ -90,18 +97,36 @@ assumed rather than modeled); `Status`/`Snapshot` are two independent volatiles 
 readers may observe a fresh `Status` with a stale `Snapshot` (deliberate snapshot-
 retention semantics; M2c ViewModels must tolerate this cross-field tearing).
 
-## Layer 1 — Promela model (Spin)
+## Layer 1 — design-level models (F# primary, Spin double-check)
 
 ### Tool choice
 
-Spin/Promela over TLA+/TLC (no JVM dependency; exhaustive checking, equal verification
-power for this model) and over the P language (P's checker is bounded/randomized
-exploration — strictly weaker than exhaustive search on a deliberately small state
-space). Cost accepted: Promela specs read as operational C-style code rather than
-declarative math, and the `pan` verifier needs a C compiler (trivial on CI ubuntu;
-MSYS2 gcc or CI-only on the Windows dev machine).
+**Primary: an F# executable specification.** The protocol is a pure transition
+system — immutable state record, discriminated unions for loop steps and environment
+actions, `step : State -> Action -> State list` (nondeterminism as a list) — checked
+by a small explicit-state BFS explorer (~150 lines of pure F#), run as ordinary xUnit
+tests on all three CI platforms. What F# buys over a foreign modeling language:
 
-### Model boundary and granularity
+- **Typed correspondence:** the model references `Lattice.Core`'s real types
+  (`HostConnectionState` etc.); renames and added states break the model at compile
+  time — the first compiler-enforced drift guard in the design.
+- **Compile-checked totality:** exhaustive-match warnings as errors make an
+  unhandled state×action combination a build failure, not a runtime discovery.
+- **Zero foreign toolchain for the primary check** and three-platform execution.
+
+Cost owned honestly: the explorer is ours, including the hard part — liveness
+(SCC/non-progress-cycle detection under weak fairness). Mitigations: the red-first
+discipline (deliberately break the protocol per property; a checker that stays green
+is itself broken) exercises the checker, and the explorer is ~150 lines of
+reviewable pure code.
+
+**Double-check: Spin/Promela** (over TLA+/TLC: no JVM; over P: exhaustive vs.
+bounded/randomized). Spin's 30-year-mature LTL + weak-fairness machinery is
+**authoritative for the liveness properties**; it also re-checks all safety
+properties as the independent second encoding. `pan` needs a C compiler — trivial on
+CI ubuntu, CI-only is acceptable on the Windows dev machine.
+
+### Model boundary and granularity (shared by both encodings)
 
 - **Processes:** one `Loop` process (dispatcher → attempt → poll, transcribing
   `RunAsync`/`RunAttemptAsync`/`PollAsync`/`TickAsync` control flow) and one `Env`
@@ -162,10 +187,12 @@ model's header comments so a reviewer can check the mapping:
 Safety (inline assertions / monitor):
 
 - **I1 — guarded publish/mutation:** every publish (Connected status, snapshot,
-  message batch) **and every user-visible mutation** (the message-log clear — same
-  discipline; a not-yet-accepted attempt must not destroy public state) is
+  message batch) **and every user-visible mutation** (the message-log `ReplaceAll`,
+  which after rider 2 exists only on a connection's first tick, post-accept) is
   immediately preceded by a guard step that observed `configChanged == false`, and
-  the vintage it carries equals the version current at *guard* time. (The code
+  the vintage it carries equals the version current at *guard* time. A
+  not-yet-accepted attempt has NO user-visible mutation available to it at all —
+  by construction, not by guard. (The code
   documents a benign guard-to-publish window — see `HostMonitor.cs` comment at the
   final snapshot recheck; the model encodes exactly this contract, no stronger.)
 - **I2 — connection exclusivity:** at most one client connection live at any time;
@@ -227,9 +254,11 @@ freeze the loop at P, execute A on the test thread, release, run to quiescence
 (FakeTimeProvider, no real sleeps), then assert the code-level invariants:
 
 - **A1 (I1):** frozen *before a guard* + UpdateConfig ⇒ the guarded publish must NOT
-  happen — and neither may the guarded message-log clear: freezing between
-  `GetStateAsync` and the pre-Connected guard, then updating config, must leave the
-  old messages intact (red on current code until the reset moves behind the guard). Frozen *between guard and publish* ⇒ the publish may still occur (the gap
+  happen — and the message log must survive: freezing at ANY pre-first-tick point,
+  then updating config, must leave the old messages intact (red on current code's
+  eager clear until rider 2's structural fix lands; afterwards the property holds by
+  construction — there is no code path that clears without new data in hand — and
+  the sweep arm additionally asserts the first-tick `ReplaceAll` semantics). Frozen *between guard and publish* ⇒ the publish may still occur (the gap
   is physically unclosable without publishing under the lock), but the doctrine and
   assertion differ per publish type (Codex spec-review finding, PR #8 round 1):
   - *Snapshot publish:* benign by the documented retention semantics — an old-vintage
@@ -276,28 +305,48 @@ user-visible state mutated before the attempt is accepted:
    attempt-local; write the field only at the Connected publish (post-guard).
    Retrying/AuthFailed statuses then carry the last *accepted* version.
 2. The message-log reset (`_lastSeqno = 0` + `_messages.Clear()`) runs before the
-   pre-Connected guard (Codex PR #8 round-2). Fix: move it after the guard, before
-   the Connected publish — accepted-connection semantics unchanged (still precedes
-   the first tick), aborted attempts no longer destroy the public log.
+   pre-Connected guard (Codex PR #8 round-2). Round 3 showed the first proposed fix
+   (move the reset behind the guard) merely narrows the window — `UpdateConfig` can
+   still land between guard and reset, and even an atomic guard+clear leaves the log
+   destroyed if the accepted connection dies before its first tick. Fix is
+   structural elimination, not a better guard: delete the `_lastSeqno` field
+   entirely (it is per-connection state — becomes a `PollAsync` local threaded
+   through `TickAsync` like `state` already is), and replace the eager `Clear()`
+   with an atomic `MessageLog.ReplaceAll(batch)` on the new connection's **first
+   tick**. The log then transitions old→new at the instant new data exists; no
+   destructive pre-accept (or pre-first-tick) mutation remains *expressible*.
+   Deliberate user-visible behavior change, to be flagged in the PR: during
+   reconnects the old messages stay visible instead of vanishing — now consistent
+   with `Snapshot`'s keep-last-known retention doctrine. (A first tick that fetches
+   zero messages replaces the log with empty — correct: the daemon genuinely has an
+   empty buffer.)
 
 Both are in scope because the alternative is weakening A1 to excuse known violations.
 
 ## Toolchain, layout, CI
 
 ```
+tests/Lattice.Verification/     # F# executable spec (PRIMARY design-level check)
+├── Lattice.Verification.fsproj #   xUnit; references Lattice.Core for shared types
+├── Model.fs                    #   state record + action DUs + step function
+├── Explorer.fs                 #   BFS reachability + SCC/fairness liveness (~150 lines)
+├── Properties.fs               #   I1–I5 as reachable-state invariants, L1–L3
 verification/
-├── HostMonitor.pml      # Promela model (transcription-commented against the C#)
-├── README.md            # correspondence rule, property list, memory-model note, how to run
+├── HostMonitor.pml      # Promela model (independent double-check; same properties)
+├── README.md            # correspondence rules + shared-state inventory + property
+│                        #   cross-reference table (F# ↔ Promela), memory-model note
 scripts/
 ├── model-check.sh       # spin -a → gcc pan.c → pan runs (safety + one per LTL property);
                          # verifies spin/gcc presence, prints versions into the log
 ```
 
-- **CI:** new `model-check` job in `.github/workflows/ci.yml` (ubuntu-latest,
-  `apt-get install -y spin gcc`, run `scripts/model-check.sh`). Added to the
-  `protect-main` ruleset as a required check (per the standing authorization for
-  ruleset edits from PR #7's CI-matrix change). Harness tests ride the existing
-  `build-test` matrix — no new job.
+- **CI:** the F# spec project rides the existing `build-test` matrix (three
+  platforms, already a required check) — the primary design-level gate costs zero
+  new CI surface. One new `model-check` job for the Spin double-check
+  (ubuntu-latest, `apt-get install -y spin gcc`, run `scripts/model-check.sh`),
+  added to the `protect-main` ruleset as a required check (per the standing
+  authorization for ruleset edits from PR #7's CI-matrix change). Harness tests
+  also ride `build-test` — no further jobs.
 - **Local (Windows dev machine):** spin's Windows binary + MSYS2 gcc; if local setup
   fights back, CI is the gate and the script documents the ubuntu path. Not a blocker.
 
@@ -322,11 +371,17 @@ scripts/
   correspondence rules in README (review checklist) + the sweep harness on the code
   side. Accepted: a semantic code change with a stale model turns nothing red until
   a sweep case or reviewer catches it; the README makes the audit cheap.
-- **Shared blind spot (irreducible):** both layers are authored from one
-  understanding of the code — a misunderstood interleaving surface gets mis-modeled
-  AND un-probed simultaneously; the layers are not independent evidence. The
-  independent check is external review (Codex) against the shared-state inventory,
-  which exists precisely to make "what did the author forget" auditable.
+- **Shared blind spot (irreducible, now double-mitigated):** all layers are authored
+  from one understanding of the code — a misunderstood interleaving surface gets
+  mis-modeled AND un-probed simultaneously. Mitigations: external review (Codex)
+  against the shared-state inventory (spec-first review already caught three such
+  gaps: A1 doctrine, lifecycle task-publication state, the pre-accept log clear),
+  and the F#/Spin N-version redundancy — the same author, but two foreign encodings
+  that fail differently; a green/red disagreement is a transcription bug surfaced.
+- **Two-encoding maintenance (user-chosen):** every protocol change must be applied
+  to both design models. Accepted deliberately for the cross-validation value;
+  controlled by the README's property cross-reference table (a property present in
+  one encoding and missing in the other is a review failure).
 - **Bounded exhaustiveness (irreducible):** pan is exhaustive only within the stated
   bounds (≤ 2 config updates, etc.); defects requiring longer histories are invisible.
   Accepted on the small-scope hypothesis — the protocol's state is essentially
