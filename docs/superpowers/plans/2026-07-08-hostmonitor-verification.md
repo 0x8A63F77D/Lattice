@@ -1032,6 +1032,7 @@ end_loop:
          ctsState = 1;
          injectedFail = false; authRefused = false;
          reachedConnected = false; firstTickPending = true;
+         daemonVerVintage = 255; logVintage = 255;   /* per-attempt stamps (I1m) */
          connLive = false;
          ph = Conn }
     /* awaits: cancel/dispose observed, or progress, or injected failure */
@@ -1063,7 +1064,8 @@ end_loop:
     :: atomic { (ph == PubConn) ->
          /* I1 publish half: guard adjacency — assert guard was honored */
          daemonVerVintage = attemptVersion;           /* rider A: accepted only */
-         reachedConnected = true; attempt = 0;
+         reachedConnected = true;   /* NO attempt reset here: dispatcher owns the
+                                     * counter (HostMonitor.cs RunAsync: ReachedConnected ? 1 : n+1) */
          status = Cted; statusVersion = attemptVersion;
          ph = Tick }
     :: atomic { (ph == Tick && (ctsState == 2 || outerCanceled)) -> ph = Tear }
@@ -1196,7 +1198,11 @@ revert; keep the evidence links in the task report):
    (add this assert as PERMANENT model content now — it is I1's mutation half for
    the log, mirroring the F# property; the break then trips it).
 2. Break the snapshot atomicity (round 7): split `ph == Snap` into two atomic blocks
-   (flag clear first, CTS creation second) → monitor's I3 assert must fire.
+   — `attemptVersion = curVersion` in the FIRST, `configChanged = false; ctsState = 1`
+   (and the rest) in the SECOND. An env update landing between them is silently
+   erased: stale attempt, no pending flag, live CTS → monitor's I3 assert must fire.
+   (Do NOT split as "flag clear first, version read second" — that shape re-reads
+   the fresh version and is a semantic no-op; F# mutant M1 encodes the same break.)
 
 Expected: both breaks RED (assertion violated in pan output), then restore, expected
 GREEN. If a break stays green, the corresponding assertion is too weak — fix the
