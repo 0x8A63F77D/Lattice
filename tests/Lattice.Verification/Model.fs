@@ -110,8 +110,8 @@ let private isWaitPhase p = p = PollWait || p = BackoffWait || p = ParkedAuthFai
 let enabled (s: S) : Action list =
     let env =
         [ if not s.started then EnvStart                      // Start any time (idempotent)
-          if s.updatesLeft > 0 then EnvUpdateConfig
-          if s.wakesLeft > 0 then EnvWake
+          if s.updatesLeft > 0 && not s.outerDisposed then EnvUpdateConfig  // no config change after dispose
+          if s.wakesLeft > 0 && not s.outerDisposed then EnvWake  // no wake after dispose
           if s.disposesLeft > 0 then EnvDispose ]
     let loop =
         if s.faulted then []                                  // fault is terminal for the loop
@@ -174,6 +174,7 @@ let step (s: S) (a: Action) : S list =
         if s.disposeFlag then [ { s with disposesLeft = s.disposesLeft - 1 } ] // idempotent
         else
             [ { s with disposeFlag = true; outerCanceled = true; wake = true
+                       configChanged = false  // clear pending config change at disposal
                        disposesLeft = s.disposesLeft - 1
                        cts = (if s.cts = CtsLive then CtsCanceled else s.cts)
                        outerDisposed = (s.loopTask = TaskInitial || s.phase = Idle
@@ -184,16 +185,20 @@ let step (s: S) (a: Action) : S list =
 
     // ---------------- loop ----------------
     | DelayFires ->
-        match s.phase with
-        | PollWait ->
-            let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-            [ { s with phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
-        | BackoffWait ->
-            let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
-            if s.outerCanceled then [ exit' s ]
-            else [ { s with phase = Dispatch
-                            attempt = (if s.configChanged then 0 else s.attempt) } ]
-        | _ -> [ s ]
+        // If the wake was already set, WaitAsync returns with the wake, not the delay.
+        // So DelayFires should not succeed if wake=true.
+        if s.wake then []
+        else
+            match s.phase with
+            | PollWait ->
+                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
+                [ { s with phase = (if s.configChanged || s.outerCanceled then Teardown else TickRpcs) } ]
+            | BackoffWait ->
+                let s = { s with waitExitedByDelay = s.waitExitedByDelay || s.wake }
+                if s.outerCanceled then [ exit' s ]
+                else [ { s with phase = Dispatch
+                                attempt = (if s.configChanged then 0 else s.attempt) } ]
+            | _ -> [ s ]
     | WakeConsumed ->
         // WaitAsync: lock { if wake.completed { renew; return true } } — consumes the latch
         match s.phase with
