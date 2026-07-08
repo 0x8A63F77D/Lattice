@@ -6,6 +6,7 @@
     <OtherFlags>--warnaserror</OtherFlags>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="MachinePins.fs" />
     <Compile Include="Model.fs" />
     <Compile Include="Explorer.fs" />
     <Compile Include="Properties.fs" />
@@ -17,5 +18,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\Lattice.Core\Lattice.Core.csproj" />
+    <ProjectReference Include="..\..\src\Lattice.Core.Machine\Lattice.Core.Machine.fsproj" />
   </ItemGroup>
 </Project>
