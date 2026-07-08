@@ -91,7 +91,6 @@ public sealed class HostMonitor : IAsyncDisposable
         InterleaveProbe?.Invoke(point) ?? Task.CompletedTask;
 
     private readonly MessageLog _messages = new(MessageCapacity);
-    private int _lastSeqno;
 
     /// <summary>Creates a monitor; call <see cref="Start"/> to begin connecting.</summary>
     public HostMonitor(HostConfig config, Func<IGuiRpcClient> clientFactory,
@@ -123,9 +122,12 @@ public sealed class HostMonitor : IAsyncDisposable
     }
 
     /// <summary>
-    /// The retained message buffer (oldest first, capped at 5,000). Cleared and
-    /// refetched from seqno 0 at the start of every new connection (including
-    /// reconnects), since a restarted daemon's seqno counter may have reset.
+    /// The retained message buffer (oldest first, capped at 5,000). Retains
+    /// messages from the previous connection until the new connection's first tick
+    /// completes, at which point the log is atomically replaced with the daemon's
+    /// current buffer (from seqno 0). This retention applies the same "last known"
+    /// doctrine as Snapshot, ensuring a freshly (re)started daemon whose seqno
+    /// counter reset cannot silently lose messages already seen.
     /// </summary>
     public IReadOnlyList<Message> Messages => _messages.Snapshot();
 
@@ -142,10 +144,11 @@ public sealed class HostMonitor : IAsyncDisposable
     public event EventHandler<HostSnapshot>? SnapshotUpdated;
 
     /// <summary>
-    /// Raised when a tick returns new messages; carries only the new ones. Because the
-    /// message buffer resets on every reconnect, the first tick after a reconnect
-    /// re-raises this for the daemon's current buffer from seqno 0, even if some of
-    /// those messages were already seen before the disconnect.
+    /// Raised when a tick returns new messages; carries only the new ones.
+    /// Semantics unchanged by retention: the first tick of a new connection
+    /// atomically replaces the log and raises this with the daemon's current buffer
+    /// from seqno 0, even if some of those messages were already seen before
+    /// disconnect. Subsequent ticks within the same connection append new messages.
     /// Subscriber exceptions are ignored — they never affect the state machine.
     /// </summary>
     public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
@@ -429,14 +432,6 @@ public sealed class HostMonitor : IAsyncDisposable
             VersionInfo daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
             CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
 
-            // A new connection may be talking to a freshly (re)started daemon whose
-            // seqno counter reset to zero: a stale high _lastSeqno would silently
-            // miss every message it now considers new. Reset the cursor and the
-            // retained buffer so the first tick refetches the daemon's current
-            // buffer from scratch (matches official BOINC Manager semantics).
-            _lastSeqno = 0;
-            _messages.Clear();
-
             // A config change may have landed after the fetch above completed but
             // before Connected is published: never surface Connected (or the
             // snapshot/messages that would follow) for a connection to the OLD
@@ -509,11 +504,21 @@ public sealed class HostMonitor : IAsyncDisposable
                                  CancellationToken connCt, CancellationToken ct)
     {
         bool reauthedSinceLastSuccess = false;
+        // Per-connection message cursor. Starts at 0 for every new connection: a
+        // freshly (re)started daemon's seqno counter may have reset, so the first
+        // tick refetches the daemon's current buffer from scratch and REPLACES the
+        // retained log (old messages stay visible until that instant — same
+        // keep-last-known retention doctrine as Snapshot). Field-free by design:
+        // per-connection state must not outlive the connection (I1 mutation half).
+        int lastSeqno = 0;
+        bool firstTick = true;
         while (true)
         {
             try
             {
-                state = await TickAsync(client, config, state, connCt).ConfigureAwait(false);
+                (state, lastSeqno) = await TickAsync(client, config, state, lastSeqno,
+                                                     replaceLog: firstTick, connCt).ConfigureAwait(false);
+                firstTick = false;
                 reauthedSinceLastSuccess = false;
             }
             catch (BoincUnauthorizedException ex)
@@ -545,13 +550,15 @@ public sealed class HostMonitor : IAsyncDisposable
         }
     }
 
-    private async Task<CcState> TickAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
+    private async Task<(CcState State, int LastSeqno)> TickAsync(
+        IGuiRpcClient client, HostConfig config, CcState state,
+        int lastSeqno, bool replaceLog, CancellationToken ct)
     {
         CcStatus ccStatus = await client.GetCcStatusAsync(ct).ConfigureAwait(false);
         IReadOnlyList<Result> results = await client.GetResultsAsync(ct: ct).ConfigureAwait(false);
         IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync(ct).ConfigureAwait(false);
 
-        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(_lastSeqno, ct).ConfigureAwait(false);
+        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(lastSeqno, ct).ConfigureAwait(false);
 
         // A config change may have landed (and canceled connCt) while get_messages was
         // in flight: never append/publish messages fetched from the OLD connection.
@@ -562,11 +569,21 @@ public sealed class HostMonitor : IAsyncDisposable
         await ProbeAsync(InterleavePoints.TickBeforeMsgGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
         await ProbeAsync(InterleavePoints.TickBeforeMsgPublish).ConfigureAwait(false);
         if (newMessages.Count > 0)
+            lastSeqno = newMessages.Max(m => m.Seqno);
+        if (replaceLog)
         {
-            _lastSeqno = newMessages.Max(m => m.Seqno);
+            // First tick of this connection: atomically swap old-connection content
+            // for the daemon's current buffer (may be empty — a genuinely empty
+            // daemon buffer replaces the log with empty).
+            _messages.ReplaceAll(newMessages);
+            if (newMessages.Count > 0)
+                RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
+        }
+        else if (newMessages.Count > 0)
+        {
             _messages.Append(newMessages);
             RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
         }
@@ -583,7 +600,7 @@ public sealed class HostMonitor : IAsyncDisposable
         await ProbeAsync(InterleavePoints.TickBeforeSnapGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
         await ProbeAsync(InterleavePoints.TickBeforeBuild).ConfigureAwait(false);
 
         HostSnapshot snapshot = SnapshotBuilder.Build(
@@ -597,11 +614,11 @@ public sealed class HostMonitor : IAsyncDisposable
         // correctness polish, not load-bearing machinery.
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
 
         await ProbeAsync(InterleavePoints.TickBeforeSnapPublish).ConfigureAwait(false);
         Snapshot = snapshot;
         RaiseSafe(SnapshotUpdated, snapshot);
-        return state;
+        return (state, lastSeqno);
     }
 }
