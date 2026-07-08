@@ -29,6 +29,13 @@ interleaving bugs.
   interleaving point against every environment action (the implementation layer).
 - Fix the one known violation of the target invariants: `_daemonVersion` stamped from
   unaccepted connection attempts (PR #7 round-9 P2 deferral).
+- Verify **lifecycle edges**: `Start`/`DisposeAsync` ordering, double-dispose,
+  start-after-dispose. Suspected latent defects (found during this design's
+  completeness audit, to be confirmed by red tests first): a second `DisposeAsync`
+  calls `Cancel()` on a disposed CTS → `ObjectDisposedException` escapes, violating
+  IAsyncDisposable idempotency convention; `Start()` after dispose evaluates
+  `_cts.Token` in the loop lambda → the loop task faults unobserved. If confirmed,
+  harden (idempotency flag / started-state check) as part of this work.
 
 ## Non-goals
 
@@ -47,12 +54,30 @@ interleaving bugs.
 | Design | Promela model + Spin (exhaustive) | Is the protocol itself correct? | design errors, guard placement, lost wakeups, livelocks |
 | Implementation | C# probe-point sweep tests (xUnit, in the normal suite) | Does the code faithfully implement the protocol? | r7-class transplant races, guard misplacement in code |
 
-**Correspondence rule (the bridge, human-checked at review time):** every atomic step
-in the model that touches `_gate`-protected state must correspond to **exactly one**
-`lock (_gate)` block in `HostMonitor.cs`. Splitting one model step into two lock
-acquisitions (the round-7 bug shape) violates the rule; the model will not turn red on
-its own, but the sweep harness will. The rule is stated in `verification/README.md`
-and is the checklist item for any PR that touches `HostMonitor.cs`.
+**Correspondence rules (the bridge, human-checked at review time), stated in
+`verification/README.md` as the checklist for any PR touching `HostMonitor.cs`:**
+
+1. Every atomic step in the model that touches `_gate`-protected state must
+   correspond to **exactly one** `lock (_gate)` block in the code. Splitting one
+   model step into two lock acquisitions (the round-7 bug shape) violates the rule;
+   the model will not turn red on its own, but the sweep harness will.
+2. Every field of `HostMonitor` must appear in the README's **shared-state
+   inventory**: field → protection regime (`_gate` / `volatile` / `Volatile.R/W` /
+   single-writer loop-confined) → modeled or excluded, with justification.
+   (E.g. `_lastSeqno` and `_messages` are excluded as single-writer loop-confined —
+   only the loop thread writes them; `MessageLog` is internally thread-safe for
+   readers.) A new field with no inventory row is a review failure.
+3. Any new shared-state touch point in the code requires a probe point (the harness
+   drifts too, not just the model): adding a write/read of shared state between two
+   existing probe points without adding a probe there is a review failure.
+
+**Verification assumptions (also in the README — outside what either layer checks):**
+event subscribers terminate (a blocking subscriber stalls the actor thread; liveness
+properties are conditional on this); `SnapshotBuilder.Build` is pure (no shared
+state); the `IGuiRpcClient` is confined to its attempt's scope (structural, but
+assumed rather than modeled); `Status`/`Snapshot` are two independent volatiles —
+readers may observe a fresh `Status` with a stale `Snapshot` (deliberate snapshot-
+retention semantics; M2c ViewModels must tolerate this cross-field tearing).
 
 ## Layer 1 — Promela model (Spin)
 
@@ -70,7 +95,10 @@ MSYS2 gcc or CI-only on the Windows dev machine).
 - **Processes:** one `Loop` process (dispatcher → attempt → poll, transcribing
   `RunAsync`/`RunAttemptAsync`/`PollAsync`/`TickAsync` control flow) and one `Env`
   process that nondeterministically performs a bounded number of `UpdateConfig`,
-  `RequestRefresh` (wake), `SetPollingInterval`, and one `Dispose`.
+  `RequestRefresh` (wake), `SetPollingInterval`, and lifecycle actions: `Start`
+  (including start-after-dispose ordering) and up to two `Dispose` calls
+  (idempotency). The CTS is modeled with a Disposed state so that
+  cancel-after-dispose / token-after-dispose faults are expressible.
 - **Atomicity:** one atomic step = one `lock (_gate)` block (wrapped in `atomic{}`)
   or one straight-line segment between interleaving points. `Env` actions can
   interleave between any two steps — this models the truth that environment threads
@@ -101,6 +129,9 @@ Safety (inline assertions / monitor):
   on a null CTS *and* the stale attempt runs unaborted to a publish.
 - **I4 — attempt-counter semantics (round-6's property):** a failure after Connected
   was published enters Retrying with `attempt == 1`.
+- **I5 — lifecycle safety:** no reachable step faults on a disposed resource
+  (cancel-after-dispose, token-after-dispose modeled as assertion failures);
+  `Dispose` is idempotent; `Start` at any point never produces a faulted loop.
 
 Liveness (LTL, weak fairness on `Loop`):
 
@@ -161,6 +192,10 @@ freeze the loop at P, execute A on the test thread, release, run to quiescence
   `Attempt == 1`.
 - **A5:** DisposeAsync at any P ⇒ loop task completes non-faulted, final status
   Disconnected, client disposed.
+- **A6 (lifecycle, targeted rather than swept):** double `DisposeAsync` does not
+  throw; `Start()` after dispose neither throws nor leaves a faulted loop task;
+  `DisposeAsync` racing `Start()` settles in Disconnected with no unobserved fault.
+  Expected red on current code (see Goals) → harden → green.
 
 Roughly 14 × 3 sweep cases plus the targeted A4 scenario — all deterministic, all in
 the normal three-platform test run. `SetPollingInterval` is modeled in the Promela
@@ -216,9 +251,18 @@ scripts/
 ## Risks / accepted tradeoffs
 
 - **Model-code drift:** Spin re-checks the *model*, not the code. Drift control =
-  correspondence rule in README (review checklist) + the sweep harness on the code
+  correspondence rules in README (review checklist) + the sweep harness on the code
   side. Accepted: a semantic code change with a stale model turns nothing red until
   a sweep case or reviewer catches it; the README makes the audit cheap.
+- **Shared blind spot (irreducible):** both layers are authored from one
+  understanding of the code — a misunderstood interleaving surface gets mis-modeled
+  AND un-probed simultaneously; the layers are not independent evidence. The
+  independent check is external review (Codex) against the shared-state inventory,
+  which exists precisely to make "what did the author forget" auditable.
+- **Bounded exhaustiveness (irreducible):** pan is exhaustive only within the stated
+  bounds (≤ 2 config updates, etc.); defects requiring longer histories are invisible.
+  Accepted on the small-scope hypothesis — the protocol's state is essentially
+  "current vs. stale", not history-dependent.
 - **Probe seams in production code:** ~14 awaited null-checks on the loop's paths.
   Zero measurable cost at 2–60 s polling cadence; the seam is `internal` and invisible
   to the public API.
