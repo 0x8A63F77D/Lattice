@@ -62,6 +62,11 @@ end_mon:
                 && (ph == Conn || ph == Auth || ph == Fetch || ph == Accept
                     || ph == PubConn || ph == Tick || ph == MsgG || ph == MsgP
                     || ph == SnapG || ph == SnapP || ph == PWait) ));
+         /* I1 mutation half (log): an attempt that has not reached Connected
+          * must never have stamped ITS OWN version into the log. The MsgP
+          * assert cannot catch an eager write injected at Fetch (by MsgP,
+          * reachedConnected is already true) — this backstop can. */
+         assert(!(logVintage == attemptVersion && !reachedConnected && attemptVersion != 255));
          /* I5: no reachable fault */
          assert(!faulted);
        }

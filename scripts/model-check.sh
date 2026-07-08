@@ -21,8 +21,8 @@ run_pan () {
   rm -f pan pan.out
 }
 
-# Safety: assertions + invalid end states (monitor/env are intentional end states —
-# they carry end labels, so -q stays sound).
+# Safety: assertions + invalid end states (monitor/env are intentional end
+# states — they carry end labels, so default end-state checking stays sound).
 spin -a HostMonitor.pml
 run_pan "safety (assertions, I1..I5)" -m100000
 
