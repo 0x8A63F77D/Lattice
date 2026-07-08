@@ -30,6 +30,7 @@ pins.
 | I3 | `` `I3 no unabortable stale attempt` `` | `monitor()` `d_step` assert | `SweepPointTimesAction` (UpdateConfig arm, `AssertA3NewGenerationConnected`) |
 | I4 | `` `I4 attempt counter resets after a connected session` `` | `Retry`-phase assert | `FailedAttemptDoesNotPollute_DaemonVersion` + sweep preamble case (`BeforeRetryPublish` arm of `AssertA1Doctrine`, asserts `Attempt == 1`) |
 | I5 | `` `I5 lifecycle safety - no disposed-resource faults` `` | `monitor()` `assert(!faulted)` | `LifecycleTests` (A6): `DoubleDisposeDoesNotThrow`, `DisposeWithoutStartThenStartIsInert`, `ConcurrentStartAndDisposeSettleDisconnected` |
+| I6 | `` `I6 published status is coherent with the core phase` `` | `monitor()` `d_step` asserts (status/phase coherence; mapping offset one phase vs the F# encoding — deliberate N-version divergence) | (covered indirectly: `HostMonitorStateMachineTests` pins the published status sequences) |
 | L1 | `` `L1 no lost wakeup` `` | `ltl L1` | (covered by design layer; harness indirectly via `ReentrancyTests` and the `RequestRefresh` sweep arm's wake-consumption assertions) |
 | L2 | `` `L2 config change converges` `` | `ltl L2` | Sweep A3 convergence arm (`SweepPointTimesAction`, UpdateConfig branch's post-quiescence reconnect/snapshot/log assertions) |
 | L3 | `` `L3 disposal terminates the loop` `` + `` `L3b AuthFailed parks until config change or disposal` `` | `ltl L3` | Sweep A5 (`SweepPointTimesAction`, `AssertA5DisposeOutcomeAsync`) |
@@ -82,7 +83,7 @@ review time for any PR touching `HostMonitor.cs`:
 A **red/green disagreement** between the F# encoding and the Promela encoding on
 the same property is itself a finding — a transcription bug in one of the two
 encodings — and blocks. The two design artifacts share one property list
-(I1–I5, L1–L3) and both must pass.
+(I1–I6, L1–L3) and both must pass.
 
 ## 3. Shared-state inventory
 

@@ -42,6 +42,20 @@ module ProbePoints =
 /// This module is public so Lattice.Core and Lattice.Verification can consume it,
 /// but it is an implementation detail of Lattice.Core, not a supported API.
 ///
+/// Conceptual model: this is a pure Mealy machine — an immutable State value plus
+/// a total transition function. It executes nothing and holds no resources;
+/// "Machine" names the mathematical object, not a runtime engine. Phase enumerates
+/// the protocol's interleaving points (the former C# async state machine's
+/// continuation points), which is deliberately finer than the user-facing 7-value
+/// HostConnectionState lifecycle: guard-adjacency properties (I1) live below the
+/// lifecycle's granularity. The projection back onto the lifecycle is pinned by
+/// verification property I6 — once a phase's entry batch has drained its publish:
+///   Connecting → Connecting; Authorizing → Authorizing;
+///   Fetching/AcceptGuard → FetchingState; tick pipeline → Connected;
+///   BackoffWaiting/PostBackoffObserve → Retrying; Parked → AuthFailed;
+///   Exited → Disconnected; Dispatch/SnapshotWait/TearingDown → trajectory-
+///   dependent (they surface the previous publish by design).
+///
 /// Interpreter contract (the shell and the verification wrapper both obey it):
 ///  - step is total: every (phase, input) pair returns; unexpected pairs fall
 ///    through to a safe loop exit (the loop task must never fault — I5/A5).

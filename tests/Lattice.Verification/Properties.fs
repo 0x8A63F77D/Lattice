@@ -106,6 +106,34 @@ let ``I4 attempt counter resets after a connected session`` () =
 let ``I5 lifecycle safety - no disposed-resource faults`` () =
     Explorer.checkInvariant reach.Value "I5" (fun s -> not s.faulted)
 
+// I6: the machine, projected onto the published status, IS the 7-value connection
+// lifecycle (HostConnectionState). Once a phase's entry batch has drained its
+// publish, the published status is determined by the phase. Trajectory-dependent
+// phases (Dispatch, SnapshotWait, TearingDown) are unconstrained: they surface the
+// previous publish by design (e.g. AuthFailed stays visible through the reconnect
+// dispatch until Connecting is published).
+let private i6Coherent (s: S) =
+    s.queue |> List.exists (function PublishStatus _ -> true | _ -> false)
+    || (let expected =
+            match s.core.phase with
+            | Connecting -> Some HostConnectionState.Connecting
+            | Authorizing -> Some HostConnectionState.Authorizing
+            | Fetching | AcceptGuard -> Some HostConnectionState.FetchingState
+            | TickAwait | Reauthorizing | MsgGuard | Refetching | SnapGuard
+            | PostBuildGuard | PollObserve | PollWaiting | PostWaitObserve ->
+                Some HostConnectionState.Connected
+            | BackoffWaiting | PostBackoffObserve -> Some HostConnectionState.Retrying
+            | Parked -> Some HostConnectionState.AuthFailed
+            | Exited -> Some HostConnectionState.Disconnected
+            | Dispatch | SnapshotWait | TearingDown _ -> None
+        match expected with
+        | Some st -> s.statusState = st
+        | None -> true)
+
+[<Fact>]
+let ``I6 published status is coherent with the core phase`` () =
+    Explorer.checkInvariant reach.Value "I6" i6Coherent
+
 /// true when running `check` over the mutant's reachable graph throws.
 let private violates (check: Explorer.Reach -> unit) (mutantStep: S -> Action -> S list) =
     let r = Explorer.explore mutantStep (Model.initial bounds)
@@ -175,6 +203,18 @@ module private Mutants =
                 else s2)
         | _ -> Model.step s a
 
+    // M8 (I6's red-first witness): the backoff publish lies about the lifecycle —
+    // it writes Connected instead of Retrying. The phase/status projection must
+    // catch it. (The Retrying publish is never batch-terminal — WaitBackoff always
+    // follows — so no trailing-EffectOk feed is needed here.)
+    let m8WrongBackoffPublish (s: S) (a: Action) : S list =
+        match a, s.waiting, s.queue with
+        | ExecCmd, None, (PublishStatus(HostConnectionState.Retrying, _, _, _, _) :: rest) ->
+            [ { s with queue = rest
+                       statusState = HostConnectionState.Connected
+                       statusVersion = s.attemptVersion } ]
+        | _ -> Model.step s a
+
     // M5 (PR#8 audit, pre-rider-C): dispose without the idempotency flag —
     // start-after-dispose can read a disposed token (EnvStart's fault branch).
     let m5NoDisposeFlag (s: S) (a: Action) : S list =
@@ -234,6 +274,11 @@ let ``mutant M5 no dispose flag violates I5`` () =
     Assert.True(violates (fun r ->
         Explorer.checkInvariant r "I5" (fun s -> not s.faulted))
         Mutants.m5NoDisposeFlag)
+
+[<Fact>]
+let ``mutant M8 wrong backoff publish violates I6`` () =
+    let check (r: Explorer.Reach) = Explorer.checkInvariant r "I6" i6Coherent
+    Assert.True(violates check Mutants.m8WrongBackoffPublish)
 
 // L1 no lost wakeup — a completed wake is eventually consumed, unless the loop is not
 // running (Exited, or never started). The latch may survive a delay exit (WhenAny race);

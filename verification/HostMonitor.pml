@@ -2,7 +2,7 @@
  * Independent second encoding of the HostMonitor concurrency protocol (whose
  * primary design artifact now EXECUTES the production HostMachine.step directly
  * — tests/Lattice.Verification).
- * Property numbering shared: I1–I5 safety (assertions), L1–L3 liveness (ltl, pan -a -f).
+ * Property numbering shared: I1–I6 safety (assertions), L1–L3 liveness (ltl, pan -a -f).
  * Primitive anchoring: lock(_gate) blocks = atomic{}; awaits = statement boundaries;
  * TCS wake = sticky bit with consume-if-completed protocol; CTS = monotonic bits.
  * This model abstains from the post-build recheck (the F# layer's PostBuildGuard,
@@ -51,7 +51,7 @@ byte failsLeft = MAX_FAILS;
 
 /* I-invariants as a monitor process: checked at every state via timeout-free
  * always-enabled assertion stepping is expensive; instead assert inline at the
- * mutation/publish sites (I1, I4, I5) and via this monitor for I2/I3. */
+ * mutation/publish sites (I1, I4, I5) and via this monitor for I2/I3/I6. */
 active proctype monitor()
 {
 end_mon:
@@ -72,6 +72,22 @@ end_mon:
          assert(!(logVintage == attemptVersion && !reachedConnected && attemptVersion != 255));
          /* I5: no reachable fault */
          assert(!faulted);
+         /* I6: the published status coheres with the loop phase — the machine,
+          * projected onto the observable, IS the 7-value connection lifecycle.
+          * pml granularity: the ladder publishes fire ON the transition INTO a
+          * phase (the F# wrapper drains them as queued commands inside the
+          * phase), so this mapping sits one phase later than the F# encoding —
+          * deliberate N-version divergence, same property. Trajectory-dependent
+          * phases (Idle/Dispatch/Snap/Conn/Tear/Retry) are unconstrained: they
+          * surface the previous publish by design. */
+         assert(!(ph == Auth)   || status == Cing);
+         assert(!(ph == Fetch)  || status == Aing);
+         assert(!(ph == Accept || ph == PubConn) || status == Fing);
+         assert(!(ph == Tick || ph == MsgG || ph == MsgP || ph == SnapG
+                || ph == SnapP || ph == PWait) || status == Cted);
+         assert(!(ph == BWait)  || status == Rtry);
+         assert(!(ph == Park)   || status == AFail);
+         assert(!(ph == Exited) || status == Disc);
        }
     od
 }
