@@ -131,6 +131,32 @@ MSYS2 gcc or CI-only on the Windows dev machine).
   attempt counter capped at 3, ≤ 2 stray wakes. Small enough for exhaustive search in
   seconds.
 
+### Primitive-semantics anchoring
+
+The model must not invent ad-hoc encodings for .NET primitives; every primitive is
+anchored on a mature, documented semantic model, and the anchoring is stated in the
+model's header comments so a reviewer can check the mapping:
+
+- **`async`/`await`:** the loop process is transcribed as the state machine the C#
+  compiler itself lowers async methods to — every `await` is an explicit
+  continuation point and nothing else is. The set of interleaving points is thus
+  *derived from the language's execution model*, not hand-picked.
+- **`lock (_gate)`:** .NET monitor semantics → Promela `atomic { }` (the code never
+  awaits inside a lock, so lock queuing/reentrancy need not be modeled — stated as
+  an assumption tied to correspondence rule 1).
+- **`TaskCompletionSource` (RunContinuationsAsynchronously):** a one-shot latch —
+  monotonic completed bit, idempotent `TrySetResult`, per its documented contract.
+- **`CancellationTokenSource`:** monotonic canceled bit; the linked CTS is the
+  disjunction of its own bit and the outer token's; `Dispose` transitions to a state
+  where `Cancel`/`Token` fault (documented ODE behavior) — the I5 fault states.
+- **`Task.WhenAny`/`Task.Delay`:** nondeterministic completion choice (time is
+  abstracted; the FakeTimeProvider layer owns time determinism, not the model).
+- **`volatile` flags:** plain shared bits under the SC assumption, valid per the
+  memory-model note (single-direction `false→true` transitions).
+- **Promela idiom discipline:** standard Spin patterns (Holzmann) — a bounded
+  nondeterministic environment process, `d_step` only for internal bookkeeping that
+  can never block, LTL checked per-property with weak fairness (`pan -f`).
+
 ### Properties
 
 Safety (inline assertions / monitor):
