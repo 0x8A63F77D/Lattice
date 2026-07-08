@@ -986,6 +986,12 @@ active proctype env()
 {
 end_env:
     do
+    /* The environment is OPTIONS, not obligations: under pan -f (per-process
+     * weak fairness) an env without this stutter branch would eventually be
+     * FORCED into its last enabled branch (Dispose), draining every execution
+     * to Exited and making all liveness vacuous. The stutter lets a fair
+     * execution keep the env silent forever. */
+    :: true -> skip
     :: (updatesLeft > 0) -> atomic {
          updatesLeft--;
          curVersion++;
@@ -1148,12 +1154,13 @@ end_loop:
  * consumed unless the monitor is dead (exited, or disposed before start).
  * Sound under Spin's process-level weak fairness BECAUSE wait entries consume
  * the latch deterministically: no infinite execution can keep ignoring it. */
-ltl L1 { [] (wake -> <> (!wake || ph == Exited || (disposeFlag && ph == Idle))) }
-/* L2 config convergence (dead-monitor discharge: disposed-before-start can
- * never adopt a config; that is the documented terminal contract) */
-ltl L2 { [] (configChanged -> <> (!configChanged || ph == Exited || (disposeFlag && ph == Idle))) }
+ltl L1 { [] (wake -> <> (!wake || ph == Exited || ph == Idle)) }
+/* L2 config convergence (Idle discharge: a monitor whose loop is not running —
+ * never started, or disposed before start — cannot adopt a config; the
+ * obligation transfers to Start, which the environment never owes) */
+ltl L2 { [] (configChanged -> <> (!configChanged || ph == Exited || ph == Idle)) }
 /* L3 disposal terminates (disposed-before-start: loop never ran, stays Idle) */
-ltl L3 { [] (outerCanceled -> <> (ph == Exited || (disposeFlag && ph == Idle))) }
+ltl L3 { [] (outerCanceled -> <> (ph == Exited || ph == Idle)) }
 ```
 
 - [ ] **Step 2: Write scripts/model-check.sh**
