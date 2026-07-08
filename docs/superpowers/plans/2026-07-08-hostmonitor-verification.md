@@ -955,14 +955,10 @@ byte daemonVerVintage = 255;   /* 255 = none */
 byte logVintage = 255;
 
 /* L1 history */
-bool wakeSetDuringWait = false;
-bool waitExitedByDelay = false;
 
 byte updatesLeft = MAX_UPDATES;
 byte wakesLeft = MAX_WAKES;
 byte failsLeft = MAX_FAILS;
-
-#define IN_WAIT (ph == PWait || ph == BWait || ph == Park)
 
 /* I-invariants as a monitor process: checked at every state via timeout-free
  * always-enabled assertion stepping is expensive; instead assert inline at the
@@ -995,13 +991,11 @@ end_env:
          curVersion++;
          configChanged = true;
          if :: ctsState == 1 -> ctsState = 2 :: else -> skip fi;
-         wake = true;
-         if :: IN_WAIT -> wakeSetDuringWait = true :: else -> skip fi
+         wake = true
        }
     :: (wakesLeft > 0) -> atomic {
          wakesLeft--;
-         wake = true;
-         if :: IN_WAIT -> wakeSetDuringWait = true :: else -> skip fi
+         wake = true
        }
     :: (!started) -> atomic {          /* Start (rider C: no-op after dispose) */
          if
@@ -1082,10 +1076,17 @@ end_loop:
          ph = SnapG }
     :: atomic { (ph == SnapG) ->
          if :: configChanged -> ph = Tear :: else -> ph = SnapP fi }
-    :: atomic { (ph == SnapP) -> ph = PWait }
-    /* waits: delay fires, or sticky wake consumed */
+    :: atomic { (ph == SnapP) ->
+         /* WaitAsync ENTRY consumes a completed latch (HostMonitor.cs:183-187):
+          * entering the poll wait with the wake set returns immediately. */
+         if
+         :: wake -> wake = false;
+            if :: (configChanged || outerCanceled) -> ph = Tear :: else -> ph = Tick fi
+         :: !wake -> ph = PWait
+         fi }
+    /* waits: delay fires (the latch may stay set — sticky; the next wait entry
+     * consumes it), or the sticky wake is consumed mid-wait */
     :: atomic { (ph == PWait) ->                      /* delay fires */
-         if :: wake -> waitExitedByDelay = true :: else -> skip fi;
          if :: (configChanged || outerCanceled) -> ph = Tear :: else -> ph = Tick fi }
     :: atomic { (ph == PWait && wake) ->              /* wake consumed */
          wake = false;
@@ -1095,7 +1096,11 @@ end_loop:
          if
          :: outerCanceled -> ph = Exited; status = Disc
          :: (!outerCanceled && authRefused) ->
-              status = AFail; statusVersion = attemptVersion; attempt = 0; ph = Park
+              status = AFail; statusVersion = attemptVersion; attempt = 0;
+              /* WaitForConfigChangeAsync entry consumes a stale completed latch
+               * (HostMonitor.cs:214-217) unless configChanged releases immediately */
+              if :: (wake && !configChanged) -> wake = false :: else -> skip fi;
+              ph = Park
          :: (!outerCanceled && !authRefused && (configChanged || !injectedFail)) ->
               attempt = 0; ph = Dispatch
          :: (!outerCanceled && !authRefused && !configChanged && injectedFail) ->
@@ -1107,9 +1112,18 @@ end_loop:
          fi }
     :: atomic { (ph == Retry) ->
          assert(!(reachedConnected && injectedFail) || attempt == 1);   /* I4 */
-         status = Rtry; statusVersion = attemptVersion; ph = BWait }
-    :: atomic { (ph == BWait) ->                      /* delay fires */
-         if :: wake -> waitExitedByDelay = true :: else -> skip fi;
+         status = Rtry; statusVersion = attemptVersion;
+         /* WaitAsync ENTRY consumes a completed latch: entering backoff with the
+          * wake set skips the wait. */
+         if
+         :: wake -> wake = false;
+            if
+            :: outerCanceled -> ph = Exited; status = Disc
+            :: else -> if :: configChanged -> attempt = 0 :: else -> skip fi; ph = Dispatch
+            fi
+         :: !wake -> ph = BWait
+         fi }
+    :: atomic { (ph == BWait) ->                      /* delay fires; latch sticky */
          if
          :: outerCanceled -> ph = Exited; status = Disc
          :: else -> if :: configChanged -> attempt = 0 :: else -> skip fi; ph = Dispatch
@@ -1130,12 +1144,16 @@ end_loop:
     od
 }
 
-/* L1 lost wakeup — safety via history (checked as invariant): */
-ltl L1 { [] !(wakeSetDuringWait && waitExitedByDelay) }
-/* L2 config convergence */
-ltl L2 { [] (configChanged -> <> (!configChanged || ph == Exited)) }
-/* L3 disposal terminates */
-ltl L3 { [] (outerCanceled -> <> (ph == Exited)) }
+/* L1 no lost wakeup — sticky-latch liveness: a completed wake is eventually
+ * consumed unless the monitor is dead (exited, or disposed before start).
+ * Sound under Spin's process-level weak fairness BECAUSE wait entries consume
+ * the latch deterministically: no infinite execution can keep ignoring it. */
+ltl L1 { [] (wake -> <> (!wake || ph == Exited || (disposeFlag && ph == Idle))) }
+/* L2 config convergence (dead-monitor discharge: disposed-before-start can
+ * never adopt a config; that is the documented terminal contract) */
+ltl L2 { [] (configChanged -> <> (!configChanged || ph == Exited || (disposeFlag && ph == Idle))) }
+/* L3 disposal terminates (disposed-before-start: loop never ran, stays Idle) */
+ltl L3 { [] (outerCanceled -> <> (ph == Exited || (disposeFlag && ph == Idle))) }
 ```
 
 - [ ] **Step 2: Write scripts/model-check.sh**
