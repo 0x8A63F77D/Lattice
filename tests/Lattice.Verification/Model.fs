@@ -226,6 +226,7 @@ let step (s: S) (a: Action) : S list =
             [ { s with attemptVersion = s.curVersion; configChanged = false; cts = CtsLive
                        injectedFail = false; reachedConnected = false
                        firstTickPending = true; logReplacedThisConn = false
+                       daemonVersionVintage = None; logVintage = None
                        phase = AwaitConnect; connLive = false } ]
         | AwaitConnect ->
             if s.cts = CtsCanceled || s.outerCanceled then [ { s with phase = Teardown } ]
