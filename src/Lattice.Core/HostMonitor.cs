@@ -73,7 +73,9 @@ public sealed class HostMonitor : IAsyncDisposable
     private CancellationTokenSource? _connectionCts;
     private volatile int _pollingIntervalSeconds;
     private TaskCompletionSource _wake = NewWake();
-    private Task _loop = Task.CompletedTask;
+    // internal (not private) solely so the interleaving sweep can assert the loop
+    // task never faults (A5); no production code outside this class touches it.
+    internal Task _loop = Task.CompletedTask;
     private bool _started;
     private bool _disposed;
     private VersionInfo? _daemonVersion;
