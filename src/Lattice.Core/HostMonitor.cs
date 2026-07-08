@@ -423,7 +423,10 @@ public sealed class HostMonitor : IAsyncDisposable
                 throw new HostAuthException();
 
             SetStatus(HostConnectionState.FetchingState, attempt);
-            _daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
+            // Attempt-local until accepted: a failed attempt must not pollute
+            // Status publishes with an unaccepted daemon version (I1 mutation half;
+            // PR #7 round-9 P2).
+            VersionInfo daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
             CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
 
             // A new connection may be talking to a freshly (re)started daemon whose
@@ -443,6 +446,7 @@ public sealed class HostMonitor : IAsyncDisposable
             if (_configChanged)
                 return AttemptOutcome.ConfigChanged;
             await ProbeAsync(InterleavePoints.BeforeConnectedPublish).ConfigureAwait(false);
+            _daemonVersion = daemonVersion;
             SetStatus(HostConnectionState.Connected, 0);
             connected = true;
             await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
