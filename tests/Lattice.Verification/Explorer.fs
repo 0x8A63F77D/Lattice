@@ -57,7 +57,8 @@ let checkInvariant (r: Reach) (name: string) (ok: S -> bool) : unit =
 /// always-available EnvDispose as an escape hatch and discharge every
 /// obligation by "the user will eventually dispose".)
 let private isLoopAction = function
-    | LoopStep | LoopStepFail | DelayFires | WakeConsumed -> true
+    | ExecCmd | ExecCmdFail | ExecAuthRefused | ExecUnauthorized
+    | DelayFires | WakeConsumed -> true
     | EnvStart | EnvUpdateConfig | EnvWake | EnvDispose -> false
 
 /// Loop-only successor relation — the single definition both SCC computation

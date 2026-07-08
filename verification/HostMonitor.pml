@@ -1,8 +1,13 @@
 /* HostMonitor concurrency protocol — Promela double-check model.
- * Independent second encoding of the F# executable spec (tests/Lattice.Verification).
- * Property numbering shared: I1–I5 safety (assertions), L1–L3 liveness (ltl, pan -a -f).
+ * Independent second encoding of the HostMonitor concurrency protocol (whose
+ * primary design artifact now EXECUTES the production HostMachine.step directly
+ * — tests/Lattice.Verification).
+ * Property numbering shared: I1–I6 safety (assertions), L1–L3 liveness (ltl, pan -a -f).
  * Primitive anchoring: lock(_gate) blocks = atomic{}; awaits = statement boundaries;
  * TCS wake = sticky bit with consume-if-completed protocol; CTS = monotonic bits.
+ * This model abstains from the post-build recheck (the F# layer's PostBuildGuard,
+ * executing the real core, covers it); it models the three load-bearing guards
+ * — accept, message, and snapshot.
  */
 
 #define MAX_UPDATES 2
@@ -46,7 +51,7 @@ byte failsLeft = MAX_FAILS;
 
 /* I-invariants as a monitor process: checked at every state via timeout-free
  * always-enabled assertion stepping is expensive; instead assert inline at the
- * mutation/publish sites (I1, I4, I5) and via this monitor for I2/I3. */
+ * mutation/publish sites (I1, I4, I5) and via this monitor for I2/I3/I6. */
 active proctype monitor()
 {
 end_mon:
@@ -67,6 +72,22 @@ end_mon:
          assert(!(logVintage == attemptVersion && !reachedConnected && attemptVersion != 255));
          /* I5: no reachable fault */
          assert(!faulted);
+         /* I6: the published status coheres with the loop phase — the machine,
+          * projected onto the observable, IS the 7-value connection lifecycle.
+          * pml granularity: the ladder publishes fire ON the transition INTO a
+          * phase (the F# wrapper drains them as queued commands inside the
+          * phase), so this mapping sits one phase later than the F# encoding —
+          * deliberate N-version divergence, same property. Trajectory-dependent
+          * phases (Idle/Dispatch/Snap/Conn/Tear/Retry) are unconstrained: they
+          * surface the previous publish by design. */
+         assert(!(ph == Auth)   || status == Cing);
+         assert(!(ph == Fetch)  || status == Aing);
+         assert(!(ph == Accept || ph == PubConn) || status == Fing);
+         assert(!(ph == Tick || ph == MsgG || ph == MsgP || ph == SnapG
+                || ph == SnapP || ph == PWait) || status == Cted);
+         assert(!(ph == BWait)  || status == Rtry);
+         assert(!(ph == Park)   || status == AFail);
+         assert(!(ph == Exited) || status == Disc);
        }
     od
 }
@@ -153,8 +174,8 @@ end_loop:
     :: atomic { (ph == PubConn) ->
          /* I1 publish half: guard adjacency — assert guard was honored */
          daemonVerVintage = attemptVersion;           /* rider A: accepted only */
-         reachedConnected = true;   /* NO attempt reset here: dispatcher owns the
-                                     * counter (HostMonitor.cs RunAsync: ReachedConnected ? 1 : n+1) */
+         reachedConnected = true;   /* NO attempt reset here: teardown routing owns the
+                                     * counter (HostMachine.fs TearingDown/OFailed: reached ? 1 : n+1) */
          status = Cted; statusVersion = attemptVersion;
          ph = Tick }
     :: atomic { (ph == Tick && (ctsState == 2 || outerCanceled)) -> ph = Tear }
@@ -172,8 +193,8 @@ end_loop:
     :: atomic { (ph == SnapG) ->
          if :: configChanged -> ph = Tear :: else -> ph = SnapP fi }
     :: atomic { (ph == SnapP) ->
-         /* WaitAsync ENTRY consumes a completed latch (HostMonitor.cs:183-187):
-          * entering the poll wait with the wake set returns immediately. */
+         /* WaitAsync ENTRY consumes a completed latch (HostMonitor.cs WaitAsync
+          * entry-consume): entering the poll wait with the wake set returns immediately. */
          if
          :: wake -> wake = false;
             if :: (configChanged || outerCanceled) -> ph = Tear :: else -> ph = Tick fi
@@ -193,7 +214,8 @@ end_loop:
          :: (!outerCanceled && authRefused) ->
               status = AFail; statusVersion = attemptVersion; attempt = 0;
               /* WaitForConfigChangeAsync entry consumes a stale completed latch
-               * (HostMonitor.cs:214-217) unless configChanged releases immediately */
+               * (HostMonitor.cs WaitForConfigChangeAsync entry) unless configChanged
+               * releases immediately */
               if :: (wake && !configChanged) -> wake = false :: else -> skip fi;
               ph = Park
          :: (!outerCanceled && !authRefused && (configChanged || !injectedFail)) ->

@@ -12,6 +12,7 @@ Lattice is a GUI RPC *client*. It does not schedule, download, or compute anythi
 lattice/
 ├── Lattice.App/            # Avalonia UI (views, viewmodels, theming)
 ├── Lattice.Core/           # Domain: host registry, polling scheduler, state cache + diff. NO UI deps, NO direct socket code.
+├── Lattice.Core.Machine/    # Pure F# decision core for HostMonitor (HostMachine.step). No I/O, no deps.
 ├── Lattice.Boinc.GuiRpc/   # Protocol layer: connection, auth, RPC ops, strongly-typed models. Single-host semantics only.
 └── Lattice.Tests/
 ```
@@ -83,7 +84,7 @@ Remote hosts:
 - **Rider MCP server** (built into Rider 2025.2+): use it for builds (structured compile errors) and rename refactorings (semantic, project-wide). If tool registration flakes out, fall back to `dotnet build` and parse output.
 - Avalonia DevTools MCP (live visual tree, screenshots) is paid (Avalonia Plus) and deliberately deferred; do not assume its availability.
 - Small commits, conventional messages. Protocol code changes must come with fixture-based tests in the same commit.
-- **Verification sync rule (hard workflow contract):** any semantic change to `src/Lattice.Core/HostMonitor.cs` must update, in the SAME commit: the F# executable spec (`tests/Lattice.Verification/`), the Promela model (`verification/HostMonitor.pml`), and the shared-state inventory + probe-point list. All code here is AI-written, so model-code sync is the author's obligation at write time — never deferred to review. A commit touching HostMonitor semantics without touching the verification artifacts must state in its message why no model change is needed.
+- **Verification sync rule (hard workflow contract):** any semantic change to `src/Lattice.Core/HostMonitor.cs` must update, in the SAME commit: the F# executable spec (`tests/Lattice.Verification/`), the Promela model (`verification/HostMonitor.pml`), and the shared-state inventory + probe-point list. All code here is AI-written, so model-code sync is the author's obligation at write time — never deferred to review. A commit touching HostMonitor semantics without touching the verification artifacts must state in its message why no model change is needed. The F# executable spec executes the production `HostMachine.step` directly (functional-core restructure 2026-07-08); the spec-sync leg is by-construction for decision logic, still manual for shell changes.
 
 ## Milestones
 
