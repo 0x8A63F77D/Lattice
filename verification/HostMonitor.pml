@@ -141,9 +141,7 @@ end_loop:
          failsLeft--; injectedFail = true; ph = Tear }
     :: atomic { (ph == Fetch && (ctsState == 2 || outerCanceled)) -> ph = Tear }
     :: atomic { (ph == Fetch && ctsState == 1 && !outerCanceled) ->
-         status = Fing; statusVersion = attemptVersion;
-         logVintage = attemptVersion;   /* RED-CHECK: PR#8 round-2 eager log write */
-         ph = Accept }
+         status = Fing; statusVersion = attemptVersion; ph = Accept }
          /* NOTE deliberately NO daemonVerVintage/logVintage write here (riders A/B):
           * mutating either at Fetch is the historical bug; I1 assertions below
           * would fire. */
@@ -169,7 +167,8 @@ end_loop:
          if :: configChanged -> ph = Tear :: else -> ph = MsgP fi }
     :: atomic { (ph == MsgP) ->
          /* rider B: first tick replaces, later ticks append; either way accepted-only */
-         logVintage = attemptVersion;   /* RED-CHECK: MsgP assert deleted */
+         assert(reachedConnected);                    /* I1 mutation half */
+         logVintage = attemptVersion;
          firstTickPending = false;
          ph = SnapG }
     :: atomic { (ph == SnapG) ->
