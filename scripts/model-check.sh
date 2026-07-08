@@ -12,24 +12,29 @@ echo "gcc:  $(gcc --version | head -1)"
 run_pan () {
   local desc="$1"; shift
   echo "=== $desc ==="
-  gcc -O2 -o pan pan.c
   ./pan "$@" | tee pan.out
   # pan reports violations via 'errors: N' — fail on any nonzero error count,
   # and on unreached-assertion noise stay quiet (exit code alone is not enough:
   # pan exits 0 even when errors are found).
   grep -q "errors: 0" pan.out || { echo "MODEL CHECK FAILED: $desc"; exit 1; }
-  rm -f pan pan.out
+  rm -f pan.out
 }
+
+# Generate + compile ONCE: every embedded `ltl NAME {}` block is compiled into
+# pan and selected at RUN time with `./pan -N NAME`. (`spin -a -N x` would
+# instead read a never-claim FILE named x — that is not what we want.)
+spin -a HostMonitor.pml
+gcc -O2 -o pan pan.c
 
 # Safety: assertions + invalid end states (monitor/env are intentional end
 # states — they carry end labels, so default end-state checking stays sound).
-spin -a HostMonitor.pml
-run_pan "safety (assertions, I1..I5)" -m100000
+# -noclaim: keep the LTL claims out of the safety sweep entirely.
+run_pan "safety (assertions, I1..I5)" -m100000 -noclaim
 
 # Liveness: one exhaustive run per LTL property, weak fairness.
 for P in L1 L2 L3; do
-  spin -a -N "$P" HostMonitor.pml
-  run_pan "liveness $P (acceptance, weak fairness)" -a -f -m100000
+  run_pan "liveness $P (acceptance, weak fairness)" -a -f -m100000 -N "$P"
 done
 
+rm -f pan
 echo "ALL MODEL CHECKS PASSED"
