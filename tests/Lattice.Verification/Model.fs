@@ -63,8 +63,9 @@ type S = {
     // ---- observables the properties read ----
     statusState: HostConnectionState
     statusVersion: int           // vintage carried by last status publish
-    daemonVersionVintage: int option  // vintage of _daemonVersion field (rider A: accepted only)
-    logVintage: int option       // vintage of message-log CONTENT (None = empty/initial)
+    daemonVersionVintage: int option  // stamp left by the CURRENT attempt scope (reset at
+                                      // SnapshotBlock); I1m reads "did THIS attempt stamp it pre-accept"
+    logVintage: int option       // same per-attempt stamp discipline for the message log
     logReplacedThisConn: bool
     faulted: bool                // I5 violation marker: any disposed-resource fault
     // ---- history for L1 (lost wakeup) ----
@@ -254,8 +255,12 @@ let step (s: S) (a: Action) : S list =
             else [ { s with phase = PublishConnected } ]
         | PublishConnected ->
             // rider A: daemonVersion field written HERE (accepted attempt only)
+            // NO attempt reset here: the dispatcher owns the counter
+            // (HostMonitor.cs RunAsync: ReachedConnected ? 1 : n+1); Teardown's
+            // reachedConnected branch is the reset point. An extra reset here
+            // masks mutant M2.
             [ { s with daemonVersionVintage = Some s.attemptVersion
-                       reachedConnected = true; attempt = 0
+                       reachedConnected = true
                        statusState = HostConnectionState.Connected
                        statusVersion = s.attemptVersion
                        phase = TickRpcs } ]

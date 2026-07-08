@@ -81,12 +81,21 @@ let private violates (check: Explorer.Reach -> unit) (mutantStep: S -> Action ->
 
 module private Mutants =
     open Model
-    // M1 (PR#7 round-7): snapshot atomic block split — flag cleared one step early,
-    // before the CTS exists.
+    // M1 (PR#7 round-7): snapshot atomic block split — config version read in one
+    // lock, flag cleared in a LATER one. An UpdateConfig landing between them is
+    // silently erased: stale attempt, no pending flag, live CTS -> I3.
+    // (Splitting the other way — flag first, version later — is a semantic no-op:
+    // the second block would re-read the fresh version.)
     let m1SplitSnapshot (s: S) (a: Action) =
         match a, s.phase with
         | LoopStep, Dispatch when not s.outerCanceled ->
-            [ { s with phase = SnapshotBlock; configChanged = false } ]
+            [ { s with attemptVersion = s.curVersion; phase = SnapshotBlock } ]
+        | LoopStep, SnapshotBlock ->
+            [ { s with configChanged = false; cts = CtsLive
+                       injectedFail = false; reachedConnected = false
+                       firstTickPending = true; logReplacedThisConn = false
+                       daemonVersionVintage = None; logVintage = None
+                       phase = AwaitConnect; connLive = false } ]
         | _ -> step s a
     // M2 (PR#7 round-6): Failed-after-Connected keeps counting instead of resetting.
     let m2NoAttemptReset (s: S) (a: Action) =
