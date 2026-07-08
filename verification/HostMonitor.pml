@@ -40,8 +40,6 @@ byte statusVersion = 0;
 byte daemonVerVintage = 255;   /* 255 = none */
 byte logVintage = 255;
 
-/* L1 history */
-
 byte updatesLeft = MAX_UPDATES;
 byte wakesLeft = MAX_WAKES;
 byte failsLeft = MAX_FAILS;
