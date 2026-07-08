@@ -267,6 +267,8 @@ production `HostMachine.step`.
 
 1. `docs: functional-core restructure spec` + ride-along `.mcp.json` + ledger.
 2. `feat(core): Lattice.Core.Machine — pure HostMachine transition core`
+   (may split into scaffold / machine / verification-rewrite commits — each
+   green; the sync rule binds none of them since HostMonitor.cs is untouched)
    - New F# project (+ sln, referenced by `Lattice.Core`), `HostConnectionState`
      moved in full (added to Machine AND removed from `ConnectionStatus.cs` in
      this commit — leaving both would be an ambiguous-type compile error),
