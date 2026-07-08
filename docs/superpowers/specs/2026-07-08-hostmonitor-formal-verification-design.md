@@ -33,8 +33,10 @@ interleaving bugs.
   message-log reset (`_lastSeqno = 0` + `_messages.Clear()`) running *before* the
   pre-Connected `_configChanged` guard (Codex PR #8 round-2 finding) — an aborted
   attempt destroys the public log, with no self-healing if the new config then
-  fails or parks. Fix: move the reset after the guard, still before the Connected
-  publish and the first tick (semantics unchanged for accepted connections).
+  fails or parks. The required fix is the STRUCTURAL one specified in "Code change
+  riders" below (delete the `_lastSeqno` field, atomic `ReplaceAll` on first tick);
+  merely moving the reset behind the guard is explicitly NOT acceptable — it only
+  narrows the destructive window (PR #8 round-3/round-4 findings).
 - Verify **lifecycle edges**: `Start`/`DisposeAsync` ordering, double-dispose,
   start-after-dispose. Suspected latent defects (found during this design's
   completeness audit, to be confirmed by red tests first): a second `DisposeAsync`
@@ -91,7 +93,15 @@ encodings that fail differently.
 
 **Verification assumptions (also in the README — outside what either layer checks):**
 event subscribers terminate (a blocking subscriber stalls the actor thread; liveness
-properties are conditional on this); `SnapshotBuilder.Build` is pure (no shared
+properties are conditional on this); subscribers may synchronously **reenter**
+`UpdateConfig`/`RequestRefresh`/`SetPollingInterval` from a handler — this is
+IN-contract and needs no new model states: publishes run outside `_gate` and a
+reentrant call's effects (flag/CTS/wake, all `_gate`-serialized) are a deterministic
+special case of the concurrent environment action already modeled at that boundary
+(the harness pins this with a targeted reentrant-`UpdateConfig`-from-`StatusChanged`
+case); what subscribers must NOT do is synchronously block on the monitor's own
+lifecycle (e.g. `DisposeAsync().AsTask().Wait()` from a handler deadlocks the loop
+by construction — documented as out-of-contract, Codex PR #8 round-4); `SnapshotBuilder.Build` is pure (no shared
 state); the `IGuiRpcClient` is confined to its attempt's scope (structural, but
 assumed rather than modeled); `Status`/`Snapshot` are two independent volatiles —
 readers may observe a fresh `Status` with a stale `Snapshot` (deliberate snapshot-
@@ -367,10 +377,14 @@ scripts/
 
 ## Risks / accepted tradeoffs
 
-- **Model-code drift:** Spin re-checks the *model*, not the code. Drift control =
-  correspondence rules in README (review checklist) + the sweep harness on the code
-  side. Accepted: a semantic code change with a stale model turns nothing red until
-  a sweep case or reviewer catches it; the README makes the audit cheap.
+- **Model-code drift:** the models re-check *themselves*, not the code. Primary
+  control is now the **verification sync rule in CLAUDE.md** (user-set process,
+  2026-07-08): all code here is AI-written, so any semantic change to
+  `HostMonitor.cs` must update the F# spec, the Promela model, and the
+  inventory/probe list in the same commit — sync is the author's write-time
+  obligation, not a review hope. Backstops: correspondence rules in README (review
+  checklist), typed F#↔Core references (drift breaks the build for renames/shape
+  changes), and the sweep harness on the code side.
 - **Shared blind spot (irreducible, now double-mitigated):** all layers are authored
   from one understanding of the code — a misunderstood interleaving surface gets
   mis-modeled AND un-probed simultaneously. Mitigations: external review (Codex)
