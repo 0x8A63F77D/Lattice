@@ -557,9 +557,9 @@ public sealed class HostMonitor : IAsyncDisposable
         // though the snapshot guard has not been reached yet.
         await ProbeAsync(InterleavePoints.TickBeforeMsgGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        await ProbeAsync(InterleavePoints.TickBeforeMsgPublish).ConfigureAwait(false);
         if (_configChanged)
             return state;
+        await ProbeAsync(InterleavePoints.TickBeforeMsgPublish).ConfigureAwait(false);
         if (newMessages.Count > 0)
         {
             _lastSeqno = newMessages.Max(m => m.Seqno);
@@ -578,9 +578,9 @@ public sealed class HostMonitor : IAsyncDisposable
         // new config under this HostId.
         await ProbeAsync(InterleavePoints.TickBeforeSnapGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
-        await ProbeAsync(InterleavePoints.TickBeforeBuild).ConfigureAwait(false);
         if (_configChanged)
             return state;
+        await ProbeAsync(InterleavePoints.TickBeforeBuild).ConfigureAwait(false);
 
         HostSnapshot snapshot = SnapshotBuilder.Build(
             HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
