@@ -1,18 +1,8 @@
 using Lattice.Boinc.GuiRpc;
+using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 
 namespace Lattice.Core;
-
-/// <summary>Internal signal: authorization was refused; unwind to the AuthFailed state.</summary>
-internal sealed class HostAuthException : Exception { }
-
-/// <summary>
-/// Internal signal: PollAsync deliberately escalated a second consecutive mid-poll
-/// <see cref="BoincUnauthorizedException"/> after an already-successful silent re-auth.
-/// This is a transient-session failure (not a bad password), so it must fall into
-/// RunAsync's generic Retrying/backoff path rather than the pre-Connected
-/// unauthorized-to-AuthFailed mapping.
-/// </summary>
-internal sealed class HostSessionLostException(Exception inner) : Exception(inner.Message, inner) { }
 
 /// <summary>Payload of <see cref="HostMonitor.MessagesAdded"/>: only the newly arrived messages.</summary>
 public sealed record MessagesAddedEventArgs(Guid HostId, IReadOnlyList<Message> Messages);
@@ -23,24 +13,28 @@ public sealed record MessagesAddedEventArgs(Guid HostId, IReadOnlyList<Message> 
 /// (verification/README.md): never inside a lock block; only where environment
 /// threads can already interleave in production. Every new shared-state touch point
 /// added to HostMonitor MUST add a point here (correspondence rule 3).
+///
+/// Each name aliases the authoritative <see cref="ProbePoints"/> literal in the F#
+/// decision core (HostMachine.fs): the core emits <c>Probe</c> commands carrying these
+/// exact strings, so the two lists cannot drift.
 /// </summary>
 internal static class InterleavePoints
 {
-    public const string BeforeSnapshot = "attempt.beforeSnapshot";
-    public const string AfterSnapshot = "attempt.afterSnapshot";
-    public const string BeforeAcceptGuard = "attempt.beforeAcceptGuard";
-    public const string BeforeConnectedPublish = "attempt.beforeConnectedPublish";
-    public const string TickBeforeMsgGuard = "tick.beforeMsgGuard";
-    public const string TickBeforeMsgPublish = "tick.beforeMsgPublish";
-    public const string TickBeforeSnapGuard = "tick.beforeSnapGuard";
-    public const string TickBeforeBuild = "tick.beforeBuild";
-    public const string TickBeforeSnapPublish = "tick.beforeSnapPublish";
-    public const string PollBeforeWait = "poll.beforeWait";
-    public const string PollAfterWait = "poll.afterWait";
-    public const string FinallyEnter = "attempt.finallyEnter";
-    public const string AfterCtsDispose = "attempt.afterCtsDispose";
-    public const string BeforeRetryPublish = "dispatcher.beforeRetryPublish";
-    public const string BeforeParkWait = "dispatcher.beforeParkWait";
+    public const string BeforeSnapshot = ProbePoints.BeforeSnapshot;
+    public const string AfterSnapshot = ProbePoints.AfterSnapshot;
+    public const string BeforeAcceptGuard = ProbePoints.BeforeAcceptGuard;
+    public const string BeforeConnectedPublish = ProbePoints.BeforeConnectedPublish;
+    public const string TickBeforeMsgGuard = ProbePoints.TickBeforeMsgGuard;
+    public const string TickBeforeMsgPublish = ProbePoints.TickBeforeMsgPublish;
+    public const string TickBeforeSnapGuard = ProbePoints.TickBeforeSnapGuard;
+    public const string TickBeforeBuild = ProbePoints.TickBeforeBuild;
+    public const string TickBeforeSnapPublish = ProbePoints.TickBeforeSnapPublish;
+    public const string PollBeforeWait = ProbePoints.PollBeforeWait;
+    public const string PollAfterWait = ProbePoints.PollAfterWait;
+    public const string FinallyEnter = ProbePoints.FinallyEnter;
+    public const string AfterCtsDispose = ProbePoints.AfterCtsDispose;
+    public const string BeforeRetryPublish = ProbePoints.BeforeRetryPublish;
+    public const string BeforeParkWait = ProbePoints.BeforeParkWait;
 
     public static readonly string[] All =
     [
@@ -68,8 +62,9 @@ public sealed class HostMonitor : IAsyncDisposable
     // Owns cancellation for one connection attempt (connect through steady-state
     // polling). Linked to the disposal token; UpdateConfig cancels it to abort
     // in-flight work on the OLD config instead of waiting for it to finish on its
-    // own. Guarded by _gate: created at the top of RunAttemptAsync, canceled from
-    // UpdateConfig, disposed and nulled in RunAttemptAsync's finally.
+    // own. Guarded by _gate: created by the interpreter's SnapshotConfig command
+    // (one _gate block), canceled from UpdateConfig, disposed and nulled by
+    // DisposeConnectionCts (and defensively in RunAsync's finally).
     private CancellationTokenSource? _connectionCts;
     private volatile int _pollingIntervalSeconds;
     private TaskCompletionSource _wake = NewWake();
@@ -231,8 +226,7 @@ public sealed class HostMonitor : IAsyncDisposable
     }
 
     /// <summary>Backoff schedule: 1, 2, 4, 8, 16, 32 then capped at 60 seconds.</summary>
-    internal static TimeSpan BackoffDelay(int attempt) =>
-        TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, attempt - 1)));
+    internal static TimeSpan BackoffDelay(int attempt) => HostMachine.backoffDelay(attempt);
 
     private static TaskCompletionSource NewWake() => new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -293,12 +287,12 @@ public sealed class HostMonitor : IAsyncDisposable
     }
 
     // All event dispatch goes through here: a buggy subscriber must never affect the
-    // state machine. SetStatus publishes from INSIDE catch blocks (the AuthFailed and
-    // Retrying publishes), where an escaping subscriber exception would propagate out
-    // of RunAsync and fault the loop task silently; TickAsync's publishes would tear
-    // down a healthy connection into Retrying instead. Subscribers marshal to their
-    // own context (see class doc) and there is nowhere meaningful to report their
-    // failures from here, so they are swallowed.
+    // state machine. A subscriber exception escaping a PublishStatus/PublishSnapshot
+    // execution would be classified as a command fault — tearing down a healthy
+    // connection into Retrying, or exiting the loop outright from the post-teardown
+    // publishes (AuthFailed/Retrying execute in phase Parked/BackoffWaiting).
+    // Subscribers marshal to their own context (see class doc) and there is nowhere
+    // meaningful to report their failures from here, so they are swallowed.
     private void RaiseSafe<T>(EventHandler<T>? handler, T args)
     {
         try { handler?.Invoke(this, args); }
@@ -313,336 +307,308 @@ public sealed class HostMonitor : IAsyncDisposable
         RaiseSafe(StatusChanged, status);
     }
 
-    // What one connection attempt did, as seen by the dispatcher. RunAttemptAsync folds
-    // every path (including every exception) into one of these so the dispatcher never
-    // touches a live client or an in-flight exception.
-    private enum AttemptResult
-    {
-        Disposal,      // outer disposal token canceled: exit the loop.
-        ConfigChanged, // aborted for a new config (or PollAsync returned): reconnect now.
-        AuthFailed,    // password refused / unauthorized before Connected: park.
-        Failed,        // any other failure: Retrying + backoff.
-    }
-
-    // ReachedConnected is only meaningful on a Failed outcome: true when the failure
-    // happened AFTER Connected was published (i.e. inside PollAsync/TickAsync — a
-    // healthy connection going bad mid-poll), false for a failure before Connected
-    // was ever reached. The dispatcher uses it to tell "reset the attempt counter,
-    // then count this as attempt 1" apart from "just count another failed attempt".
-    private readonly record struct AttemptOutcome(AttemptResult Result, string? Error, bool ReachedConnected = false)
-    {
-        public static readonly AttemptOutcome Disposal = new(AttemptResult.Disposal, null);
-        public static readonly AttemptOutcome ConfigChanged = new(AttemptResult.ConfigChanged, null);
-        public static AttemptOutcome AuthFailed(string error) => new(AttemptResult.AuthFailed, error);
-        public static AttemptOutcome Failed(string error, bool reachedConnected = false) =>
-            new(AttemptResult.Failed, error, reachedConnected);
-    }
-
-    // The dispatcher. It never holds a client: each iteration hands the whole client
-    // lifetime to RunAttemptAsync and only ever sees an AttemptOutcome. Structural
-    // invariants that used to be maintained by hand at every exit path:
-    //  (a) RunAttemptAsync owns the client — when it returns, this iteration's client
-    //      and its linked CTS are already disposed (by scope, in its finally). So every
-    //      park/backoff wait below provably runs with NO GUI RPC connection open. BOINC
-    //      daemons allow very few concurrent GUI RPC connections; a lingering one can
-    //      lock the user's official Manager out.
-    //  (b) RunAttemptAsync cannot throw — its catch set folds every exception into an
-    //      AttemptOutcome — so this loop can never fault the background task.
-    //  (c) The AuthFailed/Retrying publishes below therefore happen after disposal; a
-    //      buggy subscriber can neither escape (RaiseSafe swallows it) nor hold the
-    //      already-closed connection open.
+    // ---------------------------------------------------------------------------
+    // The interpreter. All phase sequencing, guard routing, attempt counting, and
+    // auth handling live in the pure decision core HostMachine.step (HostMachine.fs,
+    // the authoritative contract). This loop owns ONLY I/O, locks, waits, and events:
+    // it executes the Commands the core emits and feeds the resulting Input back.
+    //
+    // Contract (mirrored from HostMachine.fs's module doc):
+    //  - each step returns a next State plus a Command batch: zero or more
+    //    fire-and-forget commands then at most one trailing request command; the
+    //    request's produced value is the next Input, else EffectOk.
+    //  - if executing ANY command throws, the rest of the batch is skipped and the
+    //    core is fed Faulted, classified by exception TYPE ONLY (see Classify). The
+    //    loop task must never fault (I5/A5); the core settles unexpected pairs in
+    //    Disconnected rather than throwing.
+    //
+    // The structural invariants the old hand-written dispatcher maintained by
+    // convention are now theorems of the verified core: teardown (client + linked
+    // CTS dispose) is always commanded BEFORE any park/backoff/park wait (I2), so
+    // every wait provably runs with no GUI RPC connection open; and AuthFailed/Retrying
+    // publishes are commanded after that teardown. The finally below is defense in
+    // depth only (see its comment), not decision logic.
     private async Task RunAsync(CancellationToken ct)
     {
-        int attempt = 0;
-        while (!ct.IsCancellationRequested)
-        {
-            AttemptOutcome outcome = await RunAttemptAsync(attempt, ct).ConfigureAwait(false);
+        var state = HostMachine.initial;
+        HostMachine.Input input = HostMachine.Input.Started;
 
-            if (outcome.Result == AttemptResult.Disposal)
-                break;
-
-            if (outcome.Result == AttemptResult.ConfigChanged)
-            {
-                attempt = 0;
-                continue;
-            }
-
-            if (outcome.Result == AttemptResult.AuthFailed)
-            {
-                // Terminal until a config change: only UpdateConfig (never RequestRefresh)
-                // revives it. Publishing here — after RunAttemptAsync's finally — is why a
-                // refused-password connection is provably closed for the whole parked wait.
-                SetStatus(HostConnectionState.AuthFailed, 0, lastError: outcome.Error);
-                await ProbeAsync(InterleavePoints.BeforeParkWait).ConfigureAwait(false);
-                try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
-                catch (OperationCanceledException) { break; }
-                attempt = 0;
-                continue;
-            }
-
-            // AttemptResult.Failed: back off, then retry. A config change during the wait
-            // short-circuits the attempt count so the reconnect starts fresh. A failure
-            // that happened AFTER Connected was published resets the counter first (the
-            // prior run of failures is irrelevant once a connection succeeded) and only
-            // then counts this failure, landing on attempt 1 — matching the pre-restructure
-            // behavior where `attempt = 0` ran right before publishing Connected.
-            attempt = outcome.ReachedConnected ? 1 : attempt + 1;
-            TimeSpan delay = BackoffDelay(attempt);
-            await ProbeAsync(InterleavePoints.BeforeRetryPublish).ConfigureAwait(false);
-            SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + delay, outcome.Error);
-            try { await WaitAsync(delay, ct).ConfigureAwait(false); }
-            catch (OperationCanceledException) { break; }
-            if (_configChanged)
-                attempt = 0;
-        }
-        SetStatus(HostConnectionState.Disconnected, 0);
-    }
-
-    // One connection attempt, cradle to grave. It owns the entire client lifetime:
-    // it snapshots the config and creates the linked _connectionCts (so UpdateConfig
-    // can cancel this attempt) in ONE _gate acquisition, builds the client, walks
-    // Connecting→Authorizing→FetchingState→Connected→PollAsync, and in its finally
-    // disposes both the CTS and the client. Snapshotting config and clearing
-    // _configChanged in the same lock block that creates _connectionCts is load-bearing:
-    // it is what makes UpdateConfig's "set _config, set _configChanged, cancel
-    // _connectionCts" atomic against this attempt's "read _config, clear _configChanged,
-    // create _connectionCts" — UpdateConfig, serialized by _gate, either fully precedes
-    // this block (the new config is read here) or fully follows it (cancel hits the CTS
-    // just created here). Splitting the snapshot into the dispatcher, one lock
-    // acquisition earlier, reopens a window where _connectionCts is null: UpdateConfig's
-    // cancel becomes a no-op and a stale-config connect can run unabortable until the OS
-    // TCP timeout. By the time RunAttemptAsync returns, the connection is dead — by
-    // scope, not by convention — and every exception has been folded into an
-    // AttemptOutcome, so nothing escapes. The attempt argument is only for the
-    // pre-Connected status publishes (they describe this live attempt); it is never
-    // reset in here — resetting the dispatcher's counter on success is the dispatcher's
-    // job, driven by AttemptOutcome.ReachedConnected (see `connected` below).
-    private async Task<AttemptOutcome> RunAttemptAsync(int attempt, CancellationToken ct)
-    {
-        await ProbeAsync(InterleavePoints.BeforeSnapshot).ConfigureAwait(false);
-        HostConfig config;
-        CancellationToken connCt;
-        lock (_gate)
-        {
-            config = _config;
-            _configChanged = false;
-            _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            connCt = _connectionCts.Token;
-        }
-        await ProbeAsync(InterleavePoints.AfterSnapshot).ConfigureAwait(false);
-        // Left null until the factory call succeeds so a throwing factory — e.g. a future
-        // SSH-tunnel-wrapping transport that can fail before producing a client — folds
-        // into the generic catch (→ Failed) instead of escaping this method.
+        // Attempt-scoped resources and payloads, owned by the interpreter: the core
+        // decides, these execute. Reset by the SnapshotConfig / DisposeClient commands
+        // that bracket one attempt in the core's plan.
         IGuiRpcClient? client = null;
-        // Tracks whether Connected was published this attempt, so a later failure (from
-        // PollAsync/TickAsync) can tell the dispatcher to reset the attempt counter
-        // instead of continuing to count against the pre-Connected run of failures.
-        bool connected = false;
+        HostConfig config = _config;
+        CancellationToken connCt = default;
+        VersionInfo? fetchedVersion = null;
+        CcState? ccState = null;
+        CcStatus? ccStatus = null;
+        IReadOnlyList<Result> results = [];
+        IReadOnlyList<FileTransfer> transfers = [];
+        IReadOnlyList<Message> newMessages = [];
+        HostSnapshot? builtSnapshot = null;
+
+        // Executes one command. Returns the produced Input for request commands, or
+        // null for fire-and-forget ones. Each case reproduces the pre-restructure
+        // method's exact behavior (line refs are to HostMonitor.cs @ d3950c2).
+        async Task<HostMachine.Input?> ExecuteAsync(HostMachine.Command cmd)
+        {
+            switch (cmd)
+            {
+                case HostMachine.Command.Probe p:
+                    await ProbeAsync(p.point).ConfigureAwait(false);
+                    return null;
+
+                case HostMachine.Command.PublishStatus ps:
+                    // rider A: daemon version is stamped ONLY at the Connected publish.
+                    if (ps.stampDaemonVersion)
+                        _daemonVersion = fetchedVersion;
+                    DateTimeOffset? nextAttemptAt = FSharpOption<TimeSpan>.get_IsSome(ps.backoff)
+                        ? _time.GetUtcNow() + ps.backoff.Value
+                        : null;
+                    SetStatus(ps.status, ps.attempt, nextAttemptAt, ToNullable(ps.error));
+                    return null;
+
+                case HostMachine.Command.RunTickRpcs t:
+                    // The four tick RPCs in the old TickAsync order (d3950c2:581-585).
+                    ccStatus = await client!.GetCcStatusAsync(connCt).ConfigureAwait(false);
+                    results = await client!.GetResultsAsync(ct: connCt).ConfigureAwait(false);
+                    transfers = await client!.GetFileTransfersAsync(connCt).ConfigureAwait(false);
+                    newMessages = await client!.GetMessagesAsync(t.lastSeqno, connCt).ConfigureAwait(false);
+                    // A result naming an uncached workunit means new work arrived since
+                    // the last get_state (d3950c2:616-618): route triggers the refetch.
+                    HashSet<string> knownWorkunits = [.. ccState!.Workunits.Select(w => w.Name)];
+                    bool hasUnknownWorkunit = results.Any(r => !knownWorkunits.Contains(r.WorkunitName));
+                    FSharpOption<int> maxSeqno = newMessages.Count > 0
+                        ? FSharpOption<int>.Some(newMessages.Max(m => m.Seqno))
+                        : FSharpOption<int>.None;
+                    return HostMachine.Input.NewTickFetched(
+                        new HostMachine.TickInfo(maxSeqno, hasUnknownWorkunit));
+
+                case HostMachine.Command.PublishMessages pm:
+                    // Exact old branching (d3950c2:600-613). The cursor advance itself
+                    // is the core's job (applied at PostBuildGuard); here we only touch
+                    // the log and raise MessagesAdded.
+                    if (pm.replaceLog)
+                    {
+                        // First tick of this connection: atomically swap old-connection
+                        // content for the daemon's current buffer (may be empty).
+                        _messages.ReplaceAll(newMessages);
+                        if (newMessages.Count > 0)
+                            RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
+                    }
+                    else if (newMessages.Count > 0)
+                    {
+                        _messages.Append(newMessages);
+                        RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
+                    }
+                    return null;
+
+                case HostMachine.Command.WaitBackoff wb:
+                    await WaitAsync(wb.Item, ct).ConfigureAwait(false);
+                    return HostMachine.Input.WaitEnded;
+
+                default:
+                    // Fieldless commands, matched by tag (no nested type to cast to).
+                    if (cmd.IsObserveDispatch)
+                        return HostMachine.Input.NewDispatchObserved(ct.IsCancellationRequested);
+
+                    if (cmd.IsSnapshotConfig)
+                    {
+                        // THE one atomic lock block (correspondence rule 1): snapshot
+                        // config, clear _configChanged, and create the linked CTS in a
+                        // SINGLE _gate acquisition. Splitting these reopens a window
+                        // where _connectionCts is null and UpdateConfig's cancel becomes
+                        // a no-op, letting a stale-config connect run unabortable until
+                        // the OS TCP timeout (d3950c2:401-419, 425-431).
+                        lock (_gate)
+                        {
+                            config = _config;
+                            _configChanged = false;
+                            _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                            connCt = _connectionCts.Token;
+                        }
+                        // Attempt payloads belong to the new attempt: reset here so a
+                        // stale value can never survive into it.
+                        client = null;
+                        fetchedVersion = null;
+                        ccState = null;
+                        ccStatus = null;
+                        results = [];
+                        transfers = [];
+                        newMessages = [];
+                        builtSnapshot = null;
+                        return HostMachine.Input.NewConfigSnapshotted(config.Password.Length > 0);
+                    }
+
+                    if (cmd.IsCreateClient)
+                    {
+                        // Factory only. A throwing factory — e.g. a future SSH-tunnel
+                        // transport that fails before producing a client — folds to
+                        // Failure via Classify (d3950c2:433-436, 443).
+                        client = _clientFactory();
+                        return null;
+                    }
+
+                    if (cmd.IsConnect)
+                    {
+                        await client!.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
+                        return HostMachine.Input.EffectOk;
+                    }
+
+                    if (cmd.IsAuthorize)
+                        return HostMachine.Input.NewAuthResult(
+                            await client!.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false));
+
+                    if (cmd.IsFetchVersionAndState)
+                    {
+                        // Attempt-local until accepted: a failed attempt must not
+                        // pollute Status with an unaccepted daemon version (I1).
+                        fetchedVersion = await client!.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
+                        ccState = await client!.GetStateAsync(connCt).ConfigureAwait(false);
+                        return HostMachine.Input.FetchOk;
+                    }
+
+                    if (cmd.IsRefetchState)
+                    {
+                        ccState = await client!.GetStateAsync(connCt).ConfigureAwait(false);
+                        return HostMachine.Input.EffectOk;
+                    }
+
+                    if (cmd.IsBuildSnapshot)
+                    {
+                        // Pure in-memory build into an attempt local (d3950c2:630-631).
+                        builtSnapshot = SnapshotBuilder.Build(
+                            HostId, config.DisplayName, _time.GetUtcNow(),
+                            ccState!, ccStatus!, results, transfers);
+                        return null;
+                    }
+
+                    if (cmd.IsPublishSnapshot)
+                    {
+                        Snapshot = builtSnapshot;
+                        RaiseSafe(SnapshotUpdated, builtSnapshot!);
+                        return null;
+                    }
+
+                    if (cmd.IsObserveConfigChanged)
+                        // Plain volatile read (d3950c2:465, 567, 572, 395).
+                        return HostMachine.Input.NewGuardObserved(_configChanged);
+
+                    if (cmd.IsObserveTickGuard)
+                    {
+                        // Throw-then-read: connCt cancellation aborts the tick before
+                        // the guard is consulted (d3950c2:594-595, 625-626, 639-640).
+                        connCt.ThrowIfCancellationRequested();
+                        return HostMachine.Input.NewGuardObserved(_configChanged);
+                    }
+
+                    if (cmd.IsWaitPollInterval)
+                    {
+                        // Interval read at wait time (volatile, d3950c2:570).
+                        await WaitAsync(TimeSpan.FromSeconds(_pollingIntervalSeconds), ct).ConfigureAwait(false);
+                        return HostMachine.Input.WaitEnded;
+                    }
+
+                    if (cmd.IsParkForConfigChange)
+                    {
+                        await WaitForConfigChangeAsync(ct).ConfigureAwait(false);
+                        return HostMachine.Input.WaitEnded;
+                    }
+
+                    if (cmd.IsDisposeConnectionCts)
+                    {
+                        lock (_gate)
+                        {
+                            _connectionCts?.Dispose();
+                            _connectionCts = null;
+                        }
+                        return null;
+                    }
+
+                    if (cmd.IsDisposeClient)
+                    {
+                        // Swallow dispose failures: teardown must never fault the loop
+                        // (d3950c2:513-517). client is null when the factory threw.
+                        if (client is not null)
+                        {
+                            try { await client.DisposeAsync().ConfigureAwait(false); }
+                            catch { /* ignored: dispose failures do not affect the state machine */ }
+                        }
+                        client = null;
+                        return null;
+                    }
+
+                    // ExitLoop is handled by the driver before dispatch; any other
+                    // fieldless command reaching here is an interpreter bug.
+                    return null;
+            }
+        }
+
         try
         {
-            client = _clientFactory();
-            SetStatus(HostConnectionState.Connecting, attempt);
-            await client.ConnectAsync(config.Address, config.Port, connCt).ConfigureAwait(false);
-
-            SetStatus(HostConnectionState.Authorizing, attempt);
-            if (config.Password.Length > 0
-                && !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
-                throw new HostAuthException();
-
-            SetStatus(HostConnectionState.FetchingState, attempt);
-            // Attempt-local until accepted: a failed attempt must not pollute
-            // Status publishes with an unaccepted daemon version (I1 mutation half;
-            // PR #7 round-9 P2).
-            VersionInfo daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
-            CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
-
-            // A config change may have landed after the fetch above completed but
-            // before Connected is published: never surface Connected (or the
-            // snapshot/messages that would follow) for a connection to the OLD
-            // config. The finally below tears this client down; the dispatcher
-            // reconnects against the new config on the very next iteration.
-            await ProbeAsync(InterleavePoints.BeforeAcceptGuard).ConfigureAwait(false);
-            if (_configChanged)
-                return AttemptOutcome.ConfigChanged;
-            await ProbeAsync(InterleavePoints.BeforeConnectedPublish).ConfigureAwait(false);
-            _daemonVersion = daemonVersion;
-            SetStatus(HostConnectionState.Connected, 0);
-            connected = true;
-            await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
-            // PollAsync returns only on config change: reconnect immediately.
-            return AttemptOutcome.ConfigChanged;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            return AttemptOutcome.Disposal;
-        }
-        catch (OperationCanceledException)
-        {
-            // Not disposal: UpdateConfig canceled connCt to abort in-flight work on
-            // the old config. Reconnect immediately against the new one, no backoff.
-            return AttemptOutcome.ConfigChanged;
-        }
-        catch (HostAuthException)
-        {
-            return AttemptOutcome.AuthFailed("The host refused the password.");
-        }
-        catch (BoincUnauthorizedException ex)
-        {
-            // The real client THROWS (rather than returning false) when a remote
-            // host isn't allow-listed, or when a mid-connect RPC (exchange_versions,
-            // get_state) is unauthorized before Connected is ever reached. Same
-            // terminal handling as a refused password: never spin forever on it.
-            return AttemptOutcome.AuthFailed(ex.Message);
-        }
-        catch (Exception ex)
-        {
-            return AttemptOutcome.Failed(ex.Message, connected);
+            while (true)
+            {
+                var result = HostMachine.step(state, input);
+                state = result.Item1;
+                FSharpList<HostMachine.Command> commands = result.Item2;
+                input = HostMachine.Input.EffectOk;   // default when the batch has no request
+                bool exit = false;
+                foreach (var cmd in commands)
+                {
+                    if (cmd.IsExitLoop) { exit = true; break; }
+                    try
+                    {
+                        HostMachine.Input? produced = await ExecuteAsync(cmd).ConfigureAwait(false);
+                        if (produced is not null)
+                            input = produced;
+                    }
+                    catch (Exception ex)
+                    {
+                        input = Classify(ex, ct);
+                        break;                        // skip the rest of the batch
+                    }
+                }
+                if (exit)
+                    break;
+            }
         }
         finally
         {
-            await ProbeAsync(InterleavePoints.FinallyEnter).ConfigureAwait(false);
+            // Defense in depth, NOT decision logic: the core always commands teardown
+            // before waits (verified: I2), so these are no-ops on every verified path.
+            // They exist so an unexpected shell exception can never leak a client —
+            // BOINC daemons allow very few concurrent GUI RPC connections.
             lock (_gate)
             {
                 _connectionCts?.Dispose();
                 _connectionCts = null;
             }
-            await ProbeAsync(InterleavePoints.AfterCtsDispose).ConfigureAwait(false);
-            // The connection is being torn down regardless of outcome; a disposal
-            // failure has nowhere meaningful to go and must not fault the loop.
-            // client is null when the factory itself threw before producing one.
             if (client is not null)
             {
                 try { await client.DisposeAsync().ConfigureAwait(false); }
-                catch { /* ignored: dispose failures do not affect the state machine */ }
+                catch { /* ignored */ }
             }
         }
     }
 
-    // Steady state: tick immediately on entry (first snapshot right after Connected),
-    // then wait the polling interval between ticks. Returns only on config change.
-    // connCt cancels RPC calls (including the silent re-auth) when the config changes
-    // mid-tick; ct (the outer disposal token) is used for the interval wait, whose
-    // existing wake/flag mechanism already handles config changes without needing
-    // cancellation — and must not be aborted into a tight retry loop on cancel.
-    private async Task PollAsync(IGuiRpcClient client, HostConfig config, CcState state,
-                                 CancellationToken connCt, CancellationToken ct)
+    // Exception classification: the shell looks ONLY at the exception type; routing by
+    // phase/history is the core's job (see HostMachine.fs faultInAttempt / fault fold).
+    private static HostMachine.Input Classify(Exception ex, CancellationToken outerCt) => ex switch
     {
-        bool reauthedSinceLastSuccess = false;
-        // Per-connection message cursor. Starts at 0 for every new connection: a
-        // freshly (re)started daemon's seqno counter may have reset, so the first
-        // tick refetches the daemon's current buffer from scratch and REPLACES the
-        // retained log (old messages stay visible until that instant — same
-        // keep-last-known retention doctrine as Snapshot). Field-free by design:
-        // per-connection state must not outlive the connection (I1 mutation half).
-        int lastSeqno = 0;
-        bool firstTick = true;
-        while (true)
-        {
-            try
-            {
-                (state, lastSeqno) = await TickAsync(client, config, state, lastSeqno,
-                                                     replaceLog: firstTick, connCt).ConfigureAwait(false);
-                firstTick = false;
-                reauthedSinceLastSuccess = false;
-            }
-            catch (BoincUnauthorizedException ex)
-            {
-                // Daemon restarted with a new password, or the session expired: one
-                // silent re-auth per successful tick. If we already re-authed since
-                // the last successful tick and are still unauthorized, the daemon is
-                // accepting AuthorizeAsync but refusing RPCs regardless — escalate as a
-                // plain (non-BoincUnauthorizedException) failure so RunAsync's generic
-                // handler moves the host to Retrying with backoff, instead of either
-                // hammering the daemon in a zero-delay loop or being mapped to the
-                // pre-Connected unauthorized-to-AuthFailed path (this is a transient
-                // mid-session failure, not a refused password).
-                if (reauthedSinceLastSuccess)
-                    throw new HostSessionLostException(ex);
-                if (config.Password.Length == 0
-                    || !await client.AuthorizeAsync(config.Password, connCt).ConfigureAwait(false))
-                    throw new HostAuthException();
-                reauthedSinceLastSuccess = true;
-                continue;
-            }
-            if (_configChanged)
-                return;
-            await ProbeAsync(InterleavePoints.PollBeforeWait).ConfigureAwait(false);
-            await WaitAsync(TimeSpan.FromSeconds(_pollingIntervalSeconds), ct).ConfigureAwait(false);
-            await ProbeAsync(InterleavePoints.PollAfterWait).ConfigureAwait(false);
-            if (_configChanged)
-                return;
-        }
-    }
+        OperationCanceledException when outerCt.IsCancellationRequested =>
+            HostMachine.Input.NewFaulted(HostMachine.FailureKind.Disposal),
+        OperationCanceledException =>
+            HostMachine.Input.NewFaulted(HostMachine.FailureKind.ConnCanceled),
+        BoincUnauthorizedException u =>
+            HostMachine.Input.NewFaulted(HostMachine.FailureKind.NewUnauthorized(u.Message)),
+        _ =>
+            HostMachine.Input.NewFaulted(HostMachine.FailureKind.NewFailure(ex.Message)),
+    };
 
-    private async Task<(CcState State, int LastSeqno)> TickAsync(
-        IGuiRpcClient client, HostConfig config, CcState state,
-        int lastSeqno, bool replaceLog, CancellationToken ct)
-    {
-        CcStatus ccStatus = await client.GetCcStatusAsync(ct).ConfigureAwait(false);
-        IReadOnlyList<Result> results = await client.GetResultsAsync(ct: ct).ConfigureAwait(false);
-        IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync(ct).ConfigureAwait(false);
+    // F# option -> C# nullable helpers (None is represented as null; use get_IsSome).
+    private static TimeSpan? ToNullable(FSharpOption<TimeSpan> o) =>
+        FSharpOption<TimeSpan>.get_IsSome(o) ? o.Value : null;
 
-        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(lastSeqno, ct).ConfigureAwait(false);
-
-        // A config change may have landed (and canceled connCt) while get_messages was
-        // in flight: never append/publish messages fetched from the OLD connection.
-        // This mirrors the guard below the state refetch — that one protects the
-        // snapshot, this one protects the message log and MessagesAdded, which would
-        // otherwise be able to fire under this HostId with stale-connection data even
-        // though the snapshot guard has not been reached yet.
-        await ProbeAsync(InterleavePoints.TickBeforeMsgGuard).ConfigureAwait(false);
-        ct.ThrowIfCancellationRequested();
-        if (_configChanged)
-            return (state, lastSeqno);
-        await ProbeAsync(InterleavePoints.TickBeforeMsgPublish).ConfigureAwait(false);
-        if (newMessages.Count > 0)
-            lastSeqno = newMessages.Max(m => m.Seqno);
-        if (replaceLog)
-        {
-            // First tick of this connection: atomically swap old-connection content
-            // for the daemon's current buffer (may be empty — a genuinely empty
-            // daemon buffer replaces the log with empty).
-            _messages.ReplaceAll(newMessages);
-            if (newMessages.Count > 0)
-                RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
-        }
-        else if (newMessages.Count > 0)
-        {
-            _messages.Append(newMessages);
-            RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
-        }
-
-        // A result naming a workunit we haven't cached means new work arrived since
-        // the last get_state: re-fetch the join tables once.
-        HashSet<string> knownWorkunits = [.. state.Workunits.Select(w => w.Name)];
-        if (results.Any(r => !knownWorkunits.Contains(r.WorkunitName)))
-            state = await client.GetStateAsync(ct).ConfigureAwait(false);
-
-        // A config change may have landed (and canceled connCt) while the RPCs above
-        // were in flight: never publish a snapshot that could straddle the old and
-        // new config under this HostId.
-        await ProbeAsync(InterleavePoints.TickBeforeSnapGuard).ConfigureAwait(false);
-        ct.ThrowIfCancellationRequested();
-        if (_configChanged)
-            return (state, lastSeqno);
-        await ProbeAsync(InterleavePoints.TickBeforeBuild).ConfigureAwait(false);
-
-        HostSnapshot snapshot = SnapshotBuilder.Build(
-            HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
-
-        // Build is a pure in-memory call that observes no token, so a config change
-        // landing during it would otherwise slip an old-config snapshot past the guard
-        // above and into the assignment/publish below. A stale-vintage publish here is
-        // harmless-but-confusing (Snapshot deliberately retains last-known data across
-        // reconnects until the new connection's first tick), so this recheck is cheap
-        // correctness polish, not load-bearing machinery.
-        ct.ThrowIfCancellationRequested();
-        if (_configChanged)
-            return (state, lastSeqno);
-
-        await ProbeAsync(InterleavePoints.TickBeforeSnapPublish).ConfigureAwait(false);
-        Snapshot = snapshot;
-        RaiseSafe(SnapshotUpdated, snapshot);
-        return (state, lastSeqno);
-    }
+    private static string? ToNullable(FSharpOption<string> o) =>
+        FSharpOption<string>.get_IsSome(o) ? o.Value : null;
 }
