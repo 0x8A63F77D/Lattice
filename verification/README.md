@@ -79,6 +79,16 @@ review time for any PR touching `HostMonitor.cs`:
    (`HostMonitor.cs`). The harness drifts too, not just the model: adding a
    write/read of shared state between two existing probe points without adding a
    probe there is a review failure.
+4. **Domain-vocabulary discipline** (guards conceptual drift; user review
+   2026-07-09): `HostMachine.Phase` names the protocol's interleaving points —
+   operational vocabulary inherited from the parity round, a recorded debt, not
+   a style to extend. Any change that adds, removes, or renames a phase must,
+   in the SAME commit: (a) extend I6's phase→lifecycle projection in both
+   design encodings AND the `HostMachine.fs` doc table (a phase must either
+   project onto one `HostConnectionState` or be explicitly justified as
+   trajectory-dependent — a phase with neither is a review failure); and
+   (b) prefer a domain-shaped name where parity allows, justifying any new
+   operationally-named phase in the commit message.
 
 A **red/green disagreement** between the F# encoding and the Promela encoding on
 the same property is itself a finding — a transcription bug in one of the two
