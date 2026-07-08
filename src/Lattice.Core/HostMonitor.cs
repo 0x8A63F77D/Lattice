@@ -18,6 +18,40 @@ internal sealed class HostSessionLostException(Exception inner) : Exception(inne
 public sealed record MessagesAddedEventArgs(Guid HostId, IReadOnlyList<Message> Messages);
 
 /// <summary>
+/// Named interleaving points of the actor loop, in loop order. Test-only seam:
+/// production leaves <see cref="HostMonitor.InterleaveProbe"/> null. Placement rules
+/// (verification/README.md): never inside a lock block; only where environment
+/// threads can already interleave in production. Every new shared-state touch point
+/// added to HostMonitor MUST add a point here (correspondence rule 3).
+/// </summary>
+internal static class InterleavePoints
+{
+    public const string BeforeSnapshot = "attempt.beforeSnapshot";
+    public const string AfterSnapshot = "attempt.afterSnapshot";
+    public const string BeforeAcceptGuard = "attempt.beforeAcceptGuard";
+    public const string BeforeConnectedPublish = "attempt.beforeConnectedPublish";
+    public const string TickBeforeMsgGuard = "tick.beforeMsgGuard";
+    public const string TickBeforeMsgPublish = "tick.beforeMsgPublish";
+    public const string TickBeforeSnapGuard = "tick.beforeSnapGuard";
+    public const string TickBeforeBuild = "tick.beforeBuild";
+    public const string TickBeforeSnapPublish = "tick.beforeSnapPublish";
+    public const string PollBeforeWait = "poll.beforeWait";
+    public const string PollAfterWait = "poll.afterWait";
+    public const string FinallyEnter = "attempt.finallyEnter";
+    public const string AfterCtsDispose = "attempt.afterCtsDispose";
+    public const string BeforeRetryPublish = "dispatcher.beforeRetryPublish";
+    public const string BeforeParkWait = "dispatcher.beforeParkWait";
+
+    public static readonly string[] All =
+    [
+        BeforeSnapshot, AfterSnapshot, BeforeAcceptGuard, BeforeConnectedPublish,
+        TickBeforeMsgGuard, TickBeforeMsgPublish, TickBeforeSnapGuard, TickBeforeBuild,
+        TickBeforeSnapPublish, PollBeforeWait, PollAfterWait, FinallyEnter,
+        AfterCtsDispose, BeforeRetryPublish, BeforeParkWait,
+    ];
+}
+
+/// <summary>
 /// The per-host actor: one background loop owns one <see cref="IGuiRpcClient"/> and
 /// walks the connection state machine. Events fire on the loop's thread-pool context,
 /// sequentially per host — subscribers marshal to their own context (the app uses
@@ -39,8 +73,11 @@ public sealed class HostMonitor : IAsyncDisposable
     private CancellationTokenSource? _connectionCts;
     private volatile int _pollingIntervalSeconds;
     private TaskCompletionSource _wake = NewWake();
-    private Task _loop = Task.CompletedTask;
+    // internal (not private) solely so the interleaving sweep can assert the loop
+    // task never faults (A5); no production code outside this class touches it.
+    internal Task _loop = Task.CompletedTask;
     private bool _started;
+    private bool _disposed;
     private VersionInfo? _daemonVersion;
     private ConnectionStatus _status;
     private HostSnapshot? _snapshot;
@@ -48,8 +85,15 @@ public sealed class HostMonitor : IAsyncDisposable
     /// <summary>Message buffer cap: the most recent 5,000 messages are retained per host.</summary>
     internal const int MessageCapacity = 5000;
 
+    // Test-only interleaving seam (see InterleavePoints). Null in production: the
+    // probe call is a single null check on the loop's paths. Set via
+    // InternalsVisibleTo by the sweep harness ONLY before Start().
+    internal Func<string, Task>? InterleaveProbe;
+
+    private Task ProbeAsync(string point) =>
+        InterleaveProbe?.Invoke(point) ?? Task.CompletedTask;
+
     private readonly MessageLog _messages = new(MessageCapacity);
-    private int _lastSeqno;
 
     /// <summary>Creates a monitor; call <see cref="Start"/> to begin connecting.</summary>
     public HostMonitor(HostConfig config, Func<IGuiRpcClient> clientFactory,
@@ -81,9 +125,12 @@ public sealed class HostMonitor : IAsyncDisposable
     }
 
     /// <summary>
-    /// The retained message buffer (oldest first, capped at 5,000). Cleared and
-    /// refetched from seqno 0 at the start of every new connection (including
-    /// reconnects), since a restarted daemon's seqno counter may have reset.
+    /// The retained message buffer (oldest first, capped at 5,000). Retains
+    /// messages from the previous connection until the new connection's first tick
+    /// completes, at which point the log is atomically replaced with the daemon's
+    /// current buffer (from seqno 0). This retention applies the same "last known"
+    /// doctrine as Snapshot, ensuring a freshly (re)started daemon whose seqno
+    /// counter reset cannot silently lose messages already seen.
     /// </summary>
     public IReadOnlyList<Message> Messages => _messages.Snapshot();
 
@@ -100,23 +147,28 @@ public sealed class HostMonitor : IAsyncDisposable
     public event EventHandler<HostSnapshot>? SnapshotUpdated;
 
     /// <summary>
-    /// Raised when a tick returns new messages; carries only the new ones. Because the
-    /// message buffer resets on every reconnect, the first tick after a reconnect
-    /// re-raises this for the daemon's current buffer from seqno 0, even if some of
-    /// those messages were already seen before the disconnect.
+    /// Raised when a tick returns new messages; carries only the new ones.
+    /// Semantics unchanged by retention: the first tick of a new connection
+    /// atomically replaces the log and raises this with the daemon's current buffer
+    /// from seqno 0, even if some of those messages were already seen before
+    /// disconnect. Subsequent ticks within the same connection append new messages.
     /// Subscriber exceptions are ignored — they never affect the state machine.
     /// </summary>
     public event EventHandler<MessagesAddedEventArgs>? MessagesAdded;
 
-    /// <summary>Starts the background loop. Idempotent.</summary>
+    /// <summary>Starts the background loop. Idempotent and inert after disposal.</summary>
     public void Start()
     {
         lock (_gate)
         {
-            if (_started)
+            if (_started || _disposed)
                 return;
             _started = true;
-            _loop = Task.Run(() => RunAsync(_cts.Token), CancellationToken.None);
+            // Token captured under _gate: DisposeAsync sets _disposed under this
+            // same lock BEFORE it ever cancels/disposes _cts, so a Start that got
+            // here holds a token read strictly before any dispose (I5).
+            CancellationToken token = _cts.Token;
+            _loop = Task.Run(() => RunAsync(token), CancellationToken.None);
         }
     }
 
@@ -151,14 +203,31 @@ public sealed class HostMonitor : IAsyncDisposable
         Wake();
     }
 
-    /// <summary>Stops the loop, disposes the client, and settles in Disconnected.</summary>
+    /// <summary>Stops the loop, disposes the client, and settles in Disconnected. Idempotent.</summary>
     public async ValueTask DisposeAsync()
     {
-        _cts.Cancel();
-        Wake();
-        try { await _loop.ConfigureAwait(false); }
+        // Exactly one caller wins the _disposed test-and-set under _gate; only that
+        // caller touches _cts (a second Cancel/Dispose would throw ObjectDisposed).
+        // Every caller — winner or not — awaits the SAME loop task read under the
+        // lock, so no DisposeAsync returns before teardown actually finished, and
+        // _cts.Dispose() is sequenced strictly after the loop's last token use.
+        bool first;
+        Task loop;
+        lock (_gate)
+        {
+            first = !_disposed;
+            _disposed = true;
+            loop = _loop;
+        }
+        if (first)
+        {
+            _cts.Cancel();
+            Wake();
+        }
+        try { await loop.ConfigureAwait(false); }
         catch { /* the loop reports failures via Status, never by throwing */ }
-        _cts.Dispose();
+        if (first)
+            _cts.Dispose();
     }
 
     /// <summary>Backoff schedule: 1, 2, 4, 8, 16, 32 then capped at 60 seconds.</summary>
@@ -304,6 +373,7 @@ public sealed class HostMonitor : IAsyncDisposable
                 // revives it. Publishing here — after RunAttemptAsync's finally — is why a
                 // refused-password connection is provably closed for the whole parked wait.
                 SetStatus(HostConnectionState.AuthFailed, 0, lastError: outcome.Error);
+                await ProbeAsync(InterleavePoints.BeforeParkWait).ConfigureAwait(false);
                 try { await WaitForConfigChangeAsync(ct).ConfigureAwait(false); }
                 catch (OperationCanceledException) { break; }
                 attempt = 0;
@@ -318,6 +388,7 @@ public sealed class HostMonitor : IAsyncDisposable
             // behavior where `attempt = 0` ran right before publishing Connected.
             attempt = outcome.ReachedConnected ? 1 : attempt + 1;
             TimeSpan delay = BackoffDelay(attempt);
+            await ProbeAsync(InterleavePoints.BeforeRetryPublish).ConfigureAwait(false);
             SetStatus(HostConnectionState.Retrying, attempt, _time.GetUtcNow() + delay, outcome.Error);
             try { await WaitAsync(delay, ct).ConfigureAwait(false); }
             catch (OperationCanceledException) { break; }
@@ -348,6 +419,7 @@ public sealed class HostMonitor : IAsyncDisposable
     // job, driven by AttemptOutcome.ReachedConnected (see `connected` below).
     private async Task<AttemptOutcome> RunAttemptAsync(int attempt, CancellationToken ct)
     {
+        await ProbeAsync(InterleavePoints.BeforeSnapshot).ConfigureAwait(false);
         HostConfig config;
         CancellationToken connCt;
         lock (_gate)
@@ -357,6 +429,7 @@ public sealed class HostMonitor : IAsyncDisposable
             _connectionCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             connCt = _connectionCts.Token;
         }
+        await ProbeAsync(InterleavePoints.AfterSnapshot).ConfigureAwait(false);
         // Left null until the factory call succeeds so a throwing factory — e.g. a future
         // SSH-tunnel-wrapping transport that can fail before producing a client — folds
         // into the generic catch (→ Failed) instead of escaping this method.
@@ -377,24 +450,22 @@ public sealed class HostMonitor : IAsyncDisposable
                 throw new HostAuthException();
 
             SetStatus(HostConnectionState.FetchingState, attempt);
-            _daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
+            // Attempt-local until accepted: a failed attempt must not pollute
+            // Status publishes with an unaccepted daemon version (I1 mutation half;
+            // PR #7 round-9 P2).
+            VersionInfo daemonVersion = await client.ExchangeVersionsAsync(connCt).ConfigureAwait(false);
             CcState state = await client.GetStateAsync(connCt).ConfigureAwait(false);
-
-            // A new connection may be talking to a freshly (re)started daemon whose
-            // seqno counter reset to zero: a stale high _lastSeqno would silently
-            // miss every message it now considers new. Reset the cursor and the
-            // retained buffer so the first tick refetches the daemon's current
-            // buffer from scratch (matches official BOINC Manager semantics).
-            _lastSeqno = 0;
-            _messages.Clear();
 
             // A config change may have landed after the fetch above completed but
             // before Connected is published: never surface Connected (or the
             // snapshot/messages that would follow) for a connection to the OLD
             // config. The finally below tears this client down; the dispatcher
             // reconnects against the new config on the very next iteration.
+            await ProbeAsync(InterleavePoints.BeforeAcceptGuard).ConfigureAwait(false);
             if (_configChanged)
                 return AttemptOutcome.ConfigChanged;
+            await ProbeAsync(InterleavePoints.BeforeConnectedPublish).ConfigureAwait(false);
+            _daemonVersion = daemonVersion;
             SetStatus(HostConnectionState.Connected, 0);
             connected = true;
             await PollAsync(client, config, state, connCt, ct).ConfigureAwait(false);
@@ -429,11 +500,13 @@ public sealed class HostMonitor : IAsyncDisposable
         }
         finally
         {
+            await ProbeAsync(InterleavePoints.FinallyEnter).ConfigureAwait(false);
             lock (_gate)
             {
                 _connectionCts?.Dispose();
                 _connectionCts = null;
             }
+            await ProbeAsync(InterleavePoints.AfterCtsDispose).ConfigureAwait(false);
             // The connection is being torn down regardless of outcome; a disposal
             // failure has nowhere meaningful to go and must not fault the loop.
             // client is null when the factory itself threw before producing one.
@@ -455,11 +528,21 @@ public sealed class HostMonitor : IAsyncDisposable
                                  CancellationToken connCt, CancellationToken ct)
     {
         bool reauthedSinceLastSuccess = false;
+        // Per-connection message cursor. Starts at 0 for every new connection: a
+        // freshly (re)started daemon's seqno counter may have reset, so the first
+        // tick refetches the daemon's current buffer from scratch and REPLACES the
+        // retained log (old messages stay visible until that instant — same
+        // keep-last-known retention doctrine as Snapshot). Field-free by design:
+        // per-connection state must not outlive the connection (I1 mutation half).
+        int lastSeqno = 0;
+        bool firstTick = true;
         while (true)
         {
             try
             {
-                state = await TickAsync(client, config, state, connCt).ConfigureAwait(false);
+                (state, lastSeqno) = await TickAsync(client, config, state, lastSeqno,
+                                                     replaceLog: firstTick, connCt).ConfigureAwait(false);
+                firstTick = false;
                 reauthedSinceLastSuccess = false;
             }
             catch (BoincUnauthorizedException ex)
@@ -483,19 +566,23 @@ public sealed class HostMonitor : IAsyncDisposable
             }
             if (_configChanged)
                 return;
+            await ProbeAsync(InterleavePoints.PollBeforeWait).ConfigureAwait(false);
             await WaitAsync(TimeSpan.FromSeconds(_pollingIntervalSeconds), ct).ConfigureAwait(false);
+            await ProbeAsync(InterleavePoints.PollAfterWait).ConfigureAwait(false);
             if (_configChanged)
                 return;
         }
     }
 
-    private async Task<CcState> TickAsync(IGuiRpcClient client, HostConfig config, CcState state, CancellationToken ct)
+    private async Task<(CcState State, int LastSeqno)> TickAsync(
+        IGuiRpcClient client, HostConfig config, CcState state,
+        int lastSeqno, bool replaceLog, CancellationToken ct)
     {
         CcStatus ccStatus = await client.GetCcStatusAsync(ct).ConfigureAwait(false);
         IReadOnlyList<Result> results = await client.GetResultsAsync(ct: ct).ConfigureAwait(false);
         IReadOnlyList<FileTransfer> transfers = await client.GetFileTransfersAsync(ct).ConfigureAwait(false);
 
-        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(_lastSeqno, ct).ConfigureAwait(false);
+        IReadOnlyList<Message> newMessages = await client.GetMessagesAsync(lastSeqno, ct).ConfigureAwait(false);
 
         // A config change may have landed (and canceled connCt) while get_messages was
         // in flight: never append/publish messages fetched from the OLD connection.
@@ -503,12 +590,24 @@ public sealed class HostMonitor : IAsyncDisposable
         // snapshot, this one protects the message log and MessagesAdded, which would
         // otherwise be able to fire under this HostId with stale-connection data even
         // though the snapshot guard has not been reached yet.
+        await ProbeAsync(InterleavePoints.TickBeforeMsgGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
+        await ProbeAsync(InterleavePoints.TickBeforeMsgPublish).ConfigureAwait(false);
         if (newMessages.Count > 0)
+            lastSeqno = newMessages.Max(m => m.Seqno);
+        if (replaceLog)
         {
-            _lastSeqno = newMessages.Max(m => m.Seqno);
+            // First tick of this connection: atomically swap old-connection content
+            // for the daemon's current buffer (may be empty — a genuinely empty
+            // daemon buffer replaces the log with empty).
+            _messages.ReplaceAll(newMessages);
+            if (newMessages.Count > 0)
+                RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
+        }
+        else if (newMessages.Count > 0)
+        {
             _messages.Append(newMessages);
             RaiseSafe(MessagesAdded, new MessagesAddedEventArgs(HostId, newMessages));
         }
@@ -522,9 +621,11 @@ public sealed class HostMonitor : IAsyncDisposable
         // A config change may have landed (and canceled connCt) while the RPCs above
         // were in flight: never publish a snapshot that could straddle the old and
         // new config under this HostId.
+        await ProbeAsync(InterleavePoints.TickBeforeSnapGuard).ConfigureAwait(false);
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
+        await ProbeAsync(InterleavePoints.TickBeforeBuild).ConfigureAwait(false);
 
         HostSnapshot snapshot = SnapshotBuilder.Build(
             HostId, config.DisplayName, _time.GetUtcNow(), state, ccStatus, results, transfers);
@@ -537,10 +638,11 @@ public sealed class HostMonitor : IAsyncDisposable
         // correctness polish, not load-bearing machinery.
         ct.ThrowIfCancellationRequested();
         if (_configChanged)
-            return state;
+            return (state, lastSeqno);
 
+        await ProbeAsync(InterleavePoints.TickBeforeSnapPublish).ConfigureAwait(false);
         Snapshot = snapshot;
         RaiseSafe(SnapshotUpdated, snapshot);
-        return state;
+        return (state, lastSeqno);
     }
 }

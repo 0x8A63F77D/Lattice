@@ -27,10 +27,19 @@ internal sealed class MessageLog(int capacity)
             return [.. _messages];
     }
 
-    /// <summary>Discards all retained messages (used when a new connection's seqno counter may have reset).</summary>
-    public void Clear()
+    /// <summary>
+    /// Atomically replaces the entire retained buffer with <paramref name="items"/>
+    /// (capped to capacity, keeping the newest). Readers see either the old content
+    /// or the new — never an intermediate empty state.
+    /// </summary>
+    public void ReplaceAll(IReadOnlyList<Message> items)
     {
         lock (_gate)
+        {
             _messages.Clear();
+            int skip = Math.Max(0, items.Count - capacity);
+            for (int i = skip; i < items.Count; i++)
+                _messages.Enqueue(items[i]);
+        }
     }
 }

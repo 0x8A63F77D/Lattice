@@ -7,7 +7,7 @@ namespace Lattice.Tests;
 
 public class HostMonitorPollingTests
 {
-    private static HostConfig Config() => new(Guid.NewGuid(), "test", "localhost", 31416, "pw");
+    private static HostConfig Config() => TestData.MakeHostConfig();
 
     [Fact]
     public void Message_log_caps_at_capacity()
@@ -206,8 +206,9 @@ public class HostMonitorPollingTests
         Assert.Contains("get_messages:0", fake.Calls);
 
         // Simulate daemon restart: force a tick failure so the monitor tears down and
-        // reconnects. Without the fix, the reconnect would keep _lastSeqno == 2 and
-        // ask get_messages:2, silently missing the "new" (to the reset daemon) 1..2.
+        // reconnects. Without the fix, the reconnect would carry a stale message cursor
+        // of 2 and ask get_messages:2, silently missing the "new" (to the reset daemon)
+        // 1..2. The fix resets the per-connection cursor to 0 on every new connection.
         failOnce = true;
         monitor.RequestRefresh();
         await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Retrying);

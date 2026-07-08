@@ -1,4 +1,5 @@
 using Lattice.Boinc.GuiRpc;
+using Lattice.Core;
 
 namespace Lattice.Tests;
 
@@ -29,6 +30,14 @@ public static class TestData
         DateTimeOffset? nextRequest = null)
         => new(name, projectUrl, projectName, 1000, 0, false, 0, null, nextRequest,
                0, 0, 0, 0, 0, true, xferActive);
+
+    public static HostConfig MakeHostConfig(
+        Guid? id = null,
+        string name = "test",
+        string address = "localhost",
+        int port = 31416,
+        string password = "pw")
+        => new(id ?? Guid.NewGuid(), name, address, port, password);
 
     public static Message MakeMessage(int seqno, string body = "hello")
         => new("Example", MessagePriority.Info, seqno, DateTimeOffset.UnixEpoch, body);

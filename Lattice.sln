@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lattice.SmokeTest", "tools\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Lattice.Core", "src\Lattice.Core\Lattice.Core.csproj", "{B3452014-B532-44D7-B8B3-1A0FBF949DF3}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Lattice.Verification", "tests\Lattice.Verification\Lattice.Verification.fsproj", "{A444B590-C4FD-4DC2-9ED3-A81A91830F72}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -75,6 +77,18 @@ Global
 		{B3452014-B532-44D7-B8B3-1A0FBF949DF3}.Release|x64.Build.0 = Release|Any CPU
 		{B3452014-B532-44D7-B8B3-1A0FBF949DF3}.Release|x86.ActiveCfg = Release|Any CPU
 		{B3452014-B532-44D7-B8B3-1A0FBF949DF3}.Release|x86.Build.0 = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|x64.Build.0 = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Debug|x86.Build.0 = Debug|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|x64.ActiveCfg = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|x64.Build.0 = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|x86.ActiveCfg = Release|Any CPU
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -84,5 +98,6 @@ Global
 		{A3F93816-9B11-4630-B4C6-B362878E835A} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{01C5B711-BD06-4174-9C62-C14D71F634D9} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
 		{B3452014-B532-44D7-B8B3-1A0FBF949DF3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{A444B590-C4FD-4DC2-9ED3-A81A91830F72} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal
