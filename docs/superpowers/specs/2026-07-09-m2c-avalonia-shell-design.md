@@ -25,7 +25,7 @@ New project `src/Lattice.App` (net10.0, `OutputType=WinExe` — the cross-platfo
 
 - Avalonia 12.x + `Avalonia.Desktop` + `Avalonia.Diagnostics` (debug only)
 - FluentAvaloniaUI 3.x (Fluent 2 theme, NavigationView, InfoBar/InfoBadge, SettingsExpander, ContentDialog, TaskDialog)
-- `Avalonia.Controls.DataGrid` + its Fluent theme `StyleInclude`. **Decision (2026-07-08): TreeDataGrid is Avalonia Pro (paid) in the Avalonia 12 era; the free MIT package tops out at 11.x. All tabular views use the free DataGrid.** Plan-time verification item: reconcile stock DataGrid Fluent theme with FluentAvalonia Fluent 2 resources; restyle via our token dictionary where they diverge (row heights 36/28, header 32/11px, selection tint, focus visuals).
+- `Avalonia.Controls.DataGrid`. **Decision (2026-07-08): TreeDataGrid is Avalonia Pro (paid) in the Avalonia 12 era; the free MIT package tops out at 11.x. All tabular views use the free DataGrid.** Plan-time verification RESOLVED (2026-07-09): FluentAvaloniaUI 3.0.1 depends on `Avalonia.Controls.DataGrid` and ships its own Fluent-2 DataGrid control themes (`src/FluentAvalonia/Styling/ControlThemes/BasicControls/DataGrid/`) — no separate theme `StyleInclude` needed; only token-level overrides remain (row heights 36/28, header 32/11px, selection tint).
 - CommunityToolkit.Mvvm (source-generated `[ObservableProperty]`/`[RelayCommand]`)
 - Icons: Fluent System Icons (MIT) — package only the ~35 glyphs named in the design README (subset font or path geometries; decide at plan time with size measurement), not the full family.
 
@@ -93,7 +93,7 @@ Keyboard per design (↑↓, Ctrl+F, F5, Ctrl+1..4, Space sort, FocusStroke2 vis
 
 ## 9. State matrix and partial semantics
 
-- Rail states map 1:1 from `ConnectionStatus` (five states, icon+text+color three channels; no UI-invented states).
+- Rail states project Core's seven `HostConnectionState` values onto the design's five visuals (icon+text+color three channels): `Disconnected|Connecting|Authorizing|FetchingState → Connecting`; `Connected → Connected`; `Retrying (attempt < 4) → Retrying`; `Retrying (attempt ≥ 4) → Unreachable` (backoff has reached the 8 s tier, ≈15 s of continuous failure — Core itself never gives up and has no Unreachable state); `AuthFailed → Auth-failed`. The threshold is a UI display tier, not domain state (amendment 2026-07-09, mirrors the I6 projection philosophy).
 - Partial InfoBar: scope == AllHosts && ≥1 host unreachable; dismissable, reappears when the reachable-set fingerprint changes; status-bar counts cover reachable hosts only.
 - First-connect loading is per-host — connected hosts render immediately, never block on the slowest (design red line).
 - Empty states per view; first-run (no hosts) hides the rail hosts section, Settings shows the CTA.
@@ -151,7 +151,7 @@ User review calibration (recorded in memory 2026-07-09): the user reviews concep
 
 ## 15. Risks
 
-- **DataGrid theme fidelity**: stock DataGrid Fluent theme predates Fluent 2; token-dictionary restyling effort is budgeted in stage 1 (verify at plan time, prototype in the scaffold task).
+- **DataGrid theme fidelity**: RETIRED 2026-07-09 — FluentAvalonia 3.x ships Fluent-2 DataGrid control themes (see §3); only token-level metric overrides remain, done in stage 2 with the Tasks view.
 - **Icon packaging**: subset strategy needs a build-time check that all ~35 named glyphs resolve; missing glyph = build failure, not runtime blank.
 - **Daemon lifecycle on this machine**: the local client runs only while BOINC Manager runs (`--launched_by_manager`) — acceptance runs must start Manager first; documented in dev-environment memory.
 - **Real task data**: still 0 projects attached; the attach follow-up remains open and is NOT a stage gate (sample host covers data-rich states).
