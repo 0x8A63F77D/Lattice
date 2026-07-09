@@ -1,0 +1,94 @@
+using Lattice.App.Infrastructure;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.Core;
+using Lattice.Tests;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+public class RailStateTests
+{
+    private static ConnectionStatus Status(
+        HostConnectionState state, int attempt = 0, DateTimeOffset? nextAt = null, string? error = null) =>
+        new(Guid.NewGuid(), state, attempt, nextAt, error, null);
+
+    [Theory]
+    [InlineData(HostConnectionState.Disconnected, 0, RailState.Connecting)]
+    [InlineData(HostConnectionState.Connecting, 0, RailState.Connecting)]
+    [InlineData(HostConnectionState.Authorizing, 0, RailState.Connecting)]
+    [InlineData(HostConnectionState.FetchingState, 0, RailState.Connecting)]
+    [InlineData(HostConnectionState.Connected, 0, RailState.Connected)]
+    [InlineData(HostConnectionState.Retrying, 1, RailState.Retrying)]
+    [InlineData(HostConnectionState.Retrying, 3, RailState.Retrying)]
+    [InlineData(HostConnectionState.Retrying, 4, RailState.Unreachable)]
+    [InlineData(HostConnectionState.Retrying, 12, RailState.Unreachable)]
+    [InlineData(HostConnectionState.AuthFailed, 1, RailState.AuthFailed)]
+    public void Projection_covers_all_core_states(HostConnectionState state, int attempt, RailState expected) =>
+        Assert.Equal(expected, RailStateProjection.From(Status(state, attempt)));
+
+    [Fact]
+    public void Connected_item_shows_task_count_subtext()
+    {
+        var entry = MakeEntry(Status(HostConnectionState.Connected));
+        entry.Snapshot = SnapshotWithTasks(entry.Config.Id, taskCount: 3);
+        var vm = new HostRailItemViewModel(entry, new ManualUiClock());
+        vm.Refresh();
+        Assert.Equal("Connected · 3 tasks", vm.StateText);
+    }
+
+    [Fact]
+    public void Retrying_item_counts_down_on_clock_tick()
+    {
+        var clock = new ManualUiClock();
+        var entry = MakeEntry(Status(
+            HostConnectionState.Retrying, attempt: 3, nextAt: clock.Now.AddSeconds(12), error: "boom"));
+        var vm = new HostRailItemViewModel(entry, clock);
+        vm.Refresh();
+        Assert.Equal("Retrying in 12s (attempt 3)", vm.StateText);
+        Assert.Equal("boom", vm.Tooltip);
+
+        clock.Advance(TimeSpan.FromSeconds(5));
+        Assert.Equal("Retrying in 7s (attempt 3)", vm.StateText);
+    }
+
+    [Fact]
+    public void AuthFailed_item_says_wrong_password()
+    {
+        var vm = new HostRailItemViewModel(MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
+        vm.Refresh();
+        Assert.Equal(RailState.AuthFailed, vm.State);
+        Assert.Equal("Wrong password", vm.StateText);
+    }
+
+    private static HostEntry MakeEntry(ConnectionStatus status)
+    {
+        var config = TestData.MakeHostConfig(id: status.HostId, name: "office-pc");
+        var registry = new HostRegistry(
+            new LatticeConfig(5, [config]),
+            Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json"));
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var entry = store.Hosts[0];
+        entry.Status = status;
+        return entry;
+    }
+
+    private static HostSnapshot SnapshotWithTasks(Guid hostId, int taskCount)
+    {
+        // Signature verified against src/Lattice.Boinc.GuiRpc/Models/Result.cs;
+        // only the task COUNT matters to the assertion.
+        var result = new Lattice.Boinc.GuiRpc.Result(
+            Name: "task_0", WorkunitName: "wu_0", ProjectUrl: "http://proj.example/",
+            State: Lattice.Boinc.GuiRpc.ResultState.FilesDownloaded,
+            ReportDeadline: DateTimeOffset.Now.AddDays(1), ReadyToReport: false,
+            SuspendedViaGui: false, FinalCpuTime: 0, FinalElapsedTime: 0,
+            EstimatedCpuTimeRemaining: 100, VersionNum: 1, PlanClass: "",
+            ExitStatus: 0, ActiveTask: null);
+        var tasks = Enumerable.Range(0, taskCount)
+            .Select(_ => new TaskSnapshot(result, "P", "A", 100, false))
+            .ToList();
+        return new HostSnapshot(hostId, "office-pc", DateTimeOffset.Now,
+            FakeGuiRpcClient.DefaultStatus, tasks, [], []);
+    }
+}

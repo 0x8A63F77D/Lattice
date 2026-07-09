@@ -1,0 +1,55 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using Lattice.App.Infrastructure;
+
+namespace Lattice.App.ViewModels;
+
+/// <summary>
+/// One two-line host entry in the nav rail. Countdown text refreshes on the
+/// shared clock tick; everything else refreshes when the store signals change.
+/// </summary>
+public sealed partial class HostRailItemViewModel : ObservableObject, IDisposable
+{
+    private readonly HostEntry _entry;
+    private readonly IUiClock _clock;
+
+    public HostRailItemViewModel(HostEntry entry, IUiClock clock)
+    {
+        _entry = entry;
+        _clock = clock;
+        _clock.Tick += OnTick;
+        Refresh();
+    }
+
+    public Guid HostId => _entry.Config.Id;
+
+    [ObservableProperty] private string _name = "";
+    [ObservableProperty] private RailState _state;
+    [ObservableProperty] private string _stateText = "";
+    [ObservableProperty] private string? _tooltip;
+
+    public void Refresh()
+    {
+        Name = _entry.Config.DisplayName;
+        State = RailStateProjection.From(_entry.Status);
+        Tooltip = State is RailState.Retrying or RailState.Unreachable ? _entry.Status.LastError : null;
+        StateText = State switch
+        {
+            RailState.Connected => $"Connected · {_entry.Snapshot?.Tasks.Count ?? 0} tasks",
+            RailState.Connecting => "Connecting…",
+            RailState.Retrying when _entry.Status.NextAttemptAt is { } next =>
+                TimeText.RetryCountdown(next, _clock.Now, _entry.Status.Attempt),
+            RailState.Retrying => "Retrying…",
+            RailState.Unreachable => "Unreachable",
+            RailState.AuthFailed => "Wrong password",
+            _ => "",
+        };
+    }
+
+    private void OnTick(object? sender, EventArgs e)
+    {
+        if (State == RailState.Retrying)
+            Refresh();
+    }
+
+    public void Dispose() => _clock.Tick -= OnTick;
+}
