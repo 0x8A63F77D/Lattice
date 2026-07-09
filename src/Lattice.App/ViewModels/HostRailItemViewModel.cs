@@ -27,6 +27,23 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _stateText = "";
     [ObservableProperty] private string? _tooltip;
 
+    // XAML binds five stacked, statically-typed PathIcons to these bools so the
+    // VM stays Avalonia-free and the state brushes stay DynamicResource-live.
+    public bool IsConnected => State == RailState.Connected;
+    public bool IsConnecting => State == RailState.Connecting;
+    public bool IsRetrying => State == RailState.Retrying;
+    public bool IsUnreachable => State == RailState.Unreachable;
+    public bool IsAuthFailed => State == RailState.AuthFailed;
+
+    partial void OnStateChanged(RailState value)
+    {
+        OnPropertyChanged(nameof(IsConnected));
+        OnPropertyChanged(nameof(IsConnecting));
+        OnPropertyChanged(nameof(IsRetrying));
+        OnPropertyChanged(nameof(IsUnreachable));
+        OnPropertyChanged(nameof(IsAuthFailed));
+    }
+
     public void Refresh()
     {
         Name = _entry.Config.DisplayName;

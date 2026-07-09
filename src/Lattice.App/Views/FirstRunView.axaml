@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             x:Class="Lattice.App.Views.FirstRunView"
+             x:DataType="vm:ShellViewModel">
+  <!-- Design 2d first-run empty state -->
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+    <PathIcon Data="{StaticResource IconServerRegular}" Width="24" Height="24"
+              HorizontalAlignment="Center" Foreground="{DynamicResource LatticeDisabledBrush}" />
+    <TextBlock Text="Connect your first host" FontSize="16" FontWeight="SemiBold"
+               HorizontalAlignment="Center" Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+    <TextBlock Text="Lattice monitors BOINC clients over GUI RPC (port 31416)."
+               FontSize="12" HorizontalAlignment="Center"
+               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+    <Button Classes="accent" Content="Add a host" HorizontalAlignment="Center"
+            Command="{Binding RequestAddHostCommand}" />
+  </StackPanel>
+</UserControl>
