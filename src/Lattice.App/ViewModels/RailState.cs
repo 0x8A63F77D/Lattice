@@ -25,6 +25,9 @@ public static class RailStateProjection
         HostConnectionState.Retrying when status.Attempt >= 4 => RailState.Unreachable,
         HostConnectionState.Retrying => RailState.Retrying,
         HostConnectionState.AuthFailed => RailState.AuthFailed,
-        _ => RailState.Connecting,
+        HostConnectionState.Disconnected or HostConnectionState.Connecting
+            or HostConnectionState.Authorizing or HostConnectionState.FetchingState => RailState.Connecting,
+        _ => throw new ArgumentOutOfRangeException(nameof(status), status.State,
+            "HostConnectionState grew — extend the rail projection and spec §9."),
     };
 }

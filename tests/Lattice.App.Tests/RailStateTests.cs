@@ -28,6 +28,13 @@ public class RailStateTests
         Assert.Equal(expected, RailStateProjection.From(Status(state, attempt)));
 
     [Fact]
+    public void Projection_is_total_over_core_states()
+    {
+        foreach (var state in Enum.GetValues<HostConnectionState>())
+            _ = RailStateProjection.From(Status(state, attempt: 1));
+    }
+
+    [Fact]
     public void Connected_item_shows_task_count_subtext()
     {
         var entry = MakeEntry(Status(HostConnectionState.Connected));
@@ -61,18 +68,8 @@ public class RailStateTests
         Assert.Equal("Wrong password", vm.StateText);
     }
 
-    private static HostEntry MakeEntry(ConnectionStatus status)
-    {
-        var config = TestData.MakeHostConfig(id: status.HostId, name: "office-pc");
-        var registry = new HostRegistry(
-            new LatticeConfig(5, [config]),
-            Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json"));
-        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
-        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var entry = store.Hosts[0];
-        entry.Status = status;
-        return entry;
-    }
+    private static HostEntry MakeEntry(ConnectionStatus status) =>
+        new(TestData.MakeHostConfig(id: status.HostId, name: "office-pc"), status);
 
     private static HostSnapshot SnapshotWithTasks(Guid hostId, int taskCount)
     {
