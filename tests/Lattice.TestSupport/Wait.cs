@@ -1,6 +1,5 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
-using Xunit;
 
 namespace Lattice.Tests;
 
@@ -14,7 +13,7 @@ public static class Wait
         while (!condition())
         {
             if (sw.ElapsedMilliseconds > 5000)
-                Assert.Fail($"Timed out waiting for condition{(because is null ? "" : $": {because}")}");
+                throw new TimeoutException($"Timed out waiting for condition{(because is null ? "" : $": {because}")}");
             await Task.Delay(10);
         }
     }
@@ -30,7 +29,7 @@ public static class Wait
         while (!condition())
         {
             if (sw.ElapsedMilliseconds > 5000)
-                Assert.Fail("Timed out advancing fake time");
+                throw new TimeoutException("Timed out advancing fake time");
             time.Advance(step);
             await Task.Delay(10);
         }

@@ -15,5 +15,8 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Lattice.App/Lattice.App.csproj" />
+    <!-- xunit-free shared fakes (FakeGuiRpcClient, TestData, Wait); consumable from
+         both xunit v2 (Lattice.Tests) and v3 (this project). -->
+    <ProjectReference Include="../Lattice.TestSupport/Lattice.TestSupport.csproj" />
   </ItemGroup>
 </Project>
