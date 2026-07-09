@@ -8,6 +8,7 @@ namespace Lattice.App.Views;
 public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
+    private bool _addHostInFlight;
 
     public ShellWindow()
     {
@@ -18,12 +19,36 @@ public partial class ShellWindow : Window
     private void AttachShell()
     {
         if (_shell is not null)
+        {
             _shell.PropertyChanged -= OnShellPropertyChanged;
+            _shell.AddHostRequested -= OnAddHostRequested;
+        }
         _shell = DataContext as ShellViewModel;
         if (_shell is not null)
         {
             _shell.PropertyChanged += OnShellPropertyChanged;
+            _shell.AddHostRequested += OnAddHostRequested;
             SyncNavSelection();
+        }
+    }
+
+    private async void OnAddHostRequested(object? sender, EventArgs e)
+    {
+        // Single-flight: the CTA and the rail's + button both raise AddHostRequested;
+        // a double-fire before the first dialog resolves would stack a second overlay.
+        if (_addHostInFlight || _shell is not { } shell)
+            return;
+        _addHostInFlight = true;
+        try
+        {
+            var vm = new AddHostViewModel(shell.Settings.Registry, shell.Settings.ClientFactory);
+            var dialog = new AddHostDialog { DataContext = vm };
+            if (TopLevel.GetTopLevel(this) is { } top)
+                await dialog.ShowAsync(top);
+        }
+        finally
+        {
+            _addHostInFlight = false;
         }
     }
 

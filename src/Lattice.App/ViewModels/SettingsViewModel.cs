@@ -22,6 +22,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<HostSettingsItemViewModel> Hosts { get; } = [];
 
+    /// <summary>Exposed for the Add-host dialog, which registers into the same registry/factory.</summary>
+    public HostRegistry Registry => _registry;
+    public Func<IGuiRpcClient> ClientFactory => _clientFactory;
+
     public static IReadOnlyList<int> AllowedPollingIntervals => LatticeConfig.AllowedPollingIntervals;
 
     public int PollingIntervalSeconds
