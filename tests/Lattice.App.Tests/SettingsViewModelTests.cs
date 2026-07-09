@@ -99,6 +99,35 @@ public class SettingsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Test_connection_times_out_rather_than_hanging()
+    {
+        var hanging = new SettingsViewModel(_registry, _store,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => Task.Delay(Timeout.Infinite) });
+        _registry.AddHost(TestData.MakeHostConfig());
+        hanging.Reconcile();
+        var item = hanging.Hosts[^1];
+        item.TestTimeout = TimeSpan.FromMilliseconds(50);
+
+        await item.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal("Connection timed out.", item.TestResultText);
+    }
+
+    [Fact]
+    public async Task Failed_validation_clears_stale_test_result()
+    {
+        var item = AddHost();
+        await item.TestConnectionCommand.ExecuteAsync(null);
+        Assert.NotNull(item.TestResultText);
+
+        item.Address = "";
+        await item.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Null(item.TestResultText);
+        Assert.NotNull(item.ValidationError);
+    }
+
+    [Fact]
     public void Auth_failed_host_exposes_error_state_and_actionable_text()
     {
         var item = AddHost(name: "office-pc");

@@ -27,6 +27,9 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
 
     public Guid HostId => _entry.Config.Id;
 
+    /// <summary>Ceiling for a connection test — a dead host must not pin "Testing…" forever.</summary>
+    internal TimeSpan TestTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
     [ObservableProperty] private bool _isExpanded;
     [ObservableProperty] private string _displayName = "";
     [ObservableProperty] private string _statusText = "";
@@ -74,7 +77,7 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
             return null;
         }
         ValidationError = null;
-        return _entry.Config with { Name = Name.Trim(), Address = Address.Trim(), Port = port, Password = Password };
+        return _entry.Config with { Name = (Name ?? "").Trim(), Address = Address.Trim(), Port = port, Password = Password };
     }
 
     [RelayCommand]
@@ -88,12 +91,24 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
     private async Task TestConnectionAsync()
     {
         if (BuildCandidate() is not { } candidate)
+        {
+            TestResultText = null;
             return;
+        }
         TestResultText = "Testing…";
-        TestConnectionResult result = await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory);
-        TestResultText = result.Success
-            ? $"Connected — BOINC {result.Version!.Major}.{result.Version.Minor}.{result.Version.Release}"
-            : result.Error;
+        try
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            TestConnectionResult result =
+                await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
+            TestResultText = result.Success
+                ? $"Connected — BOINC {result.Version!.Major}.{result.Version.Minor}.{result.Version.Release}"
+                : result.Error;
+        }
+        catch (OperationCanceledException)
+        {
+            TestResultText = "Connection timed out.";
+        }
     }
 
     [RelayCommand]
