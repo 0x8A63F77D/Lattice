@@ -35,7 +35,8 @@ ICONS=(
 
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }
 
-OUT=Icons.axaml
+OUT=$(mktemp)
+FINAL=Icons.axaml
 {
   echo '<ResourceDictionary xmlns="https://github.com/avaloniaui"'
   echo '                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">'
@@ -47,10 +48,12 @@ for entry in "${ICONS[@]}"; do
   IFS='|' read -r snake folder variant <<< "$entry"
   url="$BASE/${folder// /%20}/SVG/ic_fluent_${snake}_20_${variant}.svg"
   svg=$(curl -sf "$url") || { echo "MISSING: $url" >&2; exit 1; }
-  d=$(echo "$svg" | grep -oE ' d="[^"]+"' | sed -E 's/ d="([^"]+)"/\1/' | tr '\n' ' ' | sed 's/ $//')
+  # NOTE: naive text extraction — assumes each upstream SVG is a single top-level <path>. Verify any NEW icon added to ICONS still fits that shape before trusting the output.
+  d=$(echo "$svg" | grep -oE ' d="[^"]+"' | sed -E 's/ d="([^"]+)"/\1/' | tr '\n' ' ' | sed 's/ $//' || true)
   [ -n "$d" ] || { echo "NO PATH DATA: $url" >&2; exit 1; }
   suffix=$([ "$variant" = "filled" ] && echo Filled || echo Regular)
   echo "  <StreamGeometry x:Key=\"Icon$(pascal "$snake")$suffix\">$d</StreamGeometry>" >> "$OUT"
 done
 echo '</ResourceDictionary>' >> "$OUT"
-echo "generated $OUT with $(grep -c StreamGeometry "$OUT") geometries"
+mv "$OUT" "$FINAL"
+echo "generated $FINAL with $(grep -c StreamGeometry "$FINAL") geometries"
