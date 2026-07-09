@@ -77,7 +77,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private void ReconcileHosts()
     {
         // Keyed reconcile: keep VMs whose host still exists (their Refresh reads
-        // the live entry), add new, drop removed. Order follows the registry.
+        // the live entry), add new, drop removed. Order matches the registry
+        // because hosts are append-only today (no reorder API); revisit the
+        // insert position if reordering ever lands.
         var byId = HostItems.ToDictionary(i => i.HostId);
         var seen = new HashSet<Guid>();
         for (var i = 0; i < _store.Hosts.Count; i++)
@@ -85,11 +87,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             HostEntry entry = _store.Hosts[i];
             seen.Add(entry.Config.Id);
             if (!byId.TryGetValue(entry.Config.Id, out HostRailItemViewModel? item))
-            {
-                item = new HostRailItemViewModel(entry, _clock);
-                HostItems.Insert(Math.Min(i, HostItems.Count), item);
-            }
-            item.Refresh();
+                HostItems.Insert(Math.Min(i, HostItems.Count), new HostRailItemViewModel(entry, _clock));
+            else
+                item.Refresh();
         }
         for (var i = HostItems.Count - 1; i >= 0; i--)
             if (!seen.Contains(HostItems[i].HostId))

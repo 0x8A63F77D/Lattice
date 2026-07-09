@@ -16,8 +16,8 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     {
         _entry = entry;
         _clock = clock;
-        _clock.Tick += OnTick;
         Refresh();
+        _clock.Tick += OnTick;
     }
 
     public Guid HostId => _entry.Config.Id;

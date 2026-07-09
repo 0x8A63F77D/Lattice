@@ -13,6 +13,7 @@ public class ShellViewModelTests : IAsyncLifetime
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private HostStore _store = null!;
+    private ManualUiClock _clock = null!;
     private ShellViewModel _shell = null!;
 
     public ValueTask InitializeAsync()
@@ -20,7 +21,8 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), TimeProvider.System);
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
-        _shell = new ShellViewModel(_registry, _store, new ManualUiClock(), () => new FakeGuiRpcClient());
+        _clock = new ManualUiClock();
+        _shell = new ShellViewModel(_registry, _store, _clock, () => new FakeGuiRpcClient());
         return ValueTask.CompletedTask;
     }
 
@@ -58,6 +60,17 @@ public class ShellViewModelTests : IAsyncLifetime
 
         _registry.RemoveHost(a.Id);
         Assert.Equal("b", Assert.Single(_shell.HostItems).Name);
+    }
+
+    [Fact]
+    public void Removing_a_host_disposes_its_rail_item_clock_subscription()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        Assert.Equal(1, _clock.SubscriberCount);
+
+        _registry.RemoveHost(host.Id);
+        Assert.Equal(0, _clock.SubscriberCount);
     }
 
     [Fact]
