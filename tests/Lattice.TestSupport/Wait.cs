@@ -6,7 +6,7 @@ namespace Lattice.Tests;
 /// <summary>Bounded real-time polling helpers for asserting on background-loop state.</summary>
 public static class Wait
 {
-    /// <summary>Polls until the condition holds; fails the test after 5 seconds.</summary>
+    /// <summary>Polls until the condition holds; throws TimeoutException (failing the test) after 5 seconds.</summary>
     public static async Task UntilAsync(Func<bool> condition, string? because = null)
     {
         var sw = Stopwatch.StartNew();
