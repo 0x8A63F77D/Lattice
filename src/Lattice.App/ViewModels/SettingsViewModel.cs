@@ -22,11 +22,31 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     public ObservableCollection<HostSettingsItemViewModel> Hosts { get; } = [];
 
+    public static IReadOnlyList<int> AllowedPollingIntervals => LatticeConfig.AllowedPollingIntervals;
+
+    public int PollingIntervalSeconds
+    {
+        get => _registry.PollingIntervalSeconds;
+        set
+        {
+            if (value != _registry.PollingIntervalSeconds)
+            {
+                _registry.SetPollingInterval(value);
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    /// <summary>Bubbled from items; the view shows the confirm dialog, then calls Remove.</summary>
+    public event EventHandler<HostSettingsItemViewModel>? RemoveRequested;
+
     public void ExpandHost(Guid hostId)
     {
         foreach (HostSettingsItemViewModel host in Hosts)
             host.IsExpanded = host.HostId == hostId;
     }
+
+    public void Remove(Guid hostId) => _registry.RemoveHost(hostId);
 
     /// <summary>Called by the shell when the store's host list changed.</summary>
     public void Reconcile()
@@ -38,8 +58,11 @@ public sealed partial class SettingsViewModel : ObservableObject
             HostEntry entry = _store.Hosts[i];
             seen.Add(entry.Config.Id);
             if (!byId.TryGetValue(entry.Config.Id, out HostSettingsItemViewModel? item))
-                Hosts.Insert(Math.Min(i, Hosts.Count),
-                    new HostSettingsItemViewModel(entry, _registry, _clientFactory));
+            {
+                item = new HostSettingsItemViewModel(entry, _registry, _clientFactory);
+                item.RemoveRequested += (_, _) => RemoveRequested?.Invoke(this, item);
+                Hosts.Insert(Math.Min(i, Hosts.Count), item);
+            }
             else
                 item.RefreshFromEntry();
         }
