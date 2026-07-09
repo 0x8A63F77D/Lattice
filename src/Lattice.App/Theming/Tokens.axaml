@@ -1,0 +1,64 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Design tokens: docs/design/m2/README.md §Design Tokens. UI code references
+       these keys only; literal hexes must not appear outside this file. -->
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="LatticeCanvasBrush" Color="#FAFAFA" />
+      <SolidColorBrush x:Key="LatticeSurfaceBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="LatticeNavSurfaceBrush" Color="#F5F5F5" />
+      <SolidColorBrush x:Key="LatticeStrokeBrush" Color="#E0E0E0" />
+      <SolidColorBrush x:Key="LatticeStrokeSubtleBrush" Color="#F0F0F0" />
+      <SolidColorBrush x:Key="LatticeTextPrimaryBrush" Color="#242424" />
+      <SolidColorBrush x:Key="LatticeTextSecondaryBrush" Color="#616161" />
+      <SolidColorBrush x:Key="LatticeTextTertiaryBrush" Color="#767676" />
+      <SolidColorBrush x:Key="LatticeAccentBrush" Color="#0F6CBD" />
+      <SolidColorBrush x:Key="LatticeSelectedTintBrush" Color="#EBF3FC" />
+      <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#107C10" />
+      <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#BC4B09" />
+      <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#FFF9F5" />
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBgBrush" Color="#FFF9F5" />
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#FDCFB4" />
+      <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#C50F1F" />
+      <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#FDF3F4" />
+      <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#616161" />
+      <SolidColorBrush x:Key="LatticeDisabledBrush" Color="#BDBDBD" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="LatticeCanvasBrush" Color="#1F1F1F" />
+      <SolidColorBrush x:Key="LatticeSurfaceBrush" Color="#292929" />
+      <SolidColorBrush x:Key="LatticeNavSurfaceBrush" Color="#202020" />
+      <SolidColorBrush x:Key="LatticeStrokeBrush" Color="#3D3D3D" />
+      <SolidColorBrush x:Key="LatticeStrokeSubtleBrush" Color="#333333" />
+      <SolidColorBrush x:Key="LatticeTextPrimaryBrush" Color="#FFFFFF" />
+      <SolidColorBrush x:Key="LatticeTextSecondaryBrush" Color="#D6D6D6" />
+      <SolidColorBrush x:Key="LatticeTextTertiaryBrush" Color="#ADADAD" />
+      <SolidColorBrush x:Key="LatticeAccentBrush" Color="#479EF5" />
+      <SolidColorBrush x:Key="LatticeSelectedTintBrush" Color="#123B5C" />
+      <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#9FD89F" />
+      <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#FAA06B" />
+      <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#3A2A1E" />
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBgBrush" Color="#411200" />
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#714224" />
+      <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#E37D80" />
+      <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#3A1E20" />
+      <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#ADADAD" />
+      <SolidColorBrush x:Key="LatticeDisabledBrush" Color="#5C5C5C" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <!-- Variant-independent layout tokens -->
+  <x:Double x:Key="LatticeNavWidth">260</x:Double>
+  <x:Double x:Key="LatticeNavCompactWidth">48</x:Double>
+  <x:Double x:Key="LatticeNavItemHeight">36</x:Double>
+  <x:Double x:Key="LatticeHostItemHeight">40</x:Double>
+  <x:Double x:Key="LatticeCommandBarHeight">52</x:Double>
+  <x:Double x:Key="LatticeGridHeaderHeight">32</x:Double>
+  <x:Double x:Key="LatticeRowHeight">36</x:Double>
+  <x:Double x:Key="LatticeRowHeightCompact">28</x:Double>
+  <x:Double x:Key="LatticeStatusBarHeight">28</x:Double>
+  <CornerRadius x:Key="LatticeSurfaceRadius">8</CornerRadius>
+  <CornerRadius x:Key="LatticeControlRadius">4</CornerRadius>
+  <Thickness x:Key="LatticePagePadding">16</Thickness>
+  <x:Double x:Key="LatticeGap">8</x:Double>
+</ResourceDictionary>
