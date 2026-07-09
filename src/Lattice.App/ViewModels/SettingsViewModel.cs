@@ -47,7 +47,14 @@ public sealed partial class SettingsViewModel : ObservableObject
     public void ExpandHost(Guid hostId)
     {
         foreach (HostSettingsItemViewModel host in Hosts)
+        {
             host.IsExpanded = host.HostId == hostId;
+            // The auth-failed rail linkage focuses this host directly; refresh it
+            // from its entry so the expanded card reflects live state (e.g. the
+            // auth-error banner) without depending on a prior store reconcile.
+            if (host.IsExpanded)
+                host.RefreshFromEntry();
+        }
     }
 
     public void Remove(Guid hostId) => _registry.RemoveHost(hostId);
