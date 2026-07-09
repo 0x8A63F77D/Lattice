@@ -12,6 +12,12 @@ public partial class AddHostDialog : FAContentDialog
         PrimaryButtonClick += OnPrimaryClick;
     }
 
+    // Subclassing changes the default StyleKey to AddHostDialog, so the
+    // FAContentDialog control theme no longer resolves and OnApplyTemplate
+    // can't find the PrimaryButton template part (KeyNotFoundException at
+    // first measure). Pin the base type's theme.
+    protected override Type StyleKeyOverride => typeof(FAContentDialog);
+
     // The primary button test-connects; on failure the dialog stays open and the
     // InfoBar renders the error. A deferral holds the close until AddAsync resolves.
     private async void OnPrimaryClick(FAContentDialog sender, FAContentDialogButtonClickEventArgs args)

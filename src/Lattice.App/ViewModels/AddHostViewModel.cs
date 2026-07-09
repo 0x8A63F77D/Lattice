@@ -62,7 +62,6 @@ public sealed partial class AddHostViewModel : ObservableObject
     private async Task AddAsync()
     {
         IsBusy = true;
-        AddCommand.NotifyCanExecuteChanged();
         try
         {
             var candidate = new HostConfig(
@@ -72,9 +71,19 @@ public sealed partial class AddHostViewModel : ObservableObject
                 await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
             if (result.Success)
             {
-                _registry.AddHost(candidate);
-                Succeeded = true;
-                ErrorText = null;
+                // AddHost persists the host list to disk synchronously; a write
+                // failure must land in the dialog's InfoBar, not escape the
+                // async void PrimaryButtonClick handler and down the app.
+                try
+                {
+                    _registry.AddHost(candidate);
+                    Succeeded = true;
+                    ErrorText = null;
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    ErrorText = $"Connected, but saving the host list failed: {ex.Message}";
+                }
             }
             else
             {
@@ -88,7 +97,6 @@ public sealed partial class AddHostViewModel : ObservableObject
         finally
         {
             IsBusy = false;
-            AddCommand.NotifyCanExecuteChanged();
         }
     }
 }
