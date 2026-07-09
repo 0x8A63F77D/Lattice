@@ -89,11 +89,36 @@ public class HostStoreTests : IAsyncLifetime
         var store = new HostStore(_registry, _manager, queue);
 
         _manager.Start();
-        await Wait.UntilAsync(() => queue.Drain() > 0, "posts should arrive");
+        await Wait.UntilAsync(() => queue.Pending > 0, "posts should arrive");
+
+        // The marshaling contract itself: state must stay untouched until the
+        // UI queue runs — pending events gate every mutation.
+        Assert.Equal(HostConnectionState.Disconnected, store.Hosts[0].Status.State);
+        Assert.Null(store.Hosts[0].Snapshot);
+
         await Wait.UntilAsync(() =>
         {
             queue.Drain();
             return store.Hosts[0].Status.State == HostConnectionState.Connected;
         }, "drained store should reach Connected");
+    }
+
+    [Fact]
+    public async Task Disposed_store_ignores_queued_events()
+    {
+        _registry.AddHost(TestData.MakeHostConfig());
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var changed = false;
+        store.Changed += (_, _) => changed = true;
+
+        _manager.Start();
+        await Wait.UntilAsync(() => queue.Pending > 0, "posts should arrive");
+
+        store.Dispose();
+        queue.Drain();
+
+        Assert.Equal(HostConnectionState.Disconnected, store.Hosts[0].Status.State);
+        Assert.False(changed);
     }
 }

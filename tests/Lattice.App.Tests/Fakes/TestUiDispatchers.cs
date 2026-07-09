@@ -16,6 +16,7 @@ public sealed class QueueUiDispatcher : IUiDispatcher
     private readonly object _gate = new();
     public bool CheckAccess() => true;
     public void Post(Action action) { lock (_gate) _queue.Enqueue(action); }
+    public int Pending { get { lock (_gate) return _queue.Count; } }
     public int Drain()
     {
         var n = 0;

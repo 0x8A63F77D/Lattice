@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Lattice.Core;
 
 namespace Lattice.App.Infrastructure;
@@ -28,6 +29,7 @@ public sealed class HostStore : IDisposable
     private readonly HostMonitorManager _manager;
     private readonly IUiDispatcher _dispatcher;
     private readonly List<HostEntry> _hosts = [];
+    private bool _disposed;
 
     public HostStore(HostRegistry registry, HostMonitorManager manager, IUiDispatcher dispatcher)
     {
@@ -48,9 +50,13 @@ public sealed class HostStore : IDisposable
 
     public void Dispose()
     {
+        // Runs on the UI thread, as do the queued Post closures below — the
+        // flag is therefore a deterministic guard, not a racy one.
+        _disposed = true;
         _registry.Changed -= OnRegistryChanged;
         _manager.StatusChanged -= OnStatusChanged;
         _manager.SnapshotUpdated -= OnSnapshotUpdated;
+        Changed = null;
     }
 
     private static ConnectionStatus InitialStatus(Guid hostId) =>
@@ -60,6 +66,7 @@ public sealed class HostStore : IDisposable
 
     private void OnRegistryChanged(object? sender, RegistryChangedEventArgs e)
     {
+        Debug.Assert(_dispatcher.CheckAccess(), "HostRegistry mutations must come from the UI thread.");
         switch (e.Kind)
         {
             case RegistryChangeKind.HostAdded:
@@ -81,6 +88,7 @@ public sealed class HostStore : IDisposable
     private void OnStatusChanged(object? sender, ConnectionStatus status) =>
         _dispatcher.Post(() =>
         {
+            if (_disposed) return;
             if (Find(status.HostId) is { } entry)
             {
                 entry.Status = status;
@@ -91,6 +99,7 @@ public sealed class HostStore : IDisposable
     private void OnSnapshotUpdated(object? sender, HostSnapshot snapshot) =>
         _dispatcher.Post(() =>
         {
+            if (_disposed) return;
             if (Find(snapshot.HostId) is { } entry)
             {
                 entry.Snapshot = snapshot;
