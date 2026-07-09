@@ -50,11 +50,11 @@ public partial class App : Application
         {
             return HostRegistry.Load(path);
         }
-        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
             try { File.Move(path, $"{path}.corrupt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}"); }
             catch { /* keep going with defaults; nothing useful to do */ }
-            return new HostRegistry(new LatticeConfig(5, []), path);
+            return new HostRegistry(LatticeConfig.Default, path);
         }
     }
 }
