@@ -4,7 +4,6 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <IsPackable>false</IsPackable>
-    <UseAppHost>true</UseAppHost>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" Version="12.0.5" />

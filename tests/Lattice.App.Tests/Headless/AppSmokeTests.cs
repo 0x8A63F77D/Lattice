@@ -6,12 +6,6 @@ namespace Lattice.App.Tests.Headless;
 
 public class AppSmokeTests
 {
-    [Fact]
-    public void A_simple_test_passes()
-    {
-        Assert.True(true);
-    }
-
     [AvaloniaFact]
     public void A_window_can_open_under_the_fluent_theme()
     {
