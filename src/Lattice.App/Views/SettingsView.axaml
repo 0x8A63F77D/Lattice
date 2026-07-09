@@ -33,7 +33,10 @@
                   <TextBlock Grid.Row="2" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
                   <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PortText, Mode=TwoWay}" />
                   <TextBlock Grid.Row="3" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
-                  <TextBox x:Name="PasswordBox" Grid.Row="3" Grid.Column="1" PasswordChar="●"
+                  <!-- Known limitation (accepted + ledger-tracked): Avalonia's TextBoxAutomationPeer
+                       exposes the raw Text via UI Automation regardless of PasswordChar, and neither
+                       Avalonia 12 nor FluentAvalonia 3 ships a first-party PasswordBox. -->
+                  <TextBox Grid.Row="3" Grid.Column="1" PasswordChar="●"
                            Text="{Binding Password, Mode=TwoWay}"
                            PlaceholderText="From gui_rpc_auth.cfg" />
                 </Grid>
