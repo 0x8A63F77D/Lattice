@@ -79,6 +79,57 @@ public class ShellWindowTests
     }
 
     [AvaloniaFact]
+    public void Tasks_is_highlighted_on_first_render()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        Assert.Same(window.NavTasks, window.Nav.SelectedItem);
+        var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
+        Assert.Equal("Tasks", page.Title);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Programmatic_view_selection_moves_the_nav_highlight()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        shell.SelectViewCommand.Execute("2");
+
+        Assert.Same(window.NavTransfers, window.Nav.SelectedItem);
+        // Reentrancy check: the Nav.SelectedItem assignment re-enters
+        // OnNavSelectionChanged -> SelectViewCommand; the VM equality guard must
+        // stop the loop with the page still on Transfers.
+        var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
+        Assert.Equal("Transfers", page.Title);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Navigating_to_settings_highlights_the_footer_item()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        shell.NavigateToSettings();
+
+        Assert.Same(window.NavSettings, window.Nav.SelectedItem);
+        // Reentrancy check: highlighting the footer item re-enters
+        // OnNavSelectionChanged -> NavigateToSettings; the equality guards must
+        // leave the page settled on Settings.
+        Assert.Same(shell.Settings, shell.CurrentPage);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void Host_rail_renders_one_item_per_host()
     {
         var (window, shell, registry) = MakeShell();

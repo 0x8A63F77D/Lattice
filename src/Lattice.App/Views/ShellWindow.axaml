@@ -57,17 +57,17 @@
             <ui:FAPathIconSource Data="{StaticResource IconTaskListSquareLtrRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem Content="Projects" Tag="1">
+        <ui:FANavigationViewItem x:Name="NavProjects" Content="Projects" Tag="1">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconGridRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem Content="Transfers" Tag="2">
+        <ui:FANavigationViewItem x:Name="NavTransfers" Content="Transfers" Tag="2">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem Content="Event log" Tag="3">
+        <ui:FANavigationViewItem x:Name="NavEventLog" Content="Event log" Tag="3">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
           </ui:FANavigationViewItem.IconSource>
@@ -98,7 +98,7 @@
                     <PathIcon Width="16" Height="16" IsVisible="{Binding IsConnected}"
                               Data="{StaticResource IconCheckmarkCircleRegular}"
                               Foreground="{DynamicResource LatticeSuccessBrush}" />
-                    <PathIcon Classes="spin" Width="16" Height="16" IsVisible="{Binding IsConnecting}"
+                    <PathIcon Classes.spin="{Binding IsConnecting}" Width="16" Height="16" IsVisible="{Binding IsConnecting}"
                               Data="{StaticResource IconArrowSyncRegular}"
                               Foreground="{DynamicResource LatticeAccentBrush}" />
                     <PathIcon Width="16" Height="16" IsVisible="{Binding IsRetrying}"
@@ -125,7 +125,7 @@
       </ui:FANavigationView.PaneCustomContent>
 
       <ui:FANavigationView.FooterMenuItems>
-        <ui:FANavigationViewItem Content="Settings" Tag="settings">
+        <ui:FANavigationViewItem x:Name="NavSettings" Content="Settings" Tag="settings">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconSettingsRegular}" />
           </ui:FANavigationViewItem.IconSource>
