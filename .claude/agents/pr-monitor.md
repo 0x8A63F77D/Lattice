@@ -49,9 +49,12 @@ So each Phase-1 cycle checks BOTH signals via `mcp__github__pull_request_read`:
 - **Already-posted result?** `get_reviews` + `get_comments` — is there a Codex
   (`chatgpt-codex-connector[bot]`) review/comment tied to the head sha (or newer than
   baseline)? If yes → jump straight to `Codex: POSTED` (Phase 2 is already satisfied).
-- **Ack?** `get_comments` returns each comment with a `reactions` object inline; find the
-  comment whose `id` == the trigger comment id and read `reactions.eyes` (`eyes >= 1` = Codex
-  acknowledged).
+- **Ack?** Call `get_comments` with **`perPage: 100`** and find the comment whose `id` == the
+  trigger comment id, then read its `reactions.eyes` (`eyes >= 1` = Codex acknowledged). This
+  MCP returns comments **oldest-first and paginated**, so the newest (trigger) comment falls
+  off a small default page — `perPage: 100` guarantees it's present (page to the last page in
+  the rare case of >100 comments). NEVER treat "trigger id not in the results" as `eyes == 0`
+  unless you actually fetched the page it lives on.
 
 Interval ≈ 15–20 s, SHORT Bash `sleep` between polls. **Total Phase-1 cap = 5 minutes.** Resolve:
 - **A result already posted →** `Codex: POSTED` and stop (do not wait further).
@@ -61,7 +64,8 @@ Interval ≈ 15–20 s, SHORT Bash `sleep` between polls. **Total Phase-1 cap = 
   NO-ACK after confirming no result exists — never on absent eyes alone.
 
 ## Phase 2 — review-result wait (long)
-Only after ACK. Now wait for the review itself.
+Only after ACK. Wait for the review AND for CI to settle — the handoff needs both, so do NOT
+stop the instant Codex posts if the CI matrix is still running (a later leg could still fail).
 
 - Each cycle poll `get_reviews` and `get_comments` for a NEW review/comment by
   `chatgpt-codex-connector[bot]` tied to the head sha (its `commit_id` == head, or an id not
@@ -70,6 +74,12 @@ Only after ACK. Now wait for the review itself.
   further.
 - Interval ≈ 20–30 s, SHORT `sleep`-only Bash between cycles. Cap Phase 2 at ≈15 minutes
   (~30 cycles).
+- **Terminal conditions:** (a) any CI check fails/cancels/times-out → report immediately
+  (`Codex: <state> · CI: FAILED <name>`), regardless of Codex; (b) Codex has responded AND all
+  CI checks completed `success` → `Codex: POSTED`; (c) Codex posts an error/quota/limit reply
+  → `Codex: ERROR`; (d) cap hit → `Codex: TIMEOUT` (report whatever state exists). If Codex has
+  posted but CI is still mid-flight and not yet failed, keep polling until CI is terminal —
+  don't stop early.
 
 ## Reporting format (status only)
 Report exactly one terminal status, plus the CI rollup and PR URL, then end:
