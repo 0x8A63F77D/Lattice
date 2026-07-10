@@ -4,13 +4,13 @@
 
 Lattice is a cross-platform Avalonia (XAML) desktop app using **Fluent 2 via FluentAvalonia** that monitors BOINC clients on multiple hosts — a modern BOINCTasks replacement. **M2 is read-only**: display state only; control actions (suspend/abort/attach) come in M3 but the layout reserves space for them (disabled command-bar buttons).
 
-This package specifies the app shell + 5 views + all states, with an approved shell direction (option "1c" from the design exploration).
+This package specifies the app shell + 5 views + all states. Approved shell direction: option "1c" from the design exploration, **as amended by rev. B (sections 3a/3b)** — hosts rail bottom-docked + management moved out of Settings. Where rev. B conflicts with older sections, rev. B wins.
 
 ## About the Design Files
 
 `Lattice M2 Spec.html` is a **design reference created in HTML** — a spec document with pixel-accurate mockups and annotations, NOT production code. The task is to **recreate these designs natively in Avalonia XAML with FluentAvalonia controls**, following the control mapping below. Do not port any HTML/CSS.
 
-Open the file in a browser to view. Sections are labeled: 1a/1b/1c (shell options — **1c is the approved direction**), 1d (row anatomy), 1e (state matrix), 1f (dark theme), 1g (tokens), 2a Projects, 2b Transfers, 2c Event log, 2d Settings, 2e Motion, 2f Responsive.
+Open the file in a browser to view. Sections are labeled: **3a (hosts rail — final) and 3b (host management — final): the rev. B amendments, at the top of the doc**; 1a/1b/1c (shell options — 1c is the approved base), 1d (row anatomy), 1e (state matrix), 1f (dark theme), 1g (tokens), 2a Projects, 2b Transfers, 2c Event log, 2d Settings, 2e Motion, 2f Responsive.
 
 ## Fidelity
 
@@ -35,21 +35,28 @@ Column and field names split into what exists today vs. what the M2 milestone mu
 - `FileTransfer` model + `get_file_transfers` RPC (Transfers view)
 - Per-host connection-state machine in the Core layer: `connected / connecting / retrying(backoff, attempt) / unreachable / auth-failed`
 
-## App shell (approved: option 1c)
+## App shell (approved: option 1c, amended by rev. B — see 3a)
 
 **NavigationView, Left mode, 260px** (collapses to 48px LeftCompact — see Responsive).
 
-Two zones in one rail:
+Three zones in one rail (top → bottom):
 1. **Views (MenuItems, top)**: Tasks, Projects, Transfers, Event log. Item = 36px high, 20px icon (regular at rest, **filled + accent when selected**), 13px label. Selected: 3px accent pill on left + `#EBEBEB` bg. Right-aligned inline counts (Tasks 47, Transfers 2) in 12px secondary; Event log carries a red **InfoBadge** = unread warning+error count.
-2. **Hosts section (below a separator)**: header "Hosts" (11px semibold secondary) + "+" quick-add button. First entry **All hosts** (aggregate), then one 40px two-line entry per host: line 1 = host name (13px), line 2 = connection state (11px). Selecting a host scopes ALL views; scope persists across view switches. All-hosts selected state uses brand tint bg `#EBF3FC` + accent pill. Per-host InfoBadge when that host has alerts.
-3. **Footer**: Settings.
+2. **Hosts section — bottom-docked in the `PaneFooter` slot, directly above Settings** (rev. B; it is a custom selectable list control, NOT NavigationViewItems — NavigationView single-selection covers views only, the hosts list keeps its own independent selection = the global scope; both selected states render simultaneously). The vertical gap between views and hosts is intentional: MenuItems absorbs remaining height, do not fill it. Header "Hosts" (11px semibold secondary) + "+" button (opens the Add host dialog — see Host management). Row anatomy: 40px two-line entry per host, line 1 = host name (13px), line 2 = connection state (11px). Selecting a host scopes ALL views; scope persists across view switches. All-hosts selected state uses brand tint bg `#EBF3FC` + accent pill. Per-host InfoBadge when that host has alerts.
+   **Scale rule (3a) — height-adaptive, not count-based**: 1 host → single row, no "All hosts" entry (scope pinned to it), header + "+" kept · flat list ("All hosts" first) whenever it fits the footer budget · **doesn't fit → status groups**: Attention (unreachable/auth-failed/retrying — always expanded, 36px rows) · Healthy · Offline (collapsed 28px count rows; expand state persists). Fit test: available list height = window height − ~290px fixed rail chrome (logo + 4 view items + separators/headers + Settings); at 40px/row that's All hosts + ~8 hosts on a 768-high screen, +16 at 1080, +25 at 1440. The rail never scrolls internally in auto mode; window resize across the fit boundary re-evaluates.
+   **Manual override**: a list/group toggle icon in the Hosts header (left of "+"), shown only while auto-grouping is in effect; forces flat (internal scroll, user's choice) or grouped; persisted per machine.
+3. **Footer**: Settings (FooterMenuItems, below the hosts block).
 
 **Host connection states** (icon + text, never color alone):
 - Connected — `checkmark_circle` regular, success color; subtext "Connected · N tasks"
 - Connecting — `arrow_sync` rotating (1.5s/rev linear, the only allowed looping animation), brand color; "Connecting…"
 - Retrying — `arrow_clockwise`, warning color; "Retrying in 12s (attempt 3)" — countdown updates every second, plain text swap, no animation
 - Unreachable — `dismiss_circle`, danger color; tooltip carries last error
-- Auth-failed — `key`, danger color; "Wrong password"; clicking navigates to Settings with that host's expander open and password field focused
+- Auth-failed — `key`, danger color; "Wrong password"; clicking opens the **Edit host dialog** with the password field in error state and focused (rev. B; formerly Settings navigation)
+
+**Host management (rev. B — see 3b):**
+- **"+"** in the Hosts header opens the **Add host ContentDialog** directly (no Settings round-trip).
+- **Right-click a host row → MenuFlyout**: Edit host… (same ContentDialog retitled, fields prefilled) · Test connection (result as inline state-subtext change + tooltip) · Remove host… (ContentDialog confirm). 32px items; danger item `#C50F1F`; icon + label.
+- "All hosts" and group header rows have no context menu in M2 (batch operations = M3 candidate).
 
 ## Screens
 
@@ -98,13 +105,13 @@ Columns: File * (ellipsis+tooltip) · Project 140 · Direction 80 · Progress 19
 - Virtualized; retain last 5,000 messages/host. New rows do NOT animate while Following (high frequency).
 - Status bar: "412 messages · 3 reachable hosts · showing all priorities" / "Following live".
 
-### Settings (2d)
+### Settings (2d, amended by rev. B — see 3b)
 
-- **Hosts group**: one **SettingsExpander** per host. Header: `server` icon, host name, subtext "192.168.1.40:31416 · Connected" (state text colored but also plain-language). Expanded content: Address / Port / Password fields, "Test connection" secondary button, "Save" primary, "Remove host" danger text-button (opens ContentDialog confirm).
-  - **Auth-failed host auto-expands** with password field in error state (danger border) and actionable message: "The host refused this password. Check the gui_rpc_auth.cfg on office-pc."
+- **Hosts group: REMOVED** (rev. B). Host management lives in the rail: "+" → Add host dialog; right-click a host → Edit / Test connection / Remove. Settings keeps **global groups only** (Polling, Theme) plus a one-line pointer caption: "Hosts are managed from the sidebar — use '+' to add, right-click a host to edit or remove."
+- **Edit host — ContentDialog** (rev. B): identical to Add host, retitled, fields prefilled; auth-failed deep link opens it with the password field in error state (danger border) + message: "The host refused this password. Check gui_rpc_auth.cfg on mini-01." and a "Test connection" text-button in the footer.
 - **Add host — ContentDialog**: Name (optional, "Defaults to the address") · Address (required; Add disabled while empty) · Port (prefilled 31416) · Password ("From gui_rpc_auth.cfg") · info strip: "Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg." Primary button shows inline ProgressRing while connecting; failure renders an InfoBar in the dialog.
-- **Polling group**: SettingsExpander-style row + ComboBox: 2/5/10/30/60 seconds, default 5.
-- First-run empty state (no hosts): centered `server` icon, "Connect your first host", caption "Lattice monitors BOINC clients over GUI RPC (port 31416).", accent button "Add a host" → opens the dialog. Nav rail hides the Hosts section in this state.
+- **Polling group**: SettingsExpander-style row + ComboBox: 2/5/10/30/60 seconds, default 5. **Theme group** (rev. B): Light / Dark / System ComboBox (dark spec in 1f).
+- First-run empty state (no hosts): centered `server` icon, "Connect your first host", caption "Lattice monitors BOINC clients over GUI RPC (port 31416).", accent button "Add a host" → opens the dialog directly. Nav rail hides the Hosts section in this state.
 
 ## States summary (1e)
 
@@ -179,7 +186,8 @@ Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their sur
 
 | Region | Control |
 |---|---|
-| Shell | NavigationView (Left, PaneDisplayMode auto-compact); hosts = custom two-line NavigationViewItem template |
+| Shell | NavigationView (Left, PaneDisplayMode auto-compact); views = MenuItems; hosts = **custom selectable list control in `PaneFooter`** (two-line rows; own selection state, independent of NavigationView's) |
+| Host row context menu | MenuFlyout (Edit / Test connection / Remove) |
 | Alert counts | InfoBadge |
 | Partial banner, dialog errors | InfoBar |
 | All lists | DataGrid (virtualized, sortable) |
@@ -207,3 +215,6 @@ Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their sur
 4. No pill capsules for project status — icon + text everywhere; parent row 14px vs child 12px for hierarchy.
 5. Event log: no in-view host TabView; scope via nav rail; merged stream gets a Host column.
 6. Flat table + Host column for all-hosts task aggregation (no grouping headers — cross-host sorting is the core scenario); grouping toggle possible in M3.
+7. **(rev. B)** Hosts rail bottom-docked in PaneFooter — resolves the FANavigationView slot constraint (PaneCustomContent-on-top was rejected in demo review); the views↔hosts gap is accepted, never filled. Scale-adaptive: single row / flat list / status groups — switch is **height-based ("fits → flat, doesn't → grouped")**, not a fixed host count (a fixed >12 overflows 768-high laptops at 9 hosts and wastes 1440p at 13); manual list/group override in the Hosts header, persisted.
+8. **(rev. B)** Host management moved out of Settings: "+" → Add host dialog; right-click host → MenuFlyout (Edit / Test / Remove); auth-failed click → Edit dialog with password error. Settings = global groups only.
+9. **(rev. B)** Primary persona is single-host/local; multi-host farms (community) drive the scale rule — persistent status list beats a scope-picker flyout for "which node died at a glance".
