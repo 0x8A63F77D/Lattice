@@ -41,15 +41,6 @@ public class AddHostDialogTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    // FAContentDialog's FinalCloseDialog awaits Task.Delay(200) before resolving
-    // the ShowAsync task, so draining dispatcher jobs alone never settles a
-    // dialog transition — a real delay must elapse first.
-    private static async Task SettleDialogAsync()
-    {
-        await Task.Delay(300);
-        Dispatcher.UIThread.RunJobs();
-    }
-
     [AvaloniaFact]
     public void Double_firing_add_host_opens_exactly_one_dialog()
     {
@@ -92,7 +83,9 @@ public class AddHostDialogTests
             .Single(b => b.Name == "PrimaryButton");
         Assert.True(primary.IsEnabled);
         primary.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        await SettleDialogAsync();
+        // The failure path never runs the 200 ms close delay (the deferral cancels
+        // the close), so the outcome is: error surfaced and the button re-enabled.
+        await HeadlessSync.WaitUntilAsync(() => vm.ErrorText is not null && dialog.IsPrimaryButtonEnabled);
 
         Assert.NotNull(vm.ErrorText);
         Assert.Contains("Connection refused", vm.ErrorText);

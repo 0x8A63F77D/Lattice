@@ -43,15 +43,6 @@ public class SettingsViewTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    // FAContentDialog's FinalCloseDialog awaits Task.Delay(200) before resolving
-    // the ShowAsync task, so draining dispatcher jobs alone never completes the
-    // close — a real delay must elapse first.
-    private static async Task SettleDialogAsync()
-    {
-        await Task.Delay(300);
-        Dispatcher.UIThread.RunJobs();
-    }
-
     [AvaloniaFact]
     public void Renders_one_expander_per_host_plus_polling_selector()
     {
@@ -78,7 +69,7 @@ public class SettingsViewTests
 
         var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
         dialog.Hide(FAContentDialogResult.Primary);
-        await SettleDialogAsync();
+        await HeadlessSync.WaitUntilAsync(() => registry.Hosts.Count == 1);
 
         Assert.Single(registry.Hosts);
         Assert.DoesNotContain(registry.Hosts, h => h.Id == removed.HostId);
@@ -97,7 +88,8 @@ public class SettingsViewTests
 
         var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
         dialog.Hide(FAContentDialogResult.None);
-        await SettleDialogAsync();
+        await HeadlessSync.WaitUntilAsync(
+            () => !window.GetVisualDescendants().OfType<FAContentDialog>().Any());
 
         Assert.Equal(2, registry.Hosts.Count);
         window.Close();
@@ -121,7 +113,9 @@ public class SettingsViewTests
         // the second call throws ArgumentException unhandled on the dispatcher).
         var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
         dialog.Hide(FAContentDialogResult.Primary);
-        await SettleDialogAsync();
+        await HeadlessSync.WaitUntilAsync(
+            () => registry.Hosts.Count == 1
+                && !window.GetVisualDescendants().OfType<FAContentDialog>().Any());
 
         Assert.Single(registry.Hosts);
         Assert.DoesNotContain(registry.Hosts, h => h.Id == removed.HostId);
