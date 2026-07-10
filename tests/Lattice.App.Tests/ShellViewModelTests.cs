@@ -57,10 +57,10 @@ public class ShellViewModelTests : IAsyncLifetime
         var b = TestData.MakeHostConfig(name: "b");
         _registry.AddHost(a);
         _registry.AddHost(b);
-        Assert.Equal(2, _shell.HostItems.Count);
+        Assert.Equal(2, _shell.RailEntries.OfType<HostRailItemViewModel>().Count());
 
         _registry.RemoveHost(a.Id);
-        Assert.Equal("b", Assert.Single(_shell.HostItems).Name);
+        Assert.Equal("b", Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>()).Name);
     }
 
     [Fact]

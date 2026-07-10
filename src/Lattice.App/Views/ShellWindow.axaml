@@ -97,9 +97,27 @@
           </DockPanel>
           <ListBox x:Name="HostList" x:FieldModifier="public" Classes="hostRail"
                    Background="Transparent"
-                   ItemsSource="{Binding HostItems}"
+                   ItemsSource="{Binding RailEntries}"
+                   SelectedItem="{Binding SelectedRailEntry, Mode=TwoWay}"
                    SelectionChanged="OnHostSelectionChanged">
-            <ListBox.ItemTemplate>
+            <ListBox.DataTemplates>
+              <DataTemplate x:DataType="vm:AllHostsRailItemViewModel">
+                <DockPanel Height="{StaticResource LatticeHostItemHeight}"
+                           ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+                  <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="{StaticResource IconAppsListRegular}"
+                              Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+                  </Panel>
+                  <StackPanel x:Name="AllHostsText" VerticalAlignment="Center" Margin="4,0,0,0"
+                              IsVisible="{Binding #Nav.IsPaneOpen}">
+                    <TextBlock Text="{Binding Name}" FontSize="13"
+                               Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+                    <TextBlock Text="{Binding Subtext}" FontSize="11"
+                               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
               <DataTemplate x:DataType="vm:HostRailItemViewModel">
                 <DockPanel Height="{StaticResource LatticeHostItemHeight}"
                            ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
@@ -129,7 +147,7 @@
                   </StackPanel>
                 </DockPanel>
               </DataTemplate>
-            </ListBox.ItemTemplate>
+            </ListBox.DataTemplates>
           </ListBox>
         </StackPanel>
       </ui:FANavigationView.PaneCustomContent>

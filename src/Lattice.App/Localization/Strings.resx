@@ -124,7 +124,8 @@
     Naming: keys are based on meaning/content (e.g., SettingsSaveButton), not role.
     Exception: role-based stems (e.g., AddHostPrimaryButton/AddHostCloseButton) for FluentAvalonia dual-button dialog slots.
     Exception: a *Word suffix marks a bare state noun reused across surfaces (the rail composes them, Settings shows them bare).
-    Note: Hosts-prefixed keys belong to the Rail banner (nav pane host list).
+    Note: Hosts-prefixed keys belong to the Rail banner (nav pane host list);
+    AllHosts-prefixed keys are the same rail's first (aggregate) entry.
   -->
   <!-- ===== AddHost ===== -->
   <data name="AddHostCloseButton" xml:space="preserve">
@@ -175,6 +176,15 @@
     <value>Connect your first host</value>
   </data>
   <!-- ===== Nav ===== -->
+  <data name="AllHosts" xml:space="preserve">
+    <value>All hosts</value>
+  </data>
+  <data name="AllHostsCountFmt" xml:space="preserve">
+    <value>{0} hosts</value>
+  </data>
+  <data name="AllHostsPartialFmt" xml:space="preserve">
+    <value>{0} of {1} connected</value>
+  </data>
   <data name="HostsAddTooltip" xml:space="preserve">
     <value>Add a host</value>
   </data>

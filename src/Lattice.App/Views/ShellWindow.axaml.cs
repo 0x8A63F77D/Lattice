@@ -106,17 +106,11 @@ public partial class ShellWindow : Window
     {
         if (_shell is null)
             return;
-        if (HostList.SelectedItem is HostRailItemViewModel item)
-        {
-            _shell.Scope = new ScopeSelection(item.HostId);
-            // Design: clicking an auth-failed host navigates to Settings with that
-            // host's expander open (the one cross-view linkage).
-            if (item.State == RailState.AuthFailed)
-                _shell.NavigateToSettings(item.HostId);
-        }
-        else
-        {
-            _shell.Scope = ScopeSelection.AllHosts;
-        }
+        // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding;
+        // this handler only owns the one remaining cross-view linkage: clicking an
+        // auth-failed host jumps to Settings with that host's expander open. The
+        // All-hosts sentinel never navigates.
+        if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
+            _shell.NavigateToSettings(item.HostId);
     }
 }

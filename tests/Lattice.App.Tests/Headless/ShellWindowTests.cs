@@ -139,7 +139,8 @@ public class ShellWindowTests
         registry.AddHost(TestData.MakeHostConfig(name: "a"));
         registry.AddHost(TestData.MakeHostConfig(name: "b"));
         Layout(window);
-        Assert.Equal(2, window.HostList.ItemCount);
+        // +1 for the All-hosts sentinel that always leads the rail.
+        Assert.Equal(3, window.HostList.ItemCount);
         window.Close();
     }
 
@@ -167,8 +168,10 @@ public class ShellWindowTests
 
         // The theme's ListBoxItem MinWidth (88) used to overflow the 48px strip;
         // layout then centers the oversized item at a negative offset and the
-        // state icon renders half-clipped at the pane edge.
-        var item = window.HostList.GetVisualDescendants().OfType<ListBoxItem>().Single();
+        // state icon renders half-clipped at the pane edge. Two rows now exist
+        // (the All-hosts sentinel plus this one host) — target the host row.
+        var item = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(li => li.DataContext is HostRailItemViewModel);
         var origin = item.TranslatePoint(new Point(0, 0), window)!.Value;
         Assert.True(origin.X >= 0, $"rail item starts at x={origin.X}");
         Assert.True(item.Bounds.Width <= window.Nav.CompactPaneLength,
