@@ -111,8 +111,16 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             .ThenBy(r => r.Deadline)
             .ToList();
 
-        Rows.Clear();
-        foreach (var row in rows) Rows.Add(row);
+        // Replace the collection only when contents actually changed (rows are
+        // value-equal records, so SequenceEqual is a semantic comparison): the
+        // 1s tick also lands here, and an unconditional Clear()+Add would fire
+        // Reset + N Adds every second and reset a bound DataGrid's selection
+        // onto brand-new row instances.
+        if (!rows.SequenceEqual(Rows))
+        {
+            Rows.Clear();
+            foreach (var row in rows) Rows.Add(row);
+        }
 
         // Counts/at-risk cover the reachable, UNFILTERED set: a stable summary
         // that the text/state filter shouldn't perturb.

@@ -213,7 +213,7 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task CountsText_matches_a_crafted_mix_and_polling_reads_the_registry_interval()
+    public async Task CountsText_matches_a_crafted_mix()
     {
         var fake = new FakeGuiRpcClient
         {
@@ -232,6 +232,16 @@ public class TasksViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() => vm.Rows.Count == 5);
 
         Assert.Equal(string.Format(Strings.CountsFmt, 5, 2, 1, 1), vm.CountsText);
+    }
+
+    [Fact]
+    public async Task PollingText_reads_the_registry_interval()
+    {
+        AddHost("host-a", new FakeGuiRpcClient());
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading, "first snapshot should land");
+
         Assert.Equal(string.Format(Strings.PollingFmt, 5), vm.PollingText);
     }
 
@@ -335,6 +345,38 @@ public class TasksViewModelTests : IAsyncLifetime
         _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
         _clock.Advance(TimeSpan.FromSeconds(3));
 
+        Assert.Equal(string.Format(Strings.UpdatedSecondsFmt, 3), vm.UpdatedText);
+    }
+
+    [Fact]
+    public async Task Clock_tick_does_not_churn_rows_when_task_data_is_unchanged()
+    {
+        // The 1s tick funnels into Rebuild() like every other trigger, but with
+        // unchanged task data it must NOT replace the row collection: a DataGrid
+        // bound to Rows would otherwise see a Reset + re-Add every second and a
+        // future SelectedItem binding would lose selection every tick (rows are
+        // value-equal records, so identity must be preserved when nothing changed).
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "steady")]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        var firstRow = vm.Rows[0];
+        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        var collectionChanges = 0;
+        vm.Rows.CollectionChanged += (_, _) => collectionChanges++;
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, collectionChanges);
+        Assert.Same(firstRow, vm.Rows[0]);
+        // The tick path itself must stay alive: freshness text still advances.
         Assert.Equal(string.Format(Strings.UpdatedSecondsFmt, 3), vm.UpdatedText);
     }
 
