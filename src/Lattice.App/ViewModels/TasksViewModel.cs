@@ -18,11 +18,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     private readonly IUiClock _clock;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
-    // The dismissed partial-bar id-set and the set computed on the last Rebuild.
-    // Episode semantics (when a dismissal holds, when it is forgotten) live in
-    // PartialBarPolicy; this class only stores the state and applies the scope gate.
-    private IReadOnlySet<Guid> _dismissedUnreachable = new HashSet<Guid>();
-    private IReadOnlySet<Guid> _unreachableIds = new HashSet<Guid>();
+    // The dismissed partial-bar fingerprint and the one computed on the last
+    // Rebuild. Episode semantics (when a dismissal holds, when it is
+    // forgotten) live in PartialBarPolicy; this class only stores the state
+    // and applies the scope gate.
+    private PartialBarPolicy.Fingerprint _dismissedFingerprint = PartialBarPolicy.EmptyFingerprint;
+    private PartialBarPolicy.Fingerprint _currentFingerprint = PartialBarPolicy.EmptyFingerprint;
 
     public TasksViewModel(HostStore store, IUiClock clock)
     {
@@ -69,7 +70,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissPartial()
     {
-        _dismissedUnreachable = PartialBarPolicy.Dismiss(_unreachableIds);
+        _dismissedFingerprint = PartialBarPolicy.Dismiss(_currentFingerprint);
         ShowPartialBar = false;
     }
 
@@ -145,29 +146,37 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         IsUpdateStale = scoped.Any(h =>
             RailStateProjection.From(h.Status) is RailState.Retrying or RailState.Unreachable);
 
-        _unreachableIds = _store.Hosts
+        var unreachableIds = _store.Hosts
             .Where(h => RailStateProjection.From(h.Status) is RailState.Unreachable or RailState.AuthFailed)
             .Select(h => h.Config.Id)
             .ToHashSet();
 
-        // Episode semantics (dismissal forgotten on full recovery; any id-set
-        // change re-reports) are PartialBarPolicy's; the All-hosts scope gate
-        // is the one piece that stays here.
-        (IReadOnlySet<Guid> dismissed, bool visible) =
-            PartialBarPolicy.Advance(_dismissedUnreachable, _unreachableIds);
-        _dismissedUnreachable = dismissed;
+        // "tasks below cover {2} hosts" must count the exact set Rows are
+        // built from (Connected AND snapshotted; the bar only shows in the
+        // All-hosts scope, so `reachable` spans every host here) — NOT total
+        // minus unreachable-tier, which would also count Retrying/Connecting
+        // hosts whose tasks are not in the grid (Codex P2). This same covered
+        // set also feeds the dismissal fingerprint below (Codex P2 round 2):
+        // a dismissed bar must reappear when a covered host drops out, even
+        // if the unreachable tier itself never changes.
+        var coveredIds = reachable
+            .Where(h => h.Snapshot is not null)
+            .Select(h => h.Config.Id)
+            .ToHashSet();
+
+        // Episode semantics (dismissal forgotten on full recovery; any
+        // fingerprint change re-reports) are PartialBarPolicy's; the
+        // All-hosts scope gate is the one piece that stays here.
+        _currentFingerprint = new PartialBarPolicy.Fingerprint(unreachableIds, coveredIds);
+        (PartialBarPolicy.Fingerprint dismissed, bool visible) =
+            PartialBarPolicy.Advance(_dismissedFingerprint, _currentFingerprint);
+        _dismissedFingerprint = dismissed;
         ShowPartialBar = Scope.IsAllHosts && visible;
 
         if (ShowPartialBar)
         {
-            // "tasks below cover {2} hosts" must count the exact set Rows are
-            // built from (Connected AND snapshotted; the bar only shows in the
-            // All-hosts scope, so `reachable` spans every host here) — NOT
-            // total minus unreachable-tier, which would also count Retrying/
-            // Connecting hosts whose tasks are not in the grid (Codex P2).
-            var covered = reachable.Count(h => h.Snapshot is not null);
             PartialBarText = string.Format(
-                Strings.PartialFmt, _unreachableIds.Count, _store.Hosts.Count, covered);
+                Strings.PartialFmt, unreachableIds.Count, _store.Hosts.Count, coveredIds.Count);
         }
 
         // Overlay choice (loading skeleton vs empty message vs neither) is

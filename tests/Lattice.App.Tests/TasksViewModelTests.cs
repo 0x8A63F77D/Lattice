@@ -312,6 +312,66 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Partial_bar_reappears_when_a_dismissed_covered_host_drops_out()
+    {
+        // Codex P2 (design doc: InfoBar "reappears when the reachable set
+        // changes"): the dismissal fingerprint must cover the whole
+        // partial-state picture — (unreachable set, covered set) — not just
+        // the unreachable id-set. Here A is AuthFailed for the whole test, so
+        // the unreachable set stays {A} throughout; only a COVERED host (C)
+        // drops out of Connected (into Retrying, below the Unreachable tier).
+        // That shrinks the grid's coverage without touching the unreachable
+        // tier at all — the old id-set-only fingerprint would keep the bar
+        // hidden forever after the first dismissal.
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var fakeC = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "c_task")]),
+        };
+        AddHost("host-a", fakeA);
+        AddHost("host-b", fakeB);
+        var hostC = AddHost("host-c", fakeC);
+        var vm = MakeVm();
+        _manager.Start();
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            "A parks in AuthFailed while B and C feed the grid");
+        Assert.True(vm.ShowPartialBar);
+
+        vm.DismissPartialCommand.Execute(null);
+        Assert.False(vm.ShowPartialBar);
+
+        await Wait.UntilAsync(() => fakeC.Calls.Count(c => c == "get_cc_status") > 0,
+            "C's first poll should be observed before the test breaks it");
+
+        // Hold C in the Retrying tier (below the Unreachable threshold, so the
+        // unreachable id-set never changes): its live poll AND every reconnect
+        // attempt throw, so it can only cycle Retrying -> (instant connect
+        // failure) -> Retrying, never Connected again.
+        fakeC.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeC.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostC.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostC.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostC.Id).Snapshot);
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "C's stale rows should drop out");
+
+        // Unreachable tier is still just {A} — but the bar must reappear
+        // because the covered set shrank from {B, C} to {B}.
+        await Wait.UntilAsync(
+            () => vm.ShowPartialBar
+                  && vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+            "the bar must reappear: the covered set shrank even though the unreachable set stayed {A}");
+    }
+
+    [Fact]
     public async Task Stale_snapshot_of_unreachable_host_leaves_rows_and_counts()
     {
         // HostEntry.Snapshot is never cleared when a host drops out of Connected,
