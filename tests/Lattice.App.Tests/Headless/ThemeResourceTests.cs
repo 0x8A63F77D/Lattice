@@ -62,6 +62,15 @@ public class ThemeResourceTests
     [InlineData("IconWarningRegular")]
     [InlineData("IconInfoRegular")]
     [InlineData("IconErrorCircleRegular")]
+    [InlineData("IconPlayRegular")]
+    [InlineData("IconPauseRegular")]
+    [InlineData("IconClockRegular")]
+    [InlineData("IconArrowUploadRegular")]
+    [InlineData("IconWarningFilled")]
+    [InlineData("IconSearchRegular")]
+    [InlineData("IconMoreHorizontalRegular")]
+    [InlineData("IconTextLineSpacingRegular")]
+    [InlineData("IconAppsListRegular")]
     public void Icon_geometry_resolves(string key)
     {
         Assert.True(Application.Current!.TryGetResource(key, null, out var value), key);
