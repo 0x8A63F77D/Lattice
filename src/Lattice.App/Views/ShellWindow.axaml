@@ -3,9 +3,10 @@
         xmlns:ui="using:FluentAvalonia.UI.Controls"
         xmlns:vm="using:Lattice.App.ViewModels"
         xmlns:v="using:Lattice.App.Views"
+        xmlns:loc="using:Lattice.App.Localization"
         x:Class="Lattice.App.Views.ShellWindow"
         x:DataType="vm:ShellViewModel"
-        Title="Lattice"
+        Title="{x:Static loc:Strings.AppTitle}"
         Width="1280" Height="800" MinWidth="1000" MinHeight="700"
         TransparencyLevelHint="Mica, None"
         Background="{DynamicResource LatticeCanvasBrush}">
