@@ -2,7 +2,7 @@
 name: pr-monitor
 description: Polls an open GitHub pull request at a short interval and reports when its state changes — CI check results, Codex Review verdict, new review comments, mergeability. Dispatch it when you want to watch a PR to completion instead of manually re-checking. Give it a PR number (defaults to the current branch's PR).
 model: haiku
-tools: Bash, mcp__github__pull_request_read, mcp__github__list_pull_requests
+tools: Bash, ToolSearch, mcp__github__pull_request_read, mcp__github__list_pull_requests
 background: true
 color: cyan
 ---
