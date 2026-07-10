@@ -1,0 +1,156 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ui="using:FluentAvalonia.UI.Controls"
+        xmlns:vm="using:Lattice.App.ViewModels"
+        xmlns:v="using:Lattice.App.Views"
+        x:Class="Lattice.App.Views.ShellWindow"
+        x:DataType="vm:ShellViewModel"
+        Title="Lattice"
+        Width="1280" Height="800" MinWidth="1000" MinHeight="700"
+        TransparencyLevelHint="Mica, None"
+        Background="{DynamicResource LatticeCanvasBrush}">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Ctrl+D1" Command="{Binding SelectViewCommand}" CommandParameter="0" />
+    <KeyBinding Gesture="Ctrl+D2" Command="{Binding SelectViewCommand}" CommandParameter="1" />
+    <KeyBinding Gesture="Ctrl+D3" Command="{Binding SelectViewCommand}" CommandParameter="2" />
+    <KeyBinding Gesture="Ctrl+D4" Command="{Binding SelectViewCommand}" CommandParameter="3" />
+  </Window.KeyBindings>
+
+  <Window.Styles>
+    <!-- The only allowed looping animation: Connecting spinner, 1.5 s/rev linear -->
+    <Style Selector="PathIcon.spin">
+      <Setter Property="RenderTransform">
+        <RotateTransform Angle="0" />
+      </Setter>
+      <Style.Animations>
+        <Animation Duration="0:0:1.5" IterationCount="Infinite">
+          <KeyFrame Cue="0%"><Setter Property="RotateTransform.Angle" Value="0" /></KeyFrame>
+          <KeyFrame Cue="100%"><Setter Property="RotateTransform.Angle" Value="360" /></KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+    <!-- Selected host rail entry: brand tint + accent pill (design 1c) -->
+    <Style Selector="ListBox.hostRail ListBoxItem">
+      <Setter Property="Padding" Value="8,0" />
+      <Setter Property="MinHeight" Value="{StaticResource LatticeHostItemHeight}" />
+      <!-- The theme's ListBoxItem MinWidth (88) overflows the 48px compact rail:
+           layout centers the oversized item at a negative offset and the state
+           icon renders half-clipped at the pane edge. Rail entries stretch to
+           whatever width the pane gives them. -->
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="CornerRadius" Value="{StaticResource LatticeControlRadius}" />
+    </Style>
+    <Style Selector="ListBox.hostRail ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource LatticeSelectedTintBrush}" />
+    </Style>
+  </Window.Styles>
+
+  <Panel>
+    <v:FirstRunView x:Name="FirstRun" x:FieldModifier="public" IsVisible="{Binding !HasHosts}" />
+
+    <ui:FANavigationView x:Name="Nav" x:FieldModifier="public"
+                       IsVisible="{Binding HasHosts}"
+                       PaneDisplayMode="Left"
+                       OpenPaneLength="260" CompactPaneLength="48"
+                       IsSettingsVisible="False"
+                       IsBackButtonVisible="False"
+                       SelectionChanged="OnNavSelectionChanged">
+      <ui:FANavigationView.MenuItems>
+        <ui:FANavigationViewItem x:Name="NavTasks" Content="Tasks" Tag="0">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconTaskListSquareLtrRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+        <ui:FANavigationViewItem x:Name="NavProjects" Content="Projects" Tag="1">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconGridRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+        <ui:FANavigationViewItem x:Name="NavTransfers" Content="Transfers" Tag="2">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+        <ui:FANavigationViewItem x:Name="NavEventLog" Content="Event log" Tag="3">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+      </ui:FANavigationView.MenuItems>
+
+      <ui:FANavigationView.PaneCustomContent>
+        <StackPanel Margin="4,8,4,0">
+          <DockPanel Margin="12,0,8,4">
+            <Button DockPanel.Dock="Right" Padding="4" Background="Transparent"
+                    Command="{Binding RequestAddHostCommand}"
+                    ToolTip.Tip="Add a host">
+              <PathIcon Data="{StaticResource IconAddRegular}" Width="12" Height="12" />
+            </Button>
+            <!-- Design §Responsive: the 48px compact rail shows host state icons only;
+                 names/subtext live in tooltips. Text elements follow the pane state. -->
+            <TextBlock x:Name="HostsHeader" Text="Hosts" FontSize="11" FontWeight="SemiBold"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding #Nav.IsPaneOpen}"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          </DockPanel>
+          <ListBox x:Name="HostList" x:FieldModifier="public" Classes="hostRail"
+                   Background="Transparent"
+                   ItemsSource="{Binding HostItems}"
+                   SelectionChanged="OnHostSelectionChanged">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:HostRailItemViewModel">
+                <DockPanel Height="{StaticResource LatticeHostItemHeight}"
+                           ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+                  <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">
+                    <PathIcon Width="16" Height="16" IsVisible="{Binding IsConnected}"
+                              Data="{StaticResource IconCheckmarkCircleRegular}"
+                              Foreground="{DynamicResource LatticeSuccessBrush}" />
+                    <PathIcon Classes.spin="{Binding IsConnecting}" Width="16" Height="16" IsVisible="{Binding IsConnecting}"
+                              Data="{StaticResource IconArrowSyncRegular}"
+                              Foreground="{DynamicResource LatticeAccentBrush}" />
+                    <PathIcon Width="16" Height="16" IsVisible="{Binding IsRetrying}"
+                              Data="{StaticResource IconArrowClockwiseRegular}"
+                              Foreground="{DynamicResource LatticeWarningFgBrush}" />
+                    <PathIcon Width="16" Height="16" IsVisible="{Binding IsUnreachable}"
+                              Data="{StaticResource IconDismissCircleRegular}"
+                              Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                    <PathIcon Width="16" Height="16" IsVisible="{Binding IsAuthFailed}"
+                              Data="{StaticResource IconKeyRegular}"
+                              Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                  </Panel>
+                  <StackPanel x:Name="HostText" VerticalAlignment="Center" Margin="4,0,0,0"
+                              IsVisible="{Binding #Nav.IsPaneOpen}">
+                    <TextBlock Text="{Binding Name}" FontSize="13"
+                               Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+                    <TextBlock Text="{Binding StateText}" FontSize="11"
+                               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </ui:FANavigationView.PaneCustomContent>
+
+      <ui:FANavigationView.FooterMenuItems>
+        <ui:FANavigationViewItem x:Name="NavSettings" Content="Settings" Tag="settings">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconSettingsRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+      </ui:FANavigationView.FooterMenuItems>
+
+      <ContentControl Content="{Binding CurrentPage}">
+        <ContentControl.DataTemplates>
+          <DataTemplate DataType="vm:PlaceholderViewModel">
+            <v:PlaceholderView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:SettingsViewModel">
+            <v:SettingsView />
+          </DataTemplate>
+        </ContentControl.DataTemplates>
+      </ContentControl>
+    </ui:FANavigationView>
+  </Panel>
+</Window>

@@ -1,0 +1,25 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sty="using:FluentAvalonia.Styling"
+             x:Class="Lattice.App.App"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <sty:FluentAvaloniaTheme />
+    <!-- FluentAvalonia's non-Windows text-alignment correction (TextVerticalAlignmentOverride)
+         covers CheckBox/RadioButton/ComboBox but not TextBox, whose Stretch alignment
+         top-aligns glyphs inside the stretched line box (~3px high with macOS font metrics).
+         Same fix FA applies to the covered controls. A future multi-line TextBox
+         (AcceptsReturn) should set Stretch locally. -->
+    <Style Selector="TextBox">
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+  </Application.Styles>
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Lattice.App/Theming/Tokens.axaml" />
+        <ResourceInclude Source="avares://Lattice.App/Theming/Icons.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

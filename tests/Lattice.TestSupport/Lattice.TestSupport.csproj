@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- xunit-free shared test doubles. Namespace stays Lattice.Tests deliberately: these types
+       predate the split and both xunit v2 (Lattice.Tests) and v3 (Lattice.App.Tests) consumers
+       keep their callsites unchanged. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Lattice.Boinc.GuiRpc/Lattice.Boinc.GuiRpc.csproj" />
+    <ProjectReference Include="../../src/Lattice.Core/Lattice.Core.csproj" />
+  </ItemGroup>
+</Project>

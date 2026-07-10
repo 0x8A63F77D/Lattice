@@ -1,0 +1,12 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             x:Class="Lattice.App.Views.PlaceholderView"
+             x:DataType="vm:PlaceholderViewModel">
+  <StackPanel Margin="{StaticResource LatticePagePadding}" Spacing="8">
+    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+               Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+    <TextBlock Text="{Binding Body}" FontSize="13"
+               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+  </StackPanel>
+</UserControl>

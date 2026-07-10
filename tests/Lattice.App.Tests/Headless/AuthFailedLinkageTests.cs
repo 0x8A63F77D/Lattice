@@ -1,0 +1,57 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Lattice.App.Infrastructure;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.App.Views;
+using Lattice.Core;
+using Lattice.Tests;
+using Xunit;
+
+namespace Lattice.App.Tests.Headless;
+
+public class AuthFailedLinkageTests
+{
+    // Headless Show() does not run a full layout pass, so the rail ListBox inside
+    // the NavigationView's PaneCustomContent stays unrealized until measured.
+    // Mirrors ShellWindowTests.Layout.
+    private static void Layout(Window window)
+    {
+        window.Measure(new Size(window.Width, window.Height));
+        window.Arrange(new Rect(0, 0, window.Width, window.Height));
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    [AvaloniaFact]
+    public void Selecting_an_auth_failed_host_lands_in_settings_with_that_host_expanded()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        // Manager never started: no sockets, no background threads in headless tests.
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell };
+        window.Show();
+        Layout(window);
+
+        var host = TestData.MakeHostConfig(name: "office-pc");
+        registry.AddHost(host);
+        store.Hosts[0].Status = new ConnectionStatus(
+            host.Id, HostConnectionState.AuthFailed, 1, null, "unauthorized", null);
+        shell.HostItems[0].Refresh();
+        Layout(window);
+
+        window.HostList.SelectedIndex = 0;
+        Layout(window);
+
+        Assert.Same(shell.Settings, shell.CurrentPage);
+        var item = Assert.Single(shell.Settings.Hosts);
+        Assert.True(item.IsExpanded);
+        Assert.True(item.HasAuthError);
+        Assert.Equal(host.Id, shell.Scope.HostId);
+        window.Close();
+    }
+}

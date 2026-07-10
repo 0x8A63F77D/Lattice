@@ -1,20 +1,19 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Time.Testing;
-using Xunit;
 
 namespace Lattice.Tests;
 
 /// <summary>Bounded real-time polling helpers for asserting on background-loop state.</summary>
 public static class Wait
 {
-    /// <summary>Polls until the condition holds; fails the test after 5 seconds.</summary>
+    /// <summary>Polls until the condition holds; throws TimeoutException (failing the test) after 5 seconds.</summary>
     public static async Task UntilAsync(Func<bool> condition, string? because = null)
     {
         var sw = Stopwatch.StartNew();
         while (!condition())
         {
             if (sw.ElapsedMilliseconds > 5000)
-                Assert.Fail($"Timed out waiting for condition{(because is null ? "" : $": {because}")}");
+                throw new TimeoutException($"Timed out waiting for condition{(because is null ? "" : $": {because}")}");
             await Task.Delay(10);
         }
     }
@@ -30,7 +29,7 @@ public static class Wait
         while (!condition())
         {
             if (sw.ElapsedMilliseconds > 5000)
-                Assert.Fail("Timed out advancing fake time");
+                throw new TimeoutException("Timed out advancing fake time");
             time.Advance(step);
             await Task.Delay(10);
         }
