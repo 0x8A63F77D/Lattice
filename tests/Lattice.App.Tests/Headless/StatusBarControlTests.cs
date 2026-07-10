@@ -74,4 +74,29 @@ public class StatusBarControlTests
 
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Warning_icon_geometry_resolves()
+    {
+        // Cross-branch integration pin: the template references IconWarningFilled
+        // via DynamicResource, which silently yields null Data if the key is absent
+        // (no build error, no binding log). The icon ships from the icon batch;
+        // this asserts the two halves actually meet.
+        var control = new StatusBarControl { WarningText = "1 at risk" };
+        var window = new Window { Content = control, Width = 800, Height = 600 };
+        window.Show();
+
+        window.Measure(new Size(window.Width, window.Height));
+        window.Arrange(new Rect(0, 0, window.Width, window.Height));
+
+        var icon = window.GetVisualDescendants()
+            .OfType<StackPanel>()
+            .Single(p => p.Name == "WarningBlock")
+            .GetVisualDescendants()
+            .OfType<PathIcon>()
+            .Single();
+        Assert.NotNull(icon.Data);
+
+        window.Close();
+    }
 }
