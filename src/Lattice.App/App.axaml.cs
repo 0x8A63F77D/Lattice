@@ -43,8 +43,15 @@ public partial class App : Application
         base.OnFrameworkInitializationCompleted();
     }
 
-    /// <summary>A corrupt config must not brick a monitoring app: keep the bad file, start fresh.</summary>
-    private static HostRegistry LoadRegistryWithFallback(string path)
+    /// <summary>
+    /// A broken config must not brick a monitoring app: quarantine the file and
+    /// start fresh. But an unreadable file is not necessarily a corrupt one — if
+    /// the quarantine move also fails (say, the same permission problem that broke
+    /// the read), the file may still hold a valid host list, so the fresh registry
+    /// binds to a sibling recovery path: no later Save may overwrite hosts that
+    /// still exist on disk. Internal for tests.
+    /// </summary>
+    internal static HostRegistry LoadRegistryWithFallback(string path)
     {
         try
         {
@@ -52,8 +59,15 @@ public partial class App : Application
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
         {
-            try { File.Move(path, $"{path}.corrupt-{DateTimeOffset.Now:yyyyMMdd-HHmmss}"); }
-            catch { /* keep going with defaults; nothing useful to do */ }
+            var stamp = DateTimeOffset.Now.ToString("yyyyMMdd-HHmmss");
+            try
+            {
+                File.Move(path, $"{path}.corrupt-{stamp}");
+            }
+            catch
+            {
+                return new HostRegistry(LatticeConfig.Default, $"{path}.recovery-{stamp}");
+            }
             return new HostRegistry(LatticeConfig.Default, path);
         }
     }
