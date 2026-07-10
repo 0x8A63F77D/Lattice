@@ -53,10 +53,33 @@ public class RailStateTests
         var vm = new HostRailItemViewModel(entry, clock);
         vm.Refresh();
         Assert.Equal("Retrying in 12s (attempt 3)", vm.StateText);
-        Assert.Equal("boom", vm.Tooltip);
+        Assert.Equal("office-pc — Retrying in 12s (attempt 3)\nboom", vm.Tooltip);
 
         clock.Advance(TimeSpan.FromSeconds(5));
         Assert.Equal("Retrying in 7s (attempt 3)", vm.StateText);
+    }
+
+    // The compact rail hides the text entirely, so the tooltip is the only way
+    // to tell identical state icons apart — it must carry name + subtext in
+    // EVERY state, not just the error states (Codex P2).
+    [Fact]
+    public void Tooltip_identifies_the_host_in_every_state()
+    {
+        var connected = MakeEntry(Status(HostConnectionState.Connected));
+        connected.Snapshot = SnapshotWithTasks(connected.Config.Id, taskCount: 3);
+        var connectedVm = new HostRailItemViewModel(connected, new ManualUiClock());
+        connectedVm.Refresh();
+        Assert.Equal("office-pc — Connected · 3 tasks", connectedVm.Tooltip);
+
+        var connecting = new HostRailItemViewModel(
+            MakeEntry(Status(HostConnectionState.Connecting)), new ManualUiClock());
+        connecting.Refresh();
+        Assert.Equal("office-pc — Connecting…", connecting.Tooltip);
+
+        var authFailed = new HostRailItemViewModel(
+            MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
+        authFailed.Refresh();
+        Assert.Equal("office-pc — Wrong password", authFailed.Tooltip);
     }
 
     [Fact]

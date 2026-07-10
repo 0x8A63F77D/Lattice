@@ -48,7 +48,6 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     {
         Name = _entry.Config.DisplayName;
         State = RailStateProjection.From(_entry.Status);
-        Tooltip = State is RailState.Retrying or RailState.Unreachable ? _entry.Status.LastError : null;
         StateText = State switch
         {
             RailState.Connected => $"Connected · {_entry.Snapshot?.Tasks.Count ?? 0} tasks",
@@ -60,6 +59,13 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             RailState.AuthFailed => "Wrong password",
             _ => "",
         };
+        // The compact rail shows the state icon only, so the tooltip must
+        // identify the host in every state (design §Responsive: name/subtext/
+        // countdown live here); error states append the underlying error.
+        Tooltip = (State is RailState.Retrying or RailState.Unreachable)
+                  && _entry.Status.LastError is { Length: > 0 } error
+            ? $"{Name} — {StateText}\n{error}"
+            : $"{Name} — {StateText}";
     }
 
     private void OnTick(object? sender, EventArgs e)
