@@ -152,4 +152,26 @@ public class ShellRailTests
         Assert.Same(regular, icon.Data);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Every_nav_icon_key_resolves_against_the_shown_window()
+    {
+        // Invariant pin for ShellWindow.ResolveIconGeometry's fail-fast contract:
+        // the Regular/Filled keys are raw strings in ShellViewModel's Views list
+        // with no compile-time check, so every current (and future) key must
+        // resolve to a geometry in the merged resources.
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        foreach (var view in shell.Views)
+            foreach (var key in new[] { view.IconKey, view.IconFilledKey })
+            {
+                Assert.True(window.TryFindResource(key, out var value),
+                    $"nav icon resource '{key}' ({view.Title}) should resolve");
+                Assert.IsType<StreamGeometry>(value);
+            }
+        window.Close();
+    }
 }

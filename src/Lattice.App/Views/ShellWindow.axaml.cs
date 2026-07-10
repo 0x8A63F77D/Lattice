@@ -35,6 +35,10 @@ public partial class ShellWindow : Window
             _shell.PropertyChanged += OnShellPropertyChanged;
             _shell.AddHostRequested += OnAddHostRequested;
             SyncNavSelection();
+            // First render must not depend on the SelectionChanged side channel:
+            // whether the Nav.SelectedItem assignment above raises it synchronously
+            // is undocumented FluentAvalonia behavior, so set the icons explicitly.
+            UpdateMenuIcons();
         }
     }
 
@@ -129,13 +133,17 @@ public partial class ShellWindow : Window
 
     private Geometry ResolveIconGeometry(string key)
     {
-        if (!_iconGeometryCache.TryGetValue(key, out Geometry? geometry))
-        {
-            this.TryFindResource(key, out object? value);
-            geometry = (Geometry)value!;
-            _iconGeometryCache[key] = geometry;
-        }
-        return geometry;
+        if (_iconGeometryCache.TryGetValue(key, out Geometry? geometry))
+            return geometry;
+        // Fail fast on a miss, and never cache one (a cached null would blank the
+        // icon forever with no diagnostic). The keys live as raw strings in
+        // ShellViewModel's Views list with zero compile-time checking — same
+        // philosophy as TasksView's header-lookup invariant: a typo throws the
+        // first time any headless test constructs the shell, not silently at 2am.
+        if (!this.TryFindResource(key, out object? value) || value is not Geometry found)
+            throw new InvalidOperationException($"Nav icon resource '{key}' not found or not a Geometry.");
+        _iconGeometryCache[key] = found;
+        return found;
     }
 
     private void OnHostSelectionChanged(object? sender, SelectionChangedEventArgs e)

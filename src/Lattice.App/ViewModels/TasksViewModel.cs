@@ -100,7 +100,8 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     /// (TasksView's overflow-menu toggle is the only caller).</summary>
     public void SetColumnPreference(string columnKey, bool visible)
     {
-        _uiState.ColumnVisibility[columnKey] = visible;
+        var visibility = new Dictionary<string, bool>(_uiState.ColumnVisibility) { [columnKey] = visible };
+        _uiState = _uiState with { ColumnVisibility = visibility };
         _uiStateStore.Save(_uiState); // best-effort, as above
     }
 
