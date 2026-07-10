@@ -1,0 +1,685 @@
+using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.Boinc.GuiRpc;
+using Lattice.Core;
+using Lattice.Tests;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+/// <summary>
+/// Wraps the FakeGuiRpcClient dictionary and hands out a distinct fake per
+/// host address, resolved on ConnectAsync — the only call that carries the
+/// host identity through the shared, host-agnostic IGuiRpcClient factory.
+/// </summary>
+internal sealed class RoutingGuiRpcClient(IReadOnlyDictionary<string, FakeGuiRpcClient> fakes) : IGuiRpcClient
+{
+    private FakeGuiRpcClient? _target;
+
+    public Task ConnectAsync(string host, int port = 31416, CancellationToken ct = default)
+    {
+        _target = fakes[host];
+        return _target.ConnectAsync(host, port, ct);
+    }
+
+    public Task<bool> AuthorizeAsync(string password, CancellationToken ct = default) =>
+        _target!.AuthorizeAsync(password, ct);
+
+    public Task<VersionInfo> ExchangeVersionsAsync(CancellationToken ct = default) =>
+        _target!.ExchangeVersionsAsync(ct);
+
+    public Task<CcState> GetStateAsync(CancellationToken ct = default) =>
+        _target!.GetStateAsync(ct);
+
+    public Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default) =>
+        _target!.GetCcStatusAsync(ct);
+
+    public Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default) =>
+        _target!.GetResultsAsync(activeOnly, ct);
+
+    public Task<IReadOnlyList<Message>> GetMessagesAsync(int seqno = 0, CancellationToken ct = default) =>
+        _target!.GetMessagesAsync(seqno, ct);
+
+    public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default) =>
+        _target!.GetFileTransfersAsync(ct);
+
+    public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
+}
+
+/// <summary>
+/// Runs posted work inline (no deferral, so Wait.UntilAsync polling still
+/// works) but serialized under a lock. Plain ImmediateUiDispatcher runs each
+/// post on whatever thread called it; with two ACTUALLY RUNNING monitors
+/// (unlike every other fixture using it, which never starts more than one
+/// live monitor at a time) that means two background threads can both be
+/// inside HostStore.Changed -> TasksViewModel.Rebuild() at once, racing the
+/// unsynchronized ObservableCollection Clear()+Add(). Production never hits
+/// this: the real IUiDispatcher marshals every post onto one UI thread.
+/// </summary>
+internal sealed class LockingUiDispatcher : IUiDispatcher
+{
+    private readonly object _gate = new();
+    public bool CheckAccess() => true;
+    public void Post(Action action) { lock (_gate) action(); }
+}
+
+public class TasksViewModelTests : IAsyncLifetime
+{
+    private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+    private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
+    private HostRegistry _registry = null!;
+    private HostMonitorManager _manager = null!;
+    private HostStore _store = null!;
+    private ManualUiClock _clock = null!;
+
+    public ValueTask InitializeAsync()
+    {
+        _registry = new HostRegistry(new LatticeConfig(5, []), _path);
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
+        _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
+        _clock = new ManualUiClock();
+        return ValueTask.CompletedTask;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _manager.DisposeAsync();
+        File.Delete(_path);
+    }
+
+    private HostConfig AddHost(string address, FakeGuiRpcClient fake)
+    {
+        var host = TestData.MakeHostConfig(name: address, address: address);
+        _fakes[address] = fake;
+        _registry.AddHost(host);
+        return host;
+    }
+
+    private TasksViewModel MakeVm() => new(_store, _clock);
+
+    [Fact]
+    public async Task AllHosts_merges_rows_from_both_hosts()
+    {
+        var fakeA = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "task_a")]),
+        };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "task_b")]),
+        };
+        AddHost("host-a", fakeA);
+        AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        Assert.True(vm.IsAllHostsScope);
+        Assert.Contains(vm.Rows, r => r.Name == "task_a" && r.Host == "host-a");
+        Assert.Contains(vm.Rows, r => r.Name == "task_b" && r.Host == "host-b");
+    }
+
+    [Fact]
+    public async Task Scoping_to_a_host_hides_the_other_hosts_rows()
+    {
+        var fakeA = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "task_a")]),
+        };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "task_b")]),
+        };
+        var hostA = AddHost("host-a", fakeA);
+        AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        vm.Scope = new ScopeSelection(hostA.Id);
+
+        Assert.False(vm.IsAllHostsScope);
+        Assert.Equal("task_a", Assert.Single(vm.Rows).Name);
+    }
+
+    [Fact]
+    public async Task Rows_sort_by_deadline_ascending_with_nulls_last()
+    {
+        var later = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        var sooner = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "no_deadline", deadline: null),
+                TestData.MakeResult(name: "later", deadline: later),
+                TestData.MakeResult(name: "sooner", deadline: sooner),
+            ]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 3);
+
+        Assert.Equal(["sooner", "later", "no_deadline"], vm.Rows.Select(r => r.Name));
+    }
+
+    [Fact]
+    public async Task FilterText_matches_project_name_case_insensitively()
+    {
+        const string seti = "https://seti.berkeley.edu/";
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(
+                TestData.MakeState(projects: [TestData.MakeProject(url: seti, name: "SETI@home")])),
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "alpha", projectUrl: seti),
+                TestData.MakeResult(name: "beta", projectUrl: "https://example.org/"),
+            ]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        vm.FilterText = "seti";
+
+        Assert.Equal("alpha", Assert.Single(vm.Rows).Name);
+    }
+
+    [Fact]
+    public async Task Filter_hiding_every_row_is_not_the_empty_state()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "alpha")]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        vm.FilterText = "matches-nothing";
+
+        // The host answered WITH tasks; the filter merely hid them. "No tasks"
+        // (IsEmpty) is a statement about the unfiltered set — a filter miss
+        // must not flip the view into the empty state (Codex P2).
+        Assert.Empty(vm.Rows);
+        Assert.False(vm.IsEmpty, "a filter miss is not an empty task set");
+        Assert.False(vm.IsLoading);
+    }
+
+    [Fact]
+    public async Task StateFilter_filters_by_task_state_kind()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "susp") with { SuspendedViaGui = true },
+                TestData.MakeResult(name: "running") with { ActiveTask = new ActiveTask(1, 0.5, 10, 90) },
+            ]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        vm.StateFilter = TaskStateKind.Suspended;
+
+        Assert.Equal("susp", Assert.Single(vm.Rows).Name);
+    }
+
+    [Fact]
+    public async Task CountsText_matches_a_crafted_mix()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "r1") with { ActiveTask = new ActiveTask(1, 0.1, 10, 90) },
+                TestData.MakeResult(name: "r2") with { ActiveTask = new ActiveTask(1, 0.1, 10, 90) },
+                TestData.MakeResult(name: "u1") with { ActiveTask = null, State = ResultState.FilesUploading },
+                TestData.MakeResult(name: "s1") with { SuspendedViaGui = true },
+                TestData.MakeResult(name: "w1"),
+            ]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 5);
+
+        Assert.Equal(string.Format(Strings.CountsFmt, 5, 2, 1, 1), vm.CountsText);
+    }
+
+    [Fact]
+    public async Task PollingText_reads_the_registry_interval()
+    {
+        AddHost("host-a", new FakeGuiRpcClient());
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading, "first snapshot should land");
+
+        Assert.Equal(string.Format(Strings.PollingFmt, 5), vm.PollingText);
+    }
+
+    [Fact]
+    public async Task Partial_bar_shows_dismisses_and_reappears_when_the_unreachable_set_changes()
+    {
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = new FakeGuiRpcClient();
+        var hostA = AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
+
+        // Condition-driven: the store Waits above observe HostStore fields, which
+        // are set BEFORE Changed fires — the VM lags the store by one Rebuild, so
+        // a direct assert here can read the previous Rebuild's text.
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 2, 1),
+            "partial bar should appear for the AuthFailed host with B's coverage counted");
+        Assert.True(vm.ShowPartialBar);
+        Assert.False(vm.IsUpdateStale, "AuthFailed is not a Retrying/Unreachable staleness signal");
+
+        vm.DismissPartialCommand.Execute(null);
+        Assert.False(vm.ShowPartialBar);
+
+        // Break host B too: fail its next poll, then let it fail auth on
+        // reconnect — the id-set grows from {A} to {A, B}.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 2, 2, 0),
+            "partial bar should reappear: the unreachable id-set changed");
+        Assert.True(vm.ShowPartialBar);
+    }
+
+    [Fact]
+    public async Task Partial_bar_reappears_when_a_dismissed_covered_host_drops_out()
+    {
+        // Codex P2 (design doc: InfoBar "reappears when the reachable set
+        // changes"): the dismissal fingerprint must cover the whole
+        // partial-state picture — (unreachable set, covered set) — not just
+        // the unreachable id-set. Here A is AuthFailed for the whole test, so
+        // the unreachable set stays {A} throughout; only a COVERED host (C)
+        // drops out of Connected (into Retrying, below the Unreachable tier).
+        // That shrinks the grid's coverage without touching the unreachable
+        // tier at all — the old id-set-only fingerprint would keep the bar
+        // hidden forever after the first dismissal.
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var fakeC = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "c_task")]),
+        };
+        AddHost("host-a", fakeA);
+        AddHost("host-b", fakeB);
+        var hostC = AddHost("host-c", fakeC);
+        var vm = MakeVm();
+        _manager.Start();
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            "A parks in AuthFailed while B and C feed the grid");
+        Assert.True(vm.ShowPartialBar);
+
+        vm.DismissPartialCommand.Execute(null);
+        Assert.False(vm.ShowPartialBar);
+
+        await Wait.UntilAsync(() => fakeC.Calls.Count(c => c == "get_cc_status") > 0,
+            "C's first poll should be observed before the test breaks it");
+
+        // Hold C in the Retrying tier (below the Unreachable threshold, so the
+        // unreachable id-set never changes): its live poll AND every reconnect
+        // attempt throw, so it can only cycle Retrying -> (instant connect
+        // failure) -> Retrying, never Connected again.
+        fakeC.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeC.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostC.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostC.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostC.Id).Snapshot);
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "C's stale rows should drop out");
+
+        // Unreachable tier is still just {A} — but the bar must reappear
+        // because the covered set shrank from {B, C} to {B}.
+        await Wait.UntilAsync(
+            () => vm.ShowPartialBar
+                  && vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+            "the bar must reappear: the covered set shrank even though the unreachable set stayed {A}");
+    }
+
+    [Fact]
+    public async Task Stale_snapshot_of_unreachable_host_leaves_rows_and_counts()
+    {
+        // HostEntry.Snapshot is never cleared when a host drops out of Connected,
+        // so ONLY Rebuild's Connected-only filter keeps a dead host's stale cached
+        // tasks out of Rows/CountsText. This test goes red if that filter is
+        // replaced with a plain pass-through of the scoped hosts.
+        var fakeA = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "a_running") with { ActiveTask = new ActiveTask(1, 0.5, 10, 90) },
+                TestData.MakeResult(name: "a_waiting"),
+            ]),
+        };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: both hosts' rows merged.
+        await Wait.UntilAsync(() => vm.Rows.Count == 3, "both hosts should contribute rows");
+        Assert.Contains(vm.Rows, r => r.Name == "b_task");
+
+        // Kill B the same way the partial-bar test does — poll failure, then auth
+        // failure on reconnect — parking it in AuthFailed with its snapshot cached.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+
+        // B's stale rows must vanish from the merge and from the counts.
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "the dead host's stale rows should drop out");
+        Assert.DoesNotContain(vm.Rows, r => r.Name == "b_task");
+        Assert.Equal(["a_running", "a_waiting"], vm.Rows.Select(r => r.Name).Order());
+        Assert.Equal(string.Format(Strings.CountsFmt, 2, 1, 0, 0), vm.CountsText);
+
+        // And B now counts toward the partial-results bar (1 of 2 unreachable).
+        // Condition-driven: the VM lags the store-state Waits by one Rebuild.
+        await Wait.UntilAsync(
+            () => vm.ShowPartialBar
+                  && vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 2, 1),
+            "B should count toward the partial bar");
+    }
+
+    [Fact]
+    public async Task Partial_bar_reappears_when_the_same_host_fails_after_recovering()
+    {
+        // Codex P2 round 2: dismissal must not survive a full recovery. If the
+        // user dismisses {B}, B recovers (unreachable set -> empty), and B later
+        // fails AGAIN (set -> {B}), the fresh set SetEquals the stale dismissed
+        // set — without clearing it on recovery, the new outage is never shown.
+        // The journey is ordered on OBSERVABLE, STABLE events only. Two rules,
+        // learned from a ~10% flake in parallel runs:
+        //  - before breaking, wait until the fake has observed a poll on the
+        //    current connection (Calls log) — otherwise the break installs
+        //    itself before B's first tick and the failure cascade can complete
+        //    before this thread ever starts watching;
+        //  - never wait on the transient Retrying state. A broken B self-drives
+        //    Retrying (1s backoff) -> reconnect -> auth-reject -> AuthFailed,
+        //    so the ~1s Retrying window can be missed outright; AuthFailed is
+        //    the terminal park state and cannot be. (No backoff-skip nudge is
+        //    needed either: wakes are sticky — see HostMonitor.WaitAsync — so
+        //    one RequestRefresh reliably forces the failing tick.)
+        var fakeA = new FakeGuiRpcClient();
+        var fakeB = new FakeGuiRpcClient();
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
+            "B's first poll should be observed before the test breaks it");
+
+        // Break B: poll failure, then auth failure on reconnect -> AuthFailed.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        await Wait.UntilAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
+
+        vm.DismissPartialCommand.Execute(null);
+        Assert.False(vm.ShowPartialBar);
+
+        // Heal B. AuthFailed parks the monitor until a config change, so the
+        // recovery goes through UpdateHost (same address — routing stays valid).
+        var pollsBeforeHeal = fakeB.Calls.Count(c => c == "get_cc_status");
+        fakeB.OnGetCcStatus = () => Task.FromResult(FakeGuiRpcClient.DefaultStatus);
+        fakeB.OnAuthorize = _ => Task.FromResult(true);
+        _registry.UpdateHost(hostB with { Name = "host-b-healed" });
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected,
+            "B should recover after the config update");
+        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > pollsBeforeHeal,
+            "B's first post-reconnect poll should be observed before the test re-breaks it");
+        Assert.False(vm.ShowPartialBar, "no outage, no bar");
+
+        // Break B again: the SAME id-set {B} as the dismissed outage, but this
+        // is a NEW outage after a full recovery — it must be reported.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom again");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+
+        await Wait.UntilAsync(() => vm.ShowPartialBar,
+            "the bar must reappear for a new outage after full recovery");
+    }
+
+    [Fact]
+    public async Task Partial_bar_coverage_counts_only_hosts_feeding_the_grid()
+    {
+        // Codex P2: the covered count {2} in PartialFmt must describe the hosts
+        // whose tasks are actually in the grid (Connected AND snapshotted — the
+        // exact set Rows are built from), not "total minus unreachable-tier".
+        // With A=AuthFailed, B=Retrying (stale snapshot), C=Connected, the old
+        // total-minus-unreachable arithmetic claimed coverage of 2 hosts while
+        // only C's tasks were below.
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var fakeC = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "c_task")]),
+        };
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        AddHost("host-c", fakeC);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: A AuthFailed, B and C both feeding the grid. Covered = 2
+        // under BOTH the old and the new semantics — pinning it here isolates
+        // the assertion below to the B-drops-out transition.
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            "A parks in AuthFailed while B and C feed the grid");
+
+        // Hold B in the Retrying tier deterministically: its live poll AND every
+        // reconnect attempt throw, so it can only cycle Retrying -> (instant
+        // connect failure) -> Retrying, never Connected again; its snapshot stays
+        // cached, and the assertion lands within the first backoff tiers (well
+        // before attempt 4 would promote it to the Unreachable tier).
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "B's stale rows should drop out");
+        Assert.Equal("c_task", Assert.Single(vm.Rows).Name);
+
+        // Unreachable tier is still just {A} (B is Retrying, below the tier),
+        // but coverage must now count ONLY C — the sole host feeding the grid.
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+            "covered count should shrink to the hosts actually in the grid");
+    }
+
+    [Fact]
+    public async Task UpdatedText_ticks_with_the_manual_clock()
+    {
+        var fake = new FakeGuiRpcClient();
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => _store.Hosts[0].Snapshot is not null);
+
+        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        _clock.Advance(TimeSpan.FromSeconds(3));
+
+        Assert.Equal(string.Format(Strings.UpdatedSecondsFmt, 3), vm.UpdatedText);
+    }
+
+    [Fact]
+    public async Task Clock_tick_does_not_churn_rows_when_task_data_is_unchanged()
+    {
+        // The 1s tick funnels into Rebuild() like every other trigger, but with
+        // unchanged task data it must NOT replace the row collection: a DataGrid
+        // bound to Rows would otherwise see a Reset + re-Add every second and a
+        // future SelectedItem binding would lose selection every tick (rows are
+        // value-equal records, so identity must be preserved when nothing changed).
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "steady")]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        var firstRow = vm.Rows[0];
+        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        var collectionChanges = 0;
+        vm.Rows.CollectionChanged += (_, _) => collectionChanges++;
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, collectionChanges);
+        Assert.Same(firstRow, vm.Rows[0]);
+        // The tick path itself must stay alive: freshness text still advances.
+        Assert.Equal(string.Format(Strings.UpdatedSecondsFmt, 3), vm.UpdatedText);
+    }
+
+    [Fact]
+    public async Task Auth_failed_host_without_snapshot_leaves_loading_state()
+    {
+        // Codex P2 round 3: a host that parks in a TERMINAL state before its
+        // first snapshot (canonical: wrong password -> AuthFailed; Snapshot
+        // stays null forever) must not leave the first-fetch skeleton up
+        // indefinitely. And it must NOT fall through to IsEmpty either — an
+        // auth-failed scope is not "no tasks on this host"; the rail and the
+        // partial bar tell that story.
+        var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single().Status.State == HostConnectionState.AuthFailed);
+
+        await Wait.UntilAsync(() => !vm.IsLoading,
+            "the loading overlay must yield once every scoped host parks terminally");
+        Assert.False(vm.IsEmpty, "an auth-failed scope is not 'no tasks on this host'");
+    }
+
+    [Fact]
+    public async Task Stale_snapshot_does_not_suppress_loading_while_a_connected_host_fetches_first_data()
+    {
+        // Codex P2 round 6: a Retrying host's RETAINED stale snapshot must not
+        // suppress the first-fetch loading overlay (nor let the view fall
+        // through to the empty state) while a Connected host's first data is
+        // still in flight. The Connected-without-snapshot window is real and
+        // holdable: HostMachine publishes Connected right after get_state, but
+        // the first snapshot only lands after the first tick's poll — so
+        // parking A's get_cc_status on a never-completing TaskCompletionSource
+        // pins A in Connected-with-null-Snapshot deterministically (the fake
+        // awaits via WaitAsync(ct), so dispose still cancels it cleanly).
+        var gate = new TaskCompletionSource<CcStatus>();
+        var fakeA = new FakeGuiRpcClient { OnGetCcStatus = () => gate.Task };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var hostA = AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: A parked Connected-without-snapshot, B contributing rows —
+        // a contributing host suppresses loading regardless of A's pending fetch.
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "B should contribute its row");
+        Assert.Null(_store.Hosts.Single(h => h.Config.Id == hostA.Id).Snapshot);
+        Assert.False(vm.IsLoading, "B's data is visible; the first-fetch skeleton must not cover it");
+        Assert.False(vm.IsEmpty);
+
+        // Hold B in the Retrying tier (same idiom as the coverage test): its
+        // live poll AND every reconnect attempt throw, so it cycles Retrying ->
+        // (instant connect failure) -> Retrying, never Connected again — while
+        // its snapshot stays cached and hidden by the grid's Connected filter.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+        await Wait.UntilAsync(() => vm.Rows.Count == 0, "B's stale rows should drop out");
+
+        // A is still fetching its FIRST data; B's cached-but-hidden snapshot
+        // counts for nothing. Loading must return — and the view must NOT fall
+        // through to "no tasks" (A never answered; B's answer is stale).
+        await Wait.UntilAsync(() => vm.IsLoading,
+            "the first-fetch overlay must return: only A can produce visible data and it hasn't answered");
+        Assert.False(vm.IsEmpty, "an unanswered first fetch is not an empty task set");
+    }
+
+    [Fact]
+    public async Task IsLoading_until_the_first_snapshot_then_IsEmpty_with_zero_tasks()
+    {
+        var fake = new FakeGuiRpcClient();
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+
+        Assert.True(vm.IsLoading);
+        Assert.False(vm.IsEmpty);
+
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading, "loading should clear once the first snapshot lands");
+
+        Assert.False(vm.IsLoading);
+        Assert.True(vm.IsEmpty);
+        Assert.Empty(vm.Rows);
+    }
+}

@@ -45,6 +45,9 @@ public sealed class HostStore : IDisposable
 
     public IReadOnlyList<HostEntry> Hosts => _hosts;
 
+    /// <summary>Passthrough for the "Polling every {0}s" status text (Tasks view et al).</summary>
+    public int PollingIntervalSeconds => _registry.PollingIntervalSeconds;
+
     /// <summary>Ask the scoped monitor(s) to poll now. Null = all hosts.</summary>
     public void RequestRefresh(Guid? hostId = null)
     {
