@@ -111,6 +111,10 @@ Live rehearsal (controller gate, 2026-07-10, real BOINC 8.2.11 localhost:31416):
 
 Deferred to M2c-2: selected-view filled-icon swap; "All hosts" rail entry + aggregate subtext; Event-log InfoBadge; responsive column breakpoints; motion/reduce-motion; Mica verification on Windows; MessagesAdded consumption in HostStore.
 
+Deferred by user decision (reported 2026-07-10 during demo rounds, explicitly "fix later"):
+- Compact-rail transition polish: the Connected state icon shifts slightly while the pane open/close animates. Plausible mechanism: HostText visibility flips instantly on IsPaneOpen while the pane width animates, so the item's layout jumps mid-transition. Bundle with the M2c-2 motion pass.
+- Design defect (user judgment): the hosts rail section placement in the pane "feels off". ROUTE VIA CLAUDE DESIGN — per the M2 division-of-labor rule the design package is the single source of truth; this needs a revision prompt at M2c-2 planning, not an ad hoc XAML restructure.
+
 Follow-ups accumulated (tracked for next touch):
 - HostConnectionState.fs doc comment: Unreachable tier begins attempt >= 5 (comment) vs >= 4 (spec §9 + shipped projection). Comment-only fix, file in M2c-guarded dir — defer to dedicated commit outside M2c stage.
 - generate-icons.sh: chmod 644 pre-mv (mktemp creates 600) + trap rm -f for temp file — next script touch.
