@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using FluentAvalonia.UI.Controls;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -105,6 +107,48 @@ public class ShellRailTests
         window.Nav.IsPaneOpen = true;
         Layout(window);
         Assert.True(sentinelText.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Navigating_to_tasks_renders_a_TasksView()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        // Leave Tasks (the default page) and come back, so this actually exercises
+        // navigation rather than just the initial state.
+        shell.SelectViewCommand.Execute("1");
+        Layout(window);
+        shell.SelectViewCommand.Execute("0");
+        Layout(window);
+
+        Assert.IsType<TasksViewModel>(shell.CurrentPage);
+        Assert.NotEmpty(window.GetVisualDescendants().OfType<TasksView>());
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Selecting_tasks_swaps_its_icon_to_filled_and_deselecting_restores_regular()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        Assert.True(Application.Current!.TryGetResource("IconTaskListSquareLtrFilled", null, out var filled));
+        Assert.True(Application.Current!.TryGetResource("IconTaskListSquareLtrRegular", null, out var regular));
+
+        // Tasks is the default selected view, so its icon should already be Filled.
+        var icon = Assert.IsType<FAPathIconSource>(window.NavTasks.IconSource);
+        Assert.Same(filled, icon.Data);
+
+        shell.SelectViewCommand.Execute("1");
+        Layout(window);
+
+        Assert.Same(regular, icon.Data);
         window.Close();
     }
 }

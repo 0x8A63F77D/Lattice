@@ -89,8 +89,7 @@ public class ShellWindowTests
         Layout(window);
 
         Assert.Same(window.NavTasks, window.Nav.SelectedItem);
-        var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal(Strings.NavTasks, page.Title);
+        Assert.IsType<TasksViewModel>(shell.CurrentPage);
         window.Close();
     }
 

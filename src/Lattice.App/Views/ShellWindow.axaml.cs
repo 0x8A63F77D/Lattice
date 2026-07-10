@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Media;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.ViewModels;
 
@@ -9,6 +10,11 @@ public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
     private bool _addHostInFlight;
+
+    // Regular/Filled StreamGeometry resources are Application-level singletons
+    // (Icons.axaml), so a single TryFindResource per key is enough to cache the
+    // reference for the life of the window.
+    private readonly Dictionary<string, Geometry> _iconGeometryCache = new();
 
     public ShellWindow()
     {
@@ -100,6 +106,36 @@ public partial class ShellWindow : Window
             _shell.NavigateToSettings();
         else
             _shell.SelectViewCommand.Execute(tag);
+        UpdateMenuIcons();
+    }
+
+    // Recomputes every rail item's icon from scratch (rather than tracking the
+    // previously-selected item) so a deselect is just "not selected" on the next
+    // pass — no separate restore-to-Regular path to keep in sync.
+    private void UpdateMenuIcons()
+    {
+        if (_shell is null)
+            return;
+        for (var i = 0; i < _shell.Views.Count; i++)
+        {
+            NavItemViewModel view = _shell.Views[i];
+            if (MenuItemFor(view) is { IconSource: FAPathIconSource icon })
+            {
+                bool selected = ReferenceEquals(_shell.SelectedView, view);
+                icon.Data = ResolveIconGeometry(selected ? view.IconFilledKey : view.IconKey);
+            }
+        }
+    }
+
+    private Geometry ResolveIconGeometry(string key)
+    {
+        if (!_iconGeometryCache.TryGetValue(key, out Geometry? geometry))
+        {
+            this.TryFindResource(key, out object? value);
+            geometry = (Geometry)value!;
+            _iconGeometryCache[key] = geometry;
+        }
+        return geometry;
     }
 
     private void OnHostSelectionChanged(object? sender, SelectionChangedEventArgs e)

@@ -2,6 +2,7 @@ using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
@@ -11,6 +12,7 @@ namespace Lattice.App.Tests;
 public class ShellViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+    private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private HostStore _store = null!;
@@ -20,10 +22,10 @@ public class ShellViewModelTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
         _clock = new ManualUiClock();
-        _shell = new ShellViewModel(_registry, _store, _clock, () => new FakeGuiRpcClient());
+        _shell = new ShellViewModel(_registry, _store, _clock, () => new RoutingGuiRpcClient(_fakes));
         return ValueTask.CompletedTask;
     }
 
@@ -66,12 +68,16 @@ public class ShellViewModelTests : IAsyncLifetime
     [Fact]
     public void Removing_a_host_disposes_its_rail_item_clock_subscription()
     {
+        // Baseline includes Tasks' own permanent Tick subscription (it lives for
+        // the shell's lifetime, independent of any host); the rail item adds
+        // exactly one more on top of that and removes it again on host removal.
+        var baseline = _clock.SubscriberCount;
         var host = TestData.MakeHostConfig();
         _registry.AddHost(host);
-        Assert.Equal(1, _clock.SubscriberCount);
+        Assert.Equal(baseline + 1, _clock.SubscriberCount);
 
         _registry.RemoveHost(host.Id);
-        Assert.Equal(0, _clock.SubscriberCount);
+        Assert.Equal(baseline, _clock.SubscriberCount);
     }
 
     [Fact]
@@ -105,5 +111,37 @@ public class ShellViewModelTests : IAsyncLifetime
 
         Assert.Same(_shell.Settings, _shell.CurrentPage);
         Assert.True(_shell.Settings.Hosts.Single(h => h.HostId == host.Id).IsExpanded);
+    }
+
+    [Fact]
+    public void Tasks_page_is_a_TasksViewModel_and_receives_scope_changes()
+    {
+        var tasks = Assert.IsType<TasksViewModel>(_shell.Views[0].Page);
+        Assert.Same(_shell.Tasks, tasks);
+        Assert.True(tasks.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, tasks.Scope.HostId);
+    }
+
+    [Fact]
+    public async Task TasksCount_mirrors_the_tasks_view_models_row_count()
+    {
+        Assert.Equal(0, _shell.TasksCount);
+
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "task_a")]),
+        };
+        _fakes["host-a"] = fake;
+        _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        _manager.Start();
+
+        await Wait.UntilAsync(() => _shell.Tasks.Rows.Count == 1);
+
+        Assert.Equal(1, _shell.TasksCount);
     }
 }
