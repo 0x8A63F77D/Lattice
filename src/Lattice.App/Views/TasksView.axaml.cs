@@ -15,9 +15,9 @@ public partial class TasksView : UserControl
     // Null = no explicit choice yet (ColumnVisibilityPolicy's breakpoint rule
     // decides); set once the user toggles a column from the overflow menu, and
     // from then on that column's visibility no longer follows the breakpoints
-    // (design §Task 11 code-behind responsibilities). UiStateStore persistence
-    // (Task 12) can populate this dictionary at startup without touching the
-    // policy or this view.
+    // (design §Task 11 code-behind responsibilities). Populated from the VM's
+    // persisted UiState when the DataContext attaches; every overflow toggle
+    // writes back through TasksViewModel.SetColumnPreference.
     private readonly Dictionary<string, bool?> _userColumnPreferences = new()
     {
         ["Project"] = null,
@@ -57,11 +57,28 @@ public partial class TasksView : UserControl
             ["State"] = ColumnWithHeader(Strings.ColState),
         };
         PropertyChanged += OnViewPropertyChanged;
+        DataContextChanged += (_, _) => LoadColumnPreferences();
         ApplyColumnVisibility(Bounds.Width);
     }
 
     private DataGridColumn ColumnWithHeader(string header) =>
         Grid.Columns.Single(c => Equals(c.Header, header));
+
+    // Restores persisted overflow-menu choices when the VM attaches: preference
+    // dictionary, menu checkbox state (unchosen columns show checked — the
+    // all-visible default), and the resulting column visibility.
+    private void LoadColumnPreferences()
+    {
+        if (DataContext is not TasksViewModel vm)
+            return;
+        foreach (var columnKey in _userColumnPreferences.Keys.ToList())
+            _userColumnPreferences[columnKey] = vm.GetColumnPreference(columnKey);
+        if (OverflowButton.Flyout is MenuFlyout flyout)
+            foreach (var item in flyout.Items.OfType<MenuItem>())
+                if (item.Tag is string columnKey)
+                    item.IsChecked = _userColumnPreferences[columnKey] ?? true;
+        ApplyColumnVisibility(Bounds.Width);
+    }
 
     private void OnViewPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
@@ -83,6 +100,8 @@ public partial class TasksView : UserControl
         if (sender is not MenuItem { Tag: string columnName } item)
             return;
         _userColumnPreferences[columnName] = item.IsChecked;
+        if (DataContext is TasksViewModel vm)
+            vm.SetColumnPreference(columnName, item.IsChecked);
         ApplyColumnVisibility(Bounds.Width);
     }
 

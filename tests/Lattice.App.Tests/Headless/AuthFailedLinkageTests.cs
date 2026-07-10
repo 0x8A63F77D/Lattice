@@ -32,7 +32,8 @@ public class AuthFailedLinkageTests
         // Manager never started: no sockets, no background threads in headless tests.
         var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var shell = new ShellViewModel(registry, store, new ManualUiClock(), () => new FakeGuiRpcClient());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
         var window = new ShellWindow { DataContext = shell };
         window.Show();
         Layout(window);

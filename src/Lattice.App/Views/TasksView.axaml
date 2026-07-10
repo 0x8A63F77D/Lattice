@@ -86,7 +86,7 @@
                         IsChecked="{Binding IsCompact, Mode=TwoWay}">
             <PathIcon Data="{StaticResource IconTextLineSpacingRegular}" Width="14" Height="14" />
           </ToggleButton>
-          <Button Padding="6" Background="Transparent">
+          <Button x:Name="OverflowButton" Padding="6" Background="Transparent">
             <PathIcon Data="{StaticResource IconMoreHorizontalRegular}" Width="14" Height="14" />
             <Button.Flyout>
               <MenuFlyout>

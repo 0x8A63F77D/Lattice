@@ -20,12 +20,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly AllHostsRailItemViewModel _allHosts = new();
 
     public ShellViewModel(
-        HostRegistry registry, HostStore store, IUiClock clock, Func<IGuiRpcClient> clientFactory)
+        HostRegistry registry, HostStore store, IUiClock clock, UiStateStore uiState,
+        Func<IGuiRpcClient> clientFactory)
     {
         _store = store;
         _clock = clock;
         Settings = new SettingsViewModel(registry, store, clientFactory);
-        Tasks = new TasksViewModel(store, clock);
+        Tasks = new TasksViewModel(store, clock, uiState);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),

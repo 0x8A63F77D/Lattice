@@ -31,7 +31,9 @@ public class AllHostsRailTests : IAsyncLifetime
         File.Delete(_path);
     }
 
-    private ShellViewModel MakeShell() => new(_registry, _store, _clock, () => new FakeGuiRpcClient());
+    private ShellViewModel MakeShell() => new(_registry, _store, _clock,
+        new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json")),
+        () => new FakeGuiRpcClient());
 
     [Fact]
     public void Rail_entries_lead_with_the_all_hosts_sentinel()

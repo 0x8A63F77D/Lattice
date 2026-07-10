@@ -19,7 +19,7 @@ namespace Lattice.App.Tests.Headless;
 public class TasksViewTests
 {
     private static (Window Window, TasksView View, TasksViewModel Vm, HostRegistry Registry,
-        HostMonitorManager Manager, Dictionary<string, FakeGuiRpcClient> Fakes) MakeView()
+        HostMonitorManager Manager, Dictionary<string, FakeGuiRpcClient> Fakes) MakeView(UiStateStore? uiState = null)
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
@@ -27,7 +27,8 @@ public class TasksViewTests
         var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
-        var vm = new TasksViewModel(store, clock);
+        uiState ??= new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var vm = new TasksViewModel(store, clock, uiState);
         var view = new TasksView { DataContext = vm };
         // 1280px matches ShellWindow's default width: wide enough that the Elapsed
         // (<1100) and Application (<1000) responsive breakpoints don't kick in and
@@ -236,7 +237,8 @@ public class TasksViewTests
         var fakes = new Dictionary<string, FakeGuiRpcClient> { ["host-a"] = fake };
         var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var vm = new TasksViewModel(store, new ManualUiClock());
+        var vm = new TasksViewModel(store, new ManualUiClock(),
+            new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json")));
         var view = new TasksView { DataContext = vm };
         var window = new Window { Width = 1280, Height = 800, Content = view };
         registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
@@ -256,5 +258,29 @@ public class TasksViewTests
         await manager.DisposeAsync();
         window.Close();
         File.Delete(path);
+    }
+
+    [AvaloniaFact]
+    public void Persisted_column_preference_beats_the_breakpoint_default()
+    {
+        var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
+        var uiState = new UiStateStore(uiPath);
+        uiState.Save(UiState.Default with { ColumnVisibility = new() { ["Project"] = false } });
+
+        var (window, _, _, _, _, _) = MakeView(uiState);
+        window.Show();
+        Layout(window);
+
+        // At 1280px every breakpoint says "visible"; the persisted explicit hide
+        // must win (ColumnVisibilityPolicy: non-null userPreference beats width).
+        var headers = window.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.IsVisible)
+            .Select(h => h.Content as string)
+            .Where(text => text is not null)
+            .ToList();
+        Assert.DoesNotContain(Strings.ColProject, headers);
+        Assert.Equal(8, headers.Count);
+        window.Close();
+        File.Delete(uiPath);
     }
 }

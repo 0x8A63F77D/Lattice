@@ -12,6 +12,7 @@ namespace Lattice.App.Tests;
 public class ShellViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+    private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
     private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
@@ -25,7 +26,8 @@ public class ShellViewModelTests : IAsyncLifetime
         _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
         _clock = new ManualUiClock();
-        _shell = new ShellViewModel(_registry, _store, _clock, () => new RoutingGuiRpcClient(_fakes));
+        _shell = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+            () => new RoutingGuiRpcClient(_fakes));
         return ValueTask.CompletedTask;
     }
 
@@ -33,6 +35,7 @@ public class ShellViewModelTests : IAsyncLifetime
     {
         await _manager.DisposeAsync();
         File.Delete(_path);
+        File.Delete(_uiPath);
     }
 
     [Fact]
