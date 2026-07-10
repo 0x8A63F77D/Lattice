@@ -344,6 +344,61 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Partial_bar_reappears_when_the_same_host_fails_after_recovering()
+    {
+        // Codex P2 round 2: dismissal must not survive a full recovery. If the
+        // user dismisses {B}, B recovers (unreachable set -> empty), and B later
+        // fails AGAIN (set -> {B}), the fresh set SetEquals the stale dismissed
+        // set — without clearing it on recovery, the new outage is never shown.
+        var fakeA = new FakeGuiRpcClient();
+        var fakeB = new FakeGuiRpcClient();
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected);
+
+        // Break B: poll failure, then auth failure on reconnect -> AuthFailed.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        await Wait.UntilAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
+
+        vm.DismissPartialCommand.Execute(null);
+        Assert.False(vm.ShowPartialBar);
+
+        // Heal B. AuthFailed parks the monitor until a config change, so the
+        // recovery goes through UpdateHost (same address — routing stays valid).
+        fakeB.OnGetCcStatus = () => Task.FromResult(FakeGuiRpcClient.DefaultStatus);
+        fakeB.OnAuthorize = _ => Task.FromResult(true);
+        _registry.UpdateHost(hostB with { Name = "host-b-healed" });
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected,
+            "B should recover after the config update");
+        Assert.False(vm.ShowPartialBar, "no outage, no bar");
+
+        // Break B again: the SAME id-set {B} as the dismissed outage, but this
+        // is a NEW outage after a full recovery — it must be reported.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom again");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+
+        await Wait.UntilAsync(() => vm.ShowPartialBar,
+            "the bar must reappear for a new outage after full recovery");
+    }
+
+    [Fact]
     public async Task Partial_bar_coverage_counts_only_hosts_feeding_the_grid()
     {
         // Codex P2: the covered count {2} in PartialFmt must describe the hosts

@@ -150,6 +150,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             .Select(h => h.Config.Id)
             .ToHashSet();
 
+        // A dismissal covers ONE outage, not the host forever: once every host
+        // has recovered, forget it — otherwise a later outage with the same
+        // id-set would SetEquals the stale dismissal and never be reported.
+        if (_unreachableIds.Count == 0)
+            _dismissedUnreachable = [];
+
         ShowPartialBar = Scope.IsAllHosts
             && _unreachableIds.Count > 0
             && !_unreachableIds.SetEquals(_dismissedUnreachable);
