@@ -350,6 +350,18 @@ public class TasksViewModelTests : IAsyncLifetime
         // user dismisses {B}, B recovers (unreachable set -> empty), and B later
         // fails AGAIN (set -> {B}), the fresh set SetEquals the stale dismissed
         // set — without clearing it on recovery, the new outage is never shown.
+        // The journey is ordered on OBSERVABLE, STABLE events only. Two rules,
+        // learned from a ~10% flake in parallel runs:
+        //  - before breaking, wait until the fake has observed a poll on the
+        //    current connection (Calls log) — otherwise the break installs
+        //    itself before B's first tick and the failure cascade can complete
+        //    before this thread ever starts watching;
+        //  - never wait on the transient Retrying state. A broken B self-drives
+        //    Retrying (1s backoff) -> reconnect -> auth-reject -> AuthFailed,
+        //    so the ~1s Retrying window can be missed outright; AuthFailed is
+        //    the terminal park state and cannot be. (No backoff-skip nudge is
+        //    needed either: wakes are sticky — see HostMonitor.WaitAsync — so
+        //    one RequestRefresh reliably forces the failing tick.)
         var fakeA = new FakeGuiRpcClient();
         var fakeB = new FakeGuiRpcClient();
         AddHost("host-a", fakeA);
@@ -358,14 +370,13 @@ public class TasksViewModelTests : IAsyncLifetime
         _manager.Start();
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
+            "B's first poll should be observed before the test breaks it");
 
         // Break B: poll failure, then auth failure on reconnect -> AuthFailed.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
         _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
-        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
         await Wait.UntilAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
@@ -375,21 +386,21 @@ public class TasksViewModelTests : IAsyncLifetime
 
         // Heal B. AuthFailed parks the monitor until a config change, so the
         // recovery goes through UpdateHost (same address — routing stays valid).
+        var pollsBeforeHeal = fakeB.Calls.Count(c => c == "get_cc_status");
         fakeB.OnGetCcStatus = () => Task.FromResult(FakeGuiRpcClient.DefaultStatus);
         fakeB.OnAuthorize = _ => Task.FromResult(true);
         _registry.UpdateHost(hostB with { Name = "host-b-healed" });
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected,
             "B should recover after the config update");
+        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > pollsBeforeHeal,
+            "B's first post-reconnect poll should be observed before the test re-breaks it");
         Assert.False(vm.ShowPartialBar, "no outage, no bar");
 
         // Break B again: the SAME id-set {B} as the dismissed outage, but this
         // is a NEW outage after a full recovery — it must be reported.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom again");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
-        _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
         _store.RequestRefresh(hostB.Id);
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
