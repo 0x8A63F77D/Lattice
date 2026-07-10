@@ -614,6 +614,58 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Stale_snapshot_does_not_suppress_loading_while_a_connected_host_fetches_first_data()
+    {
+        // Codex P2 round 6: a Retrying host's RETAINED stale snapshot must not
+        // suppress the first-fetch loading overlay (nor let the view fall
+        // through to the empty state) while a Connected host's first data is
+        // still in flight. The Connected-without-snapshot window is real and
+        // holdable: HostMachine publishes Connected right after get_state, but
+        // the first snapshot only lands after the first tick's poll — so
+        // parking A's get_cc_status on a never-completing TaskCompletionSource
+        // pins A in Connected-with-null-Snapshot deterministically (the fake
+        // awaits via WaitAsync(ct), so dispose still cancels it cleanly).
+        var gate = new TaskCompletionSource<CcStatus>();
+        var fakeA = new FakeGuiRpcClient { OnGetCcStatus = () => gate.Task };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var hostA = AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: A parked Connected-without-snapshot, B contributing rows —
+        // a contributing host suppresses loading regardless of A's pending fetch.
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.Connected);
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "B should contribute its row");
+        Assert.Null(_store.Hosts.Single(h => h.Config.Id == hostA.Id).Snapshot);
+        Assert.False(vm.IsLoading, "B's data is visible; the first-fetch skeleton must not cover it");
+        Assert.False(vm.IsEmpty);
+
+        // Hold B in the Retrying tier (same idiom as the coverage test): its
+        // live poll AND every reconnect attempt throw, so it cycles Retrying ->
+        // (instant connect failure) -> Retrying, never Connected again — while
+        // its snapshot stays cached and hidden by the grid's Connected filter.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+        await Wait.UntilAsync(() => vm.Rows.Count == 0, "B's stale rows should drop out");
+
+        // A is still fetching its FIRST data; B's cached-but-hidden snapshot
+        // counts for nothing. Loading must return — and the view must NOT fall
+        // through to "no tasks" (A never answered; B's answer is stale).
+        await Wait.UntilAsync(() => vm.IsLoading,
+            "the first-fetch overlay must return: only A can produce visible data and it hasn't answered");
+        Assert.False(vm.IsEmpty, "an unanswered first fetch is not an empty task set");
+    }
+
+    [Fact]
     public async Task IsLoading_until_the_first_snapshot_then_IsEmpty_with_zero_tasks()
     {
         var fake = new FakeGuiRpcClient();

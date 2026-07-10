@@ -29,6 +29,13 @@ public class TasksOverlayPolicyTests
         { [Host(Connected, snap: true)],                   true,   false, false }, // rows present: neither
         { [Host(AuthFailed), Host(Connected, snap: true)], false,  false, true  }, // the connected host vouches
         { [Host(Retrying, snap: true)],                    false,  false, false }, // stale snapshot, nobody connected: neither
+        // Codex P2 round 6: a stale snapshot (cached but hidden by the grid's
+        // Connected-only filter) must count for NOTHING — it neither suppresses
+        // the first-fetch loading state nor vouches for emptiness.
+        { [Host(Connected), Host(Retrying, snap: true)],   false,  true,  false }, // THE finding: visible host still fetching; stale snap must not hide loading
+        { [Host(Retrying, snap: true), Host(Connecting)],  false,  true,  false }, // stale host doesn't suppress a genuinely pending one
+        { [Host(Connected, snap: true), Host(Retrying, snap: true)], false, false, true }, // a contributing host suppresses loading and vouches empty
+        { [Host(Connected, snap: true), Host(Retrying, snap: true)], true,  false, false }, // rows present: neither, stale host irrelevant
     };
 
     [Theory]
