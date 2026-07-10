@@ -19,10 +19,10 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // The dismissed partial-bar id-set and the set computed on the last Rebuild.
-    // Dismiss snapshots the latter into the former; the bar reappears only when
-    // a later Rebuild's set no longer equals what was dismissed (§ plan Task 7).
-    private HashSet<Guid> _dismissedUnreachable = [];
-    private HashSet<Guid> _unreachableIds = [];
+    // Episode semantics (when a dismissal holds, when it is forgotten) live in
+    // PartialBarPolicy; this class only stores the state and applies the scope gate.
+    private IReadOnlySet<Guid> _dismissedUnreachable = new HashSet<Guid>();
+    private IReadOnlySet<Guid> _unreachableIds = new HashSet<Guid>();
 
     public TasksViewModel(HostStore store, IUiClock clock)
     {
@@ -69,7 +69,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissPartial()
     {
-        _dismissedUnreachable = _unreachableIds;
+        _dismissedUnreachable = PartialBarPolicy.Dismiss(_unreachableIds);
         ShowPartialBar = false;
     }
 
@@ -150,15 +150,13 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             .Select(h => h.Config.Id)
             .ToHashSet();
 
-        // A dismissal covers ONE outage, not the host forever: once every host
-        // has recovered, forget it — otherwise a later outage with the same
-        // id-set would SetEquals the stale dismissal and never be reported.
-        if (_unreachableIds.Count == 0)
-            _dismissedUnreachable = [];
-
-        ShowPartialBar = Scope.IsAllHosts
-            && _unreachableIds.Count > 0
-            && !_unreachableIds.SetEquals(_dismissedUnreachable);
+        // Episode semantics (dismissal forgotten on full recovery; any id-set
+        // change re-reports) are PartialBarPolicy's; the All-hosts scope gate
+        // is the one piece that stays here.
+        (IReadOnlySet<Guid> dismissed, bool visible) =
+            PartialBarPolicy.Advance(_dismissedUnreachable, _unreachableIds);
+        _dismissedUnreachable = dismissed;
+        ShowPartialBar = Scope.IsAllHosts && visible;
 
         if (ShowPartialBar)
         {
