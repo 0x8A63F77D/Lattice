@@ -128,4 +128,43 @@ public class SettingsViewTests
         Assert.Empty(window.GetVisualDescendants().OfType<FAContentDialog>());
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Navigating_away_unsubscribes_the_discarded_view()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var settings = new SettingsViewModel(registry, store, () => new FakeGuiRpcClient());
+
+        // Replicates the shell: pages live in a ContentControl via DataTemplates;
+        // navigating swaps Content, discarding the old view without rebinding its
+        // DataContext. The Settings VM outlives every visit, so a discarded view
+        // that stays subscribed to RemoveRequested is a per-visit view-tree leak.
+        var host = new ContentControl
+        {
+            DataTemplates =
+            {
+                new Avalonia.Controls.Templates.FuncDataTemplate<SettingsViewModel>(
+                    (_, _) => new SettingsView()),
+            },
+        };
+        var window = new Window { Width = 900, Height = 700, Content = host };
+        window.Show();
+        host.Content = settings;
+        Layout(window);
+
+        var view = Assert.Single(window.GetVisualDescendants().OfType<SettingsView>());
+        Assert.Same(settings, view.SubscribedVmForTests);
+        Assert.True(settings.HasRemoveSubscribersForTests);
+
+        host.Content = "elsewhere"; // navigate away
+        Layout(window);
+
+        // VM-side check: the handler itself must be gone, not just the view's
+        // bookkeeping field — a leaked handler retains the whole view tree.
+        Assert.False(settings.HasRemoveSubscribersForTests);
+        window.Close();
+    }
 }

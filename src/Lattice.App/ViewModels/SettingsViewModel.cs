@@ -51,6 +51,9 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Bubbled from items; the view shows the confirm dialog, then calls Remove.</summary>
     public event EventHandler<HostSettingsItemViewModel>? RemoveRequested;
 
+    /// <summary>Test seam: whether any view is still listening (leak pin — the VM outlives page visits).</summary>
+    internal bool HasRemoveSubscribersForTests => RemoveRequested is not null;
+
     public void ExpandHost(Guid hostId)
     {
         foreach (HostSettingsItemViewModel host in Hosts)

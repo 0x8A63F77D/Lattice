@@ -11,6 +11,9 @@ public partial class SettingsView : UserControl
 
     public SettingsView() => InitializeComponent();
 
+    /// <summary>Test seam: which VM this view currently listens to (leak pin).</summary>
+    internal SettingsViewModel? SubscribedVmForTests => _subscribed;
+
     protected override void OnDataContextChanged(EventArgs e)
     {
         base.OnDataContextChanged(e);
