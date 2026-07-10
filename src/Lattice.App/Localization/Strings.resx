@@ -302,6 +302,21 @@
     <value>Settings</value>
   </data>
   <!-- ===== Tasks ===== -->
+  <data name="AtRiskFmt" xml:space="preserve">
+    <value>⚠ {0} deadline at risk</value>
+  </data>
+  <data name="CountsFmt" xml:space="preserve">
+    <value>{0} tasks · {1} running · {2} uploading · {3} suspended</value>
+  </data>
+  <data name="PartialFmt" xml:space="preserve">
+    <value>{0} of {1} hosts aren't reachable — tasks below cover {2} hosts.</value>
+  </data>
+  <data name="PartialTitle" xml:space="preserve">
+    <value>Partial results.</value>
+  </data>
+  <data name="PollingFmt" xml:space="preserve">
+    <value>Polling every {0}s</value>
+  </data>
   <data name="TaskStateAborted" xml:space="preserve">
     <value>Aborted</value>
   </data>
