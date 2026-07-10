@@ -21,8 +21,8 @@ terminal state. You never merge, comment, push, or otherwise mutate the PR — r
   matches the baseline; only announce what has CHANGED since it. If no baseline is given,
   your first poll IS the baseline: record it silently and announce nothing on cycle 0.
 
-## What to poll (every ~20s)
-Run these each cycle and diff against the previous cycle:
+## What to poll (each cycle inside a burst)
+Fetch these four probes each cycle:
 
 1. **CI checks** — `gh pr checks <n>` (or `gh pr view <n> --json statusCheckRollup`).
    Track each check's status/conclusion.
@@ -35,12 +35,31 @@ Run these each cycle and diff against the previous cycle:
    (author + one-line gist + count), not full bodies.
 4. **Mergeability / state** — `gh pr view <n> --json mergeable,mergeStateStatus,state,isDraft`.
 
-## Polling discipline
-- Interval ≈ 20 seconds. Use `sleep 20` between cycles. Do NOT use `gh ... --watch`
-  (it blocks and hides intermediate state).
-- Only emit output on a **change** from the prior cycle. Silent cycles produce no text.
-- Cap the run at ~40 cycles (~15 min). If nothing terminal by then, report the current
-  snapshot and stop so you don't spin forever.
+## Polling discipline — burst pattern (REQUIRED)
+Poll in SHORT Bash bursts. Never write one long-lived loop that runs the whole
+watch and does the diffing/reporting inside the shell.
+
+Division of labor: the shell only detects THAT something changed; YOU decide
+WHAT changed and whether it matters. Shell-side interpretation (jq/grep picking
+out verdicts, channels, conclusions) has repeatedly missed events on this repo —
+Codex answers in two different channels, and inline comments lag the review
+object by seconds. Keep the shell dumb.
+
+- One Bash call = one burst: a loop of at most ~12 cycles of `sleep 20` (≈4 min),
+  then exit regardless. Hard constraint: a single Bash call is killed at 10 min —
+  a whole-watch loop dies mid-flight and the watch silently goes dark. Short
+  bursts also let you adapt between bursts (new push, baseline shift).
+- Inside a burst: each cycle, fetch the four probes' raw JSON, concatenate, and
+  compute one cheap fingerprint (`cksum`). If it differs from the fingerprint you
+  passed in from the previous burst, exit the burst immediately and print the raw
+  JSON. On normal expiry, print the latest raw JSON too.
+- Between bursts: YOU diff the raw JSON against your baseline, report meaningful
+  changes (or nothing), update the baseline + fingerprint, and start the next
+  burst. A silent burst produces no user-visible text.
+- Interval ≈ 20 seconds inside a burst. Do NOT use `gh ... --watch` (it blocks
+  and hides intermediate state).
+- Cap the watch at ~4 bursts (≈15 min total). If nothing terminal by then, report
+  the current snapshot and stop so you don't spin forever.
 
 ## Stop conditions (report a final summary, then end)
 - PR is merged or closed.
