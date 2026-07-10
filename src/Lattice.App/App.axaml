@@ -19,8 +19,10 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceInclude Source="avares://Lattice.App/Theming/ControlStyles.axaml" />
+        <!-- Tokens first: ControlStyles resolves LatticeStatusBarHeight via StaticResource,
+             which must not depend on ResourceInclude lazy-load timing. -->
         <ResourceInclude Source="avares://Lattice.App/Theming/Tokens.axaml" />
+        <ResourceInclude Source="avares://Lattice.App/Theming/ControlStyles.axaml" />
         <ResourceInclude Source="avares://Lattice.App/Theming/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
