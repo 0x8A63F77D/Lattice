@@ -260,8 +260,13 @@ public class TasksViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
 
-        await Wait.UntilAsync(() => vm.ShowPartialBar, "partial bar should appear for the AuthFailed host");
-        Assert.Equal(string.Format(Strings.PartialFmt, 1, 2, 1), vm.PartialBarText);
+        // Condition-driven: the store Waits above observe HostStore fields, which
+        // are set BEFORE Changed fires — the VM lags the store by one Rebuild, so
+        // a direct assert here can read the previous Rebuild's text.
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 2, 1),
+            "partial bar should appear for the AuthFailed host with B's coverage counted");
+        Assert.True(vm.ShowPartialBar);
         Assert.False(vm.IsUpdateStale, "AuthFailed is not a Retrying/Unreachable staleness signal");
 
         vm.DismissPartialCommand.Execute(null);
@@ -278,8 +283,10 @@ public class TasksViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
 
-        await Wait.UntilAsync(() => vm.ShowPartialBar, "partial bar should reappear: the unreachable id-set changed");
-        Assert.Equal(string.Format(Strings.PartialFmt, 2, 2, 0), vm.PartialBarText);
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 2, 2, 0),
+            "partial bar should reappear: the unreachable id-set changed");
+        Assert.True(vm.ShowPartialBar);
     }
 
     [Fact]
@@ -329,8 +336,65 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.Equal(string.Format(Strings.CountsFmt, 2, 1, 0, 0), vm.CountsText);
 
         // And B now counts toward the partial-results bar (1 of 2 unreachable).
-        Assert.True(vm.ShowPartialBar);
-        Assert.Equal(string.Format(Strings.PartialFmt, 1, 2, 1), vm.PartialBarText);
+        // Condition-driven: the VM lags the store-state Waits by one Rebuild.
+        await Wait.UntilAsync(
+            () => vm.ShowPartialBar
+                  && vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 2, 1),
+            "B should count toward the partial bar");
+    }
+
+    [Fact]
+    public async Task Partial_bar_coverage_counts_only_hosts_feeding_the_grid()
+    {
+        // Codex P2: the covered count {2} in PartialFmt must describe the hosts
+        // whose tasks are actually in the grid (Connected AND snapshotted — the
+        // exact set Rows are built from), not "total minus unreachable-tier".
+        // With A=AuthFailed, B=Retrying (stale snapshot), C=Connected, the old
+        // total-minus-unreachable arithmetic claimed coverage of 2 hosts while
+        // only C's tasks were below.
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        var fakeC = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "c_task")]),
+        };
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        AddHost("host-c", fakeC);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: A AuthFailed, B and C both feeding the grid. Covered = 2
+        // under BOTH the old and the new semantics — pinning it here isolates
+        // the assertion below to the B-drops-out transition.
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            "A parks in AuthFailed while B and C feed the grid");
+
+        // Hold B in the Retrying tier deterministically: its live poll AND every
+        // reconnect attempt throw, so it can only cycle Retrying -> (instant
+        // connect failure) -> Retrying, never Connected again; its snapshot stays
+        // cached, and the assertion lands within the first backoff tiers (well
+        // before attempt 4 would promote it to the Unreachable tier).
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 1, "B's stale rows should drop out");
+        Assert.Equal("c_task", Assert.Single(vm.Rows).Name);
+
+        // Unreachable tier is still just {A} (B is Retrying, below the tier),
+        // but coverage must now count ONLY C — the sole host feeding the grid.
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+            "covered count should shrink to the hosts actually in the grid");
     }
 
     [Fact]

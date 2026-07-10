@@ -156,7 +156,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
 
         if (ShowPartialBar)
         {
-            var covered = _store.Hosts.Count - _unreachableIds.Count;
+            // "tasks below cover {2} hosts" must count the exact set Rows are
+            // built from (Connected AND snapshotted; the bar only shows in the
+            // All-hosts scope, so `reachable` spans every host here) — NOT
+            // total minus unreachable-tier, which would also count Retrying/
+            // Connecting hosts whose tasks are not in the grid (Codex P2).
+            var covered = reachable.Count(h => h.Snapshot is not null);
             PartialBarText = string.Format(
                 Strings.PartialFmt, _unreachableIds.Count, _store.Hosts.Count, covered);
         }
