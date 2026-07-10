@@ -17,6 +17,7 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://Lattice.App/Theming/ControlStyles.axaml" />
         <ResourceInclude Source="avares://Lattice.App/Theming/Tokens.axaml" />
         <ResourceInclude Source="avares://Lattice.App/Theming/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
