@@ -180,11 +180,29 @@ public class TasksViewTests
 
         Assert.True(vm.IsEmpty);
         Assert.Empty(vm.Rows);
-        var overlayText = window.GetVisualDescendants().OfType<TextBlock>()
+        // The Single() call is the assertion: it throws unless exactly one visible
+        // TextBlock carries the empty-overlay string.
+        _ = window.GetVisualDescendants().OfType<TextBlock>()
             .Single(t => t.IsVisible && t.Text == Strings.TasksEmptyAll);
-        Assert.NotNull(overlayText);
 
         await manager.DisposeAsync();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Loading_overlay_text_names_the_host_being_fetched()
+    {
+        var (window, _, vm, registry, _, fakes) = MakeView();
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        window.Show();
+        // Manager deliberately NOT started: the host has no snapshot yet, which is
+        // exactly the loading phase the overlay text covers.
+        Layout(window);
+
+        Assert.True(vm.IsLoading);
+        Assert.Equal(string.Format(Strings.LoadingFromFmt, "host-a"), vm.LoadingText);
+        _ = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.IsVisible && t.Text == vm.LoadingText);
         window.Close();
     }
 
@@ -204,5 +222,39 @@ public class TasksViewTests
 
         Assert.True(view.FilterBox.IsFocused);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task F5_triggers_an_immediate_refresh_poll_via_the_key_binding()
+    {
+        // Bespoke setup (not MakeView): a 3600s polling interval guarantees no
+        // natural steady-state poll can land inside the 5s Wait window below —
+        // any extra get_results after the keypress is attributable to F5 alone.
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(3600, []), path);
+        var fake = new FakeGuiRpcClient();
+        var fakes = new Dictionary<string, FakeGuiRpcClient> { ["host-a"] = fake };
+        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var vm = new TasksViewModel(store, new ManualUiClock());
+        var view = new TasksView { DataContext = vm };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+
+        window.Show();
+        manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading, "first snapshot should land");
+        Layout(window);
+
+        var pollsBefore = fake.Calls.Count(c => c == "get_results");
+        view.Grid.Focus();
+        window.KeyPress(Key.F5, RawInputModifiers.None, PhysicalKey.F5, null);
+
+        await Wait.UntilAsync(() => fake.Calls.Count(c => c == "get_results") > pollsBefore,
+            "F5 should trigger an immediate refresh poll through the XAML KeyBinding");
+
+        await manager.DisposeAsync();
+        window.Close();
+        File.Delete(path);
     }
 }

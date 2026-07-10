@@ -25,9 +25,10 @@ public sealed class FractionToWidthConverter : IValueConverter
 
 /// <summary>
 /// Compares an enum-valued binding against a ConverterParameter string by name
-/// (e.g. TaskStateKind.Running vs "Running"). Backs the four-stacked-PathIcon
-/// per-state-kind pattern used both by the host rail (ShellWindow.axaml) and the
-/// Tasks DataGrid's State cell.
+/// (e.g. TaskStateKind.Running vs "Running"). Backs the Tasks DataGrid's State
+/// cell: four stacked PathIcons, exactly one visible per state kind. (The host
+/// rail shares only the visual stacked-icon shape — it binds five exclusive
+/// bools and does not use this converter.)
 /// </summary>
 public sealed class EnumMatchConverter : IValueConverter
 {

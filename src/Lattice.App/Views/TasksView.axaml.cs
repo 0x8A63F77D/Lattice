@@ -35,6 +35,12 @@ public partial class TasksView : UserControl
     // looked up by their (localized, but fixed at process start) Header text —
     // both here and from the overflow menu's Click handler below — and cached
     // once per column that code-behind actually touches.
+    // INVARIANT (load-bearing, unchecked at compile time): each XAML column's
+    // Header="{x:Static loc:Strings.ColX}" and the constructor's
+    // ColumnWithHeader(Strings.ColX) must reference the IDENTICAL Strings
+    // symbol. If they drift, Single() throws InvalidOperationException the
+    // first time a TasksView is constructed — at runtime, not build time
+    // (though any headless TasksView test trips it immediately).
     private readonly Dictionary<string, DataGridColumn> _columnsByTag;
 
     public TasksView()
@@ -108,6 +114,9 @@ public partial class TasksView : UserControl
         e.Row.Classes.Set("suspended", row.IsSuspended);
     }
 
+    // Ctrl+F stays imperative on purpose: focusing a named control is a
+    // view-local concern with no VM command to bind — unlike F5, which maps
+    // 1:1 onto RefreshCommand and is declarative in the XAML KeyBindings.
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
@@ -116,12 +125,6 @@ public partial class TasksView : UserControl
         if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
         {
             FilterBox.Focus();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.F5)
-        {
-            if (DataContext is TasksViewModel vm)
-                vm.RefreshCommand.Execute(null);
             e.Handled = true;
         }
     }

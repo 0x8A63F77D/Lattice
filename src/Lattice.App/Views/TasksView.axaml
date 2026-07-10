@@ -8,10 +8,12 @@
              x:Class="Lattice.App.Views.TasksView"
              x:DataType="vm:TasksViewModel">
 
-  <UserControl.Resources>
-    <views:FractionToWidthConverter x:Key="FractionToWidthConverter" />
-    <views:EnumMatchConverter x:Key="EnumMatchConverter" />
-  </UserControl.Resources>
+  <UserControl.KeyBindings>
+    <!-- F5 is a pure VM-command gesture, so it's declarative (the ShellWindow
+         KeyBindings idiom); Ctrl+F needs imperative focus on a named control —
+         a view-local concern, not a VM command — so it lives in OnKeyDown. -->
+    <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
+  </UserControl.KeyBindings>
 
   <UserControl.Styles>
     <!-- Row-class overrides (design §Task 11): at-risk tint + suspended dimming.
@@ -150,7 +152,7 @@
                   <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
                     <Border Classes="progressFill" Classes.suspended="{Binding IsSuspended}"
                             HorizontalAlignment="Left" Height="3" CornerRadius="2"
-                            Width="{Binding Fraction, Converter={StaticResource FractionToWidthConverter}}" />
+                            Width="{Binding Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
                   </Border>
                   <TextBlock Text="{Binding PercentText}" FontSize="12" Classes="numeric" />
                 </StackPanel>
@@ -181,16 +183,16 @@
                   <Panel Width="12" Height="12">
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconPlayRegular}"
                               Foreground="{DynamicResource LatticeSuccessBrush}"
-                              IsVisible="{Binding StateKind, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Running}" />
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Running}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconClockRegular}"
                               Foreground="{DynamicResource LatticeNeutralFgBrush}"
-                              IsVisible="{Binding StateKind, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Waiting}" />
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Waiting}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconPauseRegular}"
                               Foreground="{DynamicResource LatticeTextSecondaryBrush}"
-                              IsVisible="{Binding StateKind, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Suspended}" />
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Suspended}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowUploadRegular}"
                               Foreground="{DynamicResource LatticeAccentBrush}"
-                              IsVisible="{Binding StateKind, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Uploading}" />
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Uploading}" />
                   </Panel>
                   <TextBlock Text="{Binding StateText}" FontSize="12" />
                 </StackPanel>
