@@ -1,3 +1,4 @@
+using System.Globalization;
 using Lattice.App.Infrastructure;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
@@ -45,7 +46,10 @@ public sealed record TaskRowViewModel(
             ? TimeText.Duration(r.EstimatedCpuTimeRemaining)
             : "—";
 
-        var deadlineText = r.ReportDeadline?.ToLocalTime().ToString("MM-dd HH:mm") ?? "—";
+        // Invariant culture: CurrentCulture's CALENDAR (e.g. Hijri under ar-SA)
+        // would otherwise shift the rendered month/day off the Gregorian deadline.
+        var deadlineText = r.ReportDeadline?.ToLocalTime()
+            .ToString("MM-dd HH:mm", CultureInfo.InvariantCulture) ?? "—";
 
         return new(
             Project: snap.ProjectName,

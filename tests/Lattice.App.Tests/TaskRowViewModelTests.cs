@@ -1,3 +1,4 @@
+using System.Globalization;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.ViewModels;
@@ -64,6 +65,70 @@ public class TaskRowViewModelTests
     {
         var row = TaskRowViewModel.From(Snap(TestData.MakeResult(), atRisk: true), "h");
         Assert.True(row.IsDeadlineAtRisk);
+    }
+
+    public static TheoryData<ResultState, string> WaitingFamilyText => new()
+    {
+        { ResultState.ComputeError, Strings.TaskStateError },
+        { ResultState.Aborted, Strings.TaskStateAborted },
+        { ResultState.FilesDownloaded, Strings.TaskStateWaiting },
+    };
+
+    [Theory]
+    [MemberData(nameof(WaitingFamilyText))]
+    public void Waiting_family_text_reflects_underlying_state(ResultState state, string expected)
+    {
+        var r = TestData.MakeResult() with { ActiveTask = null, State = state };
+        var row = TaskRowViewModel.From(Snap(r), "h");
+        Assert.Equal(TaskStateKind.Waiting, row.StateKind);
+        Assert.Equal(expected, row.StateText);
+    }
+
+    [Fact]
+    public void Remaining_shows_duration_when_estimated_else_dash()
+    {
+        var estimated = TaskRowViewModel.From(Snap(TestData.MakeResult(estRemaining: 200)), "h");
+        Assert.Equal("3m 20s", estimated.RemainingText);
+
+        var none = TaskRowViewModel.From(Snap(TestData.MakeResult(estRemaining: 0)), "h");
+        Assert.Equal("—", none.RemainingText);
+    }
+
+    [Fact]
+    public void Deadline_renders_local_time_or_dash()
+    {
+        var deadline = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+        var row = TaskRowViewModel.From(Snap(TestData.MakeResult(deadline: deadline)), "h");
+        Assert.Equal(
+            deadline.ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture),
+            row.DeadlineText);
+        Assert.Equal(deadline, row.Deadline);
+
+        var none = TaskRowViewModel.From(Snap(TestData.MakeResult(deadline: null)), "h");
+        Assert.Equal("—", none.DeadlineText);
+        Assert.Null(none.Deadline);
+    }
+
+    [Fact]
+    public void Deadline_renders_gregorian_under_non_gregorian_culture()
+    {
+        var original = CultureInfo.CurrentCulture;
+        try
+        {
+            // ar-SA defaults to the Um Al-Qura (Hijri) calendar, whose month/day
+            // differ from Gregorian. (th-TH's Buddhist calendar only shifts the
+            // year, which "MM-dd HH:mm" never shows — it cannot catch this bug.)
+            CultureInfo.CurrentCulture = new CultureInfo("ar-SA");
+            var deadline = new DateTimeOffset(2026, 7, 15, 12, 0, 0, TimeSpan.Zero);
+            var row = TaskRowViewModel.From(Snap(TestData.MakeResult(deadline: deadline)), "h");
+            Assert.Equal(
+                deadline.ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture),
+                row.DeadlineText);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Theory]
