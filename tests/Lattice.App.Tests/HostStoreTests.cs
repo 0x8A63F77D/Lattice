@@ -121,4 +121,38 @@ public class HostStoreTests : IAsyncLifetime
         Assert.Equal(HostConnectionState.Disconnected, store.Hosts[0].Status.State);
         Assert.False(changed);
     }
+
+    [Fact]
+    public async Task RequestRefresh_wakes_the_scoped_monitor()
+    {
+        // Own registry/manager: the polling interval (60s) must sit far beyond
+        // Wait's 5s ceiling, otherwise the monitor's NATURAL periodic tick lands
+        // inside the wait window and the test passes with an empty RequestRefresh.
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(60, []), path);
+        var fake = new FakeGuiRpcClient();
+        var manager = new HostMonitorManager(registry, () => fake, TimeProvider.System);
+        try
+        {
+            var host = TestData.MakeHostConfig();
+            registry.AddHost(host);
+            var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+            manager.Start();
+            // Snapshot ⇒ the first tick's get_results is done; the loop is now in
+            // its 60s poll wait, so only RequestRefresh can trigger another one.
+            await Wait.UntilAsync(() => store.Hosts[0].Snapshot is not null, "first poll should complete");
+            var before = fake.Calls.Count(c => c == "get_results");
+
+            store.RequestRefresh(host.Id);
+
+            await Wait.UntilAsync(
+                () => fake.Calls.Count(c => c == "get_results") > before,
+                "an immediate poll should follow the refresh request");
+        }
+        finally
+        {
+            await manager.DisposeAsync();
+            File.Delete(path);
+        }
+    }
 }
