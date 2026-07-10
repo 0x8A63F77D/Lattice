@@ -121,6 +121,10 @@
     Key organization convention: keys are grouped by domain/view
     (App, FirstRun, Rail, Nav, Settings, AddHost, Tasks, ...),
     one "===== GroupName =====" banner per group, alphabetical within a group.
+    Naming: keys are based on meaning/content (e.g., SettingsSaveButton), not role.
+    Exception: role-based stems (e.g., AddHostPrimaryButton/AddHostCloseButton) for FluentAvalonia dual-button dialog slots.
+    Exception: a *Word suffix marks a bare state noun reused across surfaces (the rail composes them, Settings shows them bare).
+    Note: Hosts-prefixed keys belong to the Rail banner (nav pane host list).
   -->
   <!-- ===== AddHost ===== -->
   <data name="AddHostCloseButton" xml:space="preserve">
@@ -149,6 +153,12 @@
   </data>
   <data name="AddHostRemoteAccessInfo" xml:space="preserve">
     <value>Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg.</value>
+  </data>
+  <data name="AddHostSaveFailedFmt" xml:space="preserve">
+    <value>Connected, but saving the host list failed: {0}</value>
+  </data>
+  <data name="AddHostTimeoutError" xml:space="preserve">
+    <value>Connection timed out.</value>
   </data>
   <!-- ===== App ===== -->
   <data name="AppTitle" xml:space="preserve">
@@ -187,15 +197,39 @@
     <value>Transfers</value>
   </data>
   <!-- ===== Rail ===== -->
-  <data name="RailStateAuthFailed" xml:space="preserve">
+  <data name="RailAuthFailed" xml:space="preserve">
     <value>Wrong password</value>
   </data>
+  <data name="RailConnectedFmt" xml:space="preserve">
+    <value>Connected · {0} tasks</value>
+  </data>
+  <data name="RailConnectedWord" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="RailConnecting" xml:space="preserve">
+    <value>Connecting…</value>
+  </data>
+  <data name="RailRetrying" xml:space="preserve">
+    <value>Retrying…</value>
+  </data>
+  <data name="RailRetryingFmt" xml:space="preserve">
+    <value>Retrying in {0}s (attempt {1})</value>
+  </data>
+  <data name="RailRetryingWord" xml:space="preserve">
+    <value>Retrying</value>
+  </data>
+  <data name="RailUnreachable" xml:space="preserve">
+    <value>Unreachable</value>
+  </data>
   <!-- ===== Settings ===== -->
-  <data name="SettingsAuthErrorTitle" xml:space="preserve">
-    <value>Wrong password</value>
+  <data name="SettingsAuthErrorGuidance" xml:space="preserve">
+    <value>The host refused this password. Check the gui_rpc_auth.cfg on {0}.</value>
   </data>
   <data name="SettingsFieldAddress" xml:space="preserve">
     <value>Address</value>
+  </data>
+  <data name="SettingsFieldAddressRequired" xml:space="preserve">
+    <value>Address is required.</value>
   </data>
   <data name="SettingsFieldName" xml:space="preserve">
     <value>Name</value>
@@ -212,8 +246,14 @@
   <data name="SettingsFieldPort" xml:space="preserve">
     <value>Port</value>
   </data>
+  <data name="SettingsFieldPortInvalid" xml:space="preserve">
+    <value>Port must be a number between 1 and 65535.</value>
+  </data>
   <data name="SettingsHostsSection" xml:space="preserve">
     <value>Hosts</value>
+  </data>
+  <data name="SettingsIntervalSaveFailedFmt" xml:space="preserve">
+    <value>Saving the polling interval failed: {0}</value>
   </data>
   <data name="SettingsPollingDescription" xml:space="preserve">
     <value>How often each host is polled for status and tasks</value>
@@ -227,13 +267,38 @@
   <data name="SettingsRemoveButton" xml:space="preserve">
     <value>Remove host</value>
   </data>
+  <data name="SettingsRemoveFailedFmt" xml:space="preserve">
+    <value>Removing failed: {0}</value>
+  </data>
   <data name="SettingsSaveButton" xml:space="preserve">
     <value>Save</value>
+  </data>
+  <data name="SettingsSaveFailedFmt" xml:space="preserve">
+    <value>Saving failed: {0}</value>
+  </data>
+  <data name="SettingsTestConnectionBusy" xml:space="preserve">
+    <value>Testing…</value>
   </data>
   <data name="SettingsTestConnectionButton" xml:space="preserve">
     <value>Test connection</value>
   </data>
+  <data name="SettingsTestConnectionSuccess" xml:space="preserve">
+    <value>Connected — BOINC {0}.{1}.{2}</value>
+  </data>
+  <data name="SettingsTestConnectionTimeout" xml:space="preserve">
+    <value>Connection timed out.</value>
+  </data>
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
+  </data>
+  <!-- ===== Time ===== -->
+  <data name="UpdatedHoursFmt" xml:space="preserve">
+    <value>Updated {0}h ago</value>
+  </data>
+  <data name="UpdatedMinutesFmt" xml:space="preserve">
+    <value>Updated {0}m ago</value>
+  </data>
+  <data name="UpdatedSecondsFmt" xml:space="preserve">
+    <value>Updated {0}s ago</value>
   </data>
 </root>

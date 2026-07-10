@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -39,7 +40,7 @@ public sealed partial class SettingsViewModel : ObservableObject
             if (value != _registry.PollingIntervalSeconds)
             {
                 PollingError = RegistryGuard.TryMutate(() => _registry.SetPollingInterval(value)) is { } error
-                    ? $"Saving the polling interval failed: {error}"
+                    ? string.Format(Strings.SettingsIntervalSaveFailedFmt, error)
                     : null;
                 // On failure the registry kept its old value; re-raising snaps the
                 // ComboBox back so the UI never shows an interval that isn't live.
@@ -70,7 +71,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// <summary>Removes the host. Null on success, user-facing failure text otherwise.</summary>
     public string? Remove(Guid hostId) =>
         RegistryGuard.TryMutate(() => _registry.RemoveHost(hostId)) is { } error
-            ? $"Removing failed: {error}"
+            ? string.Format(Strings.SettingsRemoveFailedFmt, error)
             : null;
 
     /// <summary>Called by the shell when the store's host list changed.</summary>

@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -77,7 +78,7 @@ public sealed partial class AddHostViewModel : ObservableObject
                 // async void PrimaryButtonClick handler and down the app.
                 if (RegistryGuard.TryMutate(() => _registry.AddHost(candidate)) is { } error)
                 {
-                    ErrorText = $"Connected, but saving the host list failed: {error}";
+                    ErrorText = string.Format(Strings.AddHostSaveFailedFmt, error);
                 }
                 else
                 {
@@ -92,7 +93,7 @@ public sealed partial class AddHostViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            ErrorText = "Connection timed out.";
+            ErrorText = Strings.AddHostTimeoutError;
         }
         finally
         {

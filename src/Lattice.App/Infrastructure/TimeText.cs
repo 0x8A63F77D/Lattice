@@ -1,3 +1,5 @@
+using Lattice.App.Localization;
+
 namespace Lattice.App.Infrastructure;
 
 /// <summary>
@@ -11,15 +13,15 @@ public static class TimeText
         var s = Math.Max(0, (long)(now - updatedAt).TotalSeconds);
         return s switch
         {
-            < 60 => $"Updated {s}s ago",
-            < 3600 => $"Updated {s / 60}m ago",
-            _ => $"Updated {s / 3600}h ago",
+            < 60 => string.Format(Strings.UpdatedSecondsFmt, s),
+            < 3600 => string.Format(Strings.UpdatedMinutesFmt, s / 60),
+            _ => string.Format(Strings.UpdatedHoursFmt, s / 3600),
         };
     }
 
     public static string RetryCountdown(DateTimeOffset nextAttemptAt, DateTimeOffset now, int attempt)
     {
         var s = Math.Max(0, (long)Math.Ceiling((nextAttemptAt - now).TotalSeconds));
-        return $"Retrying in {s}s (attempt {attempt})";
+        return string.Format(Strings.RailRetryingFmt, s, attempt);
     }
 }

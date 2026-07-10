@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
@@ -75,7 +76,7 @@ public class ShellWindowTests
         shell.SelectViewCommand.Execute("2");
 
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Transfers", page.Title);
+        Assert.Equal(Strings.NavTransfers, page.Title);
         window.Close();
     }
 
@@ -89,7 +90,7 @@ public class ShellWindowTests
 
         Assert.Same(window.NavTasks, window.Nav.SelectedItem);
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Tasks", page.Title);
+        Assert.Equal(Strings.NavTasks, page.Title);
         window.Close();
     }
 
@@ -108,7 +109,7 @@ public class ShellWindowTests
         // OnNavSelectionChanged -> SelectViewCommand; the VM equality guard must
         // stop the loop with the page still on Transfers.
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Transfers", page.Title);
+        Assert.Equal(Strings.NavTransfers, page.Title);
         window.Close();
     }
 

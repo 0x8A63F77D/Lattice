@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 
 namespace Lattice.App.ViewModels;
 
@@ -50,13 +51,13 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         State = RailStateProjection.From(_entry.Status);
         StateText = State switch
         {
-            RailState.Connected => $"Connected · {_entry.Snapshot?.Tasks.Count ?? 0} tasks",
-            RailState.Connecting => "Connecting…",
+            RailState.Connected => string.Format(Strings.RailConnectedFmt, _entry.Snapshot?.Tasks.Count ?? 0),
+            RailState.Connecting => Strings.RailConnecting,
             RailState.Retrying when _entry.Status.NextAttemptAt is { } next =>
                 TimeText.RetryCountdown(next, _clock.Now, _entry.Status.Attempt),
-            RailState.Retrying => "Retrying…",
-            RailState.Unreachable => "Unreachable",
-            RailState.AuthFailed => "Wrong password",
+            RailState.Retrying => Strings.RailRetrying,
+            RailState.Unreachable => Strings.RailUnreachable,
+            RailState.AuthFailed => Strings.RailAuthFailed,
             _ => "",
         };
         // The compact rail shows the state icon only, so the tooltip must

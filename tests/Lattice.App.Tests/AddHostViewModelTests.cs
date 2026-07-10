@@ -1,3 +1,4 @@
+using Lattice.App.Localization;
 using Lattice.App.ViewModels;
 using Lattice.Core;
 using Lattice.Tests;
@@ -91,7 +92,7 @@ public class AddHostViewModelTests
             await vm.AddCommand.ExecuteAsync(null);
 
             Assert.False(vm.Succeeded);
-            Assert.StartsWith("Connected, but saving the host list failed:", vm.ErrorText);
+            Assert.StartsWith(string.Format(Strings.AddHostSaveFailedFmt, ""), vm.ErrorText);
             Assert.Empty(registry.Hosts);
         }
         finally

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -24,10 +25,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(registry, store, clientFactory);
         Views =
         [
-            new NavItemViewModel("Tasks", "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", new PlaceholderViewModel("Tasks")),
-            new NavItemViewModel("Projects", "IconGridRegular", "IconGridFilled", new PlaceholderViewModel("Projects")),
-            new NavItemViewModel("Transfers", "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel("Transfers")),
-            new NavItemViewModel("Event log", "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel("Event log")),
+            new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", new PlaceholderViewModel(Strings.NavTasks)),
+            new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", new PlaceholderViewModel(Strings.NavProjects)),
+            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
+            new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel(Strings.NavEventLog)),
         ];
         _selectedView = Views[0];
         _currentPage = Views[0].Page;

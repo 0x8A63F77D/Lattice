@@ -24,7 +24,7 @@
               </ui:FASettingsExpander.IconSource>
               <StackPanel Spacing="8" Margin="0,4">
                 <ui:FAInfoBar Severity="Error" IsOpen="{Binding HasAuthError}" IsClosable="False"
-                              Title="{x:Static loc:Strings.SettingsAuthErrorTitle}" Message="{Binding AuthErrorText}" />
+                              Title="{x:Static loc:Strings.RailAuthFailed}" Message="{Binding AuthErrorText}" />
                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
                   <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldName}" VerticalAlignment="Center" />
                   <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"

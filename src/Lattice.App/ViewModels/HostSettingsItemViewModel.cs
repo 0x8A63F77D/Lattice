@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -50,17 +51,17 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
         DisplayName = _entry.Config.DisplayName;
         var stateWord = RailStateProjection.From(_entry.Status) switch
         {
-            RailState.Connected => "Connected",
-            RailState.Connecting => "Connecting…",
-            RailState.Retrying => "Retrying",
-            RailState.Unreachable => "Unreachable",
-            RailState.AuthFailed => "Wrong password",
+            RailState.Connected => Strings.RailConnectedWord,
+            RailState.Connecting => Strings.RailConnecting,
+            RailState.Retrying => Strings.RailRetryingWord,
+            RailState.Unreachable => Strings.RailUnreachable,
+            RailState.AuthFailed => Strings.RailAuthFailed,
             _ => "",
         };
         StatusText = $"{_entry.Config.Address}:{_entry.Config.Port} · {stateWord}";
         HasAuthError = _entry.Status.State == HostConnectionState.AuthFailed;
         AuthErrorText = HasAuthError
-            ? $"The host refused this password. Check the gui_rpc_auth.cfg on {_entry.Config.DisplayName}."
+            ? string.Format(Strings.SettingsAuthErrorGuidance, _entry.Config.DisplayName)
             : null;
     }
 
@@ -68,12 +69,12 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(Address))
         {
-            ValidationError = "Address is required.";
+            ValidationError = Strings.SettingsFieldAddressRequired;
             return null;
         }
         if (!int.TryParse(PortText, out var port) || port is < 1 or > 65535)
         {
-            ValidationError = "Port must be a number between 1 and 65535.";
+            ValidationError = Strings.SettingsFieldPortInvalid;
             return null;
         }
         ValidationError = null;
@@ -88,7 +89,7 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
         // synchronous command path as an unhandled dispatcher exception.
         if (BuildCandidate() is { } candidate)
             ValidationError = RegistryGuard.TryMutate(() => _registry.UpdateHost(candidate)) is { } error
-                ? $"Saving failed: {error}"
+                ? string.Format(Strings.SettingsSaveFailedFmt, error)
                 : null;
     }
 
@@ -100,19 +101,19 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
             TestResultText = null;
             return;
         }
-        TestResultText = "Testing…";
+        TestResultText = Strings.SettingsTestConnectionBusy;
         try
         {
             using var cts = new CancellationTokenSource(TestTimeout);
             TestConnectionResult result =
                 await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
             TestResultText = result.Success
-                ? $"Connected — BOINC {result.Version!.Major}.{result.Version.Minor}.{result.Version.Release}"
+                ? string.Format(Strings.SettingsTestConnectionSuccess, result.Version!.Major, result.Version.Minor, result.Version.Release)
                 : result.Error;
         }
         catch (OperationCanceledException)
         {
-            TestResultText = "Connection timed out.";
+            TestResultText = Strings.SettingsTestConnectionTimeout;
         }
     }
 

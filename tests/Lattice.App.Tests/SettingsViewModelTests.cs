@@ -1,4 +1,5 @@
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Core;
@@ -77,7 +78,7 @@ public class SettingsViewModelTests : IAsyncLifetime
     {
         var item = AddHost();
         await item.TestConnectionCommand.ExecuteAsync(null);
-        Assert.Equal("Connected — BOINC 8.2.0", item.TestResultText);
+        Assert.Equal(string.Format(Strings.SettingsTestConnectionSuccess, 8, 2, 0), item.TestResultText);
     }
 
     [Fact]
@@ -178,7 +179,7 @@ public class SettingsViewModelTests : IAsyncLifetime
             item.SaveCommand.Execute(null);
 
             Assert.NotNull(item.ValidationError);
-            Assert.StartsWith("Saving failed:", item.ValidationError);
+            Assert.StartsWith(string.Format(Strings.SettingsSaveFailedFmt, ""), item.ValidationError);
             Assert.Equal(before, _registry.Hosts[0]);
         }
         finally
@@ -197,7 +198,7 @@ public class SettingsViewModelTests : IAsyncLifetime
             var error = _settings.Remove(item.HostId);
 
             Assert.NotNull(error);
-            Assert.StartsWith("Removing failed:", error);
+            Assert.StartsWith(string.Format(Strings.SettingsRemoveFailedFmt, ""), error);
             Assert.Single(_registry.Hosts);
             Assert.Single(_settings.Hosts);
         }
