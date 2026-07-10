@@ -301,6 +301,25 @@
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <!-- ===== Tasks ===== -->
+  <data name="TaskStateAborted" xml:space="preserve">
+    <value>Aborted</value>
+  </data>
+  <data name="TaskStateError" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="TaskStateRunning" xml:space="preserve">
+    <value>Running</value>
+  </data>
+  <data name="TaskStateSuspended" xml:space="preserve">
+    <value>Suspended</value>
+  </data>
+  <data name="TaskStateUploading" xml:space="preserve">
+    <value>Uploading</value>
+  </data>
+  <data name="TaskStateWaiting" xml:space="preserve">
+    <value>Waiting</value>
+  </data>
   <!-- ===== Time ===== -->
   <data name="UpdatedHoursFmt" xml:space="preserve">
     <value>Updated {0}h ago</value>
