@@ -80,6 +80,11 @@ public class RailStateTests
             MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         authFailed.Refresh();
         Assert.Equal("office-pc — Wrong password", authFailed.Tooltip);
+
+        var unreachable = new HostRailItemViewModel(
+            MakeEntry(Status(HostConnectionState.Retrying, attempt: 5, error: "no route")), new ManualUiClock());
+        unreachable.Refresh();
+        Assert.Equal("office-pc — Unreachable\nno route", unreachable.Tooltip);
     }
 
     [Fact]

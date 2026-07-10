@@ -20,6 +20,13 @@ terminal state. You never merge, comment, push, or otherwise mutate the PR — r
   as if you had just polled it yourself on cycle 0. Do NOT re-announce anything that
   matches the baseline; only announce what has CHANGED since it. If no baseline is given,
   your first poll IS the baseline: record it silently and announce nothing on cycle 0.
+- **Verify the baseline on cycle 0.** The baseline is a claim, not a fact: sweep all
+  four channels yourself on the first poll and compare against it. If reality
+  contradicts the baseline (e.g. a response the task said "hasn't arrived" actually
+  exists), report the discrepancy IMMEDIATELY — a wrong baseline invalidates the whole
+  watch. (Real incident: the controller asserted "no Codex response yet" while a
+  quota-exhausted reply had been sitting on the PR for 40 minutes; the watch ran to
+  its cap waiting for a response that had already come.)
 
 ## What to poll (each cycle inside a burst)
 Fetch these four probes each cycle:
@@ -32,7 +39,10 @@ Fetch these four probes each cycle:
    requested / commented) and a link.
 3. **New comments** — `gh pr view <n> --json comments` and
    `gh api repos/{owner}/{repo}/pulls/<n>/comments`. Report new review/issue comments
-   (author + one-line gist + count), not full bodies.
+   (author + one-line gist + count), not full bodies. ANY new message from any author
+   is a reportable event — do NOT whitelist only the shapes you expect (a verdict, a
+   check result). Error/limit/quota replies from bots are MORE important than the
+   expected events, because they mean the thing you are waiting for will never come.
 4. **Mergeability / state** — `gh pr view <n> --json mergeable,mergeStateStatus,state,isDraft`.
 
 ## Polling discipline — burst pattern (REQUIRED)
