@@ -1,4 +1,5 @@
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Core;
@@ -79,7 +80,7 @@ public class RailStateTests
         var authFailed = new HostRailItemViewModel(
             MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         authFailed.Refresh();
-        Assert.Equal("office-pc — Wrong password", authFailed.Tooltip);
+        Assert.Equal($"office-pc — {Strings.RailStateAuthFailed}", authFailed.Tooltip);
 
         var unreachable = new HostRailItemViewModel(
             MakeEntry(Status(HostConnectionState.Retrying, attempt: 5, error: "no route")), new ManualUiClock());
@@ -93,7 +94,7 @@ public class RailStateTests
         var vm = new HostRailItemViewModel(MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         vm.Refresh();
         Assert.Equal(RailState.AuthFailed, vm.State);
-        Assert.Equal("Wrong password", vm.StateText);
+        Assert.Equal(Strings.RailStateAuthFailed, vm.StateText);
     }
 
     private static HostEntry MakeEntry(ConnectionStatus status) =>

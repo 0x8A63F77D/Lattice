@@ -2,24 +2,25 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:ui="using:FluentAvalonia.UI.Controls"
                     xmlns:vm="using:Lattice.App.ViewModels"
+                    xmlns:loc="using:Lattice.App.Localization"
                     x:Class="Lattice.App.Views.AddHostDialog"
                     x:DataType="vm:AddHostViewModel"
-                    Title="Add host"
-                    PrimaryButtonText="Add"
-                    CloseButtonText="Cancel"
+                    Title="{x:Static loc:Strings.AddHostDialogTitle}"
+                    PrimaryButtonText="{x:Static loc:Strings.AddHostPrimaryButton}"
+                    CloseButtonText="{x:Static loc:Strings.AddHostCloseButton}"
                     DefaultButton="Primary"
                     IsPrimaryButtonEnabled="{Binding CanAddNow}">
   <StackPanel Spacing="8" MinWidth="360">
     <ui:FAInfoBar Severity="Error" IsOpen="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                  IsClosable="False" Title="Could not connect" Message="{Binding ErrorText}" />
-    <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="Name — defaults to the address" />
-    <TextBox Text="{Binding Address, Mode=TwoWay}" PlaceholderText="Address (required)" />
-    <TextBox Text="{Binding PortText, Mode=TwoWay}" PlaceholderText="Port" />
+                  IsClosable="False" Title="{x:Static loc:Strings.AddHostErrorTitle}" Message="{Binding ErrorText}" />
+    <TextBox Text="{Binding Name, Mode=TwoWay}" PlaceholderText="{x:Static loc:Strings.AddHostFieldNamePlaceholder}" />
+    <TextBox Text="{Binding Address, Mode=TwoWay}" PlaceholderText="{x:Static loc:Strings.AddHostFieldAddressPlaceholder}" />
+    <TextBox Text="{Binding PortText, Mode=TwoWay}" PlaceholderText="{x:Static loc:Strings.AddHostFieldPortPlaceholder}" />
     <!-- PasswordChar masks rendering only; the automation peer still exposes raw
          Text (platform limitation, accepted + ledger-tracked — see SettingsView). -->
-    <TextBox Text="{Binding Password, Mode=TwoWay}" PasswordChar="●" PlaceholderText="From gui_rpc_auth.cfg" />
+    <TextBox Text="{Binding Password, Mode=TwoWay}" PasswordChar="●" PlaceholderText="{x:Static loc:Strings.AddHostFieldPasswordPlaceholder}" />
     <ui:FAInfoBar Severity="Informational" IsOpen="True" IsClosable="False"
-                  Message="Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg." />
+                  Message="{x:Static loc:Strings.AddHostRemoteAccessInfo}" />
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />
   </StackPanel>
 </ui:FAContentDialog>

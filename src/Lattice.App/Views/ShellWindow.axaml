@@ -58,22 +58,22 @@
                        IsBackButtonVisible="False"
                        SelectionChanged="OnNavSelectionChanged">
       <ui:FANavigationView.MenuItems>
-        <ui:FANavigationViewItem x:Name="NavTasks" Content="Tasks" Tag="0">
+        <ui:FANavigationViewItem x:Name="NavTasks" Content="{x:Static loc:Strings.NavTasks}" Tag="0">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconTaskListSquareLtrRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavProjects" Content="Projects" Tag="1">
+        <ui:FANavigationViewItem x:Name="NavProjects" Content="{x:Static loc:Strings.NavProjects}" Tag="1">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconGridRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavTransfers" Content="Transfers" Tag="2">
+        <ui:FANavigationViewItem x:Name="NavTransfers" Content="{x:Static loc:Strings.NavTransfers}" Tag="2">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavEventLog" Content="Event log" Tag="3">
+        <ui:FANavigationViewItem x:Name="NavEventLog" Content="{x:Static loc:Strings.NavEventLog}" Tag="3">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
           </ui:FANavigationViewItem.IconSource>
@@ -85,12 +85,12 @@
           <DockPanel Margin="12,0,8,4">
             <Button DockPanel.Dock="Right" Padding="4" Background="Transparent"
                     Command="{Binding RequestAddHostCommand}"
-                    ToolTip.Tip="Add a host">
+                    ToolTip.Tip="{x:Static loc:Strings.HostsAddTooltip}">
               <PathIcon Data="{StaticResource IconAddRegular}" Width="12" Height="12" />
             </Button>
             <!-- Design §Responsive: the 48px compact rail shows host state icons only;
                  names/subtext live in tooltips. Text elements follow the pane state. -->
-            <TextBlock x:Name="HostsHeader" Text="Hosts" FontSize="11" FontWeight="SemiBold"
+            <TextBlock x:Name="HostsHeader" Text="{x:Static loc:Strings.HostsHeader}" FontSize="11" FontWeight="SemiBold"
                        VerticalAlignment="Center"
                        IsVisible="{Binding #Nav.IsPaneOpen}"
                        Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
@@ -135,7 +135,7 @@
       </ui:FANavigationView.PaneCustomContent>
 
       <ui:FANavigationView.FooterMenuItems>
-        <ui:FANavigationViewItem x:Name="NavSettings" Content="Settings" Tag="settings">
+        <ui:FANavigationViewItem x:Name="NavSettings" Content="{x:Static loc:Strings.NavSettings}" Tag="settings">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconSettingsRegular}" />
           </ui:FANavigationViewItem.IconSource>

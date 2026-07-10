@@ -2,14 +2,15 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:loc="using:Lattice.App.Localization"
              x:Class="Lattice.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <ScrollViewer>
     <StackPanel Margin="{StaticResource LatticePagePadding}" Spacing="8" MaxWidth="900">
-      <TextBlock Text="Settings" FontSize="16" FontWeight="SemiBold"
+      <TextBlock Text="{x:Static loc:Strings.SettingsTitle}" FontSize="16" FontWeight="SemiBold"
                  Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
 
-      <TextBlock Text="Hosts" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+      <TextBlock Text="{x:Static loc:Strings.SettingsHostsSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       <ItemsControl ItemsSource="{Binding Hosts}">
         <ItemsControl.ItemTemplate>
@@ -23,22 +24,22 @@
               </ui:FASettingsExpander.IconSource>
               <StackPanel Spacing="8" Margin="0,4">
                 <ui:FAInfoBar Severity="Error" IsOpen="{Binding HasAuthError}" IsClosable="False"
-                              Title="Wrong password" Message="{Binding AuthErrorText}" />
+                              Title="{x:Static loc:Strings.SettingsAuthErrorTitle}" Message="{Binding AuthErrorText}" />
                 <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-                  <TextBlock Grid.Row="0" Grid.Column="0" Text="Name" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldName}" VerticalAlignment="Center" />
                   <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"
-                           PlaceholderText="Defaults to the address" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Text="Address" VerticalAlignment="Center" />
+                           PlaceholderText="{x:Static loc:Strings.SettingsFieldNamePlaceholder}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldAddress}" VerticalAlignment="Center" />
                   <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Address, Mode=TwoWay}" />
-                  <TextBlock Grid.Row="2" Grid.Column="0" Text="Port" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldPort}" VerticalAlignment="Center" />
                   <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PortText, Mode=TwoWay}" />
-                  <TextBlock Grid.Row="3" Grid.Column="0" Text="Password" VerticalAlignment="Center" />
+                  <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldPassword}" VerticalAlignment="Center" />
                   <!-- Known limitation (accepted + ledger-tracked): Avalonia's TextBoxAutomationPeer
                        exposes the raw Text via UI Automation regardless of PasswordChar, and neither
                        Avalonia 12 nor FluentAvalonia 3 ships a first-party PasswordBox. -->
                   <TextBox Grid.Row="3" Grid.Column="1" PasswordChar="●"
                            Text="{Binding Password, Mode=TwoWay}"
-                           PlaceholderText="From gui_rpc_auth.cfg" />
+                           PlaceholderText="{x:Static loc:Strings.SettingsFieldPasswordPlaceholder}" />
                 </Grid>
                 <TextBlock Text="{Binding ValidationError}" FontSize="12"
                            IsVisible="{Binding ValidationError, Converter={x:Static ObjectConverters.IsNotNull}}"
@@ -47,9 +48,9 @@
                            IsVisible="{Binding TestResultText, Converter={x:Static ObjectConverters.IsNotNull}}"
                            Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="Test connection" Command="{Binding TestConnectionCommand}" />
-                  <Button Classes="accent" Content="Save" Command="{Binding SaveCommand}" />
-                  <Button Content="Remove host" Command="{Binding RemoveCommand}"
+                  <Button Content="{x:Static loc:Strings.SettingsTestConnectionButton}" Command="{Binding TestConnectionCommand}" />
+                  <Button Classes="accent" Content="{x:Static loc:Strings.SettingsSaveButton}" Command="{Binding SaveCommand}" />
+                  <Button Content="{x:Static loc:Strings.SettingsRemoveButton}" Command="{Binding RemoveCommand}"
                           Background="Transparent"
                           Foreground="{DynamicResource LatticeDangerFgBrush}" />
                 </StackPanel>
@@ -59,10 +60,10 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <TextBlock Text="Polling" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+      <TextBlock Text="{x:Static loc:Strings.SettingsPollingSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-      <ui:FASettingsExpander x:Name="PollingExpander" Header="Polling interval"
-                             Description="How often each host is polled for status and tasks">
+      <ui:FASettingsExpander x:Name="PollingExpander" Header="{x:Static loc:Strings.SettingsPollingHeader}"
+                             Description="{x:Static loc:Strings.SettingsPollingDescription}">
         <ui:FASettingsExpander.Footer>
           <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllowedPollingIntervals}"
                     SelectedItem="{Binding PollingIntervalSeconds, Mode=TwoWay}" />

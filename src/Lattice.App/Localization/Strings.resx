@@ -122,8 +122,118 @@
     (App, FirstRun, Rail, Nav, Settings, AddHost, Tasks, ...),
     one "===== GroupName =====" banner per group, alphabetical within a group.
   -->
+  <!-- ===== AddHost ===== -->
+  <data name="AddHostCloseButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AddHostDialogTitle" xml:space="preserve">
+    <value>Add host</value>
+  </data>
+  <data name="AddHostErrorTitle" xml:space="preserve">
+    <value>Could not connect</value>
+  </data>
+  <data name="AddHostFieldAddressPlaceholder" xml:space="preserve">
+    <value>Address (required)</value>
+  </data>
+  <data name="AddHostFieldNamePlaceholder" xml:space="preserve">
+    <value>Name — defaults to the address</value>
+  </data>
+  <data name="AddHostFieldPasswordPlaceholder" xml:space="preserve">
+    <value>From gui_rpc_auth.cfg</value>
+  </data>
+  <data name="AddHostFieldPortPlaceholder" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="AddHostPrimaryButton" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="AddHostRemoteAccessInfo" xml:space="preserve">
+    <value>Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg.</value>
+  </data>
   <!-- ===== App ===== -->
   <data name="AppTitle" xml:space="preserve">
     <value>Lattice</value>
+  </data>
+  <!-- ===== FirstRun ===== -->
+  <data name="FirstRunAddHost" xml:space="preserve">
+    <value>Add a host</value>
+  </data>
+  <data name="FirstRunCaption" xml:space="preserve">
+    <value>Lattice monitors BOINC clients over GUI RPC (port 31416).</value>
+  </data>
+  <data name="FirstRunTitle" xml:space="preserve">
+    <value>Connect your first host</value>
+  </data>
+  <!-- ===== Nav ===== -->
+  <data name="HostsAddTooltip" xml:space="preserve">
+    <value>Add a host</value>
+  </data>
+  <data name="HostsHeader" xml:space="preserve">
+    <value>Hosts</value>
+  </data>
+  <data name="NavEventLog" xml:space="preserve">
+    <value>Event log</value>
+  </data>
+  <data name="NavProjects" xml:space="preserve">
+    <value>Projects</value>
+  </data>
+  <data name="NavSettings" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="NavTasks" xml:space="preserve">
+    <value>Tasks</value>
+  </data>
+  <data name="NavTransfers" xml:space="preserve">
+    <value>Transfers</value>
+  </data>
+  <!-- ===== Rail ===== -->
+  <data name="RailStateAuthFailed" xml:space="preserve">
+    <value>Wrong password</value>
+  </data>
+  <!-- ===== Settings ===== -->
+  <data name="SettingsAuthErrorTitle" xml:space="preserve">
+    <value>Wrong password</value>
+  </data>
+  <data name="SettingsFieldAddress" xml:space="preserve">
+    <value>Address</value>
+  </data>
+  <data name="SettingsFieldName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="SettingsFieldNamePlaceholder" xml:space="preserve">
+    <value>Defaults to the address</value>
+  </data>
+  <data name="SettingsFieldPassword" xml:space="preserve">
+    <value>Password</value>
+  </data>
+  <data name="SettingsFieldPasswordPlaceholder" xml:space="preserve">
+    <value>From gui_rpc_auth.cfg</value>
+  </data>
+  <data name="SettingsFieldPort" xml:space="preserve">
+    <value>Port</value>
+  </data>
+  <data name="SettingsHostsSection" xml:space="preserve">
+    <value>Hosts</value>
+  </data>
+  <data name="SettingsPollingDescription" xml:space="preserve">
+    <value>How often each host is polled for status and tasks</value>
+  </data>
+  <data name="SettingsPollingHeader" xml:space="preserve">
+    <value>Polling interval</value>
+  </data>
+  <data name="SettingsPollingSection" xml:space="preserve">
+    <value>Polling</value>
+  </data>
+  <data name="SettingsRemoveButton" xml:space="preserve">
+    <value>Remove host</value>
+  </data>
+  <data name="SettingsSaveButton" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SettingsTestConnectionButton" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>Settings</value>
   </data>
 </root>
