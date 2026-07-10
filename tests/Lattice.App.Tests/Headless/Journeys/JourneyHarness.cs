@@ -117,8 +117,14 @@ internal sealed class JourneyHarness : IAsyncDisposable
     /// <summary>Condition-driven wait (never a fixed sleep — transient states like
     /// Retrying race) delegating to <see cref="HeadlessSync.WaitUntilAsync"/>; the
     /// reason is folded into the timeout exception so a failing journey names the
-    /// step it never reached.</summary>
-    public async Task SettleAsync(Func<bool> condition, string reason, int timeoutMs = 5000)
+    /// step it never reached. Default ceiling is more generous than plain
+    /// HeadlessSync's (10s vs 5s): a journey builds the FULL composition root
+    /// (real background HostMonitor loops, sometimes two at once) rather than one
+    /// narrow VM/view slice, so it is more exposed to scheduling contention when
+    /// every other test class's AvaloniaFact runs concurrently in the same process
+    /// — this only widens the ceiling for a genuinely hung condition, per
+    /// HeadlessSync's own doc.</summary>
+    public async Task SettleAsync(Func<bool> condition, string reason, int timeoutMs = 10000)
     {
         try
         {
