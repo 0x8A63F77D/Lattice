@@ -50,6 +50,16 @@ public class TaskRowViewModelTests
     }
 
     [Fact]
+    public void Uploading_task_without_active_slot_shows_full_fraction()
+    {
+        var r = TestData.MakeResult() with { ActiveTask = null, State = ResultState.FilesUploading };
+        var row = TaskRowViewModel.From(Snap(r), "h");
+        Assert.Equal(TaskStateKind.Uploading, row.StateKind);
+        Assert.Equal(1.0, row.Fraction);
+        Assert.Equal("100%", row.PercentText);
+    }
+
+    [Fact]
     public void Deadline_at_risk_flag_passes_through()
     {
         var row = TaskRowViewModel.From(Snap(TestData.MakeResult(), atRisk: true), "h");
