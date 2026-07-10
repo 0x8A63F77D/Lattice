@@ -37,6 +37,31 @@ public class UiStateStoreTests
     }
 
     [Fact]
+    public void Default_loads_are_isolated_from_earlier_mutations()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        try
+        {
+            var store = new UiStateStore(path);
+
+            // Load-mutate is the documented usage; a shared Default singleton
+            // would leak this mutation into every later default load.
+            var first = store.Load();
+            first.ColumnVisibility["deadline"] = false;
+            first.ColumnWidths["name"] = 240;
+
+            var second = store.Load();
+            Assert.Empty(second.ColumnVisibility);
+            Assert.Empty(second.ColumnWidths);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Corrupt_json_loads_defaults()
     {
         var dir = TempDir();

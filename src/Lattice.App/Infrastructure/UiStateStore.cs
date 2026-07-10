@@ -99,6 +99,8 @@ public sealed record UiState(
     Dictionary<string, bool> ColumnVisibility,
     Dictionary<string, double> ColumnWidths)
 {
-    /// <summary>Factory default: standard density, all columns visible, auto widths.</summary>
-    public static UiState Default { get; } = new(false, [], []);
+    /// <summary>Factory default: standard density, all columns visible, auto widths.
+    /// Fresh instance per call — the dictionaries are mutable, so a shared
+    /// singleton would leak load-mutate edits into later default loads.</summary>
+    public static UiState Default => new(false, [], []);
 }
