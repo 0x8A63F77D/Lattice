@@ -60,6 +60,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _partialBarText = "";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isEmpty;
+    [ObservableProperty] private string _loadingText = "";
+
+    /// <summary>Density toggle for the Tasks DataGrid (compact = smaller row height).
+    /// Persistence via UiStateStore is wired in a later task; this is view-facing
+    /// state only for now.</summary>
+    [ObservableProperty] private bool _isCompact;
 
     partial void OnFilterTextChanged(string value) => Rebuild();
     partial void OnStateFilterChanged(TaskStateKind? value) => Rebuild();
@@ -187,6 +193,9 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             [.. scoped.Select(h => new TasksOverlayPolicy.HostFacts(
                 RailStateProjection.From(h.Status), h.Snapshot is not null))],
             allRows.Count > 0);
+        LoadingText = IsLoading
+            ? string.Format(Strings.LoadingFromFmt, string.Join(", ", scoped.Select(h => h.Config.DisplayName)))
+            : "";
     }
 
     public void Dispose()

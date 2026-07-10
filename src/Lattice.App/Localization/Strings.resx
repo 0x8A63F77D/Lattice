@@ -302,11 +302,47 @@
     <value>Settings</value>
   </data>
   <!-- ===== Tasks ===== -->
+  <data name="Abort" xml:space="preserve">
+    <value>Abort</value>
+  </data>
   <data name="AtRiskFmt" xml:space="preserve">
     <value>⚠ {0} deadline at risk</value>
   </data>
+  <data name="ColApplication" xml:space="preserve">
+    <value>Application</value>
+  </data>
+  <data name="ColDeadline" xml:space="preserve">
+    <value>Deadline</value>
+  </data>
+  <data name="ColElapsed" xml:space="preserve">
+    <value>Elapsed</value>
+  </data>
+  <data name="ColHost" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="ColProgress" xml:space="preserve">
+    <value>Progress</value>
+  </data>
+  <data name="ColProject" xml:space="preserve">
+    <value>Project</value>
+  </data>
+  <data name="ColRemaining" xml:space="preserve">
+    <value>Remaining</value>
+  </data>
+  <data name="ColState" xml:space="preserve">
+    <value>State</value>
+  </data>
+  <data name="ColTask" xml:space="preserve">
+    <value>Task</value>
+  </data>
   <data name="CountsFmt" xml:space="preserve">
     <value>{0} tasks · {1} running · {2} uploading · {3} suspended</value>
+  </data>
+  <data name="FilterPlaceholder" xml:space="preserve">
+    <value>Filter by name or project</value>
+  </data>
+  <data name="LoadingFromFmt" xml:space="preserve">
+    <value>Fetching state from {0}…</value>
   </data>
   <data name="PartialFmt" xml:space="preserve">
     <value>{0} of {1} hosts aren't reachable — tasks below cover {2} hosts.</value>
@@ -316,6 +352,15 @@
   </data>
   <data name="PollingFmt" xml:space="preserve">
     <value>Polling every {0}s</value>
+  </data>
+  <data name="RetryNow" xml:space="preserve">
+    <value>Retry now</value>
+  </data>
+  <data name="StateAll" xml:space="preserve">
+    <value>State: All</value>
+  </data>
+  <data name="Suspend" xml:space="preserve">
+    <value>Suspend</value>
   </data>
   <data name="TaskStateAborted" xml:space="preserve">
     <value>Aborted</value>
@@ -334,6 +379,15 @@
   </data>
   <data name="TaskStateWaiting" xml:space="preserve">
     <value>Waiting</value>
+  </data>
+  <data name="TasksEmpty" xml:space="preserve">
+    <value>No tasks on this host.</value>
+  </data>
+  <data name="TasksEmptyAll" xml:space="preserve">
+    <value>No tasks on any reachable host.</value>
+  </data>
+  <data name="TasksTitle" xml:space="preserve">
+    <value>Tasks</value>
   </data>
   <!-- ===== Time ===== -->
   <data name="UpdatedHoursFmt" xml:space="preserve">
