@@ -273,6 +273,57 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Stale_snapshot_of_unreachable_host_leaves_rows_and_counts()
+    {
+        // HostEntry.Snapshot is never cleared when a host drops out of Connected,
+        // so ONLY Rebuild's Connected-only filter keeps a dead host's stale cached
+        // tasks out of Rows/CountsText. This test goes red if that filter is
+        // replaced with a plain pass-through of the scoped hosts.
+        var fakeA = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+            [
+                TestData.MakeResult(name: "a_running") with { ActiveTask = new ActiveTask(1, 0.5, 10, 90) },
+                TestData.MakeResult(name: "a_waiting"),
+            ]),
+        };
+        var fakeB = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "b_task")]),
+        };
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        // Baseline: both hosts' rows merged.
+        await Wait.UntilAsync(() => vm.Rows.Count == 3, "both hosts should contribute rows");
+        Assert.Contains(vm.Rows, r => r.Name == "b_task");
+
+        // Kill B the same way the partial-bar test does — poll failure, then auth
+        // failure on reconnect — parking it in AuthFailed with its snapshot cached.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnAuthorize = _ => Task.FromResult(false);
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+
+        // B's stale rows must vanish from the merge and from the counts.
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "the dead host's stale rows should drop out");
+        Assert.DoesNotContain(vm.Rows, r => r.Name == "b_task");
+        Assert.Equal(["a_running", "a_waiting"], vm.Rows.Select(r => r.Name).Order());
+        Assert.Equal(string.Format(Strings.CountsFmt, 2, 1, 0, 0), vm.CountsText);
+
+        // And B now counts toward the partial-results bar (1 of 2 unreachable).
+        Assert.True(vm.ShowPartialBar);
+        Assert.Equal(string.Format(Strings.PartialFmt, 1, 2, 1), vm.PartialBarText);
+    }
+
+    [Fact]
     public async Task UpdatedText_ticks_with_the_manual_clock()
     {
         var fake = new FakeGuiRpcClient();
