@@ -192,6 +192,28 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Filter_hiding_every_row_is_not_the_empty_state()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>([TestData.MakeResult(name: "alpha")]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        vm.FilterText = "matches-nothing";
+
+        // The host answered WITH tasks; the filter merely hid them. "No tasks"
+        // (IsEmpty) is a statement about the unfiltered set — a filter miss
+        // must not flip the view into the empty state (Codex P2).
+        Assert.Empty(vm.Rows);
+        Assert.False(vm.IsEmpty, "a filter miss is not an empty task set");
+        Assert.False(vm.IsLoading);
+    }
+
+    [Fact]
     public async Task StateFilter_filters_by_task_state_kind()
     {
         var fake = new FakeGuiRpcClient

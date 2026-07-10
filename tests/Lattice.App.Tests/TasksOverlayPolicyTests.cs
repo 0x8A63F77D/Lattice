@@ -15,7 +15,8 @@ public class TasksOverlayPolicyTests
 
     public static TheoryData<TasksOverlayPolicy.HostFacts[], bool, bool, bool> Table => new()
     {
-        // scoped hosts,                                  hasRows, expLoading, expEmpty
+        // hasTasks is UNFILTERED task presence (a filter miss is not empty).
+        // scoped hosts,                                 hasTasks, expLoading, expEmpty
         { [],                                              false,  false, false }, // no hosts: neither
         { [Host(Connecting)],                              false,  true,  false }, // first fetch in flight
         { [Host(Retrying)],                                false,  true,  false }, // below the tier: still plausible
@@ -33,9 +34,9 @@ public class TasksOverlayPolicyTests
     [Theory]
     [MemberData(nameof(Table))]
     public void Decide_matches_the_table(
-        TasksOverlayPolicy.HostFacts[] scoped, bool hasRows, bool expectedLoading, bool expectedEmpty)
+        TasksOverlayPolicy.HostFacts[] scoped, bool hasTasks, bool expectedLoading, bool expectedEmpty)
     {
-        var (isLoading, isEmpty) = TasksOverlayPolicy.Decide(scoped, hasRows);
+        var (isLoading, isEmpty) = TasksOverlayPolicy.Decide(scoped, hasTasks);
         Assert.Equal(expectedLoading, isLoading);
         Assert.Equal(expectedEmpty, isEmpty);
     }

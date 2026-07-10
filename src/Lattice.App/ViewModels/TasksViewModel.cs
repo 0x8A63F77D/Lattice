@@ -172,10 +172,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
 
         // Overlay choice (loading skeleton vs empty message vs neither) is
         // TasksOverlayPolicy's; all-terminal scopes get neither (Codex P2).
+        // Task presence is the UNFILTERED set: a filter that hides every row
+        // is a filter miss, not an empty task set (Codex P2).
         (IsLoading, IsEmpty) = TasksOverlayPolicy.Decide(
             [.. scoped.Select(h => new TasksOverlayPolicy.HostFacts(
                 RailStateProjection.From(h.Status), h.Snapshot is not null))],
-            Rows.Count > 0);
+            allRows.Count > 0);
     }
 
     public void Dispose()
