@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -15,6 +16,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 {
     private readonly HostStore _store;
     private readonly IUiClock _clock;
+    private readonly AllHostsRailItemViewModel _allHosts = new();
 
     public ShellViewModel(
         HostRegistry registry, HostStore store, IUiClock clock, Func<IGuiRpcClient> clientFactory)
@@ -24,25 +26,33 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(registry, store, clientFactory);
         Views =
         [
-            new NavItemViewModel("Tasks", "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", new PlaceholderViewModel("Tasks")),
-            new NavItemViewModel("Projects", "IconGridRegular", "IconGridFilled", new PlaceholderViewModel("Projects")),
-            new NavItemViewModel("Transfers", "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel("Transfers")),
-            new NavItemViewModel("Event log", "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel("Event log")),
+            new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", new PlaceholderViewModel(Strings.NavTasks)),
+            new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", new PlaceholderViewModel(Strings.NavProjects)),
+            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
+            new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel(Strings.NavEventLog)),
         ];
         _selectedView = Views[0];
         _currentPage = Views[0].Page;
+        // The All-hosts sentinel always leads the rail; host entries follow it
+        // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
+        RailEntries.Add(_allHosts);
+        SelectedRailEntry = _allHosts;
         store.Changed += OnStoreChanged;
         ReconcileHosts();
     }
 
     public IReadOnlyList<NavItemViewModel> Views { get; }
-    public ObservableCollection<HostRailItemViewModel> HostItems { get; } = [];
+    public ObservableCollection<object> RailEntries { get; } = [];
     public SettingsViewModel Settings { get; }
 
     [ObservableProperty] private NavItemViewModel? _selectedView;
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
     [ObservableProperty] private bool _hasHosts;
+    [ObservableProperty] private object? _selectedRailEntry;
+
+    partial void OnSelectedRailEntryChanged(object? value) =>
+        Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
 
     /// <summary>Raised when a view needs to open the Add-host dialog.</summary>
     public event EventHandler? AddHostRequested;
@@ -79,32 +89,39 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // Keyed reconcile: keep VMs whose host still exists (their Refresh reads
         // the live entry), add new, drop removed. Order matches the registry
         // because hosts are append-only today (no reorder API); revisit the
-        // insert position if reordering ever lands.
-        var byId = HostItems.ToDictionary(i => i.HostId);
+        // insert position if reordering ever lands. Index 0 is always the
+        // All-hosts sentinel, so host entry i lives at RailEntries[i + 1].
+        var byId = RailEntries.OfType<HostRailItemViewModel>().ToDictionary(i => i.HostId);
         var seen = new HashSet<Guid>();
         for (var i = 0; i < _store.Hosts.Count; i++)
         {
             HostEntry entry = _store.Hosts[i];
             seen.Add(entry.Config.Id);
             if (!byId.TryGetValue(entry.Config.Id, out HostRailItemViewModel? item))
-                HostItems.Insert(Math.Min(i, HostItems.Count), new HostRailItemViewModel(entry, _clock));
+                RailEntries.Insert(Math.Min(i + 1, RailEntries.Count), new HostRailItemViewModel(entry, _clock));
             else
                 item.Refresh();
         }
-        for (var i = HostItems.Count - 1; i >= 0; i--)
-            if (!seen.Contains(HostItems[i].HostId))
+        for (var i = RailEntries.Count - 1; i >= 1; i--)
+            if (RailEntries[i] is HostRailItemViewModel item && !seen.Contains(item.HostId))
             {
-                HostItems[i].Dispose();
-                HostItems.RemoveAt(i);
+                // The scoped host vanished (e.g. removed) — fall back to All hosts
+                // rather than leaving Scope pointed at a dead id.
+                if (ReferenceEquals(SelectedRailEntry, item))
+                    SelectedRailEntry = _allHosts;
+                item.Dispose();
+                RailEntries.RemoveAt(i);
             }
-        HasHosts = HostItems.Count > 0;
+        var connected = _store.Hosts.Count(h => RailStateProjection.From(h.Status) == RailState.Connected);
+        _allHosts.Update(connected, _store.Hosts.Count);
+        HasHosts = _store.Hosts.Count > 0;
         Settings.Reconcile();
     }
 
     public void Dispose()
     {
         _store.Changed -= OnStoreChanged;
-        foreach (HostRailItemViewModel item in HostItems)
+        foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();
     }
 }

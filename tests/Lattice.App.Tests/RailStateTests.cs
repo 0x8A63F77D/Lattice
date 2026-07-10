@@ -1,4 +1,5 @@
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Core;
@@ -41,7 +42,7 @@ public class RailStateTests
         entry.Snapshot = SnapshotWithTasks(entry.Config.Id, taskCount: 3);
         var vm = new HostRailItemViewModel(entry, new ManualUiClock());
         vm.Refresh();
-        Assert.Equal("Connected · 3 tasks", vm.StateText);
+        Assert.Equal(string.Format(Strings.RailConnectedFmt, 3), vm.StateText);
     }
 
     [Fact]
@@ -52,11 +53,11 @@ public class RailStateTests
             HostConnectionState.Retrying, attempt: 3, nextAt: clock.Now.AddSeconds(12), error: "boom"));
         var vm = new HostRailItemViewModel(entry, clock);
         vm.Refresh();
-        Assert.Equal("Retrying in 12s (attempt 3)", vm.StateText);
-        Assert.Equal("office-pc — Retrying in 12s (attempt 3)\nboom", vm.Tooltip);
+        Assert.Equal(string.Format(Strings.RailRetryingFmt, 12, 3), vm.StateText);
+        Assert.Equal($"office-pc — {string.Format(Strings.RailRetryingFmt, 12, 3)}\nboom", vm.Tooltip);
 
         clock.Advance(TimeSpan.FromSeconds(5));
-        Assert.Equal("Retrying in 7s (attempt 3)", vm.StateText);
+        Assert.Equal(string.Format(Strings.RailRetryingFmt, 7, 3), vm.StateText);
     }
 
     // The compact rail hides the text entirely, so the tooltip is the only way
@@ -69,22 +70,22 @@ public class RailStateTests
         connected.Snapshot = SnapshotWithTasks(connected.Config.Id, taskCount: 3);
         var connectedVm = new HostRailItemViewModel(connected, new ManualUiClock());
         connectedVm.Refresh();
-        Assert.Equal("office-pc — Connected · 3 tasks", connectedVm.Tooltip);
+        Assert.Equal($"office-pc — {string.Format(Strings.RailConnectedFmt, 3)}", connectedVm.Tooltip);
 
         var connecting = new HostRailItemViewModel(
             MakeEntry(Status(HostConnectionState.Connecting)), new ManualUiClock());
         connecting.Refresh();
-        Assert.Equal("office-pc — Connecting…", connecting.Tooltip);
+        Assert.Equal($"office-pc — {Strings.RailConnecting}", connecting.Tooltip);
 
         var authFailed = new HostRailItemViewModel(
             MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         authFailed.Refresh();
-        Assert.Equal("office-pc — Wrong password", authFailed.Tooltip);
+        Assert.Equal($"office-pc — {Strings.RailAuthFailed}", authFailed.Tooltip);
 
         var unreachable = new HostRailItemViewModel(
             MakeEntry(Status(HostConnectionState.Retrying, attempt: 5, error: "no route")), new ManualUiClock());
         unreachable.Refresh();
-        Assert.Equal("office-pc — Unreachable\nno route", unreachable.Tooltip);
+        Assert.Equal($"office-pc — {Strings.RailUnreachable}\nno route", unreachable.Tooltip);
     }
 
     [Fact]
@@ -93,7 +94,7 @@ public class RailStateTests
         var vm = new HostRailItemViewModel(MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         vm.Refresh();
         Assert.Equal(RailState.AuthFailed, vm.State);
-        Assert.Equal("Wrong password", vm.StateText);
+        Assert.Equal(Strings.RailAuthFailed, vm.StateText);
     }
 
     private static HostEntry MakeEntry(ConnectionStatus status) =>

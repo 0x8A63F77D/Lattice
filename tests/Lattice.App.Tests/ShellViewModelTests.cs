@@ -1,4 +1,5 @@
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Core;
@@ -35,7 +36,7 @@ public class ShellViewModelTests : IAsyncLifetime
     [Fact]
     public void Has_four_views_and_starts_on_tasks()
     {
-        Assert.Equal(["Tasks", "Projects", "Transfers", "Event log"],
+        Assert.Equal([Strings.NavTasks, Strings.NavProjects, Strings.NavTransfers, Strings.NavEventLog],
             _shell.Views.Select(v => v.Title).ToArray());
         Assert.Same(_shell.Views[0], _shell.SelectedView);
         Assert.Same(_shell.Views[0].Page, _shell.CurrentPage);
@@ -56,10 +57,10 @@ public class ShellViewModelTests : IAsyncLifetime
         var b = TestData.MakeHostConfig(name: "b");
         _registry.AddHost(a);
         _registry.AddHost(b);
-        Assert.Equal(2, _shell.HostItems.Count);
+        Assert.Equal(2, _shell.RailEntries.OfType<HostRailItemViewModel>().Count());
 
         _registry.RemoveHost(a.Id);
-        Assert.Equal("b", Assert.Single(_shell.HostItems).Name);
+        Assert.Equal("b", Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>()).Name);
     }
 
     [Fact]

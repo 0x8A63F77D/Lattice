@@ -1,0 +1,56 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="using:Lattice.App.Controls">
+  <!-- StatusBarControl: 28px strip with left/warning/right text sections -->
+  <ControlTheme x:Key="{x:Type local:StatusBarControl}" TargetType="local:StatusBarControl">
+    <Setter Property="Height" Value="{StaticResource LatticeStatusBarHeight}" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="1" />
+            <RowDefinition Height="*" />
+          </Grid.RowDefinitions>
+          <!-- Top border: 1px stroke -->
+          <Border Grid.Row="0"
+                  Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <!-- Content row: DockPanel with left/warning/right sections -->
+          <DockPanel Grid.Row="1" LastChildFill="False">
+            <!-- Left text (docked left) -->
+            <TextBlock DockPanel.Dock="Left"
+                       Text="{TemplateBinding LeftText}"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       FontSize="12"
+                       TextTrimming="CharacterEllipsis"
+                       VerticalAlignment="Center"
+                       Margin="12,0,0,0" />
+            <!-- Right text (docked right) -->
+            <TextBlock DockPanel.Dock="Right"
+                       Text="{TemplateBinding RightText}"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       FontSize="12"
+                       VerticalAlignment="Center"
+                       Margin="0,0,12,0" />
+            <!-- Warning section (icon + text, visible only when WarningText is non-empty) -->
+            <StackPanel x:Name="WarningBlock"
+                        DockPanel.Dock="Left"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Margin="12,0,0,0"
+                        IsVisible="{Binding WarningText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+              <PathIcon Width="12"
+                        Height="12"
+                        Data="{DynamicResource IconWarningFilled}"
+                        Foreground="{DynamicResource LatticeWarningFgBrush}"
+                        VerticalAlignment="Center" />
+              <TextBlock Text="{TemplateBinding WarningText}"
+                         Foreground="{DynamicResource LatticeWarningFgBrush}"
+                         FontSize="12"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+          </DockPanel>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

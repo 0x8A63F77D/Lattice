@@ -45,6 +45,14 @@ public sealed class HostStore : IDisposable
 
     public IReadOnlyList<HostEntry> Hosts => _hosts;
 
+    /// <summary>Ask the scoped monitor(s) to poll now. Null = all hosts.</summary>
+    public void RequestRefresh(Guid? hostId = null)
+    {
+        foreach (HostMonitor monitor in _manager.Monitors)
+            if (hostId is null || monitor.HostId == hostId)
+                monitor.RequestRefresh();
+    }
+
     /// <summary>Raised on the UI thread whenever any entry (or the list) changed.</summary>
     public event EventHandler? Changed;
 

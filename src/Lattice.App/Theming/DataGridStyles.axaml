@@ -1,0 +1,81 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- DataGrid infrastructure: Lattice-themed column headers, row styling, and cell layout.
+       Design truth: docs/design/m2/README.md §Design Tokens.
+       All colors and dimensions reference Tokens.axaml only; no literal values here. -->
+
+  <!-- Selection tint: the Fluent DataGrid theme paints selection via Rectangle#BackgroundRectangle
+       inside the row template, using the DataGridRowSelected*BackgroundBrush resources at the
+       *Opacity values below — a plain DataGridRow.Background setter renders UNDER that overlay
+       and is invisible. Override the theme's own keys instead, aliased to the Lattice tint token.
+       The ThemeDictionaries wrapper is load-bearing even though both variants are identical:
+       theme-dictionary entries resolve lazily (after Application.Resources is populated), while
+       flat StaticResource dictionary entries resolve at style-load time and fail — see the
+       DynamicResource note below for the same load-order constraint. -->
+  <Styles.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <StaticResource x:Key="DataGridRowSelectedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedHoveredBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <StaticResource x:Key="DataGridRowSelectedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedUnfocusedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedHoveredBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+          <StaticResource x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundBrush" ResourceKey="LatticeSelectedTintBrush" />
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+      <!-- The theme dims the accent overlay (0.6/0.8); the Lattice tint is already a full
+           surface color, so paint it opaque. -->
+      <x:Double x:Key="DataGridRowSelectedBackgroundOpacity">1</x:Double>
+      <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
+      <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
+      <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- Scope: the DataGridColumnHeader / DataGridCell / selection styles apply to EVERY DataGrid
+       in the app; row sizing and grid chrome are opt-in via the "lattice" class (plus "compact"),
+       which every Lattice data view is expected to set.
+
+       Dimension tokens use DynamicResource deliberately, not StaticResource: this file loads as a
+       sibling StyleInclude in Application.Styles, which is populated BEFORE Application.Resources
+       merges Tokens.axaml — StaticResource to a Lattice* layout key throws KeyNotFound at app
+       load (verified; see Avalonia docs "How To Troubleshoot > resource not found", load order of
+       styles vs. resources). Do not "optimize" these back to StaticResource. -->
+  <Style Selector="DataGridColumnHeader">
+    <Setter Property="Height" Value="{DynamicResource LatticeGridHeaderHeight}" />
+    <Setter Property="FontSize" Value="11" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
+    <Setter Property="Padding" Value="8,0" />
+  </Style>
+
+  <Style Selector="DataGrid.lattice">
+    <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeight}" />
+    <Setter Property="FontSize" Value="13" />
+    <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />
+    <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource LatticeStrokeSubtleBrush}" />
+    <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
+    <Setter Property="Background" Value="{DynamicResource LatticeSurfaceBrush}" />
+  </Style>
+
+  <Style Selector="DataGrid.lattice.compact">
+    <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeightCompact}" />
+    <Setter Property="FontSize" Value="12" />
+  </Style>
+
+  <Style Selector="DataGridCell">
+    <Setter Property="Padding" Value="8,0" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+  </Style>
+
+  <Style Selector="TextBlock.numeric">
+    <!-- OpenType tabular (fixed-width) numerals for aligned numeric columns.
+         FontFeatures is a TextElement inherited attached property (HarfBuzz tag syntax). -->
+    <Setter Property="FontFeatures" Value="+tnum" />
+  </Style>
+</Styles>

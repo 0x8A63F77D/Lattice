@@ -13,11 +13,16 @@
     <Style Selector="TextBox">
       <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
+    <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    <StyleInclude Source="avares://Lattice.App/Theming/DataGridStyles.axaml" />
   </Application.Styles>
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
+        <!-- Tokens first: ControlStyles resolves LatticeStatusBarHeight via StaticResource,
+             which must not depend on ResourceInclude lazy-load timing. -->
         <ResourceInclude Source="avares://Lattice.App/Theming/Tokens.axaml" />
+        <ResourceInclude Source="avares://Lattice.App/Theming/ControlStyles.axaml" />
         <ResourceInclude Source="avares://Lattice.App/Theming/Icons.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>

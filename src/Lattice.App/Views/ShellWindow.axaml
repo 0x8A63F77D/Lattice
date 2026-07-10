@@ -3,9 +3,10 @@
         xmlns:ui="using:FluentAvalonia.UI.Controls"
         xmlns:vm="using:Lattice.App.ViewModels"
         xmlns:v="using:Lattice.App.Views"
+        xmlns:loc="using:Lattice.App.Localization"
         x:Class="Lattice.App.Views.ShellWindow"
         x:DataType="vm:ShellViewModel"
-        Title="Lattice"
+        Title="{x:Static loc:Strings.AppTitle}"
         Width="1280" Height="800" MinWidth="1000" MinHeight="700"
         TransparencyLevelHint="Mica, None"
         Background="{DynamicResource LatticeCanvasBrush}">
@@ -57,22 +58,22 @@
                        IsBackButtonVisible="False"
                        SelectionChanged="OnNavSelectionChanged">
       <ui:FANavigationView.MenuItems>
-        <ui:FANavigationViewItem x:Name="NavTasks" Content="Tasks" Tag="0">
+        <ui:FANavigationViewItem x:Name="NavTasks" Content="{x:Static loc:Strings.NavTasks}" Tag="0">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconTaskListSquareLtrRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavProjects" Content="Projects" Tag="1">
+        <ui:FANavigationViewItem x:Name="NavProjects" Content="{x:Static loc:Strings.NavProjects}" Tag="1">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconGridRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavTransfers" Content="Transfers" Tag="2">
+        <ui:FANavigationViewItem x:Name="NavTransfers" Content="{x:Static loc:Strings.NavTransfers}" Tag="2">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavEventLog" Content="Event log" Tag="3">
+        <ui:FANavigationViewItem x:Name="NavEventLog" Content="{x:Static loc:Strings.NavEventLog}" Tag="3">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
           </ui:FANavigationViewItem.IconSource>
@@ -84,21 +85,39 @@
           <DockPanel Margin="12,0,8,4">
             <Button DockPanel.Dock="Right" Padding="4" Background="Transparent"
                     Command="{Binding RequestAddHostCommand}"
-                    ToolTip.Tip="Add a host">
+                    ToolTip.Tip="{x:Static loc:Strings.HostsAddTooltip}">
               <PathIcon Data="{StaticResource IconAddRegular}" Width="12" Height="12" />
             </Button>
             <!-- Design §Responsive: the 48px compact rail shows host state icons only;
                  names/subtext live in tooltips. Text elements follow the pane state. -->
-            <TextBlock x:Name="HostsHeader" Text="Hosts" FontSize="11" FontWeight="SemiBold"
+            <TextBlock x:Name="HostsHeader" Text="{x:Static loc:Strings.HostsHeader}" FontSize="11" FontWeight="SemiBold"
                        VerticalAlignment="Center"
                        IsVisible="{Binding #Nav.IsPaneOpen}"
                        Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
           </DockPanel>
           <ListBox x:Name="HostList" x:FieldModifier="public" Classes="hostRail"
                    Background="Transparent"
-                   ItemsSource="{Binding HostItems}"
+                   ItemsSource="{Binding RailEntries}"
+                   SelectedItem="{Binding SelectedRailEntry, Mode=TwoWay}"
                    SelectionChanged="OnHostSelectionChanged">
-            <ListBox.ItemTemplate>
+            <ListBox.DataTemplates>
+              <DataTemplate x:DataType="vm:AllHostsRailItemViewModel">
+                <DockPanel Height="{StaticResource LatticeHostItemHeight}"
+                           ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+                  <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">
+                    <PathIcon Width="16" Height="16"
+                              Data="{StaticResource IconAppsListRegular}"
+                              Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+                  </Panel>
+                  <StackPanel x:Name="AllHostsText" VerticalAlignment="Center" Margin="4,0,0,0"
+                              IsVisible="{Binding #Nav.IsPaneOpen}">
+                    <TextBlock Text="{Binding Name}" FontSize="13"
+                               Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+                    <TextBlock Text="{Binding Subtext}" FontSize="11"
+                               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                  </StackPanel>
+                </DockPanel>
+              </DataTemplate>
               <DataTemplate x:DataType="vm:HostRailItemViewModel">
                 <DockPanel Height="{StaticResource LatticeHostItemHeight}"
                            ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
@@ -128,13 +147,13 @@
                   </StackPanel>
                 </DockPanel>
               </DataTemplate>
-            </ListBox.ItemTemplate>
+            </ListBox.DataTemplates>
           </ListBox>
         </StackPanel>
       </ui:FANavigationView.PaneCustomContent>
 
       <ui:FANavigationView.FooterMenuItems>
-        <ui:FANavigationViewItem x:Name="NavSettings" Content="Settings" Tag="settings">
+        <ui:FANavigationViewItem x:Name="NavSettings" Content="{x:Static loc:Strings.NavSettings}" Tag="settings">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconSettingsRegular}" />
           </ui:FANavigationViewItem.IconSource>

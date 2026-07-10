@@ -4,6 +4,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
@@ -75,7 +76,7 @@ public class ShellWindowTests
         shell.SelectViewCommand.Execute("2");
 
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Transfers", page.Title);
+        Assert.Equal(Strings.NavTransfers, page.Title);
         window.Close();
     }
 
@@ -89,7 +90,7 @@ public class ShellWindowTests
 
         Assert.Same(window.NavTasks, window.Nav.SelectedItem);
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Tasks", page.Title);
+        Assert.Equal(Strings.NavTasks, page.Title);
         window.Close();
     }
 
@@ -108,7 +109,7 @@ public class ShellWindowTests
         // OnNavSelectionChanged -> SelectViewCommand; the VM equality guard must
         // stop the loop with the page still on Transfers.
         var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal("Transfers", page.Title);
+        Assert.Equal(Strings.NavTransfers, page.Title);
         window.Close();
     }
 
@@ -131,14 +132,15 @@ public class ShellWindowTests
     }
 
     [AvaloniaFact]
-    public void Host_rail_renders_one_item_per_host()
+    public void Host_rail_renders_one_item_per_host_plus_sentinel()
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
         registry.AddHost(TestData.MakeHostConfig(name: "a"));
         registry.AddHost(TestData.MakeHostConfig(name: "b"));
         Layout(window);
-        Assert.Equal(2, window.HostList.ItemCount);
+        // +1 for the All-hosts sentinel that always leads the rail.
+        Assert.Equal(3, window.HostList.ItemCount);
         window.Close();
     }
 
@@ -166,8 +168,10 @@ public class ShellWindowTests
 
         // The theme's ListBoxItem MinWidth (88) used to overflow the 48px strip;
         // layout then centers the oversized item at a negative offset and the
-        // state icon renders half-clipped at the pane edge.
-        var item = window.HostList.GetVisualDescendants().OfType<ListBoxItem>().Single();
+        // state icon renders half-clipped at the pane edge. Two rows now exist
+        // (the All-hosts sentinel plus this one host) — target the host row.
+        var item = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(li => li.DataContext is HostRailItemViewModel);
         var origin = item.TranslatePoint(new Point(0, 0), window)!.Value;
         Assert.True(origin.X >= 0, $"rail item starts at x={origin.X}");
         Assert.True(item.Bounds.Width <= window.Nav.CompactPaneLength,

@@ -41,10 +41,11 @@ public class AuthFailedLinkageTests
         registry.AddHost(host);
         store.Hosts[0].Status = new ConnectionStatus(
             host.Id, HostConnectionState.AuthFailed, 1, null, "unauthorized", null);
-        shell.HostItems[0].Refresh();
+        shell.RailEntries.OfType<HostRailItemViewModel>().Single().Refresh();
         Layout(window);
 
-        window.HostList.SelectedIndex = 0;
+        // Index 0 is the All-hosts sentinel; the sole host lives at index 1.
+        window.HostList.SelectedIndex = 1;
         Layout(window);
 
         Assert.Same(shell.Settings, shell.CurrentPage);

@@ -31,6 +31,15 @@ ICONS=(
   "chevron_up|Chevron Up|regular"
   "chevron_right|Chevron Right|regular"
   "dismiss|Dismiss|regular"
+  "play|Play|regular"
+  "pause|Pause|regular"
+  "clock|Clock|regular"
+  "arrow_upload|Arrow Upload|regular"
+  "warning|Warning|filled"
+  "search|Search|regular"
+  "more_horizontal|More Horizontal|regular"
+  "text_line_spacing|Text Line Spacing|regular"
+  "apps_list|Apps List|regular"
 )
 
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }
