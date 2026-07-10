@@ -34,6 +34,11 @@
     <Style Selector="ListBox.hostRail ListBoxItem">
       <Setter Property="Padding" Value="8,0" />
       <Setter Property="MinHeight" Value="{StaticResource LatticeHostItemHeight}" />
+      <!-- The theme's ListBoxItem MinWidth (88) overflows the 48px compact rail:
+           layout centers the oversized item at a negative offset and the state
+           icon renders half-clipped at the pane edge. Rail entries stretch to
+           whatever width the pane gives them. -->
+      <Setter Property="MinWidth" Value="0" />
       <Setter Property="CornerRadius" Value="{StaticResource LatticeControlRadius}" />
     </Style>
     <Style Selector="ListBox.hostRail ListBoxItem:selected /template/ ContentPresenter">

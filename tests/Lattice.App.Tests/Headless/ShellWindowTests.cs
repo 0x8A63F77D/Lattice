@@ -164,6 +164,15 @@ public class ShellWindowTests
         Assert.False(hostText.IsVisible);
         Assert.False(header.IsVisible);
 
+        // The theme's ListBoxItem MinWidth (88) used to overflow the 48px strip;
+        // layout then centers the oversized item at a negative offset and the
+        // state icon renders half-clipped at the pane edge.
+        var item = window.HostList.GetVisualDescendants().OfType<ListBoxItem>().Single();
+        var origin = item.TranslatePoint(new Point(0, 0), window)!.Value;
+        Assert.True(origin.X >= 0, $"rail item starts at x={origin.X}");
+        Assert.True(item.Bounds.Width <= window.Nav.CompactPaneLength,
+            $"rail item width {item.Bounds.Width} exceeds the {window.Nav.CompactPaneLength}px compact strip");
+
         window.Nav.IsPaneOpen = true;
         Layout(window);
         Assert.True(hostText.IsVisible);
