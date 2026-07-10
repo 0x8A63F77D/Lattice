@@ -156,4 +156,72 @@ public class SettingsViewModelTests : IAsyncLifetime
         Assert.Equal(30, _registry.PollingIntervalSeconds);
         Assert.Equal([2, 5, 10, 30, 60], SettingsViewModel.AllowedPollingIntervals);
     }
+
+    /// <summary>Turns the registry's config path into a directory: Save's rename onto it throws.</summary>
+    private void MakeConfigPathUnwritable()
+    {
+        File.Delete(_path);
+        Directory.CreateDirectory(_path);
+    }
+
+    private void RestoreConfigPath() => Directory.Delete(_path);
+
+    [Fact]
+    public void Save_surfaces_persistence_failure_instead_of_throwing()
+    {
+        var item = AddHost();
+        var before = _registry.Hosts[0];
+        MakeConfigPathUnwritable();
+        try
+        {
+            item.Address = "192.168.1.99";
+            item.SaveCommand.Execute(null);
+
+            Assert.NotNull(item.ValidationError);
+            Assert.StartsWith("Saving failed:", item.ValidationError);
+            Assert.Equal(before, _registry.Hosts[0]);
+        }
+        finally
+        {
+            RestoreConfigPath();
+        }
+    }
+
+    [Fact]
+    public void Remove_surfaces_persistence_failure_and_keeps_the_host()
+    {
+        var item = AddHost();
+        MakeConfigPathUnwritable();
+        try
+        {
+            var error = _settings.Remove(item.HostId);
+
+            Assert.NotNull(error);
+            Assert.StartsWith("Removing failed:", error);
+            Assert.Single(_registry.Hosts);
+            Assert.Single(_settings.Hosts);
+        }
+        finally
+        {
+            RestoreConfigPath();
+        }
+    }
+
+    [Fact]
+    public void Polling_interval_persistence_failure_sets_error_and_keeps_old_value()
+    {
+        MakeConfigPathUnwritable();
+        try
+        {
+            _settings.PollingIntervalSeconds = 30;
+
+            Assert.NotNull(_settings.PollingError);
+            Assert.Equal(5, _settings.PollingIntervalSeconds);
+            Assert.Equal(5, _registry.PollingIntervalSeconds);
+        }
+        finally
+        {
+            RestoreConfigPath();
+        }
+    }
 }

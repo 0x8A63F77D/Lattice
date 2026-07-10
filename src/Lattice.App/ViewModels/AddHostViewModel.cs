@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Lattice.App.Infrastructure;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 
@@ -74,15 +75,14 @@ public sealed partial class AddHostViewModel : ObservableObject
                 // AddHost persists the host list to disk synchronously; a write
                 // failure must land in the dialog's InfoBar, not escape the
                 // async void PrimaryButtonClick handler and down the app.
-                try
+                if (RegistryGuard.TryMutate(() => _registry.AddHost(candidate)) is { } error)
                 {
-                    _registry.AddHost(candidate);
+                    ErrorText = $"Connected, but saving the host list failed: {error}";
+                }
+                else
+                {
                     Succeeded = true;
                     ErrorText = null;
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    ErrorText = $"Connected, but saving the host list failed: {ex.Message}";
                 }
             }
             else

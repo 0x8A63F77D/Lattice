@@ -78,6 +78,29 @@ public class AddHostViewModelTests
     }
 
     [Fact]
+    public async Task Persistence_failure_after_successful_test_lands_in_the_dialog()
+    {
+        // The config path is a directory, so AddHost's persist step throws.
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        Directory.CreateDirectory(path);
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var vm = new AddHostViewModel(registry, () => new FakeGuiRpcClient());
+        vm.Address = "localhost";
+        try
+        {
+            await vm.AddCommand.ExecuteAsync(null);
+
+            Assert.False(vm.Succeeded);
+            Assert.StartsWith("Connected, but saving the host list failed:", vm.ErrorText);
+            Assert.Empty(registry.Hosts);
+        }
+        finally
+        {
+            Directory.Delete(path);
+        }
+    }
+
+    [Fact]
     public async Task Add_times_out_rather_than_hanging()
     {
         var (vm, registry) = Make(() => new FakeGuiRpcClient

@@ -68,6 +68,9 @@
                     SelectedItem="{Binding PollingIntervalSeconds, Mode=TwoWay}" />
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
+      <TextBlock Text="{Binding PollingError}" FontSize="12"
+                 IsVisible="{Binding PollingError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource LatticeDangerFgBrush}" />
     </StackPanel>
   </ScrollViewer>
 </UserControl>

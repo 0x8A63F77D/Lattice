@@ -83,8 +83,13 @@ public sealed partial class HostSettingsItemViewModel : ObservableObject
     [RelayCommand]
     private void Save()
     {
+        // ValidationError doubles as the card's inline error line: a persistence
+        // failure (unwritable config.json) must land there, not escape the
+        // synchronous command path as an unhandled dispatcher exception.
         if (BuildCandidate() is { } candidate)
-            _registry.UpdateHost(candidate);
+            ValidationError = RegistryGuard.TryMutate(() => _registry.UpdateHost(candidate)) is { } error
+                ? $"Saving failed: {error}"
+                : null;
     }
 
     [RelayCommand]

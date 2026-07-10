@@ -51,8 +51,14 @@ public partial class SettingsView : UserControl
             // Remove on a gone host — HostRegistry.RemoveHost throws on unknown ids.
             if (result == FAContentDialogResult.Primary
                 && DataContext is SettingsViewModel vm
-                && vm.Hosts.Any(h => h.HostId == item.HostId))
-                vm.Remove(item.HostId);
+                && vm.Hosts.Any(h => h.HostId == item.HostId)
+                && vm.Remove(item.HostId) is { } error)
+            {
+                // Persistence failure: the host is still registered, so its card
+                // is still there — surface the error on it, expanded to be seen.
+                item.ValidationError = error;
+                item.IsExpanded = true;
+            }
         }
         finally
         {
