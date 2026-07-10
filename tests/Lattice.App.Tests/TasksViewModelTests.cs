@@ -511,6 +511,27 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Auth_failed_host_without_snapshot_leaves_loading_state()
+    {
+        // Codex P2 round 3: a host that parks in a TERMINAL state before its
+        // first snapshot (canonical: wrong password -> AuthFailed; Snapshot
+        // stays null forever) must not leave the first-fetch skeleton up
+        // indefinitely. And it must NOT fall through to IsEmpty either — an
+        // auth-failed scope is not "no tasks on this host"; the rail and the
+        // partial bar tell that story.
+        var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single().Status.State == HostConnectionState.AuthFailed);
+
+        await Wait.UntilAsync(() => !vm.IsLoading,
+            "the loading overlay must yield once every scoped host parks terminally");
+        Assert.False(vm.IsEmpty, "an auth-failed scope is not 'no tasks on this host'");
+    }
+
+    [Fact]
     public async Task IsLoading_until_the_first_snapshot_then_IsEmpty_with_zero_tasks()
     {
         var fake = new FakeGuiRpcClient();

@@ -170,8 +170,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
                 Strings.PartialFmt, _unreachableIds.Count, _store.Hosts.Count, covered);
         }
 
-        IsLoading = scoped.Count > 0 && scoped.All(h => h.Snapshot is null);
-        IsEmpty = !IsLoading && Rows.Count == 0;
+        // Overlay choice (loading skeleton vs empty message vs neither) is
+        // TasksOverlayPolicy's; all-terminal scopes get neither (Codex P2).
+        (IsLoading, IsEmpty) = TasksOverlayPolicy.Decide(
+            [.. scoped.Select(h => new TasksOverlayPolicy.HostFacts(
+                RailStateProjection.From(h.Status), h.Snapshot is not null))],
+            Rows.Count > 0);
     }
 
     public void Dispose()
