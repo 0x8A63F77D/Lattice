@@ -2,7 +2,7 @@ namespace Lattice.Core
 
 /// Connection lifecycle of one host. UI mapping: Connecting/Authorizing/FetchingState
 /// all render as "Connecting…" (FetchingState may show "Fetching state from {host}…");
-/// Retrying with Attempt >= 5 renders as "Unreachable"; AuthFailed is terminal until
+/// Retrying with Attempt >= 4 renders as "Unreachable"; AuthFailed is terminal until
 /// the host's credentials are updated.
 type HostConnectionState =
     /// Not started, or stopped by disposal.
