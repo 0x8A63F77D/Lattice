@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
@@ -138,6 +139,35 @@ public class ShellWindowTests
         registry.AddHost(TestData.MakeHostConfig(name: "b"));
         Layout(window);
         Assert.Equal(2, window.HostList.ItemCount);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Collapsed_pane_shows_host_state_icon_only()
+    {
+        var (window, _, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        Layout(window);
+
+        var hostText = window.GetVisualDescendants().OfType<StackPanel>()
+            .Single(p => p.Name == "HostText");
+        var header = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Name == "HostsHeader");
+        Assert.True(hostText.IsVisible);
+        Assert.True(header.IsVisible);
+
+        // Design §Responsive: in the 48px compact rail, hosts show the state icon
+        // only — name/subtext/countdown live in the tooltip.
+        window.Nav.IsPaneOpen = false;
+        Layout(window);
+        Assert.False(hostText.IsVisible);
+        Assert.False(header.IsVisible);
+
+        window.Nav.IsPaneOpen = true;
+        Layout(window);
+        Assert.True(hostText.IsVisible);
+        Assert.True(header.IsVisible);
         window.Close();
     }
 }

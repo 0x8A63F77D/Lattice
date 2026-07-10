@@ -82,8 +82,11 @@
                     ToolTip.Tip="Add a host">
               <PathIcon Data="{StaticResource IconAddRegular}" Width="12" Height="12" />
             </Button>
-            <TextBlock Text="Hosts" FontSize="11" FontWeight="SemiBold"
+            <!-- Design §Responsive: the 48px compact rail shows host state icons only;
+                 names/subtext live in tooltips. Text elements follow the pane state. -->
+            <TextBlock x:Name="HostsHeader" Text="Hosts" FontSize="11" FontWeight="SemiBold"
                        VerticalAlignment="Center"
+                       IsVisible="{Binding #Nav.IsPaneOpen}"
                        Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
           </DockPanel>
           <ListBox x:Name="HostList" x:FieldModifier="public" Classes="hostRail"
@@ -111,7 +114,8 @@
                               Data="{StaticResource IconKeyRegular}"
                               Foreground="{DynamicResource LatticeDangerFgBrush}" />
                   </Panel>
-                  <StackPanel VerticalAlignment="Center" Margin="4,0,0,0">
+                  <StackPanel x:Name="HostText" VerticalAlignment="Center" Margin="4,0,0,0"
+                              IsVisible="{Binding #Nav.IsPaneOpen}">
                     <TextBlock Text="{Binding Name}" FontSize="13"
                                Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
                     <TextBlock Text="{Binding StateText}" FontSize="11"
