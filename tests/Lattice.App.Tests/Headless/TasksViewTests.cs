@@ -283,4 +283,34 @@ public class TasksViewTests
         window.Close();
         File.Delete(uiPath);
     }
+
+    [AvaloniaFact]
+    public async Task Scope_switch_hiding_the_partial_bar_does_not_count_as_user_dismissal()
+    {
+        var (window, _, vm, registry, manager, fakes) = MakeView();
+        var hostUp = AddHost(registry, fakes, "host-up", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-down",
+            new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) });
+        window.Show();
+        manager.Start();
+
+        await Wait.UntilAsync(() => vm.ShowPartialBar, "partial bar should appear for the AuthFailed host");
+        Layout(window);
+
+        // Scoping to the healthy host hides the bar through the IsOpen binding;
+        // FAInfoBar raises Closed with Reason=Programmatic. That close is not a
+        // user dismissal and must not snapshot the outage as dismissed.
+        vm.Scope = new ScopeSelection(hostUp.Id);
+        Layout(window);
+        Assert.False(vm.ShowPartialBar);
+
+        vm.Scope = ScopeSelection.AllHosts;
+        Layout(window);
+
+        Assert.True(vm.ShowPartialBar,
+            "returning to All hosts must re-show the partial bar: the user never dismissed it");
+
+        await manager.DisposeAsync();
+        window.Close();
+    }
 }

@@ -119,9 +119,15 @@ public partial class TasksView : UserControl
         };
     }
 
+    // Only a close-button click is a dismissal episode (design § partial-bar
+    // dismissal semantics: dismiss snapshots the CURRENT unreachable id-set).
+    // FAInfoBar also raises Closed with Reason=Programmatic whenever the IsOpen
+    // binding flips false — scope switch to a single host, outage recovery —
+    // and snapshotting there would suppress the warning on return to All hosts
+    // even though the user never dismissed it.
     private void OnPartialBarClosed(FAInfoBar sender, FAInfoBarClosedEventArgs args)
     {
-        if (DataContext is TasksViewModel vm)
+        if (args.Reason == FAInfoBarCloseReason.CloseButton && DataContext is TasksViewModel vm)
             vm.DismissPartialCommand.Execute(null);
     }
 
