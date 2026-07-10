@@ -166,7 +166,7 @@ internal sealed class JourneyHarness : IAsyncDisposable
         }
         catch (TimeoutException ex)
         {
-            throw new TimeoutException($"{reason} ({ex.Message})");
+            throw new TimeoutException($"{reason} ({ex.Message})", ex);
         }
     }
 
