@@ -36,6 +36,7 @@ ICONS=(
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }
 
 OUT=$(mktemp)
+trap 'rm -f "$OUT"' EXIT
 FINAL=Icons.axaml
 {
   echo '<ResourceDictionary xmlns="https://github.com/avaloniaui"'
@@ -55,5 +56,6 @@ for entry in "${ICONS[@]}"; do
   echo "  <StreamGeometry x:Key=\"Icon$(pascal "$snake")$suffix\">$d</StreamGeometry>" >> "$OUT"
 done
 echo '</ResourceDictionary>' >> "$OUT"
+chmod 644 "$OUT"
 mv "$OUT" "$FINAL"
 echo "generated $FINAL with $(grep -c StreamGeometry "$FINAL") geometries"
