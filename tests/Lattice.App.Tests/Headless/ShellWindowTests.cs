@@ -132,7 +132,7 @@ public class ShellWindowTests
     }
 
     [AvaloniaFact]
-    public void Host_rail_renders_one_item_per_host()
+    public void Host_rail_renders_one_item_per_host_plus_sentinel()
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
