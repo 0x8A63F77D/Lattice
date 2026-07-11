@@ -72,12 +72,13 @@ The design package under `docs/design/m2/` is single-source-of-truth
   the Tasks pattern; plan must design the shared aggregation core serving all
   four views (F# per the functional-domains directive; Tasks retrofits onto
   it — issue #24's CollectionReconciler is part of that same machinery).
-  Rev. B shell rework (hosts rail bottom-docked, host mgmt in rail — PR #25,
-  issue #12) needs scheduling into Wave 2/3.
+  Rev. B shell rework (hosts rail bottom-docked, host mgmt in rail — PR #25;
+  tracked in issue #26 with the full gap map) was blocked by Wave-1 PR C and
+  is now UNBLOCKED: runs as its own PR before the Wave 2 views.
 - **Wave 3**: motion/polish + final walkthrough (per the M2c-2 spec).
 - Upstream FluentAvalonia #616: root-cause comment + PR offer posted;
   awaiting maintainer. Their policy bans AI-authored code — if approved, the
   USER hand-writes the patch (reference material archived; fork
   0x8A63F77D/FluentAvalonia is verification ground only).
 - Open follow-up issues: #11–#18 (Wave-0 migration), #24 (reconciler),
-  #27 (README + license) — all on GitHub milestones.
+  #26 (rev. B shell rework), #27 (README + license) — all on GitHub milestones.
