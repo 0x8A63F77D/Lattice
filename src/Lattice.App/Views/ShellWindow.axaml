@@ -179,6 +179,9 @@
           <DataTemplate DataType="vm:TasksViewModel">
             <v:TasksView />
           </DataTemplate>
+          <DataTemplate DataType="vm:ProjectsViewModel">
+            <v:ProjectsView />
+          </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>
     </ui:FANavigationView>

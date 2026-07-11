@@ -131,6 +131,20 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Projects_page_is_a_ProjectsViewModel_and_receives_scope_changes()
+    {
+        var projects = Assert.IsType<ProjectsViewModel>(_shell.Views[1].Page);
+        Assert.Same(_shell.Projects, projects);
+        Assert.True(projects.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, projects.Scope.HostId);
+    }
+
+    [Fact]
     public async Task TasksCount_mirrors_the_tasks_view_models_row_count()
     {
         Assert.Equal(0, _shell.TasksCount);
