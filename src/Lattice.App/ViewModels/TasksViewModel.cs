@@ -26,12 +26,10 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     // save here never clobbers state owned by a future consumer.
     private UiState _uiState;
 
-    // The dismissed partial-bar fingerprint and the one computed on the last
-    // Rebuild. Episode semantics (when a dismissal holds, when it is
-    // forgotten) live in PartialBarPolicy; this class only stores the state
-    // and applies the scope gate.
-    private PartialBarPolicy.Fingerprint _dismissedFingerprint = PartialBarPolicy.EmptyFingerprint;
-    private PartialBarPolicy.Fingerprint _currentFingerprint = PartialBarPolicy.EmptyFingerprint;
+    // Episode semantics live in PartialBarPolicy, the call protocol (current/
+    // dismissed fingerprints, scope gate) in PartialBarState; this class only
+    // holds the instance.
+    private readonly PartialBarState _partialBar = new();
 
     public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore)
     {
@@ -118,7 +116,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissPartial()
     {
-        _dismissedFingerprint = PartialBarPolicy.Dismiss(_currentFingerprint);
+        _partialBar.Dismiss();
         ShowPartialBar = false;
     }
 
@@ -145,36 +143,13 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             : _store.Hosts.Where(h => h.Config.Id == Scope.HostId).ToList();
         IsAllHostsScope = Scope.IsAllHosts;
 
-        // Per-host facts feed the shared F# aggregation core (ViewSlice.compute):
-        // host classification, row merge, coverage/staleness are all decided
-        // there so every data-view VM shares one implementation. Flags, not
-        // RailState — Lattice.App.Aggregation stays free of UI-layer types.
-        var facts = _store.Hosts.Select(h =>
-        {
-            var rail = RailStateProjection.From(h.Status);
-            var inScope = Scope.IsAllHosts || h.Config.Id == Scope.HostId;
-            var isRowSource = rail == RailState.Connected && h.Snapshot is not null;
-            // Positional construction: the F# record's compiler-generated
-            // constructor exposes camelCase parameter names (id, inScope, ...)
-            // that don't match the PascalCase field names C# named-argument
-            // syntax would need, so positional is the reliable path here.
-            return new HostFacts<TaskRowViewModel>(
-                h.Config.Id,
-                inScope,
-                isRowSource,
-                rail is RailState.Unreachable or RailState.AuthFailed,
-                rail is RailState.Retrying or RailState.Unreachable,
-                isRowSource ? h.Snapshot!.Timestamp : null,
-                // Rows for out-of-scope hosts are never consumed by the slice
-                // (AllRows/CoveredIds/timestamps all gate on InScope ∧
-                // IsRowSource), so skip materializing them — Rebuild runs on
-                // every 1 s tick (Codex P2, PR #37). Flags above deliberately
-                // keep all-host semantics.
-                inScope && isRowSource
-                    ? h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray()
-                    : []);
-        }).ToArray();
-        var slice = ViewSlice.compute(facts);
+        // Per-host facts feed the shared F# aggregation core (ViewSlice.compute)
+        // through the single-copy projection: host classification, row merge,
+        // coverage/staleness are all decided there so every data-view VM shares
+        // one implementation. rowsOf runs only for inScope && isRowSource hosts,
+        // so Snapshot is non-null inside it.
+        var slice = ViewSliceProjection.Compute(_store.Hosts, Scope,
+            h => h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray());
         var allRows = slice.AllRows;
 
         var target = allRows
@@ -223,14 +198,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         var unreachableIds = slice.UnreachableIds;
         var coveredIds = slice.CoveredIds;
 
-        // Episode semantics (dismissal forgotten on full recovery; any
-        // fingerprint change re-reports) are PartialBarPolicy's; the
-        // All-hosts scope gate is the one piece that stays here.
-        _currentFingerprint = new PartialBarPolicy.Fingerprint(unreachableIds, coveredIds);
-        (PartialBarPolicy.Fingerprint dismissed, bool visible) =
-            PartialBarPolicy.Advance(_dismissedFingerprint, _currentFingerprint);
-        _dismissedFingerprint = dismissed;
-        ShowPartialBar = Scope.IsAllHosts && visible;
+        ShowPartialBar = _partialBar.Advance(unreachableIds, coveredIds, Scope.IsAllHosts);
 
         if (ShowPartialBar)
         {

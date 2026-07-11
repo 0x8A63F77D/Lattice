@@ -129,8 +129,7 @@
     <!-- Grid + overlays -->
     <Panel>
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True"
-                LoadingRow="OnLoadingRow" UnloadingRow="OnUnloadingRow">
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True">
         <DataGrid.Columns>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
                                Binding="{Binding Data.Project}" Width="108" />
