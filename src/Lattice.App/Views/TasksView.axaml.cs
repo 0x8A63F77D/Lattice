@@ -43,6 +43,13 @@ public partial class TasksView : UserControl
     // (though any headless TasksView test trips it immediately).
     private readonly Dictionary<string, DataGridColumn> _columnsByTag;
 
+    // The hosting window, resolved on visual-tree attach. Design §Responsive
+    // (2f) is authoritative: breakpoints are WINDOW-width thresholds ("≥1280
+    // full rail + all columns"), not view-width — inside the shell the view is
+    // window-minus-nav-pane, which would fire the 1100/1000 thresholds ~260px
+    // early. Subscription is paired: attach subscribes, detach unsubscribes.
+    private TopLevel? _topLevel;
+
     public TasksView()
     {
         InitializeComponent();
@@ -56,9 +63,35 @@ public partial class TasksView : UserControl
             ["Deadline"] = ColumnWithHeader(Strings.ColDeadline),
             ["State"] = ColumnWithHeader(Strings.ColState),
         };
-        PropertyChanged += OnViewPropertyChanged;
         DataContextChanged += (_, _) => LoadColumnPreferences();
-        ApplyColumnVisibility(Bounds.Width);
+        ApplyColumnVisibility(BreakpointWidth);
+    }
+
+    /// <summary>Window width when hosted (the design's breakpoint dimension);
+    /// the view's own width only before attach, where it is a 0-width no-op.</summary>
+    private double BreakpointWidth => _topLevel?.Bounds.Width ?? Bounds.Width;
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _topLevel = TopLevel.GetTopLevel(this);
+        if (_topLevel is not null)
+            _topLevel.PropertyChanged += OnTopLevelPropertyChanged;
+        ApplyColumnVisibility(BreakpointWidth);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        if (_topLevel is not null)
+            _topLevel.PropertyChanged -= OnTopLevelPropertyChanged;
+        _topLevel = null;
+    }
+
+    private void OnTopLevelPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == BoundsProperty)
+            ApplyColumnVisibility(BreakpointWidth);
     }
 
     private DataGridColumn ColumnWithHeader(string header) =>
@@ -77,13 +110,7 @@ public partial class TasksView : UserControl
             foreach (var item in flyout.Items.OfType<MenuItem>())
                 if (item.Tag is string columnKey)
                     item.IsChecked = _userColumnPreferences[columnKey] ?? true;
-        ApplyColumnVisibility(Bounds.Width);
-    }
-
-    private void OnViewPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
-    {
-        if (e.Property == BoundsProperty)
-            ApplyColumnVisibility(Bounds.Width);
+        ApplyColumnVisibility(BreakpointWidth);
     }
 
     // Re-derives every tracked column's visibility from the pure policy: user
@@ -102,7 +129,7 @@ public partial class TasksView : UserControl
         _userColumnPreferences[columnName] = item.IsChecked;
         if (DataContext is TasksViewModel vm)
             vm.SetColumnPreference(columnName, item.IsChecked);
-        ApplyColumnVisibility(Bounds.Width);
+        ApplyColumnVisibility(BreakpointWidth);
     }
 
     private void OnStateFilterChanged(object? sender, SelectionChangedEventArgs e)

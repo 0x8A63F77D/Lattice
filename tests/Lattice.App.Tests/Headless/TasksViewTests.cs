@@ -284,6 +284,39 @@ public class TasksViewTests
         File.Delete(uiPath);
     }
 
+    private static List<string?> VisibleHeaders(Window window) =>
+        window.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.IsVisible)
+            .Select(h => h.Content as string)
+            .Where(text => text is not null)
+            .ToList();
+
+    [AvaloniaFact]
+    public void Breakpoints_use_window_width_not_view_width()
+    {
+        // Mimic the shell layout: a 1280px window where a 260px nav pane sits
+        // beside the view, leaving the view itself ~1020px. Design §Responsive
+        // (2f) defines breakpoints on WINDOW width — at 1280 ALL columns show;
+        // pre-fix the policy read the view's own width and auto-hid Elapsed.
+        var (window, view, _, _, _, _) = MakeView();
+        window.Content = null;
+        var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("260,*") };
+        var pane = new Border();
+        Grid.SetColumn(pane, 0);
+        Grid.SetColumn(view, 1);
+        layout.Children.Add(pane);
+        layout.Children.Add(view);
+        window.Content = layout;
+        window.Show();
+        Layout(window);
+
+        var headers = VisibleHeaders(window);
+        Assert.Contains(Strings.ColElapsed, headers);
+        Assert.Contains(Strings.ColApplication, headers);
+        Assert.Equal(9, headers.Count);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public async Task Scope_switch_hiding_the_partial_bar_does_not_count_as_user_dismissal()
     {
