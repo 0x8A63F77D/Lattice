@@ -79,6 +79,17 @@ public sealed partial class EventLogViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ResumeFollowing() => IsFollowing = true;
 
+    /// <summary>
+    /// Builds the clipboard payload for the currently visible rows as
+    /// tab-separated <c>timestamp\thost\tbody</c> lines (design 2c copy button).
+    /// The view owns the actual clipboard write; the VM stays clipboard-free and
+    /// only shapes the text.
+    /// </summary>
+    public string BuildClipboardText() =>
+        string.Join(
+            Environment.NewLine,
+            Rows.Select(h => $"{h.Data.TimestampText}\t{h.Data.Host}\t{h.Data.Body}"));
+
     private void OnMessagesReceived(object? sender, MessagesAddedEventArgs e)
     {
         var host = _store.Hosts.FirstOrDefault(h => h.Config.Id == e.HostId);
