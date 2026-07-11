@@ -55,4 +55,39 @@ public class ProjectRowViewModelTests
         Assert.Equal("Mixed · 1 suspended · 1 no new tasks",
             ProjectRowViewModel.Parent(mixed, true).StatusText);
     }
+
+    [Fact]
+    public void AllSame_non_active_status_renders_on_all_hosts_suffix()
+    {
+        var g = ProjectRows.compute([Att(susp: true), Att(host: "host-b", susp: true)])[0];
+        var row = ProjectRowViewModel.Parent(g, isAllHostsScope: true);
+
+        Assert.Equal("Suspended on all hosts", row.StatusText);
+        Assert.Equal(ProjectStatusKind.Suspended, row.StatusKind);
+    }
+
+    [Fact]
+    public void Child_rows_render_credits_tasks_and_share_fractions()
+    {
+        var g = ProjectRows.compute(
+            [Att(share: 50, rac: 100.4, total: 1000.4, tasks: 3),
+             Att(host: "host-b", share: 100, rac: 200.4, total: 2000.4, tasks: 5)])[0];
+
+        var childA = ProjectRowViewModel.Child(g, g.Attachments[0]); // host-a, share 50
+        Assert.Equal("100", childA.AvgCreditText);
+        Assert.Equal("1000", childA.TotalCreditText);
+        Assert.Equal("3 tasks", childA.TasksText);
+        Assert.Equal(0.5, childA.ShareFraction);
+
+        var childB = ProjectRowViewModel.Child(g, g.Attachments[1]); // host-b, share 100
+        Assert.Equal("200", childB.AvgCreditText);
+        Assert.Equal("2000", childB.TotalCreditText);
+        Assert.Equal("5 tasks", childB.TasksText);
+        Assert.Equal(1.0, childB.ShareFraction);
+
+        var uniform = ProjectRows.compute([Att(), Att(host: "host-b")])[0];
+        var parent = ProjectRowViewModel.Parent(uniform, isAllHostsScope: true);
+        Assert.Equal(1.0, parent.ShareFraction);
+        Assert.True(parent.ShowShareBar);
+    }
 }
