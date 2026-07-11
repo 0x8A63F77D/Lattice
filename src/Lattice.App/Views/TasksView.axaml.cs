@@ -63,8 +63,32 @@ public partial class TasksView : UserControl
             ["Deadline"] = ColumnWithHeader(Strings.ColDeadline),
             ["State"] = ColumnWithHeader(Strings.ColState),
         };
-        DataContextChanged += (_, _) => LoadColumnPreferences();
+        DataContextChanged += (_, _) =>
+        {
+            LoadColumnPreferences();
+            SyncStateFilterFromViewModel();
+        };
         ApplyColumnVisibility(BreakpointWidth);
+    }
+
+    // The shell owns one long-lived TasksViewModel while TasksViews are
+    // recreated per navigation, so the combo must render the VM's current
+    // filter instead of the XAML default "All". Inverse of the switch in
+    // OnStateFilterChanged; the SelectedIndex write re-enters that handler,
+    // which assigns the same StateFilter value back — a no-op under the
+    // ObservableProperty equality guard.
+    private void SyncStateFilterFromViewModel()
+    {
+        if (DataContext is not TasksViewModel vm)
+            return;
+        StateFilterBox.SelectedIndex = vm.StateFilter switch
+        {
+            TaskStateKind.Running => 1,
+            TaskStateKind.Waiting => 2,
+            TaskStateKind.Suspended => 3,
+            TaskStateKind.Uploading => 4,
+            _ => 0,
+        };
     }
 
     /// <summary>Window width when hosted (the design's breakpoint dimension);

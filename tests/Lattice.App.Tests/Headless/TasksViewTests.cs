@@ -318,6 +318,27 @@ public class TasksViewTests
     }
 
     [AvaloniaFact]
+    public void Recreated_view_restores_the_state_filter_combo_from_the_vm()
+    {
+        // The shell owns ONE long-lived TasksViewModel; TasksViews are recreated
+        // per navigation. A fresh view must render the VM's current filter, not
+        // the XAML default "All" — otherwise the combo lies and clicking "All"
+        // is a no-op (index 0 is already selected).
+        var (window, _, vm, _, _, _) = MakeView();
+        vm.StateFilter = TaskStateKind.Running;
+
+        var recreated = new TasksView { DataContext = vm };
+        window.Content = recreated;
+        window.Show();
+        Layout(window);
+
+        Assert.Equal(1, recreated.StateFilterBox.SelectedIndex);
+        // Attaching the view must not clobber the VM's filter either.
+        Assert.Equal(TaskStateKind.Running, vm.StateFilter);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public async Task Scope_switch_hiding_the_partial_bar_does_not_count_as_user_dismissal()
     {
         var (window, _, vm, registry, manager, fakes) = MakeView();
