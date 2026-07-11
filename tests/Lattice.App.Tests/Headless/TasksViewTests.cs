@@ -14,6 +14,7 @@ using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
+using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -45,16 +46,6 @@ public class TasksViewTests
         fakes[address] = fake;
         registry.AddHost(host);
         return host;
-    }
-
-    // Headless Show() does not run a full layout pass (precedent: ShellWindowTests.Layout,
-    // SettingsViewTests.Layout) — a measure/arrange realizes the DataGrid's row/header
-    // containers so the visual tree actually has something to search.
-    private static void Layout(Window window)
-    {
-        window.Measure(new Size(window.Width, window.Height));
-        window.Arrange(new Rect(0, 0, window.Width, window.Height));
-        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]
