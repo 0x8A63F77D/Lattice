@@ -30,19 +30,25 @@ public static class CollectionReconciler
             switch (op)
             {
                 case ReconcileOp<TKey, TRow>.Update u:
-                    Debug.Assert(EqualityComparer<TKey>.Default.Equals(rows[u.Index].Key, u.Key));
+                    Debug.Assert(
+                        EqualityComparer<TKey>.Default.Equals(rows[u.Index].Key, u.Key),
+                        "diff Update op must target the holder with the matching key");
                     rows[u.Index].Data = u.Row;
                     break;
                 case ReconcileOp<TKey, TRow>.Insert ins:
                     rows.Insert(ins.Index, createHolder(ins.Key, ins.Row));
                     break;
                 case ReconcileOp<TKey, TRow>.RemoveAt rem:
-                    Debug.Assert(EqualityComparer<TKey>.Default.Equals(rows[rem.Index].Key, rem.Key));
+                    Debug.Assert(
+                        EqualityComparer<TKey>.Default.Equals(rows[rem.Index].Key, rem.Key),
+                        "diff RemoveAt op must target the holder with the matching key");
                     rows.RemoveAt(rem.Index);
                     break;
                 case ReconcileOp<TKey, TRow>.Move mv:
                     rows.Move(mv.FromIndex, mv.ToIndex);
                     break;
+                default:
+                    throw new UnreachableException($"Unhandled ReconcileOp: {op}");
             }
         }
     }

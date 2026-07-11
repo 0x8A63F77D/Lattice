@@ -13,6 +13,7 @@ public class CollectionReconcilerTests
 
     private static void ReconcileInto(ObservableCollection<RowHolder<int, string>> rows, params (int Key, string Row)[] target)
     {
+        // C# tuple literal -> ValueTuple cast to match F#'s struct ('Key * 'Row) parameter shape.
         var existing = rows.Select(h => ((int, string))(h.Key, h.Data)).ToArray();
         CollectionReconciler.Apply(rows, Reconcile.diff(existing, target.Select(t => ((int, string))t).ToArray()));
     }
@@ -44,6 +45,7 @@ public class CollectionReconcilerTests
         ReconcileInto(rows, (2, "b"), (1, "a"));
 
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, events);
+        Assert.Contains(NotifyCollectionChangedAction.Move, events);
         Assert.Same(second, rows[0]);
         Assert.Same(first, rows[1]);
     }
@@ -59,5 +61,19 @@ public class CollectionReconcilerTests
         Assert.Equal(2, rows.Count);
         Assert.Same(survivor, rows[0]);
         Assert.Equal(3, rows[1].Key);
+    }
+
+    private sealed class FakeRow(int key, string data) : RowHolder<int, string>(key, data);
+
+    [Fact]
+    public void CreateHolder_overload_inserts_subclass_instances()
+    {
+        var rows = new ObservableCollection<RowHolder<int, string>>();
+        var existing = Array.Empty<(int, string)>();
+
+        CollectionReconciler.Apply(rows, Reconcile.diff(existing, [(1, "a")]), (k, r) => new FakeRow(k, r));
+
+        Assert.IsType<FakeRow>(rows[0]);
+        Assert.Equal("a", rows[0].Data);
     }
 }
