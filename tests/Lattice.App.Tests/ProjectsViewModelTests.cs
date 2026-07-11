@@ -128,6 +128,55 @@ public class ProjectsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Expanded_group_shrinks_when_a_host_stops_being_a_row_source()
+    {
+        // An EXPANDED group must track the row-source set live: when a host
+        // drops out of Connected, its stale cached attachment leaves the
+        // aggregation (the inScope && isRowSource gate), so its child row
+        // vanishes and the parent re-aggregates — while the parent holder
+        // identity survives the shrink (in-place Update, no remove+reinsert).
+        var fakeA = FakeWithProject("http://p/", "P", rac: 10);
+        var fakeB = FakeWithProject("http://p/", "P", rac: 5);
+        AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        vm.ToggleExpandCommand.Execute("http://p/");
+        await Wait.UntilAsync(() => vm.Rows.Count == 3, "expanding shows both hosts' children");
+        var parent = vm.Rows[0];
+        Assert.Contains(vm.Rows, r => !r.Data.IsParent && r.Data.Name == "host-b");
+
+        // Before breaking, wait until B's poll on the current connection is
+        // observed (Calls log) — TasksViewModelTests' flake lesson: otherwise
+        // the break can install itself before B's first tick.
+        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
+            "B's first poll should be observed before the test breaks it");
+
+        // Hold B in the Retrying tier deterministically (same idiom as the
+        // Tasks coverage test): its live poll AND every reconnect attempt
+        // throw, so it cycles Retrying -> (instant connect failure) ->
+        // Retrying, never Connected again — its snapshot stays cached but
+        // hidden from the aggregation by the row-source gate.
+        fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
+        _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B's child row should drop out of the expanded group");
+
+        Assert.Same(parent, vm.Rows[0]); // parent holder survives the shrink
+        Assert.True(vm.Rows[0].Data.IsParent);
+        Assert.True(vm.Rows[0].Data.IsExpanded, "the group stays expanded across the shrink");
+        Assert.False(vm.Rows[1].Data.IsParent);
+        Assert.Equal("host-a", vm.Rows[1].Data.Name); // the surviving child
+        Assert.DoesNotContain(vm.Rows, r => r.Data.Name == "host-b");
+    }
+
+    [Fact]
     public async Task Steady_state_poll_with_unchanged_data_raises_no_collection_events()
     {
         AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
