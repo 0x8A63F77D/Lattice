@@ -13,6 +13,7 @@ using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
+using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -30,16 +31,6 @@ public class ShellRailTests
         var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
         var window = new ShellWindow { DataContext = shell };
         return (window, shell, registry);
-    }
-
-    // Mirrors ShellWindowTests.Layout: headless Show() skips a full layout pass, so the
-    // rail ListBox inside the NavigationView's PaneCustomContent stays unrealized until
-    // measured.
-    private static void Layout(Window window)
-    {
-        window.Measure(new Size(window.Width, window.Height));
-        window.Arrange(new Rect(0, 0, window.Width, window.Height));
-        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]

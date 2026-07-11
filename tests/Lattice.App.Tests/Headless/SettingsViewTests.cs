@@ -11,6 +11,7 @@ using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
+using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -30,17 +31,6 @@ public class SettingsViewTests
 
         var window = new Window { Width = 900, Height = 700, Content = new SettingsView { DataContext = settings } };
         return (window, settings, registry);
-    }
-
-    // Headless Show() does not run a full layout pass, so the ItemsControl's
-    // containers are never materialized and GetVisualDescendants can't see the
-    // per-host expanders. A single measure/arrange realizes the tree, matching
-    // what a real render loop does at startup (precedent: ShellWindowTests.Layout).
-    private static void Layout(Window window)
-    {
-        window.Measure(new Size(window.Width, window.Height));
-        window.Arrange(new Rect(0, 0, window.Width, window.Height));
-        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]

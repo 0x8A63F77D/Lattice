@@ -11,6 +11,7 @@ using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
+using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -27,18 +28,6 @@ public class ShellWindowTests
         var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
         var window = new ShellWindow { DataContext = shell };
         return (window, shell, registry);
-    }
-
-    // Headless Show() does not run a full layout pass, so the NavigationView's
-    // PaneCustomContent presenter (which hosts the host rail) is never attached
-    // and its DataContext never inherits — the rail ListBox binding stays unbound.
-    // A single measure/arrange realizes the tree, matching what a real render loop
-    // does at startup. Bindings themselves are correct; this only forces timing.
-    private static void Layout(Window window)
-    {
-        window.Measure(new Size(window.Width, window.Height));
-        window.Arrange(new Rect(0, 0, window.Width, window.Height));
-        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]

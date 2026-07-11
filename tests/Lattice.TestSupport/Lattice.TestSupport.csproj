@@ -9,6 +9,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Base Avalonia only (no theme/platform heads): HeadlessLayout needs Window,
+         Size/Rect and Dispatcher. Headless-specific packages stay in the consumers. -->
+    <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.7.0" />
   </ItemGroup>
   <ItemGroup>
