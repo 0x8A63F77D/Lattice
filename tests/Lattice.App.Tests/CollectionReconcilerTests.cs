@@ -1,0 +1,63 @@
+using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using Lattice.App.Aggregation;
+using Lattice.App.Infrastructure;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+public class CollectionReconcilerTests
+{
+    private static ObservableCollection<RowHolder<int, string>> Collection(params (int Key, string Row)[] items) =>
+        new(items.Select(i => new RowHolder<int, string>(i.Key, i.Row)));
+
+    private static void ReconcileInto(ObservableCollection<RowHolder<int, string>> rows, params (int Key, string Row)[] target)
+    {
+        var existing = rows.Select(h => ((int, string))(h.Key, h.Data)).ToArray();
+        CollectionReconciler.Apply(rows, Reconcile.diff(existing, target.Select(t => ((int, string))t).ToArray()));
+    }
+
+    [Fact]
+    public void Value_change_keeps_holder_identity_and_raises_no_collection_event()
+    {
+        var rows = Collection((1, "a"), (2, "b"));
+        var holder = rows[0];
+        var events = new List<NotifyCollectionChangedAction>();
+        rows.CollectionChanged += (_, e) => events.Add(e.Action);
+
+        ReconcileInto(rows, (1, "a2"), (2, "b"));
+
+        Assert.Empty(events);
+        Assert.Same(holder, rows[0]);
+        Assert.Equal("a2", rows[0].Data);
+    }
+
+    [Fact]
+    public void Reorder_moves_holders_without_reset()
+    {
+        var rows = Collection((1, "a"), (2, "b"));
+        var first = rows[0];
+        var second = rows[1];
+        var events = new List<NotifyCollectionChangedAction>();
+        rows.CollectionChanged += (_, e) => events.Add(e.Action);
+
+        ReconcileInto(rows, (2, "b"), (1, "a"));
+
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, events);
+        Assert.Same(second, rows[0]);
+        Assert.Same(first, rows[1]);
+    }
+
+    [Fact]
+    public void Add_and_remove_touch_only_the_changed_identities()
+    {
+        var rows = Collection((1, "a"), (2, "b"));
+        var survivor = rows[1];
+
+        ReconcileInto(rows, (2, "b"), (3, "c"));
+
+        Assert.Equal(2, rows.Count);
+        Assert.Same(survivor, rows[0]);
+        Assert.Equal(3, rows[1].Key);
+    }
+}
