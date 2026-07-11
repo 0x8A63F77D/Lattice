@@ -2,7 +2,6 @@ using System.Globalization;
 using Lattice.App.Aggregation;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
-using Lattice.Tests;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -21,6 +20,14 @@ public class EventLogRowViewModelTests
         Assert.Equal("Einstein@Home", row.Project);
         Assert.Equal("work fetch", row.Body);
         Assert.Equal(EventLogPriority.Info, row.Priority);
+    }
+
+    [Fact]
+    public void Null_timestamp_renders_as_dash()
+    {
+        var msg = new Message("", MessagePriority.Info, 3, null, "b");
+        var row = EventLogRowViewModel.From(msg, Guid.NewGuid(), "h");
+        Assert.Equal("—", row.TimestampText);
     }
 
     [Fact]
