@@ -185,6 +185,9 @@
           <DataTemplate DataType="vm:ProjectsViewModel">
             <v:ProjectsView />
           </DataTemplate>
+          <DataTemplate DataType="vm:TransfersViewModel">
+            <v:TransfersView />
+          </DataTemplate>
           <DataTemplate DataType="vm:EventLogViewModel">
             <v:EventLogView />
           </DataTemplate>

@@ -65,8 +65,7 @@ public class ShellWindowTests
 
         shell.SelectViewCommand.Execute("2");
 
-        var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal(Strings.NavTransfers, page.Title);
+        Assert.Same(shell.Transfers, shell.CurrentPage);
         window.Close();
     }
 
@@ -97,8 +96,7 @@ public class ShellWindowTests
         // Reentrancy check: the Nav.SelectedItem assignment re-enters
         // OnNavSelectionChanged -> SelectViewCommand; the VM equality guard must
         // stop the loop with the page still on Transfers.
-        var page = Assert.IsType<PlaceholderViewModel>(shell.CurrentPage);
-        Assert.Equal(Strings.NavTransfers, page.Title);
+        Assert.Same(shell.Transfers, shell.CurrentPage);
         window.Close();
     }
 

@@ -235,6 +235,20 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Transfers_page_is_a_TransfersViewModel_and_receives_scope_changes()
+    {
+        var transfers = Assert.IsType<TransfersViewModel>(_shell.Views[2].Page);
+        Assert.Same(_shell.Transfers, transfers);
+        Assert.True(transfers.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, transfers.Scope.HostId);
+    }
+
+    [Fact]
     public async Task TasksCount_mirrors_the_tasks_view_models_row_count()
     {
         Assert.Equal(0, _shell.TasksCount);

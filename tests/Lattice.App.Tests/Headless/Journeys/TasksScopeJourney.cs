@@ -58,13 +58,13 @@ public class TasksScopeJourney
         Assert.Equal(2, harness.Shell.Tasks.Rows.Count);
         Assert.DoesNotContain(Strings.ColHost, VisibleColumnHeaders(harness.Window));
 
-        // Switch to the Transfers placeholder and back to Tasks: the design rule is
-        // "scope is a rail concern" — a page switch must never reset it. (Transfers,
-        // not Projects: Projects graduated to a real page in w2b, so index "2" is the
-        // still-Placeholder view this assertion needs.)
+        // Switch to another view and back to Tasks: the design rule is "scope is a
+        // rail concern" — a page switch must never reset it. All four nav views are
+        // real pages now (Tasks 0 · Projects 1 · Transfers 2 · Event log 3), so this
+        // hops to Transfers (index "2") and confirms the scope survives the round-trip.
         harness.Shell.SelectViewCommand.Execute("2");
         harness.Layout();
-        Assert.IsType<PlaceholderViewModel>(harness.Shell.CurrentPage);
+        Assert.Same(harness.Shell.Transfers, harness.Shell.CurrentPage);
 
         harness.Shell.SelectViewCommand.Execute("0");
         harness.Layout();

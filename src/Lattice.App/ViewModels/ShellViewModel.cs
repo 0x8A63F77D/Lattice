@@ -29,12 +29,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(registry, store, clientFactory);
         Tasks = new TasksViewModel(store, clock, uiState);
         Projects = new ProjectsViewModel(store, clock);
+        Transfers = new TransfersViewModel(store, clock, uiState);
         EventLog = new EventLogViewModel(store);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
             new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", Projects),
-            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
+            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", Transfers),
             new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", EventLog),
         ];
         _selectedView = Views[0];
@@ -61,6 +62,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// <summary>The Projects page VM (Views[1].Page); exposed so the shell can push
     /// scope changes into it (same rail-scope contract as <see cref="Tasks"/>).</summary>
     public ProjectsViewModel Projects { get; }
+
+    /// <summary>The Transfers page VM (Views[2].Page); exposed directly so the shell
+    /// can push scope changes into it.</summary>
+    public TransfersViewModel Transfers { get; }
 
     /// <summary>The Event-log page (Views[3].Page); the shell pushes scope into it,
     /// toggles its active flag as it becomes / leaves CurrentPage (which zeroes the
@@ -98,6 +103,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         Tasks.Scope = value;
         Projects.Scope = value;
+        Transfers.Scope = value;
         EventLog.Scope = value;
     }
 
@@ -188,6 +194,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         EventLog.PropertyChanged -= OnEventLogPropertyChanged;
         Tasks.Dispose();
         Projects.Dispose();
+        Transfers.Dispose();
         EventLog.Dispose();
         foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();
