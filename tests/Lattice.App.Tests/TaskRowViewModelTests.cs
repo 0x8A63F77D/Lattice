@@ -166,4 +166,14 @@ public class TaskRowViewModelTests
         Assert.NotEqual(new TaskRowKey(hostId, "wu_1"), new TaskRowKey(Guid.NewGuid(), "wu_1"));
         Assert.NotEqual(new TaskRowKey(hostId, "wu_1"), new TaskRowKey(hostId, "wu_2"));
     }
+
+    [Fact]
+    public void TaskRow_wires_key_and_data_through_holder_base()
+    {
+        var hostId = Guid.NewGuid();
+        var row = TaskRowViewModel.From(Snap(TestData.MakeResult(name: "wu_1")), hostId, "host-a");
+        var holder = new TaskRow(row.Key, row);
+        Assert.Equal(new TaskRowKey(hostId, "wu_1"), holder.Key);
+        Assert.Same(row, holder.Data);
+    }
 }
