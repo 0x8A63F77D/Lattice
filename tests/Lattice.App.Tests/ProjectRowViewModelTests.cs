@@ -90,4 +90,22 @@ public class ProjectRowViewModelTests
         Assert.Equal(1.0, parent.ShareFraction);
         Assert.True(parent.ShowShareBar);
     }
+
+    [Fact]
+    public void Zero_uniform_share_renders_an_empty_share_bar()
+    {
+        // Zero-share backup project attached on every host: uniform share 0
+        // must render an EMPTY track ("unknown -> empty track" idiom from the
+        // Tasks progress bar), not a full bar labelled "0".
+        var g = ProjectRows.compute([Att(share: 0), Att(host: "host-b", share: 0)])[0];
+
+        var parent = ProjectRowViewModel.Parent(g, isAllHostsScope: true);
+        Assert.Equal("0", parent.ShareText);
+        Assert.True(parent.ShowShareBar);
+        Assert.Equal(0.0, parent.ShareFraction);
+
+        // Child factory already guards maxShare > 0 — pin it.
+        Assert.Equal(0.0, ProjectRowViewModel.Child(g, g.Attachments[0]).ShareFraction);
+        Assert.Equal(0.0, ProjectRowViewModel.Child(g, g.Attachments[1]).ShareFraction);
+    }
 }

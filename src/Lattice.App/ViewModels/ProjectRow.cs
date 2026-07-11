@@ -35,7 +35,7 @@ public sealed record ProjectRowViewModel(
     {
         var (shareText, showBar, shareFraction) = g.Share switch
         {
-            ShareSummary.UniformShare u => (Num(u.Item), true, 1.0),
+            ShareSummary.UniformShare u => (Num(u.Item), true, u.Item > 0 ? 1.0 : 0.0),
             ShareSummary.VariesShare v => (
                 string.Format(Strings.ProjectsShareVariesFmt, Num(v.min), Num(v.max)), false, 0.0),
             _ => throw new InvalidOperationException("unreachable: closed DU"),
