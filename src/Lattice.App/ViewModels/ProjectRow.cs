@@ -55,7 +55,7 @@ public sealed record ProjectRowViewModel(
             TotalCreditText: Num(g.TotalCredit),
             TasksText: "",
             StatusKind: StatusKindOf(g.Status),
-            StatusText: StatusTextOf(g.Status));
+            StatusText: StatusTextOf(g.Status, isAllHostsScope));
     }
 
     public static ProjectRowViewModel Child(ProjectGroup g, ProjectAttachment a)
@@ -111,8 +111,13 @@ public sealed record ProjectRowViewModel(
         _ => throw new InvalidOperationException("unreachable: closed DU"),
     };
 
-    private static string StatusTextOf(StatusSummary s) => s switch
+    private static string StatusTextOf(StatusSummary s, bool isAllHostsScope) => s switch
     {
+        // Single-host scope: the group holds only the selected host's
+        // attachment — "on all hosts" would claim more than the scope shows.
+        // OneDeviation/Mixed can't occur there (one attachment), so their
+        // aggregate wording stays and the match stays total.
+        StatusSummary.AllSame a when !isAllHostsScope => TextOf(a.Item),
         StatusSummary.AllSame a when KindOf(a.Item) == ProjectStatusKind.Active =>
             Strings.ProjectsStatusActiveAll,
         StatusSummary.AllSame a =>

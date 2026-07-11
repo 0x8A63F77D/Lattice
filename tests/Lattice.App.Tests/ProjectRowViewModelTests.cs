@@ -108,4 +108,18 @@ public class ProjectRowViewModelTests
         Assert.Equal(0.0, ProjectRowViewModel.Child(g, g.Attachments[0]).ShareFraction);
         Assert.Equal(0.0, ProjectRowViewModel.Child(g, g.Attachments[1]).ShareFraction);
     }
+
+    [Fact]
+    public void Single_host_scope_renders_plain_status_text()
+    {
+        // Scoped groups contain only the selected host's attachment; "on all
+        // hosts" would falsely claim something about every configured host.
+        var active = ProjectRows.compute([Att()])[0];
+        Assert.Equal("Active",
+            ProjectRowViewModel.Parent(active, isAllHostsScope: false).StatusText);
+
+        var suspended = ProjectRows.compute([Att(susp: true)])[0];
+        Assert.Equal("Suspended",
+            ProjectRowViewModel.Parent(suspended, isAllHostsScope: false).StatusText);
+    }
 }
