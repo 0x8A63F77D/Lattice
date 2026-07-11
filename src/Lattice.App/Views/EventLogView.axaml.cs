@@ -58,17 +58,24 @@ public partial class EventLogView : UserControl
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        if (_boundVm is not null)
-        {
-            _boundVm.Rows.CollectionChanged -= OnRowsCollectionChanged;
-            _boundVm.PropertyChanged -= OnViewModelPropertyChanged;
-        }
+        UnhookViewModel();
         _boundVm = DataContext as EventLogViewModel;
         if (_boundVm is not null)
         {
             _boundVm.Rows.CollectionChanged += OnRowsCollectionChanged;
             _boundVm.PropertyChanged += OnViewModelPropertyChanged;
         }
+    }
+
+    // Idempotent: called both on DataContext swaps and on visual-tree detach
+    // (the two paths can run in either order), so it must be safe to hit twice.
+    private void UnhookViewModel()
+    {
+        if (_boundVm is null)
+            return;
+        _boundVm.Rows.CollectionChanged -= OnRowsCollectionChanged;
+        _boundVm.PropertyChanged -= OnViewModelPropertyChanged;
+        _boundVm = null;
     }
 
     // The DataGrid manages its own scrolling (no wrapping ScrollViewer); its
@@ -155,6 +162,11 @@ public partial class EventLogView : UserControl
             _verticalScrollBar.PropertyChanged -= OnVerticalScrollBarPropertyChanged;
             _verticalScrollBar = null;
         }
+        // Symmetric with the scrollbar teardown above: don't rely on the shell's
+        // DataTemplate hosting nulling the DataContext on detach — an explicitly
+        // set longer-lived DataContext would otherwise pin this view through the
+        // VM's Rows/PropertyChanged subscriptions.
+        UnhookViewModel();
     }
 }
 

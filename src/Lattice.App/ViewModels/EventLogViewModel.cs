@@ -88,7 +88,13 @@ public sealed partial class EventLogViewModel : ObservableObject, IDisposable
     public string BuildClipboardText() =>
         string.Join(
             Environment.NewLine,
-            Rows.Select(h => $"{h.Data.TimestampText}\t{h.Data.Host}\t{h.Data.Body}"));
+            Rows.Select(h => $"{h.Data.TimestampText}\t{h.Data.Host}\t{FlattenTsvField(h.Data.Body)}"));
+
+    // TSV integrity: interior newlines/tabs in a message body (BOINC bodies are
+    // only end-trimmed at parse) would corrupt the pasted row/column structure.
+    // Flatten each to a single space; \r\n first so it becomes ONE space.
+    private static string FlattenTsvField(string value) =>
+        value.Replace("\r\n", " ").Replace('\n', ' ').Replace('\r', ' ').Replace('\t', ' ');
 
     private void OnMessagesReceived(object? sender, MessagesAddedEventArgs e)
     {

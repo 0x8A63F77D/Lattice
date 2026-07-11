@@ -170,6 +170,71 @@ public class EventLogViewModelTests : IAsyncLifetime
         Assert.Equal(0, vm.UnreadCount);
     }
 
+    // Expected clipboard timestamp: same local-time conversion and format the
+    // row projection applies (EventLogRowViewModel.From), computed in-test so
+    // the literal layout assertion stays machine-TZ independent.
+    private static string Ts(int sec) =>
+        T(sec).ToLocalTime().ToString("MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void Clipboard_text_is_tab_separated_timestamp_host_body_lines_in_merged_order()
+    {
+        var a = AddHost("host-a");
+        var b = AddHost("host-b");
+        var vm = MakeVm();
+
+        Raise(a.Id, Msg(1, 1, "a1"), Msg(2, 3, "a3"));
+        Raise(b.Id, Msg(1, 2, "b2"));
+        _queue.Drain();
+
+        var expected = string.Join(Environment.NewLine,
+            $"{Ts(1)}\thost-a\ta1",
+            $"{Ts(2)}\thost-b\tb2",
+            $"{Ts(3)}\thost-a\ta3");
+        Assert.Equal(expected, vm.BuildClipboardText());
+    }
+
+    [Fact]
+    public void Clipboard_text_covers_only_the_filtered_rows()
+    {
+        var a = AddHost("host-a");
+        var vm = MakeVm();
+        Raise(a.Id,
+            Msg(1, 1, "info", MessagePriority.Info),
+            Msg(2, 2, "warn", MessagePriority.UserAlert));
+        _queue.Drain();
+
+        vm.ShowWarning = false;
+
+        Assert.Equal($"{Ts(1)}\thost-a\tinfo", vm.BuildClipboardText());
+    }
+
+    // The view's Copy handler skips the clipboard write entirely on
+    // text.Length == 0 — that guard depends on this exact contract.
+    [Fact]
+    public void Clipboard_text_is_empty_for_no_rows()
+    {
+        AddHost("host-a");
+        var vm = MakeVm();
+
+        Assert.Equal("", vm.BuildClipboardText());
+    }
+
+    // TSV integrity: an embedded newline or tab in the body would corrupt the
+    // pasted row/column structure (BOINC bodies are only end-trimmed at parse;
+    // interior control chars survive). Each is flattened to a single space —
+    // including \r\n as ONE space, not two.
+    [Fact]
+    public void Clipboard_text_flattens_control_characters_in_the_body()
+    {
+        var a = AddHost("host-a");
+        var vm = MakeVm();
+        Raise(a.Id, Msg(1, 1, "line1\r\nline2\tcol\rmid\nlast"));
+        _queue.Drain();
+
+        Assert.Equal($"{Ts(1)}\thost-a\tline1 line2 col mid last", vm.BuildClipboardText());
+    }
+
     [Fact]
     public void Host_removal_prunes_its_rows_on_store_changed()
     {
