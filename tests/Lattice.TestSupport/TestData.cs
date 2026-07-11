@@ -27,9 +27,15 @@ public static class TestData
         string projectUrl = "https://example.org/",
         string projectName = "",
         bool xferActive = false,
-        DateTimeOffset? nextRequest = null)
-        => new(name, projectUrl, projectName, 1000, 0, false, 0, null, nextRequest,
-               0, 0, 0, 0, 0, true, xferActive);
+        DateTimeOffset? nextRequest = null,
+        bool isUpload = false,
+        double nbytes = 1000,
+        double bytesXferred = 0,
+        int numRetries = 0,
+        double xferSpeed = 0,
+        bool persXferActive = true)
+        => new(name, projectUrl, projectName, nbytes, 0, isUpload, numRetries, null, nextRequest,
+               0, bytesXferred, 0, xferSpeed, 0, persXferActive, xferActive);
 
     public static HostConfig MakeHostConfig(
         Guid? id = null,

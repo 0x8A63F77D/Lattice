@@ -15,7 +15,9 @@ public readonly record struct TransferRowKey(Guid HostId, string ProjectUrl, str
 /// <summary>
 /// Closed holder for Transfers-view rows: XAML cannot name generic types, so
 /// the DataGrid binds TransferRow (x:DataType) while the reconciler works
-/// against the RowHolder base — the same shape as TaskRow.
+/// against the RowHolder base — the same shape as TaskRow. Data swaps in
+/// place on value-change polls; the instance — and therefore DataGrid
+/// selection — survives.
 /// </summary>
 public sealed class TransferRow(TransferRowKey key, TransferRowViewModel data)
     : RowHolder<TransferRowKey, TransferRowViewModel>(key, data);
@@ -41,6 +43,10 @@ public sealed record TransferRowViewModel(
     /// <summary>Convenience predicate for XAML/bounded lookups that only care about the retry state.</summary>
     public bool IsRetrying => UiState == TransferUiState.Retrying;
 
+    /// <summary>
+    /// Project a TransferSnapshot into a row suitable for binding to the DataGrid.
+    /// Pure: all values computed from snapshot, host name, and "now" — no I/O, no side effects.
+    /// </summary>
     public static TransferRowViewModel From(TransferSnapshot snap, Guid hostId, string host, DateTimeOffset now)
     {
         var t = snap.Transfer;

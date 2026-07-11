@@ -1,6 +1,6 @@
 using Lattice.App.ViewModels;
-using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
+using Lattice.Tests;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -15,9 +15,15 @@ public class TransferRowViewModelTests
         double speed = 0, int retries = 0, DateTimeOffset? nextRequest = null,
         TransferUiState state = TransferUiState.Queued)
     {
-        var t = new FileTransfer(name, "http://p1/", project, nbytes, 0, upload, retries,
-            null, nextRequest, 0, xferred, 0, speed, 0,
-            PersXferActive: state == TransferUiState.Retrying, XferActive: state == TransferUiState.Active);
+        var t = TestData.MakeTransfer(name, "http://p1/", project,
+            xferActive: state == TransferUiState.Active,
+            nextRequest: nextRequest,
+            isUpload: upload,
+            nbytes: nbytes,
+            bytesXferred: xferred,
+            numRetries: retries,
+            xferSpeed: speed,
+            persXferActive: state == TransferUiState.Retrying);
         return new TransferSnapshot(t, project, state);
     }
 

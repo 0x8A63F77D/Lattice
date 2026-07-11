@@ -481,6 +481,16 @@
   <data name="TasksTitle" xml:space="preserve">
     <value>Tasks</value>
   </data>
+  <!-- ===== Time ===== -->
+  <data name="UpdatedHoursFmt" xml:space="preserve">
+    <value>Updated {0}h ago</value>
+  </data>
+  <data name="UpdatedMinutesFmt" xml:space="preserve">
+    <value>Updated {0}m ago</value>
+  </data>
+  <data name="UpdatedSecondsFmt" xml:space="preserve">
+    <value>Updated {0}s ago</value>
+  </data>
   <!-- ===== Transfers ===== -->
   <data name="TransfersDownload" xml:space="preserve">
     <value>Download</value>
@@ -502,15 +512,5 @@
   </data>
   <data name="TransfersUpload" xml:space="preserve">
     <value>Upload</value>
-  </data>
-  <!-- ===== Time ===== -->
-  <data name="UpdatedHoursFmt" xml:space="preserve">
-    <value>Updated {0}h ago</value>
-  </data>
-  <data name="UpdatedMinutesFmt" xml:space="preserve">
-    <value>Updated {0}m ago</value>
-  </data>
-  <data name="UpdatedSecondsFmt" xml:space="preserve">
-    <value>Updated {0}s ago</value>
   </data>
 </root>
