@@ -291,7 +291,7 @@ git commit -m "feat(app): TransfersViewModel over shared aggregation core with p
 - Create: `src/Lattice.App/Views/TransfersView.axaml.cs`
 - Create: `tests/Lattice.App.Tests/Headless/TransfersViewTests.cs`
 
-**Stamp source:** `src/Lattice.App/Views/TasksView.axaml` (+ `.axaml.cs`). Keep: command bar layout (title + disabled `Strings.TransfersRetryNow` M3 placeholder + updated/refresh/density from TasksView.axaml:69-110), F5 KeyBinding, FAInfoBar partial bar + `OnPartialBarClosed`, StatusBarControl, loading/empty overlays, `LoadingRow`/`OnUnloadingRow` liveness pattern. Grid: `CanUserSortColumns="True"` with `Data.*` bindings (nested sort paths natively supported — DataGrid 12.1.0, established in PR #37).
+**Stamp source:** `src/Lattice.App/Views/TasksView.axaml` (+ `.axaml.cs`). Keep: command bar layout (title + disabled `Strings.TransfersRetryNow` M3 placeholder + updated/refresh/density from TasksView.axaml:69-110), F5 KeyBinding, FAInfoBar partial bar + `OnPartialBarClosed`, StatusBarControl, loading/empty overlays, the FULL row-subscription liveness kit from `TasksView.axaml.cs` — `_rowSubscriptions` dictionary, recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **and `OnDetachedFromVisualTree` → `DrainRowSubscriptions()` plus the `internal int RowSubscriptionCount` probe** (`TasksView.axaml.cs:108-129,227`). The drain is load-bearing: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without it every visit leaks realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on PR #42 review round 1). Ship the teardown-drain regression test with it (stamp the Tasks one: render, detach from the visual tree, assert `RowSubscriptionCount == 0`; red-first before wiring the detach override). Grid: `CanUserSortColumns="True"` with `Data.*` bindings (nested sort paths natively supported — DataGrid 12.1.0, established in PR #37).
 
 - [ ] **Step 1: Write the failing headless tests** (follow `Headless/TasksViewTests.cs` idiom):
 
@@ -400,7 +400,7 @@ private static void ApplyRowClasses(DataGridRow row, TransferRowViewModel data)
 
 resx additions: `TransfersTitle` = `Transfers`, `TransfersRetryNow` = `Retry now`, `TransfersColFile` = `File`, `TransfersColDirection` = `Direction`, `TransfersColSpeed` = `Speed`, `TransfersCountsFmt` = `{0} transfers · {1} up · {2} down`, `TransfersEmpty` = `No active transfers`, `TransfersEmptyCaption` = `Uploads and downloads will appear here while in progress.`
 
-- [ ] **Step 4: Run headless tests** — Expected: PASS (3).
+- [ ] **Step 4: Run headless tests** — Expected: PASS (4, incl. the teardown drain).
 
 - [ ] **Step 5: Commit**
 

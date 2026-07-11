@@ -1013,7 +1013,7 @@ Expected: FAIL (view type missing).
 
 - [ ] **Step 4: Implement the code-behind**
 
-`ProjectsView.axaml.cs` — stamp `TasksView.axaml.cs`'s `OnLoadingRow`/`OnUnloadingRow` subscription pattern (dictionary, recycled-row unsubscribe first), with the class application:
+`ProjectsView.axaml.cs` — stamp `TasksView.axaml.cs`'s **entire** row-subscription liveness kit, not just the two row events: the `_rowSubscriptions` dictionary + recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **`OnDetachedFromVisualTree` → `DrainRowSubscriptions()`** (`TasksView.axaml.cs:108-129`) and the `internal int RowSubscriptionCount` probe (`:227`). The drain is load-bearing, not defensive: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without the detach drain every visit to Projects leaks the realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on this plan's review round 1). Class application:
 
 ```csharp
 private static void ApplyRowClasses(DataGridRow row, ProjectRowViewModel data)
@@ -1025,10 +1025,12 @@ private static void ApplyRowClasses(DataGridRow row, ProjectRowViewModel data)
 
 Plus `OnPartialBarClosed` — stamp from TasksView.axaml.cs (the FAInfoBar Closed→CloseButton reason → DismissPartialCommand path; hard-won FA fact in the class doc there).
 
+Add the teardown-drain regression test as headless test 5 (stamp the Tasks one — find it via `grep -n RowSubscriptionCount tests/Lattice.App.Tests/Headless/TasksViewTests.cs`): render rows, detach the view from the visual tree, assert `view.RowSubscriptionCount == 0`. Red-first: run it before wiring `OnDetachedFromVisualTree` and watch it fail with a non-zero count.
+
 - [ ] **Step 5: Run headless tests**
 
 Run: `dotnet test tests/Lattice.App.Tests --filter ProjectsView -v minimal`
-Expected: PASS (all four, including the 40/32 geometry assert).
+Expected: PASS (all five, including the 40/32 geometry assert and the teardown drain).
 
 - [ ] **Step 6: Commit**
 

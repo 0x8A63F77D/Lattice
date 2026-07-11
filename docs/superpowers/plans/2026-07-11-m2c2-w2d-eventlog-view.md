@@ -672,7 +672,7 @@ git commit -m "feat(app): EventLogViewModel — MessageLog fold, pills/search, u
 - **Row treatment:** `MinHeight` 26 via the compact-like row style; warning/error row classes with tint brushes + 16px filled priority icon in the Time cell (`IconWarningFilled` exists; add `IconErrorCircleFilled` following the icon-sourcing convention). Rows 26px: if the `lattice` DataGrid theme's row MinHeight fights 26px, add a `Selector="DataGrid.eventlog DataGridRow"` height style — geometry-assert it (M2c-1 lesson).
 - **No partial-results InfoBar and no loading skeleton** (design 2c defines neither for this view; reachability lives in the status-bar counts — recorded decision, cite design 2c in the PR body).
 - **Status bar:** `LeftText="{Binding CountsText}"`, right text = `Strings.EventLogFollowingLive` shown only while `IsFollowing` (design 2c "Following live"; empty otherwise — this VM has no polling text by design, messages arrive with the poll stream).
-- **Code-behind:** row classes via the LoadingRow/UnloadingRow liveness stamp:
+- **Code-behind:** row classes via the FULL row-subscription liveness kit from `TasksView.axaml.cs` — `_rowSubscriptions` dictionary, recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **and `OnDetachedFromVisualTree` → `DrainRowSubscriptions()` plus the `internal int RowSubscriptionCount` probe** (`TasksView.axaml.cs:108-129,227`). The drain is load-bearing: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without it every visit leaks realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on PR #42 review round 1). Ship the teardown-drain regression test with it (stamp the Tasks one: render, detach from the visual tree, assert `RowSubscriptionCount == 0`; red-first before wiring the detach override):
 
 ```csharp
 private static void ApplyRowClasses(DataGridRow row, EventLogRowViewModel data)
@@ -697,7 +697,7 @@ Write that guard exactly as described (flag around the programmatic scroll); it 
 
 resx additions (`EventLog` prefix): `EventLogTitle` = `Event log`, `EventLogSubtitleAll` = `All hosts · merged stream`, `EventLogPillInfo` = `Info`, `EventLogPillWarning` = `Warning`, `EventLogPillError` = `Error`, `EventLogFollowing` = `Following`, `EventLogResumeFollowing` = `Resume following`, `EventLogCopy` = `Copy`, `EventLogCountsFmt` = `{0} messages · {1} reachable hosts`, `EventLogFollowingLive` = `Following live`, `EventLogEmpty` = `No messages yet.`
 
-- [ ] **Step 4: Run headless tests** — Expected: PASS (4).
+- [ ] **Step 4: Run headless tests** — Expected: PASS (5, incl. the teardown drain).
 
 - [ ] **Step 5: Commit**
 
