@@ -78,6 +78,19 @@ public class EventLogViewTests
         Assert.DoesNotContain("error", rows["warn"].Classes);
         Assert.Contains("error", rows["err"].Classes);
         Assert.DoesNotContain("warning", rows["err"].Classes);
+
+        // Mockup §2c (grid-template-columns 128px 84px 140px 20px 1fr): the
+        // priority icon is a dedicated 20px column present on EVERY row — info
+        // rows included (regular gray info glyph), not only the tinted ones.
+        // Exactly one visible icon per row, and its cell is the 20px column.
+        foreach (var row in rows.Values)
+        {
+            var icon = Assert.Single(row.GetVisualDescendants().OfType<Avalonia.Controls.PathIcon>()
+                .Where(i => i.IsVisible));
+            var cell = icon.FindAncestorOfType<DataGridCell>();
+            Assert.NotNull(cell);
+            Assert.Equal(20, (int)cell!.Bounds.Width);
+        }
         window.Close();
     }
 

@@ -75,6 +75,12 @@
       <Setter Property="MinHeight" Value="26" />
       <Setter Property="Height" Value="26" />
     </Style>
+    <!-- Dedicated 20px priority-icon column (mockup §2c grid-template-columns
+         128px 84px 140px 20px 1fr): the theme's 8,0 cell padding would leave a
+         4px content box in a 20px column, so its cells zero the padding. -->
+    <Style Selector="DataGrid.eventlog DataGridCell.priorityIcon">
+      <Setter Property="Padding" Value="0" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -146,38 +152,52 @@
                 RowHeight="26" HeadersVisibility="None"
                 CanUserSortColumns="False" CanUserReorderColumns="False">
         <DataGrid.Columns>
-          <!-- Time: leading 16px priority icon (warning/error only) + monospace timestamp.
-               128px sizes the widest mono stack plus the icon (design 2c §Font metric
-               note; deviates from the plan's 110 to fit both — cite design line). -->
+          <!-- Column plan = the mockup's grid-template-columns: 128px 84px 140px
+               20px 1fr (Time · Host · Project · priority icon · Message). Time is
+               128px for the widest mono timestamp stack alone (design README:159:
+               "size the timestamp column (128px) for the widest stack"). -->
           <DataGridTemplateColumn Width="128">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
-                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-                  <Panel Width="16" Height="16">
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconWarningFilled}"
-                              Foreground="{DynamicResource LatticeWarningFgBrush}"
-                              IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Warning}" />
-                    <PathIcon Width="16" Height="16" Data="{StaticResource IconErrorCircleFilled}"
-                              Foreground="{DynamicResource LatticeDangerFgBrush}"
-                              IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Error}" />
-                  </Panel>
-                  <TextBlock Text="{Binding Data.TimestampText}" VerticalAlignment="Center"
-                             FontFamily="{StaticResource LatticeLogMonoFont}" FontSize="12" Classes="numeric" />
-                </StackPanel>
+                <TextBlock Text="{Binding Data.TimestampText}" VerticalAlignment="Center"
+                           FontFamily="{StaticResource LatticeLogMonoFont}" FontSize="12" Classes="numeric" />
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Binding="{Binding Data.Host}" Width="84"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                               IsVisible="{Binding IsAllHostsScope}" />
-          <DataGridTextColumn Binding="{Binding Data.Project}" Width="120"
+          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          <!-- Priority icon: its own 20px column on EVERY row (mockup §2c) —
+               info rows get the regular gray glyph, warning/error the filled
+               colored ones. -->
+          <DataGridTemplateColumn Width="20" CellStyleClasses="priorityIcon">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:EventLogRow">
+                <Panel Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconInfoRegular}"
+                            Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Info}" />
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconWarningFilled}"
+                            Foreground="{DynamicResource LatticeWarningFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Warning}" />
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconErrorCircleFilled}"
+                            Foreground="{DynamicResource LatticeDangerFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Error}" />
+                </Panel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
           <DataGridTemplateColumn Width="*">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
+                <!-- Single line with ellipsis: the mockup's message span is
+                     overflow:hidden; text-overflow:ellipsis; white-space:nowrap
+                     (design wins over the plan's "TextTrimming off"). -->
                 <TextBlock Text="{Binding Data.Body}" VerticalAlignment="Center"
                            FontFamily="{StaticResource LatticeLogMonoFont}" FontSize="12"
-                           TextWrapping="NoWrap" TextTrimming="None" />
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
