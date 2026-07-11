@@ -184,9 +184,8 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         // no CollectionChanged at all — the SequenceEqual full-replace guard
         // this superseded still fired Reset + N Adds on every 1s tick even
         // when nothing changed (issue #24).
-        var existing = Rows.Select(h => ((TaskRowKey, TaskRowViewModel))(h.Key, h.Data)).ToArray();
-        var reconcileTarget = target.Select(r => ((TaskRowKey, TaskRowViewModel))r).ToArray();
-        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, reconcileTarget), (key, row) => new TaskRow(key, row));
+        var existing = Rows.Select(h => (h.Key, h.Data)).ToArray();
+        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, target), (key, row) => new TaskRow(key, row));
 
         // Counts/at-risk cover the reachable, UNFILTERED set: a stable summary
         // that the text/state filter shouldn't perturb.

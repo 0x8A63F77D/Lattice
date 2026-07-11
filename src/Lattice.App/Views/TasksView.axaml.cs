@@ -111,6 +111,22 @@ public partial class TasksView : UserControl
         if (_topLevel is not null)
             _topLevel.PropertyChanged -= OnTopLevelPropertyChanged;
         _topLevel = null;
+        DrainRowSubscriptions();
+    }
+
+    // Navigation teardown discards this view via the shell's ContentControl
+    // DataTemplate WITHOUT touching Grid.ItemsSource, and the DataGrid only
+    // unloads realized rows on an ItemsSource change/refresh (decompiled
+    // 12.1.0: ClearRows runs from the collection-changed path, not from
+    // detach) — so UnloadingRow never fires here and the row-class handlers
+    // would pin the orphaned DataGridRows to the long-lived TaskRow holders,
+    // leaking once per navigation. Drain everything on detach instead; the
+    // UnloadingRow path still handles per-row recycling while attached.
+    private void DrainRowSubscriptions()
+    {
+        foreach (var (holder, handler) in _rowSubscriptions.Values)
+            holder.PropertyChanged -= handler;
+        _rowSubscriptions.Clear();
     }
 
     private void OnTopLevelPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
@@ -205,6 +221,10 @@ public partial class TasksView : UserControl
     // don't accumulate handlers, and guard the (rare, recycling-only) case of
     // a row being loaded again before its previous subscription was cleared.
     private readonly Dictionary<DataGridRow, (TaskRow Holder, PropertyChangedEventHandler Handler)> _rowSubscriptions = new();
+
+    /// <summary>Test seam (InternalsVisibleTo): live row-class subscriptions.
+    /// The teardown-drain regression test pins this to 0 after detach.</summary>
+    internal int RowSubscriptionCount => _rowSubscriptions.Count;
 
     private void OnLoadingRow(object? sender, DataGridRowEventArgs e)
     {

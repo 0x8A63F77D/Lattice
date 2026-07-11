@@ -184,6 +184,36 @@ public class TasksViewTests
         window.Close();
     }
 
+    // Teardown-drain regression (quality review, post-#24-retrofit): navigating
+    // away from the Tasks page discards TasksView through the ContentControl
+    // DataTemplate WITHOUT changing Grid.ItemsSource, so the DataGrid never
+    // fires UnloadingRow for its realized rows — the row-class subscriptions
+    // would then pin orphaned DataGridRows to the long-lived TaskRow holders,
+    // growing unbounded across navigations. Detach must drain them all.
+    [AvaloniaFact]
+    public void Detaching_the_view_drains_all_row_class_subscriptions()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        window.Show();
+
+        var row = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "—",
+            Deadline: null, StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+        Assert.True(view.RowSubscriptionCount > 0, "a realized row should have subscribed");
+
+        // Mimic the shell's navigation teardown: the view leaves the visual
+        // tree while its ItemsSource stays untouched (no UnloadingRow fires).
+        window.Content = null;
+        Layout(window);
+
+        Assert.Equal(0, view.RowSubscriptionCount);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void Density_toggle_flips_row_height_from_standard_to_compact()
     {
