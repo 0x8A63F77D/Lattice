@@ -8,18 +8,23 @@ open Lattice.App.Aggregation
 
 // The union lives at namespace level (ReconcileOp), NOT inside module
 // Reconcile — cases are used unqualified once the namespace is open.
+// Pure oracle for the C# ObservableCollection applier: each op replayed
+// against an immutable list. Update keeps the key already at the index —
+// same as the production applier, which only rebinds the holder's Data.
 let apply (existing: struct (int * string)[]) (ops: ReconcileOp<int, string> list) =
-    let list = ResizeArray(existing |> Seq.map (fun struct (k, r) -> (k, r)))
-    for op in ops do
+    let applyOp rows op =
         match op with
-        | Update (i, _, row) -> list[i] <- (fst list[i], row)
-        | Insert (i, key, row) -> list.Insert(i, (key, row))
-        | RemoveAt (i, _) -> list.RemoveAt i
+        | Update (i, _, row) -> rows |> List.mapi (fun idx (k, r) -> if idx = i then (k, row) else (k, r))
+        | Insert (i, key, row) -> rows |> List.insertAt i (key, row)
+        | RemoveAt (i, _) -> rows |> List.removeAt i
         | Move (fromIndex, toIndex, _) ->
-            let item = list[fromIndex]
-            list.RemoveAt fromIndex
-            list.Insert(toIndex, item)
-    list |> Seq.map (fun (k, r) -> struct (k, r)) |> Array.ofSeq
+            let item = rows |> List.item fromIndex
+            rows |> List.removeAt fromIndex |> List.insertAt toIndex item
+    let initial = existing |> Array.toList |> List.map (fun struct (k, r) -> (k, r))
+    ops
+    |> List.fold applyOp initial
+    |> List.map (fun (k, r) -> struct (k, r))
+    |> Array.ofList
 
 [<Fact>]
 let ``identical input yields no ops`` () =
@@ -87,3 +92,4 @@ let ``a surviving key is never removed or inserted`` (before: struct (int * stri
 [<Property(Arbitrary = [| typeof<ReconcileArbs> |])>]
 let ``no-op diff for equal inputs`` (arr: struct (int * string)[]) =
     Reconcile.diff arr arr |> List.isEmpty
+
