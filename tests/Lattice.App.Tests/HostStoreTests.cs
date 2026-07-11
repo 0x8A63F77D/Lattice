@@ -1,5 +1,7 @@
+using System.Reflection;
 using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
@@ -181,5 +183,97 @@ public class HostStoreTests : IAsyncLifetime
             await manager.DisposeAsync();
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void MessagesReceived_fires_after_drain_with_the_host_id_and_batch()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        MessagesAddedEventArgs? received = null;
+        store.MessagesReceived += (_, e) => received = e;
+
+        var batch = new[] { TestData.MakeMessage(1), TestData.MakeMessage(2) };
+        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, batch));
+
+        // Marshaling contract: nothing is delivered until the UI queue runs.
+        Assert.Null(received);
+        queue.Drain();
+
+        Assert.NotNull(received);
+        Assert.Equal(host.Id, received!.HostId);
+        Assert.Same(batch, received.Messages);   // forwarded verbatim
+    }
+
+    [Fact]
+    public void Message_batch_does_not_raise_Changed()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var changes = 0;
+        store.Changed += (_, _) => changes++;
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        queue.Drain();
+
+        // Batches arrive every poll tick; forwarding one must NOT rebuild the
+        // snapshot-driven views — it rides its own channel, not Changed.
+        Assert.Equal(0, changes);
+        Assert.Equal(1, received);
+    }
+
+    [Fact]
+    public void Disposed_store_drops_queued_message_batch()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        store.Dispose();
+        queue.Drain();
+
+        Assert.Equal(0, received);
+    }
+
+    [Fact]
+    public void Message_batch_for_a_host_not_in_the_store_is_dropped()
+    {
+        _registry.AddHost(TestData.MakeHostConfig());
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        // HostId absent from the store — the host was removed while the batch
+        // sat queued. The Find guard drops it, same as the status/snapshot paths.
+        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(Guid.NewGuid(), [TestData.MakeMessage(1)]));
+        queue.Drain();
+
+        Assert.Equal(0, received);
+    }
+
+    // HostStore forwards HostMonitorManager.MessagesAdded as MessagesReceived. Real
+    // polling couples that event with a SnapshotUpdated (which DOES raise Changed)
+    // on every tick, so the forwarding contract — Find guard, disposed guard, and
+    // the Changed decoupling — can only be exercised in isolation by raising the
+    // manager's event on its own. The event is public but only its declaring type
+    // may invoke it, so the test reaches the compiler's field-like backing delegate
+    // by reflection. This keeps the four cases fully synchronous and deterministic.
+    private void RaiseManagerMessagesAdded(MessagesAddedEventArgs args)
+    {
+        FieldInfo field = typeof(HostMonitorManager)
+            .GetField(nameof(HostMonitorManager.MessagesAdded), BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var handler = (EventHandler<MessagesAddedEventArgs>?)field.GetValue(_manager);
+        handler?.Invoke(_manager, args);
     }
 }
