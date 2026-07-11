@@ -492,6 +492,9 @@
     <value>Updated {0}s ago</value>
   </data>
   <!-- ===== Transfers ===== -->
+  <data name="TransfersCountsFmt" xml:space="preserve">
+    <value>{0} transfers · {1} up · {2} down</value>
+  </data>
   <data name="TransfersDownload" xml:space="preserve">
     <value>Download</value>
   </data>
