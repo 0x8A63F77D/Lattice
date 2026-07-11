@@ -1,0 +1,234 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:views="using:Lattice.App.Views"
+             xmlns:controls="using:Lattice.App.Controls"
+             xmlns:loc="using:Lattice.App.Localization"
+             x:Class="Lattice.App.Views.TasksView"
+             x:DataType="vm:TasksViewModel">
+
+  <UserControl.KeyBindings>
+    <!-- F5 is a pure VM-command gesture, so it's declarative (the ShellWindow
+         KeyBindings idiom); Ctrl+F needs imperative focus on a named control —
+         a view-local concern, not a VM command — so it lives in OnKeyDown. -->
+    <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
+  </UserControl.KeyBindings>
+
+  <UserControl.Styles>
+    <!-- Row-class overrides (design §Task 11): at-risk tint + suspended dimming.
+         Selection tint intentionally wins when a row is both selected and at-risk
+         (deferred design decision, resolved): the Deadline cell's warning icon
+         still marks the risk, so nothing is lost, and DataGridStyles.axaml already
+         documents why fighting the theme's selection overlay is a losing game. -->
+    <Style Selector="DataGridRow.atRisk">
+      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+    </Style>
+    <Style Selector="DataGridRow.suspended">
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
+    </Style>
+    <!-- Progress-fill Border: accent normally, disabled-gray for suspended tasks. -->
+    <Style Selector="Border.progressFill">
+      <Setter Property="Background" Value="{DynamicResource LatticeAccentBrush}" />
+    </Style>
+    <Style Selector="Border.progressFill.suspended">
+      <Setter Property="Background" Value="{DynamicResource LatticeDisabledBrush}" />
+    </Style>
+    <!-- Deadline-cell text: SemiBold warning color when the row's deadline is at risk. -->
+    <Style Selector="TextBlock.atRiskText">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource LatticeWarningFgBrush}" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Command bar -->
+    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeSurfaceBrush}"
+            BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
+            BorderThickness="0,0,0,1">
+      <DockPanel Margin="16,0" LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="{x:Static loc:Strings.TasksTitle}" FontSize="16" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
+          <Button Content="{x:Static loc:Strings.Suspend}" IsEnabled="False" Margin="8,0,0,0" />
+          <Button Content="{x:Static loc:Strings.Abort}" IsEnabled="False" />
+          <Separator Margin="8,0" />
+          <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220"
+                   Text="{Binding FilterText, Mode=TwoWay}"
+                   PlaceholderText="{x:Static loc:Strings.FilterPlaceholder}" />
+          <ComboBox x:Name="StateFilterBox" SelectedIndex="0" SelectionChanged="OnStateFilterChanged">
+            <ComboBoxItem Content="{x:Static loc:Strings.StateAll}" />
+            <ComboBoxItem Content="{x:Static loc:Strings.TaskStateRunning}" />
+            <ComboBoxItem Content="{x:Static loc:Strings.TaskStateWaiting}" />
+            <ComboBoxItem Content="{x:Static loc:Strings.TaskStateSuspended}" />
+            <ComboBoxItem Content="{x:Static loc:Strings.TaskStateUploading}" />
+          </ComboBox>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+            <PathIcon Data="{StaticResource IconWarningFilled}" Width="12" Height="12"
+                      Foreground="{DynamicResource LatticeWarningFgBrush}"
+                      IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeWarningFgBrush}"
+                       IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       IsVisible="{Binding !IsUpdateStale}" />
+          </StackPanel>
+          <Button Padding="6" Background="Transparent" Command="{Binding RefreshCommand}"
+                  ToolTip.Tip="{x:Static loc:Strings.RetryNow}">
+            <PathIcon Data="{StaticResource IconArrowClockwiseRegular}" Width="14" Height="14" />
+          </Button>
+          <ToggleButton x:Name="DensityToggle" Padding="6" Background="Transparent"
+                        IsChecked="{Binding IsCompact, Mode=TwoWay}">
+            <PathIcon Data="{StaticResource IconTextLineSpacingRegular}" Width="14" Height="14" />
+          </ToggleButton>
+          <Button x:Name="OverflowButton" Padding="6" Background="Transparent">
+            <PathIcon Data="{StaticResource IconMoreHorizontalRegular}" Width="14" Height="14" />
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="{x:Static loc:Strings.ColProject}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Project" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColApplication}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Application" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColProgress}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Progress" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColElapsed}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Elapsed" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColRemaining}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Remaining" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColDeadline}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="Deadline" IsChecked="True" Click="OnColumnVisibilityToggled" />
+                <MenuItem Header="{x:Static loc:Strings.ColState}" ToggleType="CheckBox" StaysOpenOnClick="True"
+                          Tag="State" IsChecked="True" Click="OnColumnVisibilityToggled" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Partial-results warning -->
+    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+                  Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
+                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
+      <ui:FAInfoBar.ActionButton>
+        <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
+      </ui:FAInfoBar.ActionButton>
+    </ui:FAInfoBar>
+
+    <!-- Status bar -->
+    <controls:StatusBarControl DockPanel.Dock="Bottom"
+                                LeftText="{Binding CountsText}"
+                                WarningText="{Binding AtRiskText}"
+                                RightText="{Binding PollingText}" />
+
+    <!-- Grid + overlays -->
+    <Panel>
+      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True"
+                LoadingRow="OnLoadingRow">
+        <DataGrid.Columns>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
+                               Binding="{Binding Project}" Width="108" />
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}"
+                               Binding="{Binding Application}" Width="118" />
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}"
+                                   Width="*" MinWidth="160">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TaskRowViewModel">
+                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="112">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TaskRowViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
+                    <Border Classes="progressFill" Classes.suspended="{Binding IsSuspended}"
+                            HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                            Width="{Binding Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
+                  </Border>
+                  <TextBlock Text="{Binding PercentText}" FontSize="12" Classes="numeric" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
+                               Binding="{Binding ElapsedText}" Width="68" />
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
+                               Binding="{Binding RemainingText}" Width="74" />
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TaskRowViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <PathIcon Width="10" Height="10" Data="{StaticResource IconWarningFilled}"
+                            IsVisible="{Binding IsDeadlineAtRisk}"
+                            Foreground="{DynamicResource LatticeWarningFgBrush}" />
+                  <TextBlock Text="{Binding DeadlineText}" FontSize="12"
+                             Classes.atRiskText="{Binding IsDeadlineAtRisk}" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="112">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TaskRowViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <Panel Width="12" Height="12">
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconPlayRegular}"
+                              Foreground="{DynamicResource LatticeSuccessBrush}"
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Running}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconClockRegular}"
+                              Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Waiting}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconPauseRegular}"
+                              Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Suspended}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowUploadRegular}"
+                              Foreground="{DynamicResource LatticeAccentBrush}"
+                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Uploading}" />
+                  </Panel>
+                  <TextBlock Text="{Binding StateText}" FontSize="12" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
+                               Binding="{Binding Host}" Width="76"
+                               IsVisible="{Binding IsAllHostsScope}" />
+        </DataGrid.Columns>
+      </DataGrid>
+
+      <!-- Loading overlay -->
+      <Border Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
+          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
+                     TextWrapping="Wrap" TextAlignment="Center"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Empty overlay -->
+      <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+        <Panel>
+          <TextBlock Text="{x:Static loc:Strings.TasksEmptyAll}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                     IsVisible="{Binding IsAllHostsScope}" />
+          <TextBlock Text="{x:Static loc:Strings.TasksEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                     FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                     IsVisible="{Binding !IsAllHostsScope}" />
+        </Panel>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

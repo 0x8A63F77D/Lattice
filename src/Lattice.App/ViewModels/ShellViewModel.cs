@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
@@ -19,20 +20,24 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly AllHostsRailItemViewModel _allHosts = new();
 
     public ShellViewModel(
-        HostRegistry registry, HostStore store, IUiClock clock, Func<IGuiRpcClient> clientFactory)
+        HostRegistry registry, HostStore store, IUiClock clock, UiStateStore uiState,
+        Func<IGuiRpcClient> clientFactory)
     {
         _store = store;
         _clock = clock;
         Settings = new SettingsViewModel(registry, store, clientFactory);
+        Tasks = new TasksViewModel(store, clock, uiState);
         Views =
         [
-            new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", new PlaceholderViewModel(Strings.NavTasks)),
+            new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
             new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", new PlaceholderViewModel(Strings.NavProjects)),
             new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
             new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel(Strings.NavEventLog)),
         ];
         _selectedView = Views[0];
         _currentPage = Views[0].Page;
+        Tasks.Rows.CollectionChanged += OnTasksRowsChanged;
+        _tasksCount = Tasks.Rows.Count;
         // The All-hosts sentinel always leads the rail; host entries follow it
         // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
         RailEntries.Add(_allHosts);
@@ -45,14 +50,33 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public ObservableCollection<object> RailEntries { get; } = [];
     public SettingsViewModel Settings { get; }
 
+    /// <summary>The Tasks page VM (Views[0].Page); exposed directly so the shell
+    /// can push scope changes into it and mirror its row count for the nav badge.</summary>
+    public TasksViewModel Tasks { get; }
+
     [ObservableProperty] private NavItemViewModel? _selectedView;
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
     [ObservableProperty] private bool _hasHosts;
     [ObservableProperty] private object? _selectedRailEntry;
 
+    /// <summary>Mirrors <see cref="TasksViewModel.Rows"/>.Count; drives the Tasks nav item's inline count badge.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTasksCount))]
+    private int _tasksCount;
+
+    public bool HasTasksCount => TasksCount > 0;
+
     partial void OnSelectedRailEntryChanged(object? value) =>
         Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
+
+    // Design rule: selecting a host scopes every view. Tasks is the only real
+    // (non-Placeholder) page today, so it is the only one wired here; later
+    // views will get the same partial-method push when they graduate.
+    partial void OnScopeChanged(ScopeSelection value) => Tasks.Scope = value;
+
+    private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        TasksCount = Tasks.Rows.Count;
 
     /// <summary>Raised when a view needs to open the Add-host dialog.</summary>
     public event EventHandler? AddHostRequested;
@@ -121,6 +145,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         _store.Changed -= OnStoreChanged;
+        Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
+        Tasks.Dispose();
         foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();
     }

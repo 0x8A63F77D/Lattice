@@ -58,7 +58,15 @@
                        IsBackButtonVisible="False"
                        SelectionChanged="OnNavSelectionChanged">
       <ui:FANavigationView.MenuItems>
-        <ui:FANavigationViewItem x:Name="NavTasks" Content="{x:Static loc:Strings.NavTasks}" Tag="0">
+        <ui:FANavigationViewItem x:Name="NavTasks" Tag="0">
+          <ui:FANavigationViewItem.Content>
+            <DockPanel LastChildFill="False">
+              <TextBlock Text="{x:Static loc:Strings.NavTasks}" DockPanel.Dock="Left" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding TasksCount}" FontSize="12" DockPanel.Dock="Right"
+                         VerticalAlignment="Center" IsVisible="{Binding HasTasksCount}"
+                         Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+            </DockPanel>
+          </ui:FANavigationViewItem.Content>
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconTaskListSquareLtrRegular}" />
           </ui:FANavigationViewItem.IconSource>
@@ -167,6 +175,9 @@
           </DataTemplate>
           <DataTemplate DataType="vm:SettingsViewModel">
             <v:SettingsView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:TasksViewModel">
+            <v:TasksView />
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>

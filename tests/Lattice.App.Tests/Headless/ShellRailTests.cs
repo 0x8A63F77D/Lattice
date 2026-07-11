@@ -1,8 +1,10 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using FluentAvalonia.UI.Controls;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -24,7 +26,8 @@ public class ShellRailTests
         // Manager never started: no sockets, no background threads in headless tests.
         var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var shell = new ShellViewModel(registry, store, new ManualUiClock(), () => new FakeGuiRpcClient());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
         var window = new ShellWindow { DataContext = shell };
         return (window, shell, registry);
     }
@@ -105,6 +108,70 @@ public class ShellRailTests
         window.Nav.IsPaneOpen = true;
         Layout(window);
         Assert.True(sentinelText.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Navigating_to_tasks_renders_a_TasksView()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        // Leave Tasks (the default page) and come back, so this actually exercises
+        // navigation rather than just the initial state.
+        shell.SelectViewCommand.Execute("1");
+        Layout(window);
+        shell.SelectViewCommand.Execute("0");
+        Layout(window);
+
+        Assert.IsType<TasksViewModel>(shell.CurrentPage);
+        Assert.NotEmpty(window.GetVisualDescendants().OfType<TasksView>());
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Selecting_tasks_swaps_its_icon_to_filled_and_deselecting_restores_regular()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        Assert.True(Application.Current!.TryGetResource("IconTaskListSquareLtrFilled", null, out var filled));
+        Assert.True(Application.Current!.TryGetResource("IconTaskListSquareLtrRegular", null, out var regular));
+
+        // Tasks is the default selected view, so its icon should already be Filled.
+        var icon = Assert.IsType<FAPathIconSource>(window.NavTasks.IconSource);
+        Assert.Same(filled, icon.Data);
+
+        shell.SelectViewCommand.Execute("1");
+        Layout(window);
+
+        Assert.Same(regular, icon.Data);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Every_nav_icon_key_resolves_against_the_shown_window()
+    {
+        // Invariant pin for ShellWindow.ResolveIconGeometry's fail-fast contract:
+        // the Regular/Filled keys are raw strings in ShellViewModel's Views list
+        // with no compile-time check, so every current (and future) key must
+        // resolve to a geometry in the merged resources.
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        foreach (var view in shell.Views)
+            foreach (var key in new[] { view.IconKey, view.IconFilledKey })
+            {
+                Assert.True(window.TryFindResource(key, out var value),
+                    $"nav icon resource '{key}' ({view.Title}) should resolve");
+                Assert.IsType<StreamGeometry>(value);
+            }
         window.Close();
     }
 }

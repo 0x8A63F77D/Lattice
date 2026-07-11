@@ -68,11 +68,13 @@ internal sealed class LockingUiDispatcher : IUiDispatcher
 public class TasksViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+    private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
     private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private HostStore _store = null!;
     private ManualUiClock _clock = null!;
+    private UiStateStore _uiStore = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -80,6 +82,7 @@ public class TasksViewModelTests : IAsyncLifetime
         _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
         _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
         _clock = new ManualUiClock();
+        _uiStore = new UiStateStore(_uiPath);
         return ValueTask.CompletedTask;
     }
 
@@ -87,6 +90,7 @@ public class TasksViewModelTests : IAsyncLifetime
     {
         await _manager.DisposeAsync();
         File.Delete(_path);
+        File.Delete(_uiPath);
     }
 
     private HostConfig AddHost(string address, FakeGuiRpcClient fake)
@@ -97,7 +101,7 @@ public class TasksViewModelTests : IAsyncLifetime
         return host;
     }
 
-    private TasksViewModel MakeVm() => new(_store, _clock);
+    private TasksViewModel MakeVm() => new(_store, _clock, _uiStore);
 
     [Fact]
     public async Task AllHosts_merges_rows_from_both_hosts()
@@ -681,5 +685,25 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.False(vm.IsLoading);
         Assert.True(vm.IsEmpty);
         Assert.Empty(vm.Rows);
+    }
+
+    [Fact]
+    public void Density_and_column_preferences_round_trip_through_the_ui_state_store()
+    {
+        var vm1 = MakeVm();
+        Assert.False(vm1.IsCompact);
+        Assert.Null(vm1.GetColumnPreference("Elapsed"));
+
+        vm1.IsCompact = true;
+        vm1.SetColumnPreference("Elapsed", false);
+        vm1.Dispose();
+
+        // A brand-new VM over the same store sees the persisted choices; columns
+        // the user never toggled stay null (breakpoints keep deciding for them).
+        var vm2 = MakeVm();
+        Assert.True(vm2.IsCompact);
+        Assert.False(vm2.GetColumnPreference("Elapsed"));
+        Assert.Null(vm2.GetColumnPreference("Project"));
+        vm2.Dispose();
     }
 }

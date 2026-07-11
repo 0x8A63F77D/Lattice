@@ -8,15 +8,22 @@ namespace Lattice.App.ViewModels;
 
 /// <summary>
 /// Scopes, merges, filters, sorts and counts tasks across one or all hosts for
-/// the Tasks view DataGrid. Takes (HostStore, IUiClock) only — shell-agnostic
-/// and independently testable; ShellViewModel pushes <see cref="Scope"/> on
-/// change (design rule: selecting a host scopes every view).
+/// the Tasks view DataGrid. Takes (HostStore, IUiClock, UiStateStore) only —
+/// shell-agnostic and independently testable; ShellViewModel pushes
+/// <see cref="Scope"/> on change (design rule: selecting a host scopes every view).
 /// </summary>
 public sealed partial class TasksViewModel : ObservableObject, IDisposable
 {
     private readonly HostStore _store;
     private readonly IUiClock _clock;
+    private readonly UiStateStore _uiStateStore;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
+
+    // The persisted UI-preference record, loaded once at construction. This VM
+    // owns the load-mutate-save cycle for the fields it consumes (CompactDensity,
+    // ColumnVisibility); other fields (ColumnWidths) ride along untouched so a
+    // save here never clobbers state owned by a future consumer.
+    private UiState _uiState;
 
     // The dismissed partial-bar fingerprint and the one computed on the last
     // Rebuild. Episode semantics (when a dismissal holds, when it is
@@ -25,10 +32,15 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     private PartialBarPolicy.Fingerprint _dismissedFingerprint = PartialBarPolicy.EmptyFingerprint;
     private PartialBarPolicy.Fingerprint _currentFingerprint = PartialBarPolicy.EmptyFingerprint;
 
-    public TasksViewModel(HostStore store, IUiClock clock)
+    public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore)
     {
         _store = store;
         _clock = clock;
+        _uiStateStore = uiStateStore;
+        _uiState = uiStateStore.Load();
+        // Field write, not property: restoring the persisted choice must not
+        // re-save it through OnIsCompactChanged.
+        _isCompact = _uiState.CompactDensity;
         store.Changed += OnStoreChanged;
         clock.Tick += OnTick;
         Rebuild();
@@ -60,9 +72,38 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _partialBarText = "";
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isEmpty;
+    [ObservableProperty] private string _loadingText = "";
+
+    /// <summary>Density toggle for the Tasks DataGrid (compact = smaller row height).
+    /// Restored from UiStateStore at construction; persisted on every change.</summary>
+    [ObservableProperty] private bool _isCompact;
 
     partial void OnFilterTextChanged(string value) => Rebuild();
     partial void OnStateFilterChanged(TaskStateKind? value) => Rebuild();
+
+    partial void OnIsCompactChanged(bool value)
+    {
+        _uiState = _uiState with { CompactDensity = value };
+        _uiStateStore.Save(_uiState); // best-effort: a failed save costs only persistence
+    }
+
+    /// <summary>
+    /// The user's explicit show/hide choice for a column ("Project", "Elapsed", ...),
+    /// or null if never toggled — null lets ColumnVisibilityPolicy's breakpoints
+    /// decide. TasksView reads these into its preference dictionary at DataContext
+    /// attach.
+    /// </summary>
+    public bool? GetColumnPreference(string columnKey) =>
+        _uiState.ColumnVisibility.TryGetValue(columnKey, out var visible) ? visible : null;
+
+    /// <summary>Records and persists an explicit column show/hide choice
+    /// (TasksView's overflow-menu toggle is the only caller).</summary>
+    public void SetColumnPreference(string columnKey, bool visible)
+    {
+        var visibility = new Dictionary<string, bool>(_uiState.ColumnVisibility) { [columnKey] = visible };
+        _uiState = _uiState with { ColumnVisibility = visibility };
+        _uiStateStore.Save(_uiState); // best-effort, as above
+    }
 
     [RelayCommand]
     private void Refresh() => _store.RequestRefresh(Scope.HostId);
@@ -187,6 +228,9 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             [.. scoped.Select(h => new TasksOverlayPolicy.HostFacts(
                 RailStateProjection.From(h.Status), h.Snapshot is not null))],
             allRows.Count > 0);
+        LoadingText = IsLoading
+            ? string.Format(Strings.LoadingFromFmt, string.Join(", ", scoped.Select(h => h.Config.DisplayName)))
+            : "";
     }
 
     public void Dispose()

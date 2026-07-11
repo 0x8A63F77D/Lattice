@@ -24,7 +24,8 @@ public partial class App : Application
             var manager = new HostMonitorManager(registry, factory, TimeProvider.System);
             var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
             var clock = new DispatcherUiClock();
-            var shell = new ShellViewModel(registry, store, clock, factory);
+            var uiState = new UiStateStore();
+            var shell = new ShellViewModel(registry, store, clock, uiState, factory);
 
             desktop.MainWindow = new ShellWindow { DataContext = shell };
             desktop.Exit += (_, _) =>
@@ -32,6 +33,8 @@ public partial class App : Application
                 clock.Dispose();
                 shell.Dispose();
                 store.Dispose();
+                // UiStateStore needs no teardown: preference saves are write-through
+                // at change time and the store holds no open resources.
                 // Process teardown: bounded blocking wait is the pragmatic exception
                 // to the no-sync-over-async rule (DisposeAsync cancels the loops and
                 // returns promptly; 5 s is a generous ceiling).
