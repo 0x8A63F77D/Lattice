@@ -85,8 +85,14 @@ module ProjectRows =
     /// Precondition: caller passes in-scope attachments only (ViewSlice's
     /// AllRows), so single-host scope degrades naturally (no Varies, no
     /// children to show).
+    /// Guarantee: duplicate (MasterUrl, host) attachments collapse to the
+    /// first occurrence — SnapshotBuilder does not dedup project entries and
+    /// BOINC replies are parsed leniently, so a malformed get_state can carry
+    /// the same master_url twice; child-row key uniqueness (Reconcile.diff's
+    /// precondition) is established here, where the keys are constructed.
     let compute (attachments: ProjectAttachment[]) : ProjectGroup[] =
         attachments
+        |> Array.distinctBy (fun a -> a.MasterUrl, a.HostId)
         |> Array.groupBy (fun a -> a.MasterUrl)
         |> Array.map (fun (url, atts) ->
             let sorted = atts |> Array.sortBy (fun a -> a.HostName, a.HostId)

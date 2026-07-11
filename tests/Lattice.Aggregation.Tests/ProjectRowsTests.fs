@@ -53,6 +53,25 @@ let ``suspended wins when both flags set; display name falls back to url`` () =
     Assert.Equal(AllSame Suspended, g[0].Status)
     Assert.Equal("u", g[0].DisplayName)
 
+[<Fact>]
+let ``duplicate (MasterUrl, host) attachments collapse to the first occurrence`` () =
+    // Codex P2 (PR #46 round 4): SnapshotBuilder copies state.Projects into
+    // HostSnapshot.Projects WITHOUT dedup (unlike its TryAdd lookup dicts),
+    // and get_state is parsed leniently — a malformed reply can carry the
+    // same master_url twice. compute must collapse such duplicates (first
+    // occurrence wins), or the parent Hosts count double-counts and expansion
+    // emits duplicate ChildKey(MasterUrl, hostId) rows, violating
+    // Reconcile.diff's unique-key precondition.
+    let groups =
+        ProjectRows.compute
+            [| att "u" "P" "a" hostA false false 100.0 5.0 10.0 1
+               att "u" "P" "a" hostA false false 100.0 9.0 20.0 2 |]
+    Assert.Equal(1, groups.Length)
+    Assert.Equal(1, groups[0].Attachments.Length) // parent Hosts count = 1, not 2
+    Assert.Equal(5.0, groups[0].AvgCredit)        // first occurrence kept, no doubled sums
+    Assert.Equal(10.0, groups[0].TotalCredit)
+    Assert.Equal(1, groups[0].TaskCount)
+
 let attachmentsGen =
     gen {
         let! n = Gen.choose (0, 8)
@@ -67,18 +86,31 @@ let attachmentsGen =
                 let! rac = Gen.choose (0, 100)
                 return att url "P" (string hostIdx) hostIds[hostIdx] susp noNew share (float rac) 1.0 1
             })
-        // Key uniqueness precondition: one attachment per (url, host).
-        return atts |> List.distinctBy (fun a -> a.MasterUrl, a.HostId) |> Array.ofList
+        // Duplicates (same url, same host) are deliberately generated: key
+        // uniqueness is compute's GUARANTEE, not the caller's precondition.
+        return atts |> Array.ofList
     }
 
 type ProjectArbs =
     static member Attachments() = Arb.fromGen attachmentsGen
 
 [<Property(Arbitrary = [| typeof<ProjectArbs> |])>]
-let ``attachment conservation: groups partition the input`` (atts: ProjectAttachment[]) =
+let ``attachment conservation: groups partition the deduped input`` (atts: ProjectAttachment[]) =
+    // First-occurrence semantics: compute collapses duplicate (url, host)
+    // attachments, so groups partition the input deduped in original order.
     let groups = ProjectRows.compute atts
     let regrouped = groups |> Array.collect (fun g -> g.Attachments) |> Array.sortBy (fun a -> a.MasterUrl, a.HostId)
-    regrouped = (atts |> Array.sortBy (fun a -> a.MasterUrl, a.HostId))
+    let deduped = atts |> Array.distinctBy (fun a -> a.MasterUrl, a.HostId)
+    regrouped = (deduped |> Array.sortBy (fun a -> a.MasterUrl, a.HostId))
+
+[<Property(Arbitrary = [| typeof<ProjectArbs> |])>]
+let ``emitted (MasterUrl, HostId) pairs are distinct across groups`` (atts: ProjectAttachment[]) =
+    // Reconcile.diff's unique-key precondition, stated on compute's output:
+    // ChildKey(MasterUrl, hostId) identity must never repeat.
+    let pairs =
+        ProjectRows.compute atts
+        |> Array.collect (fun g -> g.Attachments |> Array.map (fun a -> g.MasterUrl, a.HostId))
+    pairs.Length = (pairs |> Array.distinct |> Array.length)
 
 [<Property(Arbitrary = [| typeof<ProjectArbs> |])>]
 let ``credit sums are per-group host sums`` (atts: ProjectAttachment[]) =
