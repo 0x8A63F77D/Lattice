@@ -186,10 +186,14 @@ module ProjectRows =
         else Active
 
     /// Summarize per-host statuses into the three design tiers. Operates on the
-    /// (suspended, noNew) counts — active is the remainder. NOTE: DU-case totality
-    /// is enforced upstream in `status`, not here (counting is by value-equality,
-    /// which the exhaustiveness checker cannot see). The tuple-match below is
-    /// total over int × int with no DU wildcard.
+    /// (suspended, noNew) counts — active is the remainder. NOTE: nothing in
+    /// this module gets compile-time totality over AttachmentStatus (`status`
+    /// only CONSTRUCTS cases; the counting here is value-equality — both are
+    /// invisible to the exhaustiveness checker). A new case must be threaded
+    /// through by hand; the compile-time tripwire is the exhaustive
+    /// OneDeviation match in the status-consistency FsCheck property
+    /// (ProjectRowsTests.fs), which fails under --warnaserror. The tuple-match
+    /// below is total over int × int with no DU wildcard.
     let internal summarize (statuses: AttachmentStatus[]) : StatusSummary =
         let count s = statuses |> Array.filter (fun x -> x = s) |> Array.length
         let suspended = count Suspended
