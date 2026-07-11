@@ -71,6 +71,19 @@ Remote hosts:
 - Window materials: request Mica via `TransparencyLevelHint` on Windows 11, with solid-color fallback on macOS/Linux/Win10. Never let a feature depend on the material being present.
 - Async all the way down: socket I/O and RPC calls are async; ViewModels marshal to the UI thread via `Dispatcher.UIThread`. No sync-over-async, no blocking the UI thread on RPC.
 
+## F# style canon (adopted 2026-07-11, issue #38)
+
+Practical, readable, .NET-idiomatic functional style — not purity maximalism. Purity is judged at the function boundary (referential transparency; mutation never escaping), not by a token blacklist. Idiom review against this canon is a blocking review step for F# changes.
+
+- Pipelines of small named functions. Data-last parameter order for F#-internal helpers; C#-consumed signatures may stay consumer-shaped.
+- Prefer semantically specific combinators (`map` / `filter` / `choose` / `collect` / `groupBy` / `mapFold`) over `fold`; `fold` is the last resort. An accumulator that wants to be mutable is a signal to restructure the data (ops-as-values, state threaded through the fold) — not to reach for `ResizeArray`.
+- No wildcard `| _ ->` on domain DUs outside predicate lambdas. DU totality is why F# was chosen; a wildcard silently defeats the compiler check when a case is added. (`function X -> true | _ -> false` predicates are the acceptable form.)
+- `Option` for absence, `Result` with typed errors for expected failure; convert exception-style .NET APIs at the boundary.
+- Seq re-enumeration is a correctness trap, not a style point: materialize expensive sources at an explicit point before multi-pass use.
+- Sanctioned imperative kernels (pt 24): a perf-relevant algorithm kernel may use imperative collections when the mutation is confined inside the function, the external interface is pure, and a short boundary comment states the exception (reference: `tests/Lattice.Verification/Explorer.fs`).
+- Review gate: `mutable` / `<-` / `ResizeArray` / imperative loops in F# domain logic are a review-blocking finding unless covered by the sanctioned-kernel rule. Mutation-as-simulation in test oracles is acceptable when it aids clarity.
+- Plan-time rules (the primary fix — with transcription-tier implementers the plan snippet IS the product): state the input→output relation declaratively first; pick the recursion scheme (fold / unfold / map / structural recursion) up front and write the signature in immutable terms; plan-doc F# is born pure — there is no "imperative sketch now, clean up later" tier.
+
 ## Design direction
 
 - Fluent 2 idiom, information-dense utility aesthetic. Visual references: Windows 11 Task Manager, Dev Home. This is a monitoring tool — density and scanability over whitespace.
@@ -85,6 +98,18 @@ Remote hosts:
 - Avalonia DevTools MCP (live visual tree, screenshots) is paid (Avalonia Plus) and deliberately deferred; do not assume its availability.
 - Small commits, conventional messages. Protocol code changes must come with fixture-based tests in the same commit.
 - **Verification sync rule (hard workflow contract):** any semantic change to `src/Lattice.Core/HostMonitor.cs` must update, in the SAME commit: the F# executable spec (`tests/Lattice.Verification/`), the Promela model (`verification/HostMonitor.pml`), and the shared-state inventory + probe-point list. All code here is AI-written, so model-code sync is the author's obligation at write time — never deferred to review. A commit touching HostMonitor semantics without touching the verification artifacts must state in its message why no model change is needed. The F# executable spec executes the production `HostMachine.step` directly (functional-core restructure 2026-07-08); the spec-sync leg is by-construction for decision logic, still manual for shell changes.
+
+### Cross-PR workflow lessons (durable; migrated from the retired SDD ledger, 2026-07-11)
+
+- Red-first + mutation falsification is mandatory on every fix and every reviewer pass; a reviewer independently repeats the falsification. False greens have been caught at every stage this discipline was applied.
+- Repeated same-class findings ⇒ restructure the invariant, don't re-patch (escalation ladder in user memory; TasksOverlayPolicy's taxonomy restructure on repair round 3 is the reference case).
+- Pure decision logic is extracted into policy modules from birth (PartialBarPolicy / TasksOverlayPolicy / ColumnVisibilityPolicy pattern), with exhaustive transition-table tests.
+- Deterministic UI tests: never wait on transient states or booleans that can go true early — settle on the EXPECTED TEXT or the fake's observed calls. Wall-clock settles are banned (HeadlessSync.WaitUntilAsync).
+- Test dispatchers must reproduce production ordering semantics: lock-only serialization is not `Dispatcher.UIThread.Post` — use the deferred-queue dispatcher (QueueUiDispatcher + Drain) for multi-monitor fixtures.
+- Visual bugs: geometry/pixel probing (headless Skia) is the verification bar; a fix without end-state visual verification has shipped broken once.
+- Codex review loop: verdicts count only on the FINAL commit; a review object with boilerplate body is not clean — re-poll review threads ≥60 s after it posts (inline findings share its timestamp). Quota errors mean the round will never come: get the reset time from the user. Reviews route through the github MCP tools; pr-monitor is status-only (`.claude/agents/pr-monitor.md`).
+- Design doc (`docs/design/m2/README.md`) is authoritative over plan wording when they conflict — cite the design line when deviating from a plan detail (window-width breakpoints case, PR #28).
+- Scheduled tasks (client-side cron): pre-approve their tools via "Run now" at creation, or unattended runs die on permission prompts.
 
 ## Milestones
 
