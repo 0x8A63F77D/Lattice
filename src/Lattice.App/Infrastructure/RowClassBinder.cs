@@ -22,6 +22,14 @@ public sealed class RowClassBinder<THolder> where THolder : class, INotifyProper
     /// <summary>Rows currently tracked; the teardown-drain tests pin this to 0 after detach.</summary>
     public int Count => _subscriptions.Count;
 
+    /// <summary>
+    /// Wires the binder to the grid's row lifecycle. Attach once, in the view
+    /// constructor. The applier may be re-invoked on ANY holder
+    /// PropertyChanged and must be idempotent. Detach is terminal: after the
+    /// grid leaves the visual tree the binder stays inert, so do not host
+    /// bound views in view-caching containers (e.g. TabView) without
+    /// re-realizing rows.
+    /// </summary>
     public static RowClassBinder<THolder> Attach(DataGrid grid, Action<DataGridRow, THolder> apply)
     {
         var binder = new RowClassBinder<THolder>(apply);
@@ -34,7 +42,10 @@ public sealed class RowClassBinder<THolder> where THolder : class, INotifyProper
     private void OnLoadingRow(object? sender, DataGridRowEventArgs e)
     {
         // Row recycling: a recycled DataGridRow gets a fresh LoadingRow for its
-        // new item — unsubscribe any previous entry before overwriting.
+        // new item — unsubscribe any previous entry before overwriting. This
+        // guard is defensive against grid paths not provocable under test
+        // (observed replacement paths run UnloadingRow first); losing it would
+        // surface as exactly the leak class the drain-test family monitors.
         if (_subscriptions.Remove(e.Row, out var stale))
             stale.Holder.PropertyChanged -= stale.Handler;
         if (e.Row.DataContext is not THolder holder) return;
