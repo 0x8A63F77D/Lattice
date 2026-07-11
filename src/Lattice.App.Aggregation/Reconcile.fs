@@ -13,6 +13,7 @@ type ReconcileOp<'Key, 'Row> =
 
 module Reconcile =
     /// Pure keyed diff. Precondition: keys unique within each array.
+    /// Applying the returned ops in order to `existing` yields `target` exactly.
     /// Surviving keys are never removed+reinserted — identity preservation
     /// is the point (issue #24). Removals are emitted back-to-front so every
     /// emitted index is live when its op applies.

@@ -42,6 +42,20 @@ let ``reorder uses Move, not remove plus insert`` () =
     let ops = Reconcile.diff [| struct (1, "a"); struct (2, "b") |] [| struct (2, "b"); struct (1, "a") |]
     Assert.Equal<ReconcileOp<int, string> list>([ Move(1, 0, 2) ], ops)
 
+[<Fact>]
+let ``empty to empty yields no ops`` () =
+    Assert.Empty(Reconcile.diff Array.empty<struct (int * string)> Array.empty)
+
+[<Fact>]
+let ``empty to one row is a single Insert`` () =
+    let ops = Reconcile.diff Array.empty [| struct (1, "a") |]
+    Assert.Equal<ReconcileOp<int, string> list>([ Insert(0, 1, "a") ], ops)
+
+[<Fact>]
+let ``one row to empty is a single RemoveAt`` () =
+    let ops = Reconcile.diff [| struct (1, "a") |] Array.empty
+    Assert.Equal<ReconcileOp<int, string> list>([ RemoveAt(0, 1) ], ops)
+
 // Generator: unique keys per array, small alphabet so key overlap is common.
 let keyedRows =
     gen {
@@ -54,14 +68,6 @@ let keyedRows =
 type ReconcileArbs =
     static member Array() =
         keyedRows |> Arb.fromGen
-
-    static member Pairs() =
-        gen {
-            let! before = keyedRows
-            let! after = keyedRows
-            return (before, after)
-        }
-        |> Arb.fromGen
 
 [<Property(Arbitrary = [| typeof<ReconcileArbs> |])>]
 let ``applying the diff reproduces the target exactly`` (before: struct (int * string)[], after: struct (int * string)[]) =
