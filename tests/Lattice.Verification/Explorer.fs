@@ -1,5 +1,11 @@
 /// Explicit-state BFS explorer. Small by design: reviewability IS the trust
 /// argument; the red-first mutants in Properties.fs exercise the checker itself.
+///
+/// Sanctioned imperative kernel (F# style canon pt 24, issue #38): BFS/SCC over
+/// a 10^4-10^5-state graph uses Dictionary/HashSet/Queue/Stack for state-space
+/// performance. Mutation is confined to construction inside each function; every
+/// public signature is pure, and a `Reach` is treated as frozen once `explore`
+/// returns.
 module Lattice.Verification.Explorer
 
 open System.Collections.Generic
