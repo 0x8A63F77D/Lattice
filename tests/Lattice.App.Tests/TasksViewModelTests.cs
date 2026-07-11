@@ -708,6 +708,33 @@ public class TasksViewModelTests : IAsyncLifetime
         vm2.Dispose();
     }
 
+    [Fact]
+    public async Task SetColumnPreference_preserves_a_density_change_saved_by_another_view_model_after_construction()
+    {
+        // Codex P2 (PR #45), mirrors the identical-name Transfers fact: a
+        // Transfers VM (sharing the same UiStateStore/path, as ShellViewModel
+        // wires them in production) toggles density AFTER `vm` already cached
+        // its own snapshot — a stale whole-snapshot Save from `vm` must not
+        // drop that foreign density change.
+        AddHost("host-a", new FakeGuiRpcClient());
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading);
+
+        using var transfersVm = new TransfersViewModel(_store, _clock, _uiStore);
+        transfersVm.IsCompact = true;
+
+        // Tasks only touches ColumnVisibility here, but its cached _uiState
+        // predates Transfers' write.
+        vm.SetColumnPreference("Elapsed", false);
+
+        var reloaded = _uiStore.Load();
+        Assert.True(reloaded.CompactDensity, "Transfers' density change must survive Tasks' column-preference save");
+        Assert.True(reloaded.ColumnVisibility.TryGetValue("Elapsed", out var elapsedVisible),
+            "Tasks' own column preference must be saved");
+        Assert.False(elapsedVisible);
+    }
+
     // Issue #24 acceptance (Tasks leg): keyed reconciliation must update a
     // surviving row's holder IN PLACE — no CollectionChanged event, no new
     // holder instance — so DataGrid selection survives a value-change poll.

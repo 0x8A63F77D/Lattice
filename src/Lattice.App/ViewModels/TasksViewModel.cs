@@ -20,10 +20,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     private readonly UiStateStore _uiStateStore;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
-    // The persisted UI-preference record, loaded once at construction. This VM
-    // owns the load-mutate-save cycle for the fields it consumes (CompactDensity,
-    // ColumnVisibility); other fields (ColumnWidths) ride along untouched so a
-    // save here never clobbers state owned by a future consumer.
+    // The persisted UI-preference record, loaded once at construction and used
+    // for DISPLAY reads only (GetColumnPreference). Every write funnels through
+    // UiStateStore.Update, which re-loads fresh before mutating — this cached
+    // copy would otherwise go stale the moment another UiStateStore consumer
+    // (TransfersViewModel, sharing the same store/file) saves its own
+    // preference, and a save from here would clobber it (Codex P2, PR #45).
     private UiState _uiState;
 
     // Episode semantics live in PartialBarPolicy, the call protocol (current/
@@ -88,8 +90,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
 
     partial void OnIsCompactChanged(bool value)
     {
-        _uiState = _uiState with { CompactDensity = value };
-        _uiStateStore.Save(_uiState); // best-effort: a failed save costs only persistence
+        _uiState = _uiStateStore.Update(s => s with { CompactDensity = value });
     }
 
     /// <summary>
@@ -105,9 +106,11 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     /// (TasksView's overflow-menu toggle is the only caller).</summary>
     public void SetColumnPreference(string columnKey, bool visible)
     {
-        var visibility = new Dictionary<string, bool>(_uiState.ColumnVisibility) { [columnKey] = visible };
-        _uiState = _uiState with { ColumnVisibility = visibility };
-        _uiStateStore.Save(_uiState); // best-effort, as above
+        _uiState = _uiStateStore.Update(s =>
+        {
+            var visibility = new Dictionary<string, bool>(s.ColumnVisibility) { [columnKey] = visible };
+            return s with { ColumnVisibility = visibility };
+        });
     }
 
     [RelayCommand]

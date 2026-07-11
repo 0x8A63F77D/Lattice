@@ -274,7 +274,7 @@ public class TransfersViewModelTests : IAsyncLifetime
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
 
         await Wait.UntilAsync(
-            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 2, 1),
+            () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 2, 1),
             "partial bar should appear for the AuthFailed host with B's coverage counted");
         Assert.True(vm.ShowPartialBar);
         Assert.False(vm.IsUpdateStale, "AuthFailed is not a Retrying/Unreachable staleness signal");
@@ -294,7 +294,7 @@ public class TransfersViewModelTests : IAsyncLifetime
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
 
         await Wait.UntilAsync(
-            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 2, 2, 0),
+            () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 2, 2, 0),
             "partial bar should reappear: the unreachable id-set changed");
         Assert.True(vm.ShowPartialBar);
     }
@@ -326,7 +326,7 @@ public class TransfersViewModelTests : IAsyncLifetime
 
         await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
         await Wait.UntilAsync(
-            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 2),
             "A parks in AuthFailed while B and C feed the grid");
         Assert.True(vm.ShowPartialBar);
 
@@ -353,7 +353,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         // because the covered set shrank from {B, C} to {B}.
         await Wait.UntilAsync(
             () => vm.ShowPartialBar
-                  && vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+                  && vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 1),
             "the bar must reappear: the covered set shrank even though the unreachable set stayed {A}");
     }
 
@@ -411,10 +411,38 @@ public class TransfersViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task IsCompact_toggle_preserves_a_column_preference_saved_by_another_view_model_after_construction()
+    {
+        // Codex P2 (PR #45): both TasksViewModel and TransfersViewModel load a
+        // UiState snapshot once at construction and, pre-fix, wrote the WHOLE
+        // cached snapshot back on every change. Here a Tasks VM (sharing the
+        // same UiStateStore/path, as ShellViewModel wires them in production)
+        // saves a column preference AFTER `vm` already cached its own snapshot
+        // — a stale whole-snapshot Save from `vm` must not drop it.
+        AddHost("host-a", new FakeGuiRpcClient());
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading);
+
+        using var tasksVm = new TasksViewModel(_store, _clock, _uiStore);
+        tasksVm.SetColumnPreference("Elapsed", false);
+
+        // Transfers only ever touches CompactDensity, but its cached _uiState
+        // predates Tasks' write.
+        vm.IsCompact = true;
+
+        var reloaded = _uiStore.Load();
+        Assert.True(reloaded.CompactDensity, "Transfers' own density change must be saved");
+        Assert.True(reloaded.ColumnVisibility.TryGetValue("Elapsed", out var elapsedVisible),
+            "Tasks' column preference must survive Transfers' later save");
+        Assert.False(elapsedVisible);
+    }
+
+    [Fact]
     public async Task Partial_bar_coverage_counts_only_hosts_feeding_the_grid()
     {
         // Mirrors TasksViewModelTests' identical-name fact (Codex P2): the
-        // covered count {2} in PartialFmt must describe the hosts whose
+        // covered count {2} in TransfersPartialFmt must describe the hosts whose
         // transfers are actually in the grid (Connected AND snapshotted — the
         // exact set Rows are built from), not "total minus unreachable-tier".
         var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
@@ -436,7 +464,7 @@ public class TransfersViewModelTests : IAsyncLifetime
 
         await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
         await Wait.UntilAsync(
-            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 2),
+            () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 2),
             "A parks in AuthFailed while B and C feed the grid");
 
         // Hold B in the Retrying tier deterministically: its live poll AND every
@@ -457,7 +485,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         // Unreachable tier is still just {A} (B is Retrying, below the tier),
         // but coverage must now count ONLY C — the sole host feeding the grid.
         await Wait.UntilAsync(
-            () => vm.PartialBarText == string.Format(Strings.PartialFmt, 1, 3, 1),
+            () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 1),
             "covered count should shrink to the hosts actually in the grid");
     }
 }

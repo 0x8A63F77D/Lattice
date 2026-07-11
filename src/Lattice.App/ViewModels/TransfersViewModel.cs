@@ -24,10 +24,13 @@ public sealed partial class TransfersViewModel : ObservableObject, IDisposable
     private readonly UiStateStore _uiStateStore;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
-    // The persisted UI-preference record, loaded once at construction. This VM
-    // only consumes CompactDensity (no column visibility for Transfers); other
-    // fields ride along untouched so a save here never clobbers state owned by
-    // another view.
+    // The persisted UI-preference record, loaded once at construction and used
+    // for DISPLAY reads only. This VM only consumes CompactDensity (no column
+    // visibility for Transfers), but its write funnels through
+    // UiStateStore.Update, which re-loads fresh before mutating — this cached
+    // copy would otherwise go stale the moment another UiStateStore consumer
+    // (TasksViewModel, sharing the same store/file) saves its own preference,
+    // and a save from here would clobber it (Codex P2, PR #45).
     private UiState _uiState;
 
     // Episode semantics live in PartialBarPolicy, the call protocol (current/
@@ -88,8 +91,7 @@ public sealed partial class TransfersViewModel : ObservableObject, IDisposable
 
     partial void OnIsCompactChanged(bool value)
     {
-        _uiState = _uiState with { CompactDensity = value };
-        _uiStateStore.Save(_uiState); // best-effort: a failed save costs only persistence
+        _uiState = _uiStateStore.Update(s => s with { CompactDensity = value });
     }
 
     [RelayCommand]
@@ -170,7 +172,7 @@ public sealed partial class TransfersViewModel : ObservableObject, IDisposable
         if (ShowPartialBar)
         {
             PartialBarText = string.Format(
-                Strings.PartialFmt, unreachableIds.Count, _store.Hosts.Count, coveredIds.Count);
+                Strings.TransfersPartialFmt, unreachableIds.Count, _store.Hosts.Count, coveredIds.Count);
         }
 
         // Overlay choice (loading skeleton vs empty message vs neither) is

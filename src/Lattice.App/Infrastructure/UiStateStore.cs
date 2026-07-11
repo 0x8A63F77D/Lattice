@@ -57,6 +57,21 @@ public sealed class UiStateStore
         }
     }
 
+    /// <summary>Read-modify-write: loads the current state fresh, applies
+    /// <paramref name="mutate"/>, saves the result, and returns the state it
+    /// attempted to save. The fresh load is the point: a caller that instead
+    /// mutates its own cached snapshot and calls <see cref="Save"/> can clobber
+    /// a preference another consumer saved since that snapshot was loaded — the
+    /// second writer's stale copy of the first writer's fields wins (Codex P2,
+    /// PR #45). Every consumer with more than one write site must funnel
+    /// through here rather than cache-mutate-Save.</summary>
+    public UiState Update(Func<UiState, UiState> mutate)
+    {
+        UiState updated = mutate(Load());
+        Save(updated); // best-effort: a failed save costs only persistence
+        return updated;
+    }
+
     /// <summary>Saves UI state. Returns false on write failure, never throws.</summary>
     public bool Save(UiState state)
     {

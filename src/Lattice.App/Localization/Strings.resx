@@ -513,6 +513,9 @@
   <data name="TransfersEmptyCaption" xml:space="preserve">
     <value>Uploads and downloads will appear here while in progress.</value>
   </data>
+  <data name="TransfersPartialFmt" xml:space="preserve">
+    <value>{0} of {1} hosts aren't reachable — transfers below cover {2} hosts.</value>
+  </data>
   <data name="TransfersProgressFmt" xml:space="preserve">
     <value>{0} / {1} MB</value>
   </data>
