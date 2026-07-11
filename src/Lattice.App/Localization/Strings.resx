@@ -165,6 +165,10 @@
   <data name="AppTitle" xml:space="preserve">
     <value>Lattice</value>
   </data>
+  <!-- ===== EventLog ===== -->
+  <data name="EventLogCountsFmt" xml:space="preserve">
+    <value>{0} messages · {1} reachable hosts</value>
+  </data>
   <!-- ===== FirstRun ===== -->
   <data name="FirstRunAddHost" xml:space="preserve">
     <value>Add a host</value>

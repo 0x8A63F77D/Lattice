@@ -1,4 +1,3 @@
-using System.Reflection;
 using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
 using Lattice.Core;
@@ -195,7 +194,7 @@ public class HostStoreTests : IAsyncLifetime
         store.MessagesReceived += (_, e) => received = e;
 
         var batch = new[] { TestData.MakeMessage(1), TestData.MakeMessage(2) };
-        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, batch));
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, batch));
 
         // Marshaling contract: nothing is delivered until the UI queue runs.
         Assert.Null(received);
@@ -218,7 +217,7 @@ public class HostStoreTests : IAsyncLifetime
         var received = 0;
         store.MessagesReceived += (_, _) => received++;
 
-        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
         queue.Drain();
 
         // Batches arrive every poll tick; forwarding one must NOT rebuild the
@@ -237,7 +236,7 @@ public class HostStoreTests : IAsyncLifetime
         var received = 0;
         store.MessagesReceived += (_, _) => received++;
 
-        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
         store.Dispose();
         queue.Drain();
 
@@ -255,24 +254,9 @@ public class HostStoreTests : IAsyncLifetime
 
         // HostId absent from the store (as after a removal that raced the queued
         // batch). The Find guard drops it, same as the status/snapshot paths.
-        RaiseManagerMessagesAdded(new MessagesAddedEventArgs(Guid.NewGuid(), [TestData.MakeMessage(1)]));
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(Guid.NewGuid(), [TestData.MakeMessage(1)]));
         queue.Drain();
 
         Assert.Equal(0, received);
-    }
-
-    // HostStore forwards HostMonitorManager.MessagesAdded as MessagesReceived. Real
-    // polling couples that event with a SnapshotUpdated (which DOES raise Changed)
-    // on every tick, so the forwarding contract — Find guard, disposed guard, and
-    // the Changed decoupling — can only be exercised in isolation by raising the
-    // manager's event on its own. The event is public but only its declaring type
-    // may invoke it, so the test reaches the compiler's field-like backing delegate
-    // by reflection. This keeps the four cases fully synchronous and deterministic.
-    private void RaiseManagerMessagesAdded(MessagesAddedEventArgs args)
-    {
-        FieldInfo field = typeof(HostMonitorManager)
-            .GetField(nameof(HostMonitorManager.MessagesAdded), BindingFlags.Instance | BindingFlags.NonPublic)!;
-        var handler = (EventHandler<MessagesAddedEventArgs>?)field.GetValue(_manager);
-        handler?.Invoke(_manager, args);
     }
 }
