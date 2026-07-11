@@ -33,6 +33,7 @@ ICONS=(
   "dismiss|Dismiss|regular"
   "play|Play|regular"
   "pause|Pause|regular"
+  "hand_right|Hand Right|regular"
   "clock|Clock|regular"
   "arrow_upload|Arrow Upload|regular"
   "warning|Warning|filled"
