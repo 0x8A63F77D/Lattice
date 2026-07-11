@@ -130,77 +130,77 @@
     <Panel>
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
                 ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True"
-                LoadingRow="OnLoadingRow">
+                LoadingRow="OnLoadingRow" UnloadingRow="OnUnloadingRow">
         <DataGrid.Columns>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
-                               Binding="{Binding Project}" Width="108" />
+                               Binding="{Binding Data.Project}" Width="108" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}"
-                               Binding="{Binding Application}" Width="118" />
+                               Binding="{Binding Data.Application}" Width="118" />
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}"
                                    Width="*" MinWidth="160">
             <DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:TaskRowViewModel">
-                <TextBlock Text="{Binding Name}" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+              <DataTemplate x:DataType="vm:TaskRow">
+                <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.Name}" />
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="112">
             <DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:TaskRowViewModel">
+              <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                   <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
-                    <Border Classes="progressFill" Classes.suspended="{Binding IsSuspended}"
+                    <Border Classes="progressFill" Classes.suspended="{Binding Data.IsSuspended}"
                             HorizontalAlignment="Left" Height="3" CornerRadius="2"
-                            Width="{Binding Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
+                            Width="{Binding Data.Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
                   </Border>
-                  <TextBlock Text="{Binding PercentText}" FontSize="12" Classes="numeric" />
+                  <TextBlock Text="{Binding Data.PercentText}" FontSize="12" Classes="numeric" />
                 </StackPanel>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
-                               Binding="{Binding ElapsedText}" Width="68" />
+                               Binding="{Binding Data.ElapsedText}" Width="68" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
-                               Binding="{Binding RemainingText}" Width="74" />
+                               Binding="{Binding Data.RemainingText}" Width="74" />
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100">
             <DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:TaskRowViewModel">
+              <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                   <PathIcon Width="10" Height="10" Data="{StaticResource IconWarningFilled}"
-                            IsVisible="{Binding IsDeadlineAtRisk}"
+                            IsVisible="{Binding Data.IsDeadlineAtRisk}"
                             Foreground="{DynamicResource LatticeWarningFgBrush}" />
-                  <TextBlock Text="{Binding DeadlineText}" FontSize="12"
-                             Classes.atRiskText="{Binding IsDeadlineAtRisk}" />
+                  <TextBlock Text="{Binding Data.DeadlineText}" FontSize="12"
+                             Classes.atRiskText="{Binding Data.IsDeadlineAtRisk}" />
                 </StackPanel>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="112">
             <DataGridTemplateColumn.CellTemplate>
-              <DataTemplate x:DataType="vm:TaskRowViewModel">
+              <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                   <Panel Width="12" Height="12">
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconPlayRegular}"
                               Foreground="{DynamicResource LatticeSuccessBrush}"
-                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Running}" />
+                              IsVisible="{Binding Data.StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Running}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconClockRegular}"
                               Foreground="{DynamicResource LatticeNeutralFgBrush}"
-                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Waiting}" />
+                              IsVisible="{Binding Data.StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Waiting}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconPauseRegular}"
                               Foreground="{DynamicResource LatticeTextSecondaryBrush}"
-                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Suspended}" />
+                              IsVisible="{Binding Data.StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Suspended}" />
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowUploadRegular}"
                               Foreground="{DynamicResource LatticeAccentBrush}"
-                              IsVisible="{Binding StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Uploading}" />
+                              IsVisible="{Binding Data.StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Uploading}" />
                   </Panel>
-                  <TextBlock Text="{Binding StateText}" FontSize="12" />
+                  <TextBlock Text="{Binding Data.StateText}" FontSize="12" />
                 </StackPanel>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
-                               Binding="{Binding Host}" Width="76"
+                               Binding="{Binding Data.Host}" Width="76"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>
       </DataGrid>

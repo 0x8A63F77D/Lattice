@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
@@ -194,12 +195,45 @@ public partial class TasksView : UserControl
             vm.DismissPartialCommand.Execute(null);
     }
 
+    // Post-retrofit, DataContext is a TaskRow HOLDER whose Data swaps in place
+    // on value-change polls (CollectionReconciler.Apply's Update op) — the
+    // DataGrid does NOT re-run LoadingRow for that, since the row item's
+    // identity never changes. Row classes would otherwise go stale the moment
+    // a task's at-risk/suspended state flips without the row leaving the grid.
+    // Fix: track each loaded row's holder and re-apply classes on its
+    // PropertyChanged(Data); unsubscribe on UnloadingRow so recycled rows
+    // don't accumulate handlers, and guard the (rare, recycling-only) case of
+    // a row being loaded again before its previous subscription was cleared.
+    private readonly Dictionary<DataGridRow, (TaskRow Holder, PropertyChangedEventHandler Handler)> _rowSubscriptions = new();
+
     private void OnLoadingRow(object? sender, DataGridRowEventArgs e)
     {
-        if (e.Row.DataContext is not TaskRowViewModel row)
+        if (_rowSubscriptions.Remove(e.Row, out var stale))
+            stale.Holder.PropertyChanged -= stale.Handler;
+
+        if (e.Row.DataContext is not TaskRow holder)
             return;
-        e.Row.Classes.Set("atRisk", row.IsDeadlineAtRisk);
-        e.Row.Classes.Set("suspended", row.IsSuspended);
+
+        ApplyRowClasses(e.Row, holder.Data);
+        PropertyChangedEventHandler handler = (_, args) =>
+        {
+            if (args.PropertyName == nameof(TaskRow.Data))
+                ApplyRowClasses(e.Row, holder.Data);
+        };
+        holder.PropertyChanged += handler;
+        _rowSubscriptions[e.Row] = (holder, handler);
+    }
+
+    private void OnUnloadingRow(object? sender, DataGridRowEventArgs e)
+    {
+        if (_rowSubscriptions.Remove(e.Row, out var sub))
+            sub.Holder.PropertyChanged -= sub.Handler;
+    }
+
+    private static void ApplyRowClasses(DataGridRow row, TaskRowViewModel data)
+    {
+        row.Classes.Set("atRisk", data.IsDeadlineAtRisk);
+        row.Classes.Set("suspended", data.IsSuspended);
     }
 
     // Ctrl+F stays imperative on purpose: focusing a named control is a
