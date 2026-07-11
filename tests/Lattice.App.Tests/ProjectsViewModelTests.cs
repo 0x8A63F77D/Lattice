@@ -1,4 +1,5 @@
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
@@ -204,6 +205,34 @@ public class ProjectsViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() => vm.Rows.Count == 2);
 
         Assert.Equal(["High", "Low"], vm.Rows.Select(r => r.Data.Name));
+    }
+
+    [Fact]
+    public async Task Partial_bar_speaks_of_projects_not_tasks()
+    {
+        // Codex P3 (PR #46 round 2): the banner copy on the Projects page must
+        // say "projects below cover ...", not the Tasks view's "tasks below
+        // cover ..." — the shared PartialFmt is user-visibly wrong here.
+        // Arrangement stamps TasksViewModelTests' partial-bar baseline:
+        // A parks in AuthFailed (unreachable tier), B feeds the grid.
+        var fakeA = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var fakeB = FakeWithProject("http://p/", "P", rac: 10);
+        var hostA = AddHost("host-a", fakeA);
+        var hostB = AddHost("host-b", fakeB);
+        var vm = MakeVm();
+        _manager.Start();
+
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
+
+        // Condition-driven: the store Waits above observe HostStore fields, which
+        // are set BEFORE Changed fires — the VM lags the store by one Rebuild.
+        await Wait.UntilAsync(
+            () => vm.PartialBarText == string.Format(Strings.ProjectsPartialFmt, 1, 2, 1),
+            "the Projects partial bar should use the projects-below copy");
+        Assert.True(vm.ShowPartialBar);
     }
 
     [Fact]

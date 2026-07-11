@@ -150,8 +150,10 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         ShowPartialBar = _partialBar.Advance(slice.UnreachableIds, slice.CoveredIds, Scope.IsAllHosts);
         if (ShowPartialBar)
         {
+            // Projects-specific copy ("projects below cover ..."): the shared
+            // PartialFmt says "tasks below", wrong on this page (Codex P3).
             PartialBarText = string.Format(
-                Strings.PartialFmt, slice.UnreachableIds.Count, _store.Hosts.Count, slice.CoveredIds.Count);
+                Strings.ProjectsPartialFmt, slice.UnreachableIds.Count, _store.Hosts.Count, slice.CoveredIds.Count);
         }
 
         // Overlay choice (loading skeleton vs empty message vs neither) is
