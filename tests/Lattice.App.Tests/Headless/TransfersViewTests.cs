@@ -28,7 +28,7 @@ public class TransfersViewTests
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
         uiState ??= new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
-        var vm = new TransfersViewModel(store, clock, uiState);
+        var vm = new TransfersViewModel(store, clock, new DensityPreference(uiState));
         var view = new TransfersView { DataContext = vm };
         // 1280px matches ShellWindow's default width, same rationale as TasksViewTests.
         var window = new Window { Width = 1280, Height = 800, Content = view };

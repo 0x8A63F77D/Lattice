@@ -9,23 +9,27 @@ namespace Lattice.App.ViewModels;
 
 /// <summary>
 /// Scopes, merges, filters, sorts and counts tasks across one or all hosts for
-/// the Tasks view DataGrid. Takes (HostStore, IUiClock, UiStateStore) only —
-/// shell-agnostic and independently testable; ShellViewModel pushes
-/// <see cref="Scope"/> on change (design rule: selecting a host scopes every view).
+/// the Tasks view DataGrid. Takes (HostStore, IUiClock, UiStateStore,
+/// DensityPreference) only — shell-agnostic and independently testable;
+/// ShellViewModel pushes <see cref="Scope"/> on change (design rule: selecting
+/// a host scopes every view).
 /// </summary>
 public sealed partial class TasksViewModel : ObservableObject, IDisposable
 {
     private readonly HostStore _store;
     private readonly IUiClock _clock;
     private readonly UiStateStore _uiStateStore;
+    private readonly DensityPreference _density;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // The persisted UI-preference record, loaded once at construction and used
-    // for DISPLAY reads only (GetColumnPreference). Every write funnels through
-    // UiStateStore.Update, which re-loads fresh before mutating — this cached
-    // copy would otherwise go stale the moment another UiStateStore consumer
-    // (TransfersViewModel, sharing the same store/file) saves its own
-    // preference, and a save from here would clobber it (Codex P2, PR #45).
+    // for DISPLAY reads only (GetColumnPreference — ColumnVisibility). Every
+    // write funnels through UiStateStore.Update, which re-loads fresh before
+    // mutating — this cached copy would otherwise go stale the moment another
+    // UiStateStore consumer saves its own preference, and a save from here
+    // would clobber it (Codex P2, PR #45). Density itself is no longer read
+    // from here: DensityPreference (shared with TransfersViewModel) is the
+    // single owner of that field (Codex round-3 P2, PR #45).
     private UiState _uiState;
 
     // Episode semantics live in PartialBarPolicy, the call protocol (current/
@@ -33,17 +37,19 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     // holds the instance.
     private readonly PartialBarState _partialBar = new();
 
-    public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore)
+    public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore, DensityPreference density)
     {
         _store = store;
         _clock = clock;
         _uiStateStore = uiStateStore;
         _uiState = uiStateStore.Load();
-        // Field write, not property: restoring the persisted choice must not
+        _density = density;
+        // Field write, not property: restoring the shared preference must not
         // re-save it through OnIsCompactChanged.
-        _isCompact = _uiState.CompactDensity;
+        _isCompact = density.Value;
         store.Changed += OnStoreChanged;
         clock.Tick += OnTick;
+        density.Changed += OnDensityChanged;
         Rebuild();
     }
 
@@ -82,16 +88,21 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     [ObservableProperty] private string _loadingText = "";
 
     /// <summary>Density toggle for the Tasks DataGrid (compact = smaller row height).
-    /// Restored from UiStateStore at construction; persisted on every change.</summary>
+    /// Mirrors the shared <see cref="DensityPreference"/> for XAML binding —
+    /// restored from it at construction, pushed to it on every local change,
+    /// and pulled back from it whenever TransfersViewModel changes it
+    /// (Codex round-3 P2, PR #45).</summary>
     [ObservableProperty] private bool _isCompact;
 
     partial void OnFilterTextChanged(string value) => Rebuild();
     partial void OnStateFilterChanged(TaskStateKind? value) => Rebuild();
 
-    partial void OnIsCompactChanged(bool value)
-    {
-        _uiState = _uiStateStore.Update(s => s with { CompactDensity = value });
-    }
+    partial void OnIsCompactChanged(bool value) => _density.Set(value);
+
+    // CommunityToolkit's generated setter no-ops when the new value equals the
+    // current one, so pulling _density.Value back in here on every Changed
+    // cannot re-enter OnIsCompactChanged / _density.Set — no feedback loop.
+    private void OnDensityChanged(object? sender, EventArgs e) => IsCompact = _density.Value;
 
     /// <summary>
     /// The user's explicit show/hide choice for a column ("Project", "Elapsed", ...),
@@ -226,5 +237,6 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     {
         _store.Changed -= OnStoreChanged;
         _clock.Tick -= OnTick;
+        _density.Changed -= OnDensityChanged;
     }
 }

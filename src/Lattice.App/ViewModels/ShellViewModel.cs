@@ -27,9 +27,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _store = store;
         _clock = clock;
         Settings = new SettingsViewModel(registry, store, clientFactory);
-        Tasks = new TasksViewModel(store, clock, uiState);
+        // ONE DensityPreference, shared: the single owner of the global density
+        // preference, so a toggle in either view reaches the other in-session
+        // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a
+        // fixes its row heights), so it does not take the shared preference.
+        var density = new DensityPreference(uiState);
+        Tasks = new TasksViewModel(store, clock, uiState, density);
         Projects = new ProjectsViewModel(store, clock);
-        Transfers = new TransfersViewModel(store, clock, uiState);
+        Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);
         Views =
         [

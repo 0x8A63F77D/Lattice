@@ -26,6 +26,7 @@ public class TransfersViewModelTests : IAsyncLifetime
     private HostStore _store = null!;
     private ManualUiClock _clock = null!;
     private UiStateStore _uiStore = null!;
+    private DensityPreference _density = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -34,6 +35,10 @@ public class TransfersViewModelTests : IAsyncLifetime
         _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
         _clock = new ManualUiClock();
         _uiStore = new UiStateStore(_uiPath);
+        // Shared, as ShellViewModel wires Tasks/Transfers in production — the
+        // clobber-direction fact below constructs a second, sibling VM and
+        // relies on both funneling through the same DensityPreference/store.
+        _density = new DensityPreference(_uiStore);
         return ValueTask.CompletedTask;
     }
 
@@ -52,7 +57,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         return host;
     }
 
-    private TransfersViewModel MakeVm() => new(_store, _clock, _uiStore);
+    private TransfersViewModel MakeVm() => new(_store, _clock, _density);
 
     [Fact]
     public async Task Scoping_to_a_host_hides_the_other_hosts_rows()
@@ -419,16 +424,18 @@ public class TransfersViewModelTests : IAsyncLifetime
         // same UiStateStore/path, as ShellViewModel wires them in production)
         // saves a column preference AFTER `vm` already cached its own snapshot
         // — a stale whole-snapshot Save from `vm` must not drop it.
+        // DensityPreference.Set and UiStateStore.Update both re-load fresh
+        // before persisting, so this holds regardless of write order.
         AddHost("host-a", new FakeGuiRpcClient());
         var vm = MakeVm();
         _manager.Start();
         await Wait.UntilAsync(() => !vm.IsLoading);
 
-        using var tasksVm = new TasksViewModel(_store, _clock, _uiStore);
+        using var tasksVm = new TasksViewModel(_store, _clock, _uiStore, _density);
         tasksVm.SetColumnPreference("Elapsed", false);
 
-        // Transfers only ever touches CompactDensity, but its cached _uiState
-        // predates Tasks' write.
+        // Transfers only ever touches CompactDensity (via the shared
+        // DensityPreference), predating Tasks' ColumnVisibility write.
         vm.IsCompact = true;
 
         var reloaded = _uiStore.Load();

@@ -249,6 +249,25 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Density_toggle_on_one_view_syncs_to_the_other_in_session()
+    {
+        // Codex round-3 P2 (PR #45): TasksViewModel and TransfersViewModel each
+        // cached IsCompact at construction with no way to observe a later change
+        // from the other, sibling, long-lived view — flipping density in one
+        // left the other showing the OLD density until app restart.
+        // ShellViewModel wires both through one shared DensityPreference now,
+        // so a toggle on either side must reach the other within the session.
+        Assert.False(_shell.Tasks.IsCompact);
+        Assert.False(_shell.Transfers.IsCompact);
+
+        _shell.Transfers.IsCompact = true;
+        Assert.True(_shell.Tasks.IsCompact);
+
+        _shell.Tasks.IsCompact = false;
+        Assert.False(_shell.Transfers.IsCompact);
+    }
+
+    [Fact]
     public async Task TasksCount_mirrors_the_tasks_view_models_row_count()
     {
         Assert.Equal(0, _shell.TasksCount);
