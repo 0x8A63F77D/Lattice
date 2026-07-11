@@ -481,6 +481,28 @@
   <data name="TasksTitle" xml:space="preserve">
     <value>Tasks</value>
   </data>
+  <!-- ===== Transfers ===== -->
+  <data name="TransfersDownload" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="TransfersProgressFmt" xml:space="preserve">
+    <value>{0} / {1} MB</value>
+  </data>
+  <data name="TransfersRetryFmt" xml:space="preserve">
+    <value>Retry in {0} (attempt {1})</value>
+  </data>
+  <data name="TransfersSpeedFmt" xml:space="preserve">
+    <value>{0} MB/s</value>
+  </data>
+  <data name="TransfersStatusActive" xml:space="preserve">
+    <value>Transferring</value>
+  </data>
+  <data name="TransfersStatusQueued" xml:space="preserve">
+    <value>Queued</value>
+  </data>
+  <data name="TransfersUpload" xml:space="preserve">
+    <value>Upload</value>
+  </data>
   <!-- ===== Time ===== -->
   <data name="UpdatedHoursFmt" xml:space="preserve">
     <value>Updated {0}h ago</value>
