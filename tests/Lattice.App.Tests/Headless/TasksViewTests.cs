@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
@@ -315,6 +316,39 @@ public class TasksViewTests
         Assert.Contains(Strings.ColApplication, headers);
         Assert.Equal(9, headers.Count);
         window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Auto_hidden_column_shows_unchecked_and_one_toggle_reveals_it()
+    {
+        var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
+        var uiState = new UiStateStore(uiPath);
+        var (window, view, vm, _, _, _) = MakeView(uiState);
+        // 1050 sits in the design's 1000–1099 band: Elapsed auto-hides on the
+        // breakpoint (no explicit preference), Application stays visible.
+        window.Width = 1050;
+        window.Show();
+        Layout(window);
+
+        Assert.DoesNotContain(Strings.ColElapsed, VisibleHeaders(window));
+        var elapsedItem = ((MenuFlyout)view.OverflowButton.Flyout!).Items.OfType<MenuItem>()
+            .Single(i => (string?)i.Tag == "Elapsed");
+        // The checkbox mirrors EFFECTIVE visibility, not the raw preference:
+        // an auto-hidden column reading "checked" would need TWO clicks to show
+        // (the first only persists false with no visible change).
+        Assert.False(elapsedItem.IsChecked);
+
+        // One toggle, decomposed as a real click is: flip IsChecked, raise Click.
+        elapsedItem.IsChecked = true;
+        elapsedItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Layout(window);
+
+        Assert.Contains(Strings.ColElapsed, VisibleHeaders(window));
+        Assert.True(elapsedItem.IsChecked);
+        Assert.True(vm.GetColumnPreference("Elapsed"));
+        Assert.True(uiState.Load().ColumnVisibility["Elapsed"]);
+        window.Close();
+        File.Delete(uiPath);
     }
 
     [AvaloniaFact]

@@ -122,18 +122,14 @@ public partial class TasksView : UserControl
         Grid.Columns.Single(c => Equals(c.Header, header));
 
     // Restores persisted overflow-menu choices when the VM attaches: preference
-    // dictionary, menu checkbox state (unchosen columns show checked — the
-    // all-visible default), and the resulting column visibility.
+    // dictionary, then the resulting column visibility (which also syncs the
+    // menu checkboxes to the effective outcome).
     private void LoadColumnPreferences()
     {
         if (DataContext is not TasksViewModel vm)
             return;
         foreach (var columnKey in _userColumnPreferences.Keys.ToList())
             _userColumnPreferences[columnKey] = vm.GetColumnPreference(columnKey);
-        if (OverflowButton.Flyout is MenuFlyout flyout)
-            foreach (var item in flyout.Items.OfType<MenuItem>())
-                if (item.Tag is string columnKey)
-                    item.IsChecked = _userColumnPreferences[columnKey] ?? true;
         ApplyColumnVisibility(BreakpointWidth);
     }
 
@@ -144,6 +140,22 @@ public partial class TasksView : UserControl
     {
         foreach (var (columnKey, column) in _columnsByTag)
             column.IsVisible = ColumnVisibilityPolicy.IsVisible(columnKey, width, _userColumnPreferences[columnKey]);
+        SyncOverflowCheckboxes();
+    }
+
+    // The overflow checkboxes mirror EFFECTIVE visibility (the policy result),
+    // not the raw preference: a breakpoint-hidden column reading "checked"
+    // would take two clicks to show — the first persists false with no visible
+    // change. Synced on every Apply so width changes keep them honest. Safe
+    // against feedback: the toggle handler is Click-based, and programmatic
+    // IsChecked writes do not raise Click.
+    private void SyncOverflowCheckboxes()
+    {
+        if (OverflowButton.Flyout is not MenuFlyout flyout)
+            return;
+        foreach (var item in flyout.Items.OfType<MenuItem>())
+            if (item.Tag is string columnKey && _columnsByTag.TryGetValue(columnKey, out var column))
+                item.IsChecked = column.IsVisible;
     }
 
     private void OnColumnVisibilityToggled(object? sender, RoutedEventArgs e)
