@@ -67,12 +67,14 @@ public class EventLogViewModelTests : IAsyncLifetime
     {
         var host = AddHost("host-a");
         var vm = MakeVm();
+        Assert.True(vm.IsEmpty);
 
         // Deliver out of order; rows must land in timestamp order.
         Raise(host.Id, Msg(2, 2, "second"), Msg(1, 1, "first"));
         _queue.Drain();
 
         Assert.Equal(["first", "second"], vm.Rows.Select(r => r.Data.Body));
+        Assert.False(vm.IsEmpty);
 
         // Reconnect at the VM level: the same batch re-fetched must dedup here —
         // no new rows, no CollectionChanged (identity preserved).
