@@ -23,13 +23,16 @@ public sealed record TaskRowViewModel(
     string StateText,
     bool IsDeadlineAtRisk,
     bool IsSuspended,
+    Guid HostId,
     string Host)
 {
+    public TaskRowKey Key => new(HostId, Name);
+
     /// <summary>
     /// Project a TaskSnapshot into a row suitable for binding to the DataGrid.
     /// Pure: all values computed from snapshot and host name, no I/O, no side effects.
     /// </summary>
-    public static TaskRowViewModel From(TaskSnapshot snap, string host)
+    public static TaskRowViewModel From(TaskSnapshot snap, Guid hostId, string host)
     {
         var r = snap.Result;
 
@@ -65,6 +68,7 @@ public sealed record TaskRowViewModel(
             StateText: TaskStateMapping.Text(stateKind, r),
             IsDeadlineAtRisk: snap.IsDeadlineAtRisk,
             IsSuspended: stateKind == TaskStateKind.Suspended,
+            HostId: hostId,
             Host: host);
     }
 

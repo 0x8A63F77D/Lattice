@@ -116,12 +116,13 @@ public class TasksViewTests
             Project: "p", Application: "a", Name: "at_risk_task", Fraction: 0.2, PercentText: "20%",
             ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "07-11 00:00",
             Deadline: DateTimeOffset.UtcNow.AddHours(1), StateKind: TaskStateKind.Running, StateText: "Running",
-            IsDeadlineAtRisk: true, IsSuspended: false, Host: "host-a");
-        vm.Rows.Add(atRiskRow);
+            IsDeadlineAtRisk: true, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        var atRiskHolder = new TaskRow(atRiskRow.Key, atRiskRow);
+        vm.Rows.Add(atRiskHolder);
         Layout(window);
 
         var row = window.GetVisualDescendants().OfType<DataGridRow>()
-            .Single(r => ReferenceEquals(r.DataContext, atRiskRow));
+            .Single(r => ReferenceEquals(r.DataContext, atRiskHolder));
         Assert.Contains("atRisk", row.Classes);
         window.Close();
     }
@@ -136,13 +137,80 @@ public class TasksViewTests
             Project: "p", Application: "a", Name: "susp_task", Fraction: 0.2, PercentText: "20%",
             ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "—",
             Deadline: null, StateKind: TaskStateKind.Suspended, StateText: "Suspended",
-            IsDeadlineAtRisk: false, IsSuspended: true, Host: "host-a");
-        vm.Rows.Add(suspendedRow);
+            IsDeadlineAtRisk: false, IsSuspended: true, HostId: Guid.NewGuid(), Host: "host-a");
+        var suspendedHolder = new TaskRow(suspendedRow.Key, suspendedRow);
+        vm.Rows.Add(suspendedHolder);
         Layout(window);
 
         var row = window.GetVisualDescendants().OfType<DataGridRow>()
-            .Single(r => ReferenceEquals(r.DataContext, suspendedRow));
+            .Single(r => ReferenceEquals(r.DataContext, suspendedHolder));
         Assert.Contains("suspended", row.Classes);
+        window.Close();
+    }
+
+    // Pins the row-class liveness fix (TasksView.axaml.cs OnLoadingRow):
+    // post-retrofit, an in-place Data update does NOT re-run LoadingRow (the
+    // row item's identity never changes), so classes must instead track the
+    // holder's PropertyChanged. Also pins that DataGrid selection survives
+    // the same in-place update, since both ride on holder identity.
+    [AvaloniaFact]
+    public void Row_going_at_risk_in_place_updates_the_row_class_and_keeps_selection()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        window.Show();
+
+        var initial = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "07-11 00:00",
+            Deadline: DateTimeOffset.UtcNow.AddHours(1), StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        var holder = new TaskRow(initial.Key, initial);
+        vm.Rows.Add(holder);
+        Layout(window);
+
+        view.Grid.SelectedItem = holder;
+        var dataGridRow = window.GetVisualDescendants().OfType<DataGridRow>()
+            .Single(r => ReferenceEquals(r.DataContext, holder));
+        Assert.DoesNotContain("atRisk", dataGridRow.Classes);
+
+        // Same holder, same Key — a keyed-reconcile Update op, not a
+        // remove+insert: the row never leaves the grid, so LoadingRow never
+        // re-fires for it.
+        holder.Data = holder.Data with { IsDeadlineAtRisk = true };
+        Layout(window);
+
+        Assert.Contains("atRisk", dataGridRow.Classes);
+        Assert.Same(holder, view.Grid.SelectedItem);
+        window.Close();
+    }
+
+    // Teardown-drain regression (quality review, post-#24-retrofit): navigating
+    // away from the Tasks page discards TasksView through the ContentControl
+    // DataTemplate WITHOUT changing Grid.ItemsSource, so the DataGrid never
+    // fires UnloadingRow for its realized rows — the row-class subscriptions
+    // would then pin orphaned DataGridRows to the long-lived TaskRow holders,
+    // growing unbounded across navigations. Detach must drain them all.
+    [AvaloniaFact]
+    public void Detaching_the_view_drains_all_row_class_subscriptions()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        window.Show();
+
+        var row = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "—",
+            Deadline: null, StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+        Assert.True(view.RowSubscriptionCount > 0, "a realized row should have subscribed");
+
+        // Mimic the shell's navigation teardown: the view leaves the visual
+        // tree while its ItemsSource stays untouched (no UnloadingRow fires).
+        window.Content = null;
+        Layout(window);
+
+        Assert.Equal(0, view.RowSubscriptionCount);
         window.Close();
     }
 
@@ -151,11 +219,12 @@ public class TasksViewTests
     {
         var (window, view, vm, _, _, _) = MakeView();
         window.Show();
-        vm.Rows.Add(new TaskRowViewModel(
+        var row1 = new TaskRowViewModel(
             Project: "p", Application: "a", Name: "t", Fraction: null, PercentText: "—",
             ElapsedText: "0s", RemainingText: "—", DeadlineText: "—",
             Deadline: null, StateKind: TaskStateKind.Waiting, StateText: "Waiting",
-            IsDeadlineAtRisk: false, IsSuspended: false, Host: "host-a"));
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row1.Key, row1));
         Layout(window);
 
         var row = window.GetVisualDescendants().OfType<DataGridRow>().Single();

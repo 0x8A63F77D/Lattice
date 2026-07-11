@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -122,8 +123,8 @@ public class TasksViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() => vm.Rows.Count == 2);
 
         Assert.True(vm.IsAllHostsScope);
-        Assert.Contains(vm.Rows, r => r.Name == "task_a" && r.Host == "host-a");
-        Assert.Contains(vm.Rows, r => r.Name == "task_b" && r.Host == "host-b");
+        Assert.Contains(vm.Rows, r => r.Data.Name == "task_a" && r.Data.Host == "host-a");
+        Assert.Contains(vm.Rows, r => r.Data.Name == "task_b" && r.Data.Host == "host-b");
     }
 
     [Fact]
@@ -146,7 +147,7 @@ public class TasksViewModelTests : IAsyncLifetime
         vm.Scope = new ScopeSelection(hostA.Id);
 
         Assert.False(vm.IsAllHostsScope);
-        Assert.Equal("task_a", Assert.Single(vm.Rows).Name);
+        Assert.Equal("task_a", Assert.Single(vm.Rows).Data.Name);
     }
 
     [Fact]
@@ -168,7 +169,7 @@ public class TasksViewModelTests : IAsyncLifetime
         _manager.Start();
         await Wait.UntilAsync(() => vm.Rows.Count == 3);
 
-        Assert.Equal(["sooner", "later", "no_deadline"], vm.Rows.Select(r => r.Name));
+        Assert.Equal(["sooner", "later", "no_deadline"], vm.Rows.Select(r => r.Data.Name));
     }
 
     [Fact]
@@ -192,7 +193,7 @@ public class TasksViewModelTests : IAsyncLifetime
 
         vm.FilterText = "seti";
 
-        Assert.Equal("alpha", Assert.Single(vm.Rows).Name);
+        Assert.Equal("alpha", Assert.Single(vm.Rows).Data.Name);
     }
 
     [Fact]
@@ -235,7 +236,7 @@ public class TasksViewModelTests : IAsyncLifetime
 
         vm.StateFilter = TaskStateKind.Suspended;
 
-        Assert.Equal("susp", Assert.Single(vm.Rows).Name);
+        Assert.Equal("susp", Assert.Single(vm.Rows).Data.Name);
     }
 
     [Fact]
@@ -401,7 +402,7 @@ public class TasksViewModelTests : IAsyncLifetime
 
         // Baseline: both hosts' rows merged.
         await Wait.UntilAsync(() => vm.Rows.Count == 3, "both hosts should contribute rows");
-        Assert.Contains(vm.Rows, r => r.Name == "b_task");
+        Assert.Contains(vm.Rows, r => r.Data.Name == "b_task");
 
         // Kill B the same way the partial-bar test does — poll failure, then auth
         // failure on reconnect — parking it in AuthFailed with its snapshot cached.
@@ -417,8 +418,8 @@ public class TasksViewModelTests : IAsyncLifetime
 
         // B's stale rows must vanish from the merge and from the counts.
         await Wait.UntilAsync(() => vm.Rows.Count == 2, "the dead host's stale rows should drop out");
-        Assert.DoesNotContain(vm.Rows, r => r.Name == "b_task");
-        Assert.Equal(["a_running", "a_waiting"], vm.Rows.Select(r => r.Name).Order());
+        Assert.DoesNotContain(vm.Rows, r => r.Data.Name == "b_task");
+        Assert.Equal(["a_running", "a_waiting"], vm.Rows.Select(r => r.Data.Name).Order());
         Assert.Equal(string.Format(Strings.CountsFmt, 2, 1, 0, 0), vm.CountsText);
 
         // And B now counts toward the partial-results bar (1 of 2 unreachable).
@@ -540,7 +541,7 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
 
         await Wait.UntilAsync(() => vm.Rows.Count == 1, "B's stale rows should drop out");
-        Assert.Equal("c_task", Assert.Single(vm.Rows).Name);
+        Assert.Equal("c_task", Assert.Single(vm.Rows).Data.Name);
 
         // Unreachable tier is still just {A} (B is Retrying, below the tier),
         // but coverage must now count ONLY C — the sole host feeding the grid.
@@ -705,5 +706,58 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.False(vm2.GetColumnPreference("Elapsed"));
         Assert.Null(vm2.GetColumnPreference("Project"));
         vm2.Dispose();
+    }
+
+    // Issue #24 acceptance (Tasks leg): keyed reconciliation must update a
+    // surviving row's holder IN PLACE — no CollectionChanged event, no new
+    // holder instance — so DataGrid selection survives a value-change poll.
+    [Fact]
+    public async Task Progress_change_updates_row_in_place_without_collection_events()
+    {
+        var activeTask = new ActiveTask(1, 0.25, 10, 90);
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetResults = _ => Task.FromResult<IReadOnlyList<Result>>(
+                [TestData.MakeResult(name: "wu_1") with { ActiveTask = activeTask }]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        var holder = vm.Rows[0];
+        var events = 0;
+        vm.Rows.CollectionChanged += (_, _) => events++;
+
+        activeTask = new ActiveTask(1, 0.75, 30, 90); // next poll reports progress
+        _store.RequestRefresh(null);
+        await Wait.UntilAsync(() => vm.Rows[0].Data.PercentText == "75%");
+
+        Assert.Equal(0, events);              // no Reset, no Remove+Add — issue #24
+        Assert.Same(holder, vm.Rows[0]);       // selection identity survives
+        Assert.Equal(0.75, holder.Data.Fraction);
+    }
+
+    [Fact]
+    public async Task Task_departure_removes_only_that_row()
+    {
+        IReadOnlyList<Result> results = [TestData.MakeResult(name: "wu_1"), TestData.MakeResult(name: "wu_2")];
+        var fake = new FakeGuiRpcClient { OnGetResults = _ => Task.FromResult(results) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        var survivor = vm.Rows.Single(r => r.Data.Name == "wu_2");
+        var actions = new List<NotifyCollectionChangedAction>();
+        vm.Rows.CollectionChanged += (_, e) => actions.Add(e.Action);
+
+        results = [TestData.MakeResult(name: "wu_2")];
+        _store.RequestRefresh(null);
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        Assert.Same(survivor, vm.Rows[0]);
+        Assert.Equal("wu_2", vm.Rows[0].Data.Name);
+        Assert.Equal([NotifyCollectionChangedAction.Remove], actions); // no Reset
     }
 }

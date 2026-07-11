@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 
@@ -46,7 +47,13 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         Rebuild();
     }
 
-    public ObservableCollection<TaskRowViewModel> Rows { get; } = [];
+    // Base-holder-typed collection: CollectionReconciler.Apply's generic
+    // signature requires ObservableCollection<RowHolder<TKey,TRow>> exactly
+    // (ObservableCollection<T> is invariant, and TaskRow is a closed subclass
+    // for XAML's benefit, not a type substitution). The factory below still
+    // creates real TaskRow instances, so DataContext at the view layer is
+    // always a TaskRow at runtime.
+    public ObservableCollection<RowHolder<TaskRowKey, TaskRowViewModel>> Rows { get; } = [];
 
     /// <summary>Pushed by ShellViewModel whenever the global rail scope changes.</summary>
     public ScopeSelection Scope
@@ -138,72 +145,83 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             : _store.Hosts.Where(h => h.Config.Id == Scope.HostId).ToList();
         IsAllHostsScope = Scope.IsAllHosts;
 
-        var reachable = scoped.Where(h =>
-            RailStateProjection.From(h.Status) == RailState.Connected).ToList();
+        // Per-host facts feed the shared F# aggregation core (ViewSlice.compute):
+        // host classification, row merge, coverage/staleness are all decided
+        // there so every data-view VM shares one implementation. Flags, not
+        // RailState — Lattice.App.Aggregation stays free of UI-layer types.
+        var facts = _store.Hosts.Select(h =>
+        {
+            var rail = RailStateProjection.From(h.Status);
+            var inScope = Scope.IsAllHosts || h.Config.Id == Scope.HostId;
+            var isRowSource = rail == RailState.Connected && h.Snapshot is not null;
+            // Positional construction: the F# record's compiler-generated
+            // constructor exposes camelCase parameter names (id, inScope, ...)
+            // that don't match the PascalCase field names C# named-argument
+            // syntax would need, so positional is the reliable path here.
+            return new HostFacts<TaskRowViewModel>(
+                h.Config.Id,
+                inScope,
+                isRowSource,
+                rail is RailState.Unreachable or RailState.AuthFailed,
+                rail is RailState.Retrying or RailState.Unreachable,
+                isRowSource ? h.Snapshot!.Timestamp : null,
+                // Rows for out-of-scope hosts are never consumed by the slice
+                // (AllRows/CoveredIds/timestamps all gate on InScope ∧
+                // IsRowSource), so skip materializing them — Rebuild runs on
+                // every 1 s tick (Codex P2, PR #37). Flags above deliberately
+                // keep all-host semantics.
+                inScope && isRowSource
+                    ? h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray()
+                    : []);
+        }).ToArray();
+        var slice = ViewSlice.compute(facts);
+        var allRows = slice.AllRows;
 
-        var allRows = reachable
-            .Where(h => h.Snapshot is not null)
-            .SelectMany(h => h.Snapshot!.Tasks.Select(t =>
-                TaskRowViewModel.From(t, h.Config.DisplayName)))
-            .ToList();
-
-        var rows = allRows
+        var target = allRows
             .Where(MatchesFilters)
             .OrderBy(r => r.Deadline is null)
             .ThenBy(r => r.Deadline)
-            .ToList();
+            .Select(r => (r.Key, r))
+            .ToArray();
 
-        // Replace the collection only when contents actually changed (rows are
-        // value-equal records, so SequenceEqual is a semantic comparison): the
-        // 1s tick also lands here, and an unconditional Clear()+Add would fire
-        // Reset + N Adds every second and reset a bound DataGrid's selection
-        // onto brand-new row instances.
-        if (!rows.SequenceEqual(Rows))
-        {
-            Rows.Clear();
-            foreach (var row in rows) Rows.Add(row);
-        }
+        // Keyed reconcile instead of replace: in-place Data updates keep
+        // holder identity (DataGrid selection) and steady-state polls raise
+        // no CollectionChanged at all — the SequenceEqual full-replace guard
+        // this superseded still fired Reset + N Adds on every 1s tick even
+        // when nothing changed (issue #24).
+        var existing = Rows.Select(h => (h.Key, h.Data)).ToArray();
+        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, target), (key, row) => new TaskRow(key, row));
 
         // Counts/at-risk cover the reachable, UNFILTERED set: a stable summary
         // that the text/state filter shouldn't perturb.
         var running = allRows.Count(r => r.StateKind == TaskStateKind.Running);
         var uploading = allRows.Count(r => r.StateKind == TaskStateKind.Uploading);
         var suspended = allRows.Count(r => r.StateKind == TaskStateKind.Suspended);
-        CountsText = string.Format(Strings.CountsFmt, allRows.Count, running, uploading, suspended);
+        CountsText = string.Format(Strings.CountsFmt, allRows.Length, running, uploading, suspended);
 
         var atRisk = allRows.Count(r => r.IsDeadlineAtRisk);
         AtRiskText = atRisk > 0 ? string.Format(Strings.AtRiskFmt, atRisk) : "";
 
         PollingText = string.Format(Strings.PollingFmt, _store.PollingIntervalSeconds);
 
-        var timestamps = reachable
-            .Where(h => h.Snapshot is not null)
-            .Select(h => h.Snapshot!.Timestamp)
-            .ToList();
         // Oldest of the scoped snapshots: the pessimistic "how stale could this
         // be" reading, not the newest arrival.
-        UpdatedText = timestamps.Count > 0 ? TimeText.UpdatedAgo(timestamps.Min(), _clock.Now) : "";
+        UpdatedText = slice.OldestTimestamp is { } oldest ? TimeText.UpdatedAgo(oldest, _clock.Now) : "";
 
-        IsUpdateStale = scoped.Any(h =>
-            RailStateProjection.From(h.Status) is RailState.Retrying or RailState.Unreachable);
-
-        var unreachableIds = _store.Hosts
-            .Where(h => RailStateProjection.From(h.Status) is RailState.Unreachable or RailState.AuthFailed)
-            .Select(h => h.Config.Id)
-            .ToHashSet();
+        IsUpdateStale = slice.IsUpdateStale;
 
         // "tasks below cover {2} hosts" must count the exact set Rows are
         // built from (Connected AND snapshotted; the bar only shows in the
-        // All-hosts scope, so `reachable` spans every host here) — NOT total
+        // All-hosts scope, so CoveredIds spans every host here) — NOT total
         // minus unreachable-tier, which would also count Retrying/Connecting
         // hosts whose tasks are not in the grid (Codex P2). This same covered
         // set also feeds the dismissal fingerprint below (Codex P2 round 2):
         // a dismissed bar must reappear when a covered host drops out, even
-        // if the unreachable tier itself never changes.
-        var coveredIds = reachable
-            .Where(h => h.Snapshot is not null)
-            .Select(h => h.Config.Id)
-            .ToHashSet();
+        // if the unreachable tier itself never changes. UnreachableIds spans
+        // ALL hosts regardless of scope (episode semantics) — that scope
+        // independence is ViewSlice's, not recomputed here.
+        var unreachableIds = slice.UnreachableIds;
+        var coveredIds = slice.CoveredIds;
 
         // Episode semantics (dismissal forgotten on full recovery; any
         // fingerprint change re-reports) are PartialBarPolicy's; the
@@ -227,7 +245,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         (IsLoading, IsEmpty) = TasksOverlayPolicy.Decide(
             [.. scoped.Select(h => new TasksOverlayPolicy.HostFacts(
                 RailStateProjection.From(h.Status), h.Snapshot is not null))],
-            allRows.Count > 0);
+            allRows.Length > 0);
         LoadingText = IsLoading
             ? string.Format(Strings.LoadingFromFmt, string.Join(", ", scoped.Select(h => h.Config.DisplayName)))
             : "";
