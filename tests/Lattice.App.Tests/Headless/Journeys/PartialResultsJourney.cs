@@ -37,11 +37,19 @@ public class PartialResultsJourney
         harness.Window.Show();
         harness.Layout();
 
-        await harness.SettleAsync(() => harness.Shell.Tasks.ShowPartialBar,
-            "the partial bar should appear once host A is AuthFailed and host B has snapshotted");
+        // Settle on the EXPECTED TEXT, not on ShowPartialBar alone (Codex P2):
+        // the bar becomes visible as soon as host A lands AuthFailed — possibly
+        // BEFORE host B's first snapshot has been posted and drained, in which
+        // case the covered count is still 0 and the text transiently reads
+        // (1, 2, 0). Waiting for the (1, 2, 1) text pins both halves: A counted
+        // unreachable AND B counted covered.
+        string bothSettled = string.Format(Strings.PartialFmt, 1, 2, 1);
+        await harness.SettleAsync(
+            () => harness.Shell.Tasks.ShowPartialBar && harness.Shell.Tasks.PartialBarText == bothSettled,
+            "the partial bar should read '1 of 2 unreachable, covering 1' once A is AuthFailed and B has snapshotted");
         harness.Layout();
 
-        Assert.Equal(string.Format(Strings.PartialFmt, 1, 2, 1), harness.Shell.Tasks.PartialBarText);
+        Assert.Equal(bothSettled, harness.Shell.Tasks.PartialBarText);
 
         harness.Shell.Tasks.DismissPartialCommand.Execute(null);
         Assert.False(harness.Shell.Tasks.ShowPartialBar);
@@ -54,11 +62,18 @@ public class PartialResultsJourney
         fakeB.OnGetCcStatus = () => throw new IOException("host b died");
         harness.Store.RequestRefresh(hostB.Id);
 
-        await harness.SettleAsync(() => harness.Shell.Tasks.ShowPartialBar,
-            "the bar should reappear once host B's poll fails, even though it isn't dismissed-again");
+        // Same discipline as above: settle on the expected re-report text, not
+        // bare visibility. (Today the first fingerprint change after dismissal
+        // is exactly the covered-set shrink, so visibility alone happens to
+        // coincide with this text — but pinning the text keeps the wait correct
+        // if another transition ever slips in between.)
+        string coverageLost = string.Format(Strings.PartialFmt, 1, 2, 0);
+        await harness.SettleAsync(
+            () => harness.Shell.Tasks.ShowPartialBar && harness.Shell.Tasks.PartialBarText == coverageLost,
+            "the bar should reappear reading '1 of 2 unreachable, covering 0' once host B's poll fails");
         harness.Layout();
 
-        Assert.Equal(string.Format(Strings.PartialFmt, 1, 2, 0), harness.Shell.Tasks.PartialBarText);
+        Assert.Equal(coverageLost, harness.Shell.Tasks.PartialBarText);
 
         var allHosts = Assert.IsType<AllHostsRailItemViewModel>(harness.Shell.RailEntries[0]);
         Assert.Equal(string.Format(Strings.AllHostsPartialFmt, 0, 2), allHosts.Subtext);
