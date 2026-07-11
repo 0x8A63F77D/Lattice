@@ -33,8 +33,7 @@ public class ProjectsViewTests
             registry, () => new RoutingGuiRpcClient(new Dictionary<string, FakeGuiRpcClient>()), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
-        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
-        var vm = new ProjectsViewModel(store, clock, uiState);
+        var vm = new ProjectsViewModel(store, clock);
         var view = new ProjectsView { DataContext = vm };
         var window = new Window { Width = 1280, Height = 800, Content = view };
         return (window, view, vm);

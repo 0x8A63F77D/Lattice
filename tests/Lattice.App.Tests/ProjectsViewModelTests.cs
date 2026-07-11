@@ -18,13 +18,11 @@ namespace Lattice.App.Tests;
 public class ProjectsViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-    private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
     private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private HostStore _store = null!;
     private ManualUiClock _clock = null!;
-    private UiStateStore _uiStore = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -32,7 +30,6 @@ public class ProjectsViewModelTests : IAsyncLifetime
         _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
         _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
         _clock = new ManualUiClock();
-        _uiStore = new UiStateStore(_uiPath);
         return ValueTask.CompletedTask;
     }
 
@@ -40,7 +37,6 @@ public class ProjectsViewModelTests : IAsyncLifetime
     {
         await _manager.DisposeAsync();
         File.Delete(_path);
-        File.Delete(_uiPath);
     }
 
     private HostConfig AddHost(string address, FakeGuiRpcClient fake)
@@ -51,7 +47,7 @@ public class ProjectsViewModelTests : IAsyncLifetime
         return host;
     }
 
-    private ProjectsViewModel MakeVm() => new(_store, _clock, _uiStore);
+    private ProjectsViewModel MakeVm() => new(_store, _clock);
 
     // Projects arrive via get_state (cached once per connection), so a project
     // row needs only the project present in the state — no results required.

@@ -10,15 +10,15 @@ namespace Lattice.App.ViewModels;
 /// <summary>
 /// Scopes, groups and aggregates projects across one or all hosts for the
 /// Projects view's hierarchical (flattened) DataGrid. Same shape as
-/// TasksViewModel: (HostStore, IUiClock, UiStateStore), Scope pushed by
-/// ShellViewModel, ViewSlice + Reconcile pipeline.
+/// TasksViewModel minus UiStateStore — Projects persists nothing: row heights
+/// are fixed by design 2a (40px parent / 32px child; the medium/compact
+/// densities exist only for Tasks), and expansion is session-local. Scope is
+/// pushed by ShellViewModel; ViewSlice + Reconcile pipeline.
 /// </summary>
 public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 {
     private readonly HostStore _store;
     private readonly IUiClock _clock;
-    private readonly UiStateStore _uiStateStore;
-    private UiState _uiState;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // Expansion is per project URL, session-local (not persisted — a monitoring
@@ -30,15 +30,10 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // holds the instance.
     private readonly PartialBarState _partialBar = new();
 
-    public ProjectsViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore)
+    public ProjectsViewModel(HostStore store, IUiClock clock)
     {
         _store = store;
         _clock = clock;
-        _uiStateStore = uiStateStore;
-        _uiState = uiStateStore.Load();
-        // Field write, not property: restoring the persisted choice must not
-        // re-save it through OnIsCompactChanged.
-        _isCompact = _uiState.CompactDensity;
         store.Changed += OnStoreChanged;
         clock.Tick += OnTick;
         Rebuild();
@@ -74,16 +69,6 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isEmpty;
     [ObservableProperty] private string _loadingText = "";
-
-    /// <summary>Density toggle for the Projects DataGrid (compact = smaller row height).
-    /// Restored from UiStateStore at construction; persisted on every change.</summary>
-    [ObservableProperty] private bool _isCompact;
-
-    partial void OnIsCompactChanged(bool value)
-    {
-        _uiState = _uiState with { CompactDensity = value };
-        _uiStateStore.Save(_uiState); // best-effort: a failed save costs only persistence
-    }
 
     [RelayCommand]
     private void Refresh() => _store.RequestRefresh(Scope.HostId);

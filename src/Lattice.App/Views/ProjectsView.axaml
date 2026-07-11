@@ -80,14 +80,12 @@
                        Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                        IsVisible="{Binding !IsUpdateStale}" />
           </StackPanel>
+          <!-- No density toggle here: design 2a fixes Projects row heights at
+               40/32 (the medium/compact densities are a Tasks-only concept). -->
           <Button Padding="6" Background="Transparent" Command="{Binding RefreshCommand}"
                   ToolTip.Tip="{x:Static loc:Strings.RetryNow}">
             <PathIcon Data="{StaticResource IconArrowClockwiseRegular}" Width="14" Height="14" />
           </Button>
-          <ToggleButton x:Name="DensityToggle" Padding="6" Background="Transparent"
-                        IsChecked="{Binding IsCompact, Mode=TwoWay}">
-            <PathIcon Data="{StaticResource IconTextLineSpacingRegular}" Width="14" Height="14" />
-          </ToggleButton>
         </StackPanel>
       </DockPanel>
     </Border>
@@ -108,7 +106,7 @@
 
     <!-- Grid + overlays -->
     <Panel>
-      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
+      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice"
                 ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
         <DataGrid.Columns>
           <!-- Chevron 24 -->
@@ -185,8 +183,9 @@
                               Foreground="{DynamicResource LatticeNeutralFgBrush}"
                               IsVisible="{Binding Data.StatusKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Mixed}" />
                   </Panel>
+                  <!-- Inherits the grid foreground (TasksView State-column idiom;
+                       design: status text 12px #424242, near primary). -->
                   <TextBlock Text="{Binding Data.StatusText}" FontSize="12"
-                             Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                              TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.StatusText}" />
                 </StackPanel>
               </DataTemplate>
