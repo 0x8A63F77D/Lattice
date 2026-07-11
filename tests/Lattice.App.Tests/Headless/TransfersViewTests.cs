@@ -45,12 +45,17 @@ public class TransfersViewTests
     }
 
     private static TransferRowViewModel MakeRow(
-        TransferUiState uiState, string statusText, string name = "file.dat", bool isUpload = false, Guid? hostId = null) =>
-        new(
-            Key: new TransferRowKey(hostId ?? Guid.NewGuid(), "https://project.example/", name, isUpload),
+        TransferUiState uiState, string statusText, string name = "file.dat", bool isUpload = false, Guid? hostId = null)
+    {
+        // Single hostId source: Key.HostId and Data.HostId must agree — the
+        // invariant TransferRowViewModel.From establishes in production.
+        var id = hostId ?? Guid.NewGuid();
+        return new(
+            Key: new TransferRowKey(id, "https://project.example/", name, isUpload),
             Name: name, Project: "p", DirectionText: isUpload ? Strings.TransfersUpload : Strings.TransfersDownload,
             ProgressText: "1.0 / 2.0 MB", Fraction: 0.5, SpeedText: "1.0 MB/s",
-            UiState: uiState, StatusText: statusText, HostId: hostId ?? Guid.NewGuid(), Host: "host-a");
+            UiState: uiState, StatusText: statusText, HostId: id, Host: "host-a");
+    }
 
     // Pins the retrying-row tint (design 2b): the RowClassBinder applier sets
     // the "retrying" class from TransferUiState.Retrying, and the style in
