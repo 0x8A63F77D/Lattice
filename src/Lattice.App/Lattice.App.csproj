@@ -19,6 +19,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Lattice.Core/Lattice.Core.csproj" />
+    <ProjectReference Include="../Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Lattice.App.Tests" />
