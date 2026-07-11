@@ -302,6 +302,9 @@
     <value>Settings</value>
   </data>
   <!-- ===== Projects ===== -->
+  <data name="ProjectsCountsFmt" xml:space="preserve">
+    <value>{0} projects · {1} hosts</value>
+  </data>
   <data name="ProjectsTaskCountFmt" xml:space="preserve">
     <value>{0} tasks</value>
   </data>
