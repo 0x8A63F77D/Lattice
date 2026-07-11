@@ -165,7 +165,12 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
                 rail is RailState.Unreachable or RailState.AuthFailed,
                 rail is RailState.Retrying or RailState.Unreachable,
                 isRowSource ? h.Snapshot!.Timestamp : null,
-                isRowSource
+                // Rows for out-of-scope hosts are never consumed by the slice
+                // (AllRows/CoveredIds/timestamps all gate on InScope ∧
+                // IsRowSource), so skip materializing them — Rebuild runs on
+                // every 1 s tick (Codex P2, PR #37). Flags above deliberately
+                // keep all-host semantics.
+                inScope && isRowSource
                     ? h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray()
                     : []);
         }).ToArray();
