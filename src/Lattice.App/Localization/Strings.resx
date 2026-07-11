@@ -501,6 +501,9 @@
   <data name="TransfersColSpeed" xml:space="preserve">
     <value>Speed</value>
   </data>
+  <data name="TransfersColStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
   <data name="TransfersCountsFmt" xml:space="preserve">
     <value>{0} transfers · {1} up · {2} down</value>
   </data>

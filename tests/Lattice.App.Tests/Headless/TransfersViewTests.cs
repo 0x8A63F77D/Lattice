@@ -59,24 +59,36 @@ public class TransfersViewTests
 
     // Paired header-count/host-column pattern, mirrored from TasksViewTests
     // (Themed_render_shows_the_nine_column_headers / Host_column_hides_when_
-    // scope_is_a_single_host): pins that the Host column (bound to
-    // IsAllHostsScope in TransfersView.axaml) is present by default and that
-    // it is the ONLY column the scope switch hides.
+    // scope_is_a_single_host): pins the full design-2b header wording (File ·
+    // Project · Direction · Progress · Speed · Status · Host) — design says
+    // "Status", not the Tasks grid's "State" (Codex round 2 P3 on PR #45) —
+    // and that the Host column (bound to IsAllHostsScope in
+    // TransfersView.axaml) is present by default and is the ONLY column the
+    // scope switch hides.
     [AvaloniaFact]
-    public void All_hosts_scope_shows_the_host_column()
+    public void All_hosts_scope_shows_the_seven_design_headers_including_Status()
     {
         var (window, _, _, _, _, _) = MakeView();
         window.Show();
         Layout(window);
 
+        var expected = new[]
+        {
+            Strings.TransfersColFile, Strings.ColProject, Strings.TransfersColDirection,
+            Strings.ColProgress, Strings.TransfersColSpeed, Strings.TransfersColStatus, Strings.ColHost,
+        };
         var headers = window.GetVisualDescendants().OfType<DataGridColumnHeader>()
             .Where(h => h.IsVisible)
             .Select(h => h.Content as string)
             .Where(text => text is not null)
             .ToList();
 
-        Assert.Contains(Strings.ColHost, headers);
-        Assert.Equal(7, headers.Count);
+        Assert.Equal(expected.Length, headers.Count);
+        foreach (var header in expected)
+            Assert.Contains(header, headers);
+        // Belt-and-braces against the shared-key regression: the Tasks grid's
+        // "State" wording must not leak in via Strings.ColState.
+        Assert.DoesNotContain(Strings.ColState, headers);
         window.Close();
     }
 

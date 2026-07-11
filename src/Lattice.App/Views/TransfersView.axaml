@@ -117,7 +117,7 @@
                                Binding="{Binding Data.SpeedText}" Width="90" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="210">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
