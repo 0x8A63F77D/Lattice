@@ -185,20 +185,23 @@ module ProjectRows =
         elif a.NoNewTasks then NoNewTasks
         else Active
 
-    /// Total over the three-case DU by explicit counting — no wildcard,
-    /// so a new AttachmentStatus case fails to compile here (canon).
+    /// Summarize per-host statuses into the three design tiers. Operates on the
+    /// (suspended, noNew) counts — active is the remainder. NOTE: DU-case totality
+    /// is enforced upstream in `status`, not here (counting is by value-equality,
+    /// which the exhaustiveness checker cannot see). The tuple-match below is
+    /// total over int × int with no DU wildcard.
     let internal summarize (statuses: AttachmentStatus[]) : StatusSummary =
         let count s = statuses |> Array.filter (fun x -> x = s) |> Array.length
         let suspended = count Suspended
         let noNew = count NoNewTasks
-        let active = count Active
         let total = statuses.Length
-        if active = total then AllSame Active
-        elif suspended = total then AllSame Suspended
-        elif noNew = total then AllSame NoNewTasks
-        elif noNew = 0 then OneDeviation(Suspended, suspended, total)
-        elif suspended = 0 then OneDeviation(NoNewTasks, noNew, total)
-        else MixedStatus(suspended, noNew)
+        match suspended, noNew with
+        | 0, 0 -> AllSame Active
+        | s, 0 when s = total -> AllSame Suspended
+        | 0, n when n = total -> AllSame NoNewTasks
+        | s, 0 -> OneDeviation(Suspended, s, total)
+        | 0, n -> OneDeviation(NoNewTasks, n, total)
+        | s, n -> MixedStatus(s, n)
 
     let internal shareSummary (shares: float[]) : ShareSummary =
         let lo = Array.min shares
@@ -296,7 +299,7 @@ let ``status summary counts are consistent with attachments`` (atts: ProjectAtta
         | MixedStatus (s, n) -> s = suspended && n = noNew && suspended > 0 && noNew > 0)
 ```
 
-Mutation falsification: temporarily change `summarize`'s `elif noNew = 0 then OneDeviation(...)` branch to return `MixedStatus(suspended, noNew)`, run, confirm the third property FAILS, revert. Record the observed failure in the commit body.
+Mutation falsification: temporarily change `summarize`'s `| s, 0 -> OneDeviation(Suspended, s, total)` arm to return `MixedStatus(s, 0)`, run, confirm the third property FAILS, revert. Record the observed failure in the commit body.
 
 - [ ] **Step 6: Run tests, commit**
 
