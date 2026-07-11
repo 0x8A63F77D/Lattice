@@ -10,6 +10,9 @@
 
 **Authoritative sources:** issue #31 (scope), spec `docs/superpowers/specs/2026-07-10-m2c2-data-views-design.md` §Wave 2, design package `docs/design/m2/README.md` §"Transfers view (2b)". The design package wins over this plan when they conflict.
 
+
+**Sequencing:** Blocked by the w2a2 scaffold-extraction PR (`2026-07-11-m2c2-w2a2-view-scaffold-extraction.md`) — `RowClassBinder` / `ViewSliceProjection` / `PartialBarState` must be on main before this branch starts; this plan consumes them instead of transcribing the Tasks pattern (PR #42 round-1 root cause).
+
 **Standing rules that bind every task:**
 - Red-first: run the failing test and see it fail before implementing. Reviewer repeats falsification.
 - `-warnaserror` clean, Debug + Release, on every commit.
@@ -252,11 +255,12 @@ git commit -m "feat(app): TransferRow key + row record with countdown rendering"
 - Create: `tests/Lattice.App.Tests/TransfersViewModelTests.cs`
 
 **Stamp source:** `src/Lattice.App/ViewModels/TasksViewModel.cs`, with:
-- rows: `h.Snapshot!.Transfers.Select(t => TransferRowViewModel.From(t, h.Config.Id, h.Config.DisplayName, _clock.Now)).ToArray()` inside the same facts projection (KEEP the `inScope && isRowSource` materialization gate and its comment — Codex P2, PR #37);
+- rows via the shared projection (w2a2): `var slice = ViewSliceProjection.Compute(_store.Hosts, Scope, h => h.Snapshot!.Transfers.Select(t => TransferRowViewModel.From(t, h.Config.Id, h.Config.DisplayName, _clock.Now)).ToArray());` — the `inScope && isRowSource` gate lives in the helper, not here;
 - no text filter, no state filter, no column-visibility persistence (design 2b has none); density toggle kept;
 - sort: `ProjectName` then `Name` ascending (design 2b names no default sort; this is the recorded decision — stable and scan-friendly);
 - counts: `TransfersCountsFmt` = `{0} transfers · {1} up · {2} down` over the unfiltered row set;
-- everything else (Scope, PartialBarPolicy fingerprint block, TasksOverlayPolicy overlay block, UpdatedText/IsUpdateStale, PollingText, Refresh/DismissPartial commands, Dispose) is a verbatim stamp.
+- partial bar via the shared `PartialBarState` (w2a2): one `_partialBar` field, `ShowPartialBar = _partialBar.Advance(slice.UnreachableIds, slice.CoveredIds, Scope.IsAllHosts);` in Rebuild, `_partialBar.Dismiss()` in DismissPartial — the retrofitted `TasksViewModel` on main is the reference;
+- everything else (Scope, TasksOverlayPolicy overlay block, UpdatedText/IsUpdateStale, PollingText, Refresh command, Dispose) is a verbatim stamp of the retrofitted TasksViewModel.
 
 - [ ] **Step 1: Write failing tests** — mirror `TasksViewModelTests.cs` fixture idiom. Pin, each as a real test:
 
@@ -291,7 +295,7 @@ git commit -m "feat(app): TransfersViewModel over shared aggregation core with p
 - Create: `src/Lattice.App/Views/TransfersView.axaml.cs`
 - Create: `tests/Lattice.App.Tests/Headless/TransfersViewTests.cs`
 
-**Stamp source:** `src/Lattice.App/Views/TasksView.axaml` (+ `.axaml.cs`). Keep: command bar layout (title + disabled `Strings.TransfersRetryNow` M3 placeholder + updated/refresh/density from TasksView.axaml:69-110), F5 KeyBinding, FAInfoBar partial bar + `OnPartialBarClosed`, StatusBarControl, loading/empty overlays, the FULL row-subscription liveness kit from `TasksView.axaml.cs` — `_rowSubscriptions` dictionary, recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **and `OnDetachedFromVisualTree` → `DrainRowSubscriptions()` plus the `internal int RowSubscriptionCount` probe** (`TasksView.axaml.cs:108-129,227`). The drain is load-bearing: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without it every visit leaks realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on PR #42 review round 1). Ship the teardown-drain regression test with it (stamp the Tasks one: render, detach from the visual tree, assert `RowSubscriptionCount == 0`; red-first before wiring the detach override). Grid: `CanUserSortColumns="True"` with `Data.*` bindings (nested sort paths natively supported — DataGrid 12.1.0, established in PR #37).
+**Stamp source:** `src/Lattice.App/Views/TasksView.axaml` (+ `.axaml.cs`). Keep: command bar layout (title + disabled `Strings.TransfersRetryNow` M3 placeholder + updated/refresh/density from TasksView.axaml:69-110), F5 KeyBinding, FAInfoBar partial bar + `OnPartialBarClosed`, StatusBarControl, loading/empty overlays, row-class liveness via the shared `RowClassBinder` (w2a2): attach once in the constructor, forward `internal int RowSubscriptionCount => _rowBinder.Count;`, ship the stamped teardown-drain test (render → detach → assert count 0) to pin the attachment. Grid: `CanUserSortColumns="True"` with `Data.*` bindings (nested sort paths natively supported — DataGrid 12.1.0, established in PR #37).
 
 - [ ] **Step 1: Write the failing headless tests** (follow `Headless/TasksViewTests.cs` idiom):
 
@@ -391,11 +395,11 @@ Empty overlay (design 2b, the common case — icon + title + caption, no button)
 
 **Bounded lookups for the implementer:** `Data.IsRetrying` needs a `bool IsRetrying` convenience on the record (`UiState == TransferUiState.Retrying`) — add it in Task 1 or here, either way with its unit assertion. `IconArrowSyncRegular` / `LatticeTextDisabledBrush`: check the icon/token resources next to the existing entries (`IconArrowSwapRegular` exists — it's the Transfers nav icon); add missing ones following the sourcing convention.
 
-Code-behind `ApplyRowClasses`:
+Code-behind binder attachment (constructor, after InitializeComponent):
 
 ```csharp
-private static void ApplyRowClasses(DataGridRow row, TransferRowViewModel data)
-    => row.Classes.Set("retrying", data.UiState == TransferUiState.Retrying);
+_rowBinder = RowClassBinder<TransferRow>.Attach(Grid, static (row, holder) =>
+    row.Classes.Set("retrying", holder.Data.UiState == TransferUiState.Retrying));
 ```
 
 resx additions: `TransfersTitle` = `Transfers`, `TransfersRetryNow` = `Retry now`, `TransfersColFile` = `File`, `TransfersColDirection` = `Direction`, `TransfersColSpeed` = `Speed`, `TransfersCountsFmt` = `{0} transfers · {1} up · {2} down`, `TransfersEmpty` = `No active transfers`, `TransfersEmptyCaption` = `Uploads and downloads will appear here while in progress.`

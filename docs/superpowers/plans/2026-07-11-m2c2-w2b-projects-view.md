@@ -10,6 +10,9 @@
 
 **Authoritative sources:** issue #31 (scope), spec `docs/superpowers/specs/2026-07-10-m2c2-data-views-design.md` §Wave 2, design package `docs/design/m2/README.md` §"Projects view (2a)" + §"Data model" (credit-field mapping). The design package wins over this plan when they conflict — cite the design line when deviating.
 
+
+**Sequencing:** Blocked by the w2a2 scaffold-extraction PR (`2026-07-11-m2c2-w2a2-view-scaffold-extraction.md`) — `RowClassBinder` / `ViewSliceProjection` / `PartialBarState` must be on main before this branch starts; this plan consumes them instead of transcribing the Tasks pattern (PR #42 round-1 root cause).
+
 **Standing rules that bind every task:**
 - Red-first: run the failing test and see it fail before implementing. Reviewer repeats falsification.
 - `-warnaserror` clean, Debug + Release, on every commit.
@@ -626,8 +629,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // dashboard reopens collapsed; revisit only if users ask).
     private readonly HashSet<string> _expanded = [];
 
-    private PartialBarPolicy.Fingerprint _dismissedFingerprint = PartialBarPolicy.EmptyFingerprint;
-    private PartialBarPolicy.Fingerprint _currentFingerprint = PartialBarPolicy.EmptyFingerprint;
+    private readonly PartialBarState _partialBar = new();
 
     public ProjectsViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore)
     {
@@ -678,7 +680,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void DismissPartial()
     {
-        _dismissedFingerprint = PartialBarPolicy.Dismiss(_currentFingerprint);
+        _partialBar.Dismiss();
         ShowPartialBar = false;
     }
 
@@ -701,30 +703,15 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
             : _store.Hosts.Where(h => h.Config.Id == Scope.HostId).ToList();
         IsAllHostsScope = Scope.IsAllHosts;
 
-        // Same facts projection as TasksViewModel.Rebuild (see there for the
-        // rationale comments) — rows here are ProjectAttachments.
-        var facts = _store.Hosts.Select(h =>
-        {
-            var rail = RailStateProjection.From(h.Status);
-            var inScope = Scope.IsAllHosts || h.Config.Id == Scope.HostId;
-            var isRowSource = rail == RailState.Connected && h.Snapshot is not null;
-            return new HostFacts<ProjectAttachment>(
-                h.Config.Id,
-                inScope,
-                isRowSource,
-                rail is RailState.Unreachable or RailState.AuthFailed,
-                rail is RailState.Retrying or RailState.Unreachable,
-                isRowSource ? h.Snapshot!.Timestamp : null,
-                inScope && isRowSource
-                    ? h.Snapshot!.Projects.Select(p => new ProjectAttachment(
-                        p.Project.MasterUrl, p.Project.ProjectName,
-                        h.Config.Id, h.Config.DisplayName, p.TaskCount,
-                        p.Project.ResourceShare,
-                        p.Project.HostExpavgCredit, p.Project.HostTotalCredit,
-                        p.Project.SuspendedViaGui, p.Project.DontRequestMoreWork)).ToArray()
-                    : []);
-        }).ToArray();
-        var slice = ViewSlice.compute(facts);
+        // Facts projection (incl. the inScope && isRowSource gate) lives once
+        // in ViewSliceProjection (w2a2) — this callback only shapes rows.
+        var slice = ViewSliceProjection.Compute(_store.Hosts, Scope,
+            h => h.Snapshot!.Projects.Select(p => new ProjectAttachment(
+                p.Project.MasterUrl, p.Project.ProjectName,
+                h.Config.Id, h.Config.DisplayName, p.TaskCount,
+                p.Project.ResourceShare,
+                p.Project.HostExpavgCredit, p.Project.HostTotalCredit,
+                p.Project.SuspendedViaGui, p.Project.DontRequestMoreWork)).ToArray());
 
         var groups = ProjectRows.compute(slice.AllRows);
 
@@ -750,14 +737,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         UpdatedText = slice.OldestTimestamp is { } oldest ? TimeText.UpdatedAgo(oldest, _clock.Now) : "";
         IsUpdateStale = slice.IsUpdateStale;
 
-        // Partial-bar + overlay blocks: stamp TasksViewModel.Rebuild's tail
-        // verbatim (fingerprint from slice.UnreachableIds/CoveredIds; overlay
-        // presence = groups.Length > 0).
-        _currentFingerprint = new PartialBarPolicy.Fingerprint(slice.UnreachableIds, slice.CoveredIds);
-        (PartialBarPolicy.Fingerprint dismissed, bool visible) =
-            PartialBarPolicy.Advance(_dismissedFingerprint, _currentFingerprint);
-        _dismissedFingerprint = dismissed;
-        ShowPartialBar = Scope.IsAllHosts && visible;
+        ShowPartialBar = _partialBar.Advance(slice.UnreachableIds, slice.CoveredIds, Scope.IsAllHosts);
         if (ShowPartialBar)
         {
             PartialBarText = string.Format(
@@ -821,6 +801,9 @@ git commit -m "feat(app): ProjectsViewModel — hierarchy over shared aggregatio
 // 4. In-place status change flips the row's status cell text without
 //    LoadingRow re-firing (mutate holder.Data — the Tasks Task-7 regression
 //    stamped here).
+// 5. Single-host scope hides the Hosts column (header-text lookup, the
+//    identical-Strings-symbol invariant — stamp the Tasks Host-column test;
+//    design 2a; Codex P2, round 2).
 ```
 
 Write all four as real tests. For (2):
@@ -917,8 +900,7 @@ Expected: FAIL (view type missing).
 
     <Panel>
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False"
-                LoadingRow="OnLoadingRow" UnloadingRow="OnUnloadingRow">
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
         <DataGrid.Columns>
           <!-- Chevron 24 -->
           <DataGridTemplateColumn Width="24">
@@ -947,14 +929,20 @@ Expected: FAIL (view type missing).
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
+          <!-- Hidden in single-host scope (design 2a) — same treatment as the
+               Tasks Host column; the single-host headless test asserts it. -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
-                               Binding="{Binding Data.HostsText}" Width="110" />
+                               Binding="{Binding Data.HostsText}" Width="110"
+                               IsVisible="{Binding IsAllHostsScope}" />
           <!-- Resource share 140: bar (when ShowShareBar) + text -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                  <Border Width="40" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}"
+                  <!-- Track is 56px because FractionToWidthConverter hard-codes a
+                       56px track (TaskGridConverters.cs) — do not shrink the track
+                       without parameterizing the converter (Codex P2, round 2). -->
+                  <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}"
                           IsVisible="{Binding Data.ShowShareBar}">
                     <Border Background="{DynamicResource LatticeAccentBrush}" HorizontalAlignment="Left"
                             Height="3" CornerRadius="2"
@@ -1013,19 +1001,21 @@ Expected: FAIL (view type missing).
 
 - [ ] **Step 4: Implement the code-behind**
 
-`ProjectsView.axaml.cs` — stamp `TasksView.axaml.cs`'s **entire** row-subscription liveness kit, not just the two row events: the `_rowSubscriptions` dictionary + recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **`OnDetachedFromVisualTree` → `DrainRowSubscriptions()`** (`TasksView.axaml.cs:108-129`) and the `internal int RowSubscriptionCount` probe (`:227`). The drain is load-bearing, not defensive: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without the detach drain every visit to Projects leaks the realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on this plan's review round 1). Class application:
+`ProjectsView.axaml.cs` — row-class liveness comes from the shared `RowClassBinder` (w2a2); the view attaches once in the constructor and structurally cannot forget the detach drain (PR #42 round-1 P2 provenance — see the w2a2 plan header):
 
 ```csharp
-private static void ApplyRowClasses(DataGridRow row, ProjectRowViewModel data)
+_rowBinder = RowClassBinder<ProjectRow>.Attach(Grid, static (row, holder) =>
 {
-    row.Classes.Set("projectParent", data.IsParent);
-    row.Classes.Set("projectChild", !data.IsParent);
-}
+    row.Classes.Set("projectParent", holder.Data.IsParent);
+    row.Classes.Set("projectChild", !holder.Data.IsParent);
+});
 ```
+
+with `internal int RowSubscriptionCount => _rowBinder.Count;` for the probe.
 
 Plus `OnPartialBarClosed` — stamp from TasksView.axaml.cs (the FAInfoBar Closed→CloseButton reason → DismissPartialCommand path; hard-won FA fact in the class doc there).
 
-Add the teardown-drain regression test as headless test 5 (stamp the Tasks one — find it via `grep -n RowSubscriptionCount tests/Lattice.App.Tests/Headless/TasksViewTests.cs`): render rows, detach the view from the visual tree, assert `view.RowSubscriptionCount == 0`. Red-first: run it before wiring `OnDetachedFromVisualTree` and watch it fail with a non-zero count.
+Add the teardown-drain regression test as headless test 5 (stamp the Tasks one — find it via `grep -n RowSubscriptionCount tests/Lattice.App.Tests/Headless/TasksViewTests.cs`): render rows, detach the view from the visual tree, assert `view.RowSubscriptionCount == 0`. The binder makes this hard to break, but the test still ships per view: it pins the ATTACHMENT (a view that forgets to attach the binder, or attaches it to the wrong grid, fails here).
 
 - [ ] **Step 5: Run headless tests**
 

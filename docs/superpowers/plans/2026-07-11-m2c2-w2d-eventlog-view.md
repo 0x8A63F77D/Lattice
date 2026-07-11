@@ -10,6 +10,9 @@
 
 **Authoritative sources:** issue #31 (scope), spec `docs/superpowers/specs/2026-07-10-m2c2-data-views-design.md` §Wave 2, design package `docs/design/m2/README.md` §"Event log view (2c)". The design package wins over this plan when they conflict.
 
+
+**Sequencing:** Blocked by the w2a2 scaffold-extraction PR (`2026-07-11-m2c2-w2a2-view-scaffold-extraction.md`) — `RowClassBinder` / `ViewSliceProjection` / `PartialBarState` must be on main before this branch starts; this plan consumes them instead of transcribing the Tasks pattern (PR #42 round-1 root cause).
+
 **Standing rules that bind every task:**
 - Red-first: run the failing test and see it fail before implementing. Reviewer repeats falsification.
 - `-warnaserror` clean, Debug + Release, on every commit.
@@ -275,6 +278,7 @@ git commit -m "feat(aggregation): MessageLog identity-keyed set ingest with idem
 1. `MessagesReceived` fires on the UI thread (via the queued dispatcher) with the host id + batch when the manager raises `MessagesAdded`.
 2. A message batch does NOT raise `Changed` (the whole point of the separate channel — assert zero `Changed` invocations).
 3. After `Dispose`, a queued message batch is dropped (stamp the existing disposed-guard test pattern).
+4. A batch whose HostId is not in the store (host removed while the batch was queued) is dropped — no `MessagesReceived` (the Find guard, mirroring the status/snapshot paths).
 
 - [ ] **Step 2: Run to verify failure.**
 
@@ -302,6 +306,11 @@ private void OnMessagesAdded(object? sender, MessagesAddedEventArgs e) =>
     _dispatcher.Post(() =>
     {
         if (_disposed) return;
+        // Same guard as the status/snapshot paths: a batch can be queued
+        // behind the host's removal (or arrive while the removed monitor is
+        // still disposing) — forwarding it would resurrect a deleted host's
+        // rows after the prune already ran (Codex P2, round 2).
+        if (Find(e.HostId) is null) return;
         MessagesReceived?.Invoke(this, e);
     });
 ```
@@ -672,14 +681,14 @@ git commit -m "feat(app): EventLogViewModel — MessageLog fold, pills/search, u
 - **Row treatment:** `MinHeight` 26 via the compact-like row style; warning/error row classes with tint brushes + 16px filled priority icon in the Time cell (`IconWarningFilled` exists; add `IconErrorCircleFilled` following the icon-sourcing convention). Rows 26px: if the `lattice` DataGrid theme's row MinHeight fights 26px, add a `Selector="DataGrid.eventlog DataGridRow"` height style — geometry-assert it (M2c-1 lesson).
 - **No partial-results InfoBar and no loading skeleton** (design 2c defines neither for this view; reachability lives in the status-bar counts — recorded decision, cite design 2c in the PR body).
 - **Status bar:** `LeftText="{Binding CountsText}"`, right text = `Strings.EventLogFollowingLive` shown only while `IsFollowing` (design 2c "Following live"; empty otherwise — this VM has no polling text by design, messages arrive with the poll stream).
-- **Code-behind:** row classes via the FULL row-subscription liveness kit from `TasksView.axaml.cs` — `_rowSubscriptions` dictionary, recycled-row unsubscribe at the top of `OnLoadingRow`, `OnUnloadingRow`, **and `OnDetachedFromVisualTree` → `DrainRowSubscriptions()` plus the `internal int RowSubscriptionCount` probe** (`TasksView.axaml.cs:108-129,227`). The drain is load-bearing: the shell's ContentControl swaps views without touching `Grid.ItemsSource`, so `UnloadingRow` does NOT fire on navigation — without it every visit leaks realized rows' `PropertyChanged` subscriptions (the a2e0420 regression; Codex P2 on PR #42 review round 1). Ship the teardown-drain regression test with it (stamp the Tasks one: render, detach from the visual tree, assert `RowSubscriptionCount == 0`; red-first before wiring the detach override):
+- **Code-behind:** row classes via the shared `RowClassBinder` (w2a2) — attach once in the constructor, forward `internal int RowSubscriptionCount => _rowBinder.Count;`, ship the stamped teardown-drain test (render → detach → assert count 0) to pin the attachment:
 
 ```csharp
-private static void ApplyRowClasses(DataGridRow row, EventLogRowViewModel data)
+_rowBinder = RowClassBinder<EventLogRow>.Attach(Grid, static (row, holder) =>
 {
-    row.Classes.Set("warning", data.Priority == EventLogPriority.Warning);
-    row.Classes.Set("error", data.Priority == EventLogPriority.Error);
-}
+    row.Classes.Set("warning", holder.Data.Priority == EventLogPriority.Warning);
+    row.Classes.Set("error", holder.Data.Priority == EventLogPriority.Error);
+});
 ```
 
 plus Following wiring:
