@@ -70,6 +70,33 @@ public class HostStoreTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Interval_change_with_no_hosts_does_not_raise_Changed()
+    {
+        var store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
+        var changes = 0;
+        store.Changed += (_, _) => changes++;
+
+        _registry.SetPollingInterval(30);
+
+        // Nothing is cached, so nothing on screen depends on the interval —
+        // a Changed here would only trigger a redundant re-render.
+        Assert.Equal(0, changes);
+    }
+
+    [Fact]
+    public void Interval_change_with_hosts_raises_Changed_for_the_polling_status_text()
+    {
+        _registry.AddHost(TestData.MakeHostConfig());
+        var store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
+        var changes = 0;
+        store.Changed += (_, _) => changes++;
+
+        _registry.SetPollingInterval(30);
+
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
     public void Registry_update_swaps_the_config_in_place()
     {
         var host = TestData.MakeHostConfig(name: "old");

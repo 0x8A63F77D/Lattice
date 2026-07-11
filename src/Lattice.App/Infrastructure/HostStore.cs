@@ -91,7 +91,11 @@ public sealed class HostStore : IDisposable
                     updated.Config = e.Host!;
                 break;
             case RegistryChangeKind.IntervalChanged:
-                break; // Settings reads the registry directly; nothing cached here.
+                // Settings reads the registry directly; nothing cached here. With no
+                // entries there is no "Polling every {0}s" text on screen either, so
+                // raising Changed would only trigger a redundant re-render.
+                if (_hosts.Count == 0) return;
+                break;
         }
         Changed?.Invoke(this, EventArgs.Empty);
     }
