@@ -301,6 +301,34 @@
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <!-- ===== Projects ===== -->
+  <data name="ProjectsTaskCountFmt" xml:space="preserve">
+    <value>{0} tasks</value>
+  </data>
+  <data name="ProjectsShareVariesFmt" xml:space="preserve">
+    <value>Varies · {0}–{1}</value>
+  </data>
+  <data name="ProjectsStatusActive" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="ProjectsStatusSuspended" xml:space="preserve">
+    <value>Suspended</value>
+  </data>
+  <data name="ProjectsStatusNoNewTasks" xml:space="preserve">
+    <value>No new tasks</value>
+  </data>
+  <data name="ProjectsStatusActiveAll" xml:space="preserve">
+    <value>Active on all hosts</value>
+  </data>
+  <data name="ProjectsStatusAllFmt" xml:space="preserve">
+    <value>{0} on all hosts</value>
+  </data>
+  <data name="ProjectsStatusDeviationFmt" xml:space="preserve">
+    <value>{0} · {1}/{2} hosts</value>
+  </data>
+  <data name="ProjectsStatusMixedFmt" xml:space="preserve">
+    <value>Mixed · {0} suspended · {1} no new tasks</value>
+  </data>
   <!-- ===== Tasks ===== -->
   <data name="Abort" xml:space="preserve">
     <value>Abort</value>
