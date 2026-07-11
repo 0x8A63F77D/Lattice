@@ -1,7 +1,6 @@
 using System.Reflection;
 using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
-using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
@@ -254,8 +253,8 @@ public class HostStoreTests : IAsyncLifetime
         var received = 0;
         store.MessagesReceived += (_, _) => received++;
 
-        // HostId absent from the store — the host was removed while the batch
-        // sat queued. The Find guard drops it, same as the status/snapshot paths.
+        // HostId absent from the store (as after a removal that raced the queued
+        // batch). The Find guard drops it, same as the status/snapshot paths.
         RaiseManagerMessagesAdded(new MessagesAddedEventArgs(Guid.NewGuid(), [TestData.MakeMessage(1)]));
         queue.Drain();
 
