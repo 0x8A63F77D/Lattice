@@ -116,7 +116,7 @@ public class TasksViewTests
             Project: "p", Application: "a", Name: "at_risk_task", Fraction: 0.2, PercentText: "20%",
             ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "07-11 00:00",
             Deadline: DateTimeOffset.UtcNow.AddHours(1), StateKind: TaskStateKind.Running, StateText: "Running",
-            IsDeadlineAtRisk: true, IsSuspended: false, Host: "host-a");
+            IsDeadlineAtRisk: true, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
         vm.Rows.Add(atRiskRow);
         Layout(window);
 
@@ -136,7 +136,7 @@ public class TasksViewTests
             Project: "p", Application: "a", Name: "susp_task", Fraction: 0.2, PercentText: "20%",
             ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "—",
             Deadline: null, StateKind: TaskStateKind.Suspended, StateText: "Suspended",
-            IsDeadlineAtRisk: false, IsSuspended: true, Host: "host-a");
+            IsDeadlineAtRisk: false, IsSuspended: true, HostId: Guid.NewGuid(), Host: "host-a");
         vm.Rows.Add(suspendedRow);
         Layout(window);
 
@@ -155,7 +155,7 @@ public class TasksViewTests
             Project: "p", Application: "a", Name: "t", Fraction: null, PercentText: "—",
             ElapsedText: "0s", RemainingText: "—", DeadlineText: "—",
             Deadline: null, StateKind: TaskStateKind.Waiting, StateText: "Waiting",
-            IsDeadlineAtRisk: false, IsSuspended: false, Host: "host-a"));
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a"));
         Layout(window);
 
         var row = window.GetVisualDescendants().OfType<DataGridRow>().Single();

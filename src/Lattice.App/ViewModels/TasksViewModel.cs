@@ -144,7 +144,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         var allRows = reachable
             .Where(h => h.Snapshot is not null)
             .SelectMany(h => h.Snapshot!.Tasks.Select(t =>
-                TaskRowViewModel.From(t, h.Config.DisplayName)))
+                TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)))
             .ToList();
 
         var rows = allRows
