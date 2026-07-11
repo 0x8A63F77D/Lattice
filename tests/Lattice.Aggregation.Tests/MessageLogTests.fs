@@ -66,14 +66,12 @@ let batchGen hostId =
         return Array.ofList entries
     }
 
-type LogArbs =
-    static member Batches() =
-        gen {
-            let! b1 = batchGen hostA
-            let! b2 = batchGen hostA
-            return (b1, b2)
-        }
-        |> Arb.fromGen
+let batchesGen =
+    gen {
+        let! b1 = batchGen hostA
+        let! b2 = batchGen hostA
+        return (b1, b2)
+    }
 
 [<Property>]
 let ``ingest is idempotent`` () =
@@ -82,19 +80,20 @@ let ``ingest is idempotent`` () =
         let log2, _ = MessageLog.ingest hostA b2 log1
         let log3, added = MessageLog.ingest hostA b2 log2
         log3 = log2 && Array.isEmpty added
-    Prop.forAll (Arb.fromGen (LogArbs.Batches().Generator)) testFn
+    Prop.forAll (Arb.fromGen batchesGen) testFn
 
 [<Property>]
 let ``retained set is the distinct union, capped to newest`` () =
     let testFn (b1, b2) =
-        let log1, _ = MessageLog.ingest hostA b1 (MessageLog.empty 50)
+        let log1, _ = MessageLog.ingest hostA b1 (MessageLog.empty 5)
         let log2, _ = MessageLog.ingest hostA b2 log1
-        let expected =
+        let sorted =
             Array.append b1 b2
             |> Array.distinctBy (fun e -> e.Key)
             |> Array.sortBy (fun e -> e.Key.TimestampTicks, e.Key.Seqno)
+        let expected = if sorted.Length > 5 then sorted[sorted.Length - 5 ..] else sorted
         MessageLog.merged log2 = expected
-    Prop.forAll (Arb.fromGen (LogArbs.Batches().Generator)) testFn
+    Prop.forAll (Arb.fromGen batchesGen) testFn
 
 [<Property>]
 let ``delta is exactly the not-yet-known entries`` () =
@@ -105,4 +104,4 @@ let ``delta is exactly the not-yet-known entries`` () =
         let expected =
             b2 |> Array.distinctBy (fun e -> e.Key) |> Array.filter (fun e -> not (knownKeys.Contains e.Key))
         (added |> Array.map (fun e -> e.Key) |> Set.ofArray) = (expected |> Array.map (fun e -> e.Key) |> Set.ofArray)
-    Prop.forAll (Arb.fromGen (LogArbs.Batches().Generator)) testFn
+    Prop.forAll (Arb.fromGen batchesGen) testFn
