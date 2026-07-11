@@ -17,6 +17,7 @@ type HostFacts<'Row> =
       /// Retrying or Unreachable — drives the stale-update indicator.
       IsStaleSignal: bool
       /// Snapshot timestamp when a snapshot exists.
+      /// Nullable (not Option) for frictionless C# construction.
       Timestamp: DateTimeOffset Nullable
       Rows: 'Row[] }
 

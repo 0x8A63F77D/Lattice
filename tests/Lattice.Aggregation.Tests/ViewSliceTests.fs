@@ -75,6 +75,8 @@ let factsGen =
                 let! stale = Arb.generate<bool>
                 let! seconds = Gen.choose (0, 1000)
                 let! rowCount = Gen.choose (0, 3)
+                // Modeled invariant: row-source hosts always carry a timestamp
+                // (IsRowSource ⟹ snapshotted ⟹ timestamp present); non-row-sources carry none.
                 let ts = if rowSource then Nullable(t0.AddSeconds(float seconds)) else Nullable()
                 return host (Guid.NewGuid()) inScope rowSource unreachable stale ts
                            (Array.init rowCount (fun i -> $"r{i}"))
@@ -96,3 +98,20 @@ let ``covered equals row-source ids; unreachable ignores scope`` (hosts: HostFac
     let covered = hosts |> Seq.filter (fun h -> h.InScope && h.IsRowSource) |> Seq.map (fun h -> h.Id) |> Set.ofSeq
     let unreachable = hosts |> Seq.filter (fun h -> h.IsUnreachableTier) |> Seq.map (fun h -> h.Id) |> Set.ofSeq
     (Set.ofSeq slice.CoveredIds = covered) && (Set.ofSeq slice.UnreachableIds = unreachable)
+
+[<Property(Arbitrary = [| typeof<SliceArbs> |])>]
+let ``OldestTimestamp is the minimum in-scope row-source timestamp`` (hosts: HostFacts<string>[]) =
+    let slice = ViewSlice.compute hosts
+    let expected =
+        hosts
+        |> Array.filter (fun h -> h.InScope && h.IsRowSource)
+        |> Array.choose (fun h -> Option.ofNullable h.Timestamp)
+    if expected.Length = 0 then
+        not slice.OldestTimestamp.HasValue
+    else
+        slice.OldestTimestamp = Nullable(Array.min expected)
+
+[<Property(Arbitrary = [| typeof<SliceArbs> |])>]
+let ``IsUpdateStale iff some in-scope host signals stale`` (hosts: HostFacts<string>[]) =
+    let slice = ViewSlice.compute hosts
+    slice.IsUpdateStale = (hosts |> Array.exists (fun h -> h.InScope && h.IsStaleSignal))
