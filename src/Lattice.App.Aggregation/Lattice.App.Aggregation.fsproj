@@ -12,6 +12,7 @@
     <Compile Include="Reconcile.fs" />
     <Compile Include="ViewSlice.fs" />
     <Compile Include="ProjectRows.fs" />
+    <Compile Include="MessageLog.fs" />
   </ItemGroup>
 
 </Project>
