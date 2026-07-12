@@ -1,6 +1,9 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
@@ -280,6 +283,101 @@ public class EventLogViewTests
         Layout(window);
 
         Assert.Equal(0, view.RowSubscriptionCount);
+        window.Close();
+    }
+
+    // ---- 6. Column header row (#55 / #57) --------------------------------
+
+    [AvaloniaFact]
+    public void Event_log_has_a_visible_column_header_row_with_spec_labels()
+    {
+        var (window, _, _, registry, manager, fakes) = MakeView();
+        var host = AddHost(registry, fakes, "host-a");
+        window.Show();
+        Raise(manager, host.Id, Msg(1, 1, "hello"));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        Assert.Equal(DataGridHeadersVisibility.Column, grid.HeadersVisibility);
+
+        var labels = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.IsVisible && h.Bounds.Width > 0).Select(h => h.Content as string)
+            .Where(s => !string.IsNullOrEmpty(s)).ToList();
+        Assert.Contains(Strings.EventLogColTime, labels);
+        Assert.Contains(Strings.ColHost, labels);
+        Assert.Contains(Strings.ColProject, labels);
+        Assert.Contains(Strings.EventLogColMessage, labels);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Event_log_columns_are_resizable_via_header_edge_drag()
+    {
+        var (window, _, _, registry, manager, fakes) = MakeView();
+        var host = AddHost(registry, fakes, "host-a");
+        window.Show();
+        Raise(manager, host.Id, Msg(1, 1, "hello"));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        Assert.True(grid.CanUserResizeColumns);
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == Strings.EventLogColTime);
+        var start = header.Bounds.Width;
+        var edge = header.TranslatePoint(new Point(header.Bounds.Width - 2, header.Bounds.Height / 2), window)!.Value;
+        var target = edge.WithX(edge.X + 48);
+        window.MouseMove(edge, RawInputModifiers.None);
+        window.MouseDown(edge, MouseButton.Left, RawInputModifiers.None);
+        window.MouseMove(target, RawInputModifiers.None);
+        window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
+        Layout(window);
+        Assert.True(header.Bounds.Width > start + 20, $"resize should widen Time: start={start}, now={header.Bounds.Width}");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Severity_gutter_column_has_no_divider_in_body_or_header()
+    {
+        var (window, _, _, registry, manager, fakes) = MakeView();
+        var host = AddHost(registry, fakes, "host-a");
+        window.Show();
+        Raise(manager, host.Id, Msg(1, 1, "hello"));
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+
+        var iconCells = grid.GetVisualDescendants().OfType<DataGridCell>()
+            .Where(c => c.Classes.Contains("priorityIcon")).ToList();
+        Assert.NotEmpty(iconCells);
+        foreach (var c in iconCells)
+        {
+            var line = VisualTree.FindInVisualTree<Avalonia.Controls.Shapes.Rectangle>(c, r => r.Name == "PART_RightGridLine");
+            Assert.NotNull(line);
+            Assert.Equal(0d, line!.Width);
+        }
+
+        // Header: order the REAL headers (Bounds.Width>0) left-to-right; severity is the 4th visible
+        // column in all-hosts scope. Assert its separator is off and a normal header keeps its own.
+        var headers = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.Bounds.Width > 0).OrderBy(h => h.Bounds.X).ToList();
+        // headers: Time(0) Host(1) Project(2) severity(3) Message(4)
+        Assert.False(headers[3].AreSeparatorsVisible); // severity gutter
+        Assert.True(headers[2].AreSeparatorsVisible);  // Project keeps its separator
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Event_log_default_column_widths_match_the_spec()
+    {
+        var (window, _, _, _, _, _) = MakeView();
+        window.Show();
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(128, W(0)); // Time
+        Assert.Equal(84,  W(1)); // Host
+        Assert.Equal(140, W(2)); // Project
+        Assert.Equal(20,  W(3)); // severity
+        Assert.True(grid.Columns[4].Width.IsStar); // Message
         window.Close();
     }
 
