@@ -1,5 +1,6 @@
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
+using Lattice.Tests.Interleaving;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -151,21 +152,43 @@ public class HostMonitorStateMachineTests
     public async Task Wrong_password_is_terminal_until_config_update()
     {
         var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
+        var controller = new ProbeController();
         var time = new FakeTimeProvider();
-        HostConfig config = Config();
+        HostConfig config = TestData.MakeHostConfig(password: "pw", address: "host-a");
         await using var monitor = new HostMonitor(config, () => fake, time, 5);
-        monitor.Start();
-        await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.AuthFailed);
+        monitor.InterleaveProbe = controller.Probe;
 
-        // Neither time nor RequestRefresh may revive it.
+        // Freeze the loop the instant it is about to park in AuthFailed. When
+        // WaitForAsync returns, the failed attempt has fully drained and the loop is
+        // pinned at a known point — a deterministic barrier, no wall-clock sleep, so a
+        // spurious wake below has nothing to hide behind.
+        controller.FreezeAt(InterleavePoints.BeforeParkWait);
+        monitor.Start();
+        await controller.WaitForAsync(InterleavePoints.BeforeParkWait);
+        Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
+        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
+
+        // AuthFailed parks on a config-change wait, not a timer: neither advancing the
+        // clock nor a RequestRefresh may schedule a fresh attempt. Both land while the
+        // loop is pinned; Release lets it enter the park, where a correct loop consumes
+        // the stale wake as a no-op.
         time.Advance(TimeSpan.FromMinutes(5));
         monitor.RequestRefresh();
-        await Task.Delay(100);
-        Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
+        controller.Release();
 
+        // The one thing that legitimately un-parks AuthFailed: a config change. Point it
+        // at a NEW address with the right password so its connect is unambiguous, and
+        // settle on the resulting Connected (a positive end state, no time ceiling).
         fake.OnAuthorize = _ => Task.FromResult(true);
-        monitor.UpdateConfig(config with { Password = "right" });
+        monitor.UpdateConfig(config with { Address = "host-b", Password = "right" });
         await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
+
+        // host-a was connected exactly once — the initial failure. A wake-driven revival
+        // would have re-connected host-a (recorded the instant it is attempted, before
+        // the config change ever pointed the loop at host-b), so any count above one is
+        // proof the refresh wrongly revived the parked loop.
+        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
+        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-b")));
     }
 
     [Fact]
