@@ -38,23 +38,36 @@ Classifying a response as normal-vs-error status is fine; relaying its substance
 - **Head sha** — the commit the review should target.
 
 ## Phase 1 — acknowledgement gate (hard cap 5 minutes)
-Codex acknowledges a received trigger by reacting 👀 (`eyes`) on the trigger comment, usually
-within 1–2 min. But **a missing 👀 has TWO possible meanings**, and you must distinguish them
-before concluding anything:
-1. the trigger was silently dropped and no review is coming; OR
-2. Codex already finished and posted its result — the 👀 reaction can clear once the review
-   completes, so "no eyes now" does NOT prove a dropped trigger.
+Codex acknowledges a received trigger by reacting 👀 (`eyes`), usually within 1–2 min. **WHERE
+the 👀 lives depends on the round:**
+- **Round 1 (PR-open AUTO review)** has NO trigger comment — the 👀 sits on the **PR body
+  itself** (issue-level reactions). Poll `pull_request_read` `get` (or `issue_read` `get`) →
+  `reactions.eyes` on the PR. (Watching a comment here yields a FALSE no-ack — the documented
+  #61/#65 double-trigger bug.)
+- **Manual post-push re-trigger** has a trigger comment — poll that comment's `reactions.eyes`.
 
-So each Phase-1 cycle checks BOTH signals via `mcp__github__pull_request_read`:
-- **Already-posted result?** `get_reviews` + `get_comments` — is there a Codex
-  (`chatgpt-codex-connector[bot]`) review/comment tied to the head sha (or newer than
-  baseline)? If yes → jump straight to `Codex: POSTED` (Phase 2 is already satisfied).
-- **Ack?** Call `get_comments` with **`perPage: 100`** and find the comment whose `id` == the
-  trigger comment id, then read its `reactions.eyes` (`eyes >= 1` = Codex acknowledged). This
-  MCP returns comments **oldest-first and paginated**, so the newest (trigger) comment falls
-  off a small default page — `perPage: 100` guarantees it's present (page to the last page in
-  the rare case of >100 comments). NEVER treat "trigger id not in the results" as `eyes == 0`
-  unless you actually fetched the page it lives on.
+A missing 👀 still has TWO meanings — distinguish before concluding: (1) trigger dropped, no
+review coming; OR (2) Codex already finished and the 👀 cleared on completion (absence now ≠
+dropped trigger). So each Phase-1 cycle checks BOTH signals:
+- **Already-posted result?** `get_reviews` + `get_comments` — a Codex
+  (`chatgpt-codex-connector[bot]`) review/comment tied to the head sha (or newer than baseline)?
+  If yes → `Codex: POSTED`. Also, for round 1, a bare **`+1` on the PR body** is Codex's CLEAN
+  verdict (it 👍s instead of commenting when it finds nothing) — treat a PR-body `+1` as a
+  candidate POSTED-clean signal, subject to the attribution caveat below.
+- **Ack?** Read `reactions.eyes` on the correct object (PR body for round 1; the trigger comment
+  for a manual re-trigger). For a comment, call `get_comments` with **`perPage: 100`** (it
+  returns comments oldest-first, paginated — the newest trigger comment falls off a small
+  default page; page to the last page if >100). NEVER treat "trigger id not in the results" as
+  `eyes == 0` unless you fetched the page it lives on.
+
+**⚠️ REACTION ATTRIBUTION CAVEAT (report, don't guess).** The MCP `reactions` block gives only
+COUNTS, never authors — a `reactions.eyes:1` / `+1:1` can be the OWNER, the controller, or
+anyone, NOT necessarily Codex. You (pr-monitor, MCP-only) CANNOT confirm the reactor. So:
+terminal `POSTED`/`ERROR` signals must come from AUTHORED artifacts (a review/comment whose
+`user.login == chatgpt-codex-connector[bot]` — precise). When the ONLY signal is a reaction
+(esp. a round-1 PR-body `+1` with no authored comment), report it as **reactor-UNVERIFIED** and
+let the controller exact-match the author (`gh api …/reactions`) before acting — never assert it
+was Codex.
 
 Interval ≈ 15–20 s, SHORT Bash `sleep` between polls. **Total Phase-1 cap = 5 minutes.** Resolve:
 - **A result already posted →** `Codex: POSTED` and stop (do not wait further).
