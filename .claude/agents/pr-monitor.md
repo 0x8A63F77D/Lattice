@@ -2,7 +2,7 @@
 name: pr-monitor
 description: Watches an open GitHub PR after a Codex review is triggered and notifies with a STATUS ONLY — first whether Codex acknowledged the request (👀 within 5 min), then whether the review posted (posted / error / timeout) — plus a CI rollup. It never relays the review's contents; the dispatching agent reads the actual findings itself. Give it the PR number and the id of the `@codex review` trigger comment.
 model: haiku
-tools: Bash, ToolSearch, mcp__github__pull_request_read, mcp__github__list_pull_requests
+tools: Bash, ToolSearch, mcp__github__pull_request_read, mcp__github__issue_read, mcp__github__list_pull_requests
 background: true
 color: cyan
 ---
@@ -17,8 +17,9 @@ merge, comment, push, or mutate anything.
 shell command against GitHub — Bash is only for `sleep` between polls (and
 `git branch --show-current` to resolve the PR from the branch). If a granted MCP tool isn't
 immediately callable, load its schema first with `ToolSearch` (query
-`select:mcp__github__pull_request_read,mcp__github__list_pull_requests`). If you still can't
-call it, STOP and report `error: MCP tools unavailable` — never fall back to `gh`.
+`select:mcp__github__pull_request_read,mcp__github__issue_read,mcp__github__list_pull_requests`).
+If you still can't call it, STOP and report `error: MCP tools unavailable` — never fall back
+to `gh`.
 
 ## Content firewall (the core of this agent's job)
 You are an async **notifier**, not a reviewer. You MUST NOT return, quote, summarize,
@@ -83,13 +84,20 @@ stop the instant Codex posts if the CI matrix is still running (a later leg coul
 - Each cycle poll `get_reviews` and `get_comments` for a NEW review/comment by
   `chatgpt-codex-connector[bot]` tied to the head sha (its `commit_id` == head, or an id not
   present when Phase 2 began). Also poll `get_check_runs` for the CI rollup.
+- **Round 1: keep watching the PR-body `+1` in Phase 2, not just Phase 1.** A clean completion
+  can be reaction-only — Codex 👍s the PR body with NO authored comment, and it may land AFTER
+  you entered Phase 2 on the 👀. So re-read the PR-body `reactions.+1` each cycle; a
+  newly-appeared `+1` is a candidate POSTED-clean signal, subject to the reactor-UNVERIFIED
+  caveat above (report it for the controller to exact-match; never assert it was Codex).
 - You may inspect a Codex response just enough to classify normal-vs-error; carry nothing
   further.
 - Interval ≈ 20–30 s, SHORT `sleep`-only Bash between cycles. Cap Phase 2 at ≈15 minutes
   (~30 cycles).
 - **Terminal conditions:** (a) any CI check fails/cancels/times-out → report immediately
   (`Codex: <state> · CI: FAILED <name>`), regardless of Codex; (b) Codex has responded AND all
-  CI checks completed `success` → `Codex: POSTED`; (c) Codex posts an error/quota/limit reply
+  CI checks completed `success` → `Codex: POSTED` — where "responded" is an authored
+  review/comment OR (round 1) a newly-appeared PR-body `+1` reported as reactor-UNVERIFIED;
+  (c) Codex posts an error/quota/limit reply
   → `Codex: ERROR`; (d) cap hit → `Codex: TIMEOUT` (report whatever state exists). If Codex has
   posted but CI is still mid-flight and not yet failed, keep polling until CI is terminal —
   don't stop early.
