@@ -63,14 +63,26 @@
     <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeight}" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />
+    <!-- The Fluent DataGrid ControlTheme defaults GridLinesVisibility to None, so row rules and
+         column dividers render nowhere by default regardless of the brush setters below. All
+         must render (row rules + column dividers) per spec. The trailing star-column divider
+         auto-collapses (filler column has no cell to paint), and per-cell gutter dividers are
+         killed separately later; this setter is the on/off switch only. -->
+    <Setter Property="GridLinesVisibility" Value="All" />
     <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource LatticeStrokeSubtleBrush}" />
-    <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
+    <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource LatticeGridDividerBrush}" />
     <Setter Property="Background" Value="{DynamicResource LatticeSurfaceBrush}" />
   </Style>
 
   <Style Selector="DataGrid.lattice.compact">
     <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeightCompact}" />
     <Setter Property="FontSize" Value="12" />
+  </Style>
+
+  <!-- The header bottom rule is a template part painted from the system DataGridGridLinesBrush;
+       repaint it to the Lattice stroke (#E0E0E0 / #3D3D3D) per the 32px-header bottom border. -->
+  <Style Selector="DataGrid.lattice /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">
+    <Setter Property="Fill" Value="{DynamicResource LatticeStrokeBrush}" />
   </Style>
 
   <Style Selector="DataGridCell">

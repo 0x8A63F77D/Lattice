@@ -232,4 +232,42 @@ public class DataGridInfraTests
 
         Assert.True(grid.CanUserResizeColumns);
     }
+
+    [AvaloniaFact]
+    public void Lattice_grid_enables_gridlines_and_divider_brush_is_spec_color()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        Assert.Equal(Avalonia.Controls.DataGridGridLinesVisibility.All, grid.GridLinesVisibility);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeGridDividerBrush", window.ActualThemeVariant, out var divider));
+        var vfill = Assert.IsAssignableFrom<ISolidColorBrush>(grid.VerticalGridLinesBrush);
+        Assert.Equal(((ISolidColorBrush)divider!).Color, vfill.Color);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeStrokeSubtleBrush", window.ActualThemeVariant, out var rowRule));
+        var hfill = Assert.IsAssignableFrom<ISolidColorBrush>(grid.HorizontalGridLinesBrush);
+        Assert.Equal(((ISolidColorBrush)rowRule!).Color, hfill.Color);
+        Assert.NotEqual(vfill.Color, hfill.Color);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Header_bottom_rule_paints_the_stroke_not_the_system_gridline()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var rule = VisualTree.FindInVisualTree<Rectangle>(grid, r => r.Name == "PART_ColumnHeadersAndRowsSeparator");
+        Assert.NotNull(rule);
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeStrokeBrush", window.ActualThemeVariant, out var stroke));
+        var fill = Assert.IsAssignableFrom<ISolidColorBrush>(rule!.Fill);
+        Assert.Equal(((ISolidColorBrush)stroke!).Color, fill.Color);
+        window.Close();
+    }
 }
