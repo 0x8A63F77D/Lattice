@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 96 96">
+            <defs>
+              <linearGradient id="pl20a" x1="0" y1="0" x2="0.35" y2="1">
+                <stop offset="0" stop-color="#2585DE"></stop><stop offset="1" stop-color="#0C4A8E"></stop>
+              </linearGradient>
+              <linearGradient id="ac20a" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#9AE2FF"></stop><stop offset="1" stop-color="#5FC7FF"></stop>
+              </linearGradient>
+              <clipPath id="cp20a"><rect x="2" y="2" width="92" height="92" rx="21"></rect></clipPath>
+              <clipPath id="cpV1_20a"><rect x="19" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect></clipPath>
+              <clipPath id="cpA_20a"><rect x="43" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect></clipPath>
+              <clipPath id="cpV3_20a"><rect x="67" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect></clipPath>
+              <clipPath id="all20a">
+                <rect x="19" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect>
+                <rect x="67" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect>
+                <rect x="14" y="29" width="68" height="10" rx="5" transform="rotate(45 48 48)"></rect>
+                <rect x="14" y="57" width="68" height="10" rx="5" transform="rotate(45 48 48)"></rect>
+                <rect x="43" y="16" width="10" height="64" rx="5" transform="rotate(45 48 48)"></rect>
+              </clipPath>
+              <filter id="bl20a" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="14"></feGaussianBlur>
+              </filter>
+              <filter id="sb20a" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="1.3"></feGaussianBlur>
+              </filter>
+              <filter id="ds20a" x="-30%" y="-30%" width="160%" height="160%">
+                <feDropShadow dx="0.8" dy="1.2" stdDeviation="1.2" flood-color="#04203E" flood-opacity="0.38"></feDropShadow>
+              </filter>
+              <filter id="nz20a">
+                <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch"></feTurbulence>
+                <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0.35 0.35 0.35 0 0"></feColorMatrix>
+              </filter>
+            </defs>
+            <rect x="2" y="2" width="92" height="92" rx="21" fill="url(#pl20a)"></rect>
+            <g clip-path="url(#cp20a)">
+              <ellipse cx="26" cy="14" rx="58" ry="40" fill="#8FD0FA" opacity="0.4" filter="url(#bl20a)"></ellipse>
+              <ellipse cx="82" cy="88" rx="55" ry="42" fill="#083766" opacity="0.4" filter="url(#bl20a)"></ellipse>
+            </g>
+            <g transform="rotate(45 48 48)" filter="url(#ds20a)">
+              <rect x="14" y="29" width="68" height="10" rx="5" fill="#C9DEF2"></rect>
+              <rect x="14" y="57" width="68" height="10" rx="5" fill="#C9DEF2"></rect>
+            </g>
+            <g transform="rotate(45 48 48)" filter="url(#ds20a)">
+              <rect x="19" y="16" width="10" height="64" rx="5" fill="#76A9DC"></rect>
+              <rect x="67" y="16" width="10" height="64" rx="5" fill="#76A9DC"></rect>
+            </g>
+            <g transform="rotate(45 48 48)" filter="url(#ds20a)">
+              <rect x="43" y="16" width="10" height="64" rx="5" fill="url(#ac20a)"></rect>
+            </g>
+            <g clip-path="url(#cpA_20a)">
+              <rect x="38.8" y="30.2" width="20" height="10" fill="#04203E" opacity="0.4" filter="url(#sb20a)" transform="rotate(45 48 48)"></rect>
+            </g>
+            <g clip-path="url(#cpV1_20a)">
+              <rect x="14.8" y="58.2" width="20" height="10" fill="#04203E" opacity="0.4" filter="url(#sb20a)" transform="rotate(45 48 48)"></rect>
+            </g>
+            <g clip-path="url(#cpV3_20a)">
+              <rect x="62.8" y="58.2" width="20" height="10" fill="#04203E" opacity="0.4" filter="url(#sb20a)" transform="rotate(45 48 48)"></rect>
+            </g>
+            <g transform="rotate(45 48 48)">
+              <rect x="38" y="29" width="20" height="10" fill="#C9DEF2"></rect>
+              <rect x="14" y="57" width="20" height="10" rx="5" fill="#C9DEF2"></rect>
+              <rect x="62" y="57" width="20" height="10" rx="5" fill="#C9DEF2"></rect>
+            </g>
+            <rect x="2" y="2" width="92" height="92" fill="#FFFFFF" clip-path="url(#all20a)" opacity="0.05"></rect>
+            <rect x="2" y="2" width="92" height="92" filter="url(#nz20a)" clip-path="url(#all20a)" opacity="0.02"></rect>
+          </svg>
