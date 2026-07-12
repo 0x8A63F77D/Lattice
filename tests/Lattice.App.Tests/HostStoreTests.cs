@@ -2,6 +2,7 @@ using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -15,7 +16,11 @@ public class HostStoreTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        // Frozen fake clock: the settles here land on the immediate first poll or on
+        // explicit wakes, so no natural steady-state poll is needed — freezing keeps
+        // the poll cadence out of the settles entirely (see the class-level note on
+        // TasksViewModelTests for the shared rationale).
+        _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         return ValueTask.CompletedTask;
     }
 
@@ -152,13 +157,14 @@ public class HostStoreTests : IAsyncLifetime
     [Fact]
     public async Task RequestRefresh_wakes_the_scoped_monitor()
     {
-        // Own registry/manager: the polling interval (60s) must sit far beyond
-        // Wait's 5s ceiling, otherwise the monitor's NATURAL periodic tick lands
-        // inside the wait window and the test passes with an empty RequestRefresh.
+        // Own registry/manager so a single observable fake carries the Calls log.
+        // The frozen fake clock is what guarantees no NATURAL periodic tick lands in
+        // the wait window (which would let the test pass with an empty RequestRefresh);
+        // the interval value is now irrelevant, so it stays at the fixture's 5s.
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-        var registry = new HostRegistry(new LatticeConfig(60, []), path);
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var fake = new FakeGuiRpcClient();
-        var manager = new HostMonitorManager(registry, () => fake, TimeProvider.System);
+        var manager = new HostMonitorManager(registry, () => fake, new FakeTimeProvider());
         try
         {
             var host = TestData.MakeHostConfig();
@@ -166,7 +172,7 @@ public class HostStoreTests : IAsyncLifetime
             var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
             manager.Start();
             // Snapshot ⇒ the first tick's get_results is done; the loop is now in
-            // its 60s poll wait, so only RequestRefresh can trigger another one.
+            // its (frozen) poll wait, so only RequestRefresh can trigger another one.
             await Wait.UntilAsync(() => store.Hosts[0].Snapshot is not null, "first poll should complete");
             var before = fake.Calls.Count(c => c == "get_results");
 

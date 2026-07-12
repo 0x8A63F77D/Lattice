@@ -6,6 +6,7 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -81,7 +82,13 @@ public class TasksViewModelTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
+        // Frozen fake clock: these facts drive the monitor entirely through the
+        // immediate first poll and explicit RequestRefresh/UpdateHost wakes (the
+        // "skip the remaining backoff, retry now" nudges below). Never advancing it
+        // means no natural steady-state poll — and no natural backoff-retry — ever
+        // races the scripted transitions, which is exactly the ~10% flake the
+        // reappears-after-recovery fact documents.
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
         _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
         _clock = new ManualUiClock();
         _uiStore = new UiStateStore(_uiPath);
@@ -442,18 +449,18 @@ public class TasksViewModelTests : IAsyncLifetime
         // user dismisses {B}, B recovers (unreachable set -> empty), and B later
         // fails AGAIN (set -> {B}), the fresh set SetEquals the stale dismissed
         // set — without clearing it on recovery, the new outage is never shown.
-        // The journey is ordered on OBSERVABLE, STABLE events only. Two rules,
-        // learned from a ~10% flake in parallel runs:
+        // The journey is ordered on OBSERVABLE, STABLE events only. Two rules:
         //  - before breaking, wait until the fake has observed a poll on the
         //    current connection (Calls log) — otherwise the break installs
         //    itself before B's first tick and the failure cascade can complete
         //    before this thread ever starts watching;
-        //  - never wait on the transient Retrying state. A broken B self-drives
-        //    Retrying (1s backoff) -> reconnect -> auth-reject -> AuthFailed,
-        //    so the ~1s Retrying window can be missed outright; AuthFailed is
-        //    the terminal park state and cannot be. (No backoff-skip nudge is
-        //    needed either: wakes are sticky — see HostMonitor.WaitAsync — so
-        //    one RequestRefresh reliably forces the failing tick.)
+        //  - under the fixture's frozen fake clock the backoff never auto-elapses,
+        //    so a broken B parks in Retrying rather than self-driving on to
+        //    AuthFailed. Retrying is therefore a STABLE, waitable state here: wait
+        //    for it, then a second RequestRefresh skips the (frozen) backoff to
+        //    force the reconnect -> auth-reject -> AuthFailed (the same nudge the
+        //    sibling dismiss/reappear facts use). Wakes are sticky
+        //    (HostMonitor.WaitAsync), so the nudge can never be lost.
         var fakeA = new FakeGuiRpcClient();
         var fakeB = new FakeGuiRpcClient();
         AddHost("host-a", fakeA);
@@ -465,10 +472,14 @@ public class TasksViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
             "B's first poll should be observed before the test breaks it");
 
-        // Break B: poll failure, then auth failure on reconnect -> AuthFailed.
+        // Break B: poll failure parks it in Retrying (frozen backoff), then a
+        // backoff-skip nudge forces the reconnect whose auth is rejected -> AuthFailed.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
         _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the frozen backoff, reconnect now
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
         await Wait.UntilAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
@@ -490,10 +501,14 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.False(vm.ShowPartialBar, "no outage, no bar");
 
         // Break B again: the SAME id-set {B} as the dismissed outage, but this
-        // is a NEW outage after a full recovery — it must be reported.
+        // is a NEW outage after a full recovery — it must be reported. Same
+        // Retrying-park -> backoff-skip -> AuthFailed cascade as the first break.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom again");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
         _store.RequestRefresh(hostB.Id);
+        await Wait.UntilAsync(() =>
+            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _store.RequestRefresh(hostB.Id); // skip the frozen backoff, reconnect now
         await Wait.UntilAsync(() =>
             _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
 

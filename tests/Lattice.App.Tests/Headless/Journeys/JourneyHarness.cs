@@ -7,6 +7,7 @@ using Lattice.App.Views;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 
 namespace Lattice.App.Tests.Headless.Journeys;
 
@@ -88,7 +89,7 @@ internal sealed class JourneyHarness : IAsyncDisposable
         // for the three approved substitutions).
         Registry = App.LoadRegistryWithFallback(ConfigPath);
         _factory = () => new RoutingGuiRpcClient(_fakes);
-        Manager = new HostMonitorManager(Registry, _factory, TimeProvider.System);
+        Manager = new HostMonitorManager(Registry, _factory, new FakeTimeProvider());
         Store = new HostStore(Registry, Manager, _dispatcher);
         Clock = new ManualUiClock();
         UiState = new UiStateStore(UiStatePath);

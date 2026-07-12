@@ -10,6 +10,7 @@ using Lattice.App.Views;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Lattice.Tests.HeadlessLayout;
 
@@ -23,7 +24,7 @@ public class EventLogViewTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var fakes = new Dictionary<string, FakeGuiRpcClient>();
-        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
+        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var vm = new EventLogViewModel(store);
         var view = new EventLogView { DataContext = vm };

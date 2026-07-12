@@ -5,6 +5,7 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -23,7 +24,10 @@ public class ShellViewModelTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
+        // Frozen fake clock: the count-mirroring facts settle on the immediate first
+        // poll, so no natural steady-state poll is needed (shared rationale on
+        // TasksViewModelTests).
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
         _clock = new ManualUiClock();
         _shell = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
