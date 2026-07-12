@@ -55,20 +55,30 @@
 
 Verified up front (decisions spec §1): FA 3.0.1 `FANavigationView` has `PaneFooter`, and its template renders `PaneFooter` **above** `FooterMenuItems`. The move is a pure slot change; the `MinWidth=0` compact fix and every `#Nav.IsPaneOpen` binding stay as-is.
 
-- [ ] **Step 1: Write the failing geometry test**
+- [ ] **Step 1: Write the failing SLOT-IDENTITY test**
 
-Add to `ShellRailTests` (uses the existing `MakeShell` helper + `Layout`):
+Add to `ShellRailTests` (uses the existing `MakeShell` helper + `Layout`). A vertical-order-only
+check would be a false red: today's `PaneCustomContent` also renders above `FooterMenuItems`, so an
+order assertion passes on the rejected layout. Pin the actual slot instead — the hosts block must be the
+`FANavigationView.PaneFooter` content and `PaneCustomContent` must be empty:
 
 ```csharp
 [AvaloniaFact]
-public void Hosts_block_renders_above_the_settings_footer_item()
+public void Hosts_block_is_hosted_in_the_pane_footer_slot()
 {
     var (window, shell, registry) = MakeShell();
     window.Show();
     registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
     Layout(window);
 
-    // Design 3a: hosts dock in PaneFooter directly above Settings (FooterMenuItems).
+    // Design 3a: the hosts block lives in the PaneFooter slot, NOT the rejected
+    // on-top PaneCustomContent slot. This discriminates the two layouts (order alone
+    // does not — PaneCustomContent also sits above the footer menu).
+    Assert.Null(window.Nav.PaneCustomContent);
+    var footer = Assert.IsAssignableFrom<Control>(window.Nav.PaneFooter);
+    Assert.Contains(window.HostList.GetVisualAncestors(), a => ReferenceEquals(a, footer));
+
+    // Secondary sanity: still renders above Settings (FooterMenuItems).
     var hostsTop = window.HostList.TranslatePoint(new Point(0, 0), window)!.Value.Y;
     var settingsTop = window.NavSettings.TranslatePoint(new Point(0, 0), window)!.Value.Y;
     Assert.True(hostsTop < settingsTop,
@@ -76,11 +86,12 @@ public void Hosts_block_renders_above_the_settings_footer_item()
     window.Close();
 }
 ```
+(Requires `using Avalonia.VisualTree;` for `GetVisualAncestors` — already imported in this file.)
 
-- [ ] **Step 2: Run it — expect FAIL**
+- [ ] **Step 2: Run it — expect FAIL for the right reason**
 
-Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_renders_above_the_settings_footer_item"`
-Expected: FAIL (today the block is in `PaneCustomContent`, which sits above the menu items, not just above Settings — the assertion may pass or the element tree differs; either way this pins the target).
+Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_is_hosted_in_the_pane_footer_slot"`
+Expected: FAIL on `Assert.Null(window.Nav.PaneCustomContent)` (today the block IS the `PaneCustomContent`) and on `Nav.PaneFooter` being null — i.e. red specifically because the block is still in the wrong slot, not because of a geometry accident. Leaving the block in `PaneCustomContent` cannot make this green.
 
 - [ ] **Step 3: Move the block in XAML**
 
@@ -88,8 +99,8 @@ In `ShellWindow.axaml`, cut the entire `<ui:FANavigationView.PaneCustomContent> 
 
 - [ ] **Step 4: Run the test — expect PASS**
 
-Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_renders_above_the_settings_footer_item"`
-Expected: PASS.
+Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_is_hosted_in_the_pane_footer_slot"`
+Expected: PASS — `Nav.PaneFooter` now hosts `HostList` and `Nav.PaneCustomContent` is null.
 
 - [ ] **Step 5: Run the existing compact + sentinel rail pins**
 
@@ -502,7 +513,7 @@ public static class RailTierProjection
 }
 ```
 
-> `RailTier` is an F# DU; from C# its cases are `RailTier.Attention` etc. (static properties). The `switch` has no `_` arm, so a new `RailState` is a compile error (CS8509 is treated as a warning-as-error in this repo) — the intended guard.
+> `RailTier` is an F# DU; from C# its cases are `RailTier.Attention` etc. (static properties). The `switch` has no `_` arm, so a new `RailState` raises CS8509 (non-exhaustive switch). `Lattice.App.csproj` does **not** set `TreatWarningsAsErrors`, so a local un-flagged `dotnet build` only *warns* — but CI promotes it to an error solution-wide via `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`), and nothing merges without CI green. That is the gate the guard relies on; do **not** add `<WarningsAsErrors>` to the csproj (redundant with CI).
 
 - [ ] **Step 4: Run — expect PASS.** Then `dotnet build src/Lattice.App` to confirm the exhaustiveness guard compiles clean.
 

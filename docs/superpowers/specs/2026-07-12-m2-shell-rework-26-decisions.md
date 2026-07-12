@@ -48,10 +48,13 @@ paused/disabled/snoozed state, **that** PR reopens the taxonomy — F#/C# exhaus
 | **Healthy** | `Connected` ∪ `Connecting` | collapsed 28 px count row; expand state persisted |
 
 - `Connecting` is not a problem (not `Attention`) so it folds into **Healthy** as "on its way up".
-- The classifier `RailState -> RailTier` is **total with no wildcard** (CLAUDE.md DU rule; `-warnaserror`
-  enforces the C# switch exhaustiveness). The renderer skips an empty tier, so an all-healthy farm shows no
-  Attention header, and in practice `GroupHeaderRow` only ever collapses **Healthy** (Attention is always
-  expanded).
+- The classifier `RailState -> RailTier` is **total with no wildcard** (CLAUDE.md DU rule). A new
+  `RailState` makes the C# `switch` raise CS8509; `Lattice.App.csproj` sets no `TreatWarningsAsErrors`, so a
+  local build only warns, but **CI promotes it to an error solution-wide** via
+  `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`) — the gate nothing
+  merges past. (The F# `RailLayoutPolicy` match is additionally covered by `Lattice.App.Aggregation.fsproj`'s
+  own `TreatWarningsAsErrors`.) The renderer skips an empty tier, so an all-healthy farm shows no Attention
+  header, and in practice `GroupHeaderRow` only ever collapses **Healthy** (Attention is always expanded).
 
 **Deliberate design deviation to record on the #57 design-fidelity tracker:** the mock's `Offline · 2`
 group is intentionally NOT implemented in M2 (folded into Attention, per owner). This is the same
