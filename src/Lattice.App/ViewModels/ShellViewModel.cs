@@ -27,20 +27,28 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _store = store;
         _clock = clock;
         Settings = new SettingsViewModel(registry, store, clientFactory);
-        Tasks = new TasksViewModel(store, clock, uiState);
+        // ONE DensityPreference, shared: the single owner of the global density
+        // preference, so a toggle in either view reaches the other in-session
+        // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a
+        // fixes its row heights), so it does not take the shared preference.
+        var density = new DensityPreference(uiState);
+        Tasks = new TasksViewModel(store, clock, uiState, density);
         Projects = new ProjectsViewModel(store, clock);
+        Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
             new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", Projects),
-            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
+            new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", Transfers),
             new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", EventLog),
         ];
         _selectedView = Views[0];
         _currentPage = Views[0].Page;
         Tasks.Rows.CollectionChanged += OnTasksRowsChanged;
         _tasksCount = Tasks.Rows.Count;
+        Transfers.Rows.CollectionChanged += OnTransfersRowsChanged;
+        _transfersCount = Transfers.Rows.Count;
         EventLog.PropertyChanged += OnEventLogPropertyChanged;
         // The All-hosts sentinel always leads the rail; host entries follow it
         // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
@@ -62,6 +70,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// scope changes into it (same rail-scope contract as <see cref="Tasks"/>).</summary>
     public ProjectsViewModel Projects { get; }
 
+    /// <summary>The Transfers page VM (Views[2].Page); exposed directly so the shell
+    /// can push scope changes into it.</summary>
+    public TransfersViewModel Transfers { get; }
+
     /// <summary>The Event-log page (Views[3].Page); the shell pushes scope into it,
     /// toggles its active flag as it becomes / leaves CurrentPage (which zeroes the
     /// unread badge on activation), and mirrors its unread count for the nav badge.</summary>
@@ -79,6 +91,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private int _tasksCount;
 
     public bool HasTasksCount => TasksCount > 0;
+
+    /// <summary>Mirrors <see cref="TransfersViewModel.Rows"/>.Count; drives the Transfers nav item's inline count badge.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTransfersCount))]
+    private int _transfersCount;
+
+    public bool HasTransfersCount => TransfersCount > 0;
 
     /// <summary>Mirrors <see cref="EventLogViewModel.UnreadCount"/>; drives the Event-log
     /// nav item's InfoBadge (unread warning+error count while the page is not active).</summary>
@@ -98,11 +117,15 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         Tasks.Scope = value;
         Projects.Scope = value;
+        Transfers.Scope = value;
         EventLog.Scope = value;
     }
 
     private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         TasksCount = Tasks.Rows.Count;
+
+    private void OnTransfersRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        TransfersCount = Transfers.Rows.Count;
 
     private void OnEventLogPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -185,9 +208,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
+        Transfers.Rows.CollectionChanged -= OnTransfersRowsChanged;
         EventLog.PropertyChanged -= OnEventLogPropertyChanged;
         Tasks.Dispose();
         Projects.Dispose();
+        Transfers.Dispose();
         EventLog.Dispose();
         foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();

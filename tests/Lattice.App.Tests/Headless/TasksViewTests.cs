@@ -30,7 +30,7 @@ public class TasksViewTests
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
         uiState ??= new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
-        var vm = new TasksViewModel(store, clock, uiState);
+        var vm = new TasksViewModel(store, clock, uiState, new DensityPreference(uiState));
         var view = new TasksView { DataContext = vm };
         // 1280px matches ShellWindow's default width: wide enough that the Elapsed
         // (<1100) and Application (<1000) responsive breakpoints don't kick in and
@@ -298,8 +298,8 @@ public class TasksViewTests
         var fakes = new Dictionary<string, FakeGuiRpcClient> { ["host-a"] = fake };
         var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var vm = new TasksViewModel(store, new ManualUiClock(),
-            new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json")));
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var vm = new TasksViewModel(store, new ManualUiClock(), uiState, new DensityPreference(uiState));
         var view = new TasksView { DataContext = vm };
         var window = new Window { Width = 1280, Height = 800, Content = view };
         registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));

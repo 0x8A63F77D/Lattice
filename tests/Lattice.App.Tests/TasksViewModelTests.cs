@@ -76,6 +76,7 @@ public class TasksViewModelTests : IAsyncLifetime
     private HostStore _store = null!;
     private ManualUiClock _clock = null!;
     private UiStateStore _uiStore = null!;
+    private DensityPreference _density = null!;
 
     public ValueTask InitializeAsync()
     {
@@ -84,6 +85,10 @@ public class TasksViewModelTests : IAsyncLifetime
         _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
         _clock = new ManualUiClock();
         _uiStore = new UiStateStore(_uiPath);
+        // Shared, as ShellViewModel wires Tasks/Transfers in production — the
+        // clobber-direction facts below construct a second, sibling VM and rely
+        // on both funneling through the same DensityPreference/UiStateStore.
+        _density = new DensityPreference(_uiStore);
         return ValueTask.CompletedTask;
     }
 
@@ -102,7 +107,7 @@ public class TasksViewModelTests : IAsyncLifetime
         return host;
     }
 
-    private TasksViewModel MakeVm() => new(_store, _clock, _uiStore);
+    private TasksViewModel MakeVm() => new(_store, _clock, _uiStore, _density);
 
     [Fact]
     public async Task AllHosts_merges_rows_from_both_hosts()
@@ -706,6 +711,35 @@ public class TasksViewModelTests : IAsyncLifetime
         Assert.False(vm2.GetColumnPreference("Elapsed"));
         Assert.Null(vm2.GetColumnPreference("Project"));
         vm2.Dispose();
+    }
+
+    [Fact]
+    public async Task SetColumnPreference_preserves_a_density_change_saved_by_another_view_model_after_construction()
+    {
+        // Codex P2 (PR #45), mirrors the identical-name Transfers fact: a
+        // Transfers VM (sharing the same DensityPreference/UiStateStore, as
+        // ShellViewModel wires them in production) toggles density AFTER `vm`
+        // already cached its own ColumnVisibility snapshot — a stale
+        // whole-snapshot Save from `vm` must not drop that foreign density
+        // change. DensityPreference.Set and UiStateStore.Update both re-load
+        // fresh before persisting, so this holds regardless of write order.
+        AddHost("host-a", new FakeGuiRpcClient());
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => !vm.IsLoading);
+
+        using var transfersVm = new TransfersViewModel(_store, _clock, _density);
+        transfersVm.IsCompact = true;
+
+        // Tasks only touches ColumnVisibility here, but its cached _uiState
+        // predates Transfers' write.
+        vm.SetColumnPreference("Elapsed", false);
+
+        var reloaded = _uiStore.Load();
+        Assert.True(reloaded.CompactDensity, "Transfers' density change must survive Tasks' column-preference save");
+        Assert.True(reloaded.ColumnVisibility.TryGetValue("Elapsed", out var elapsedVisible),
+            "Tasks' own column preference must be saved");
+        Assert.False(elapsedVisible);
     }
 
     // Issue #24 acceptance (Tasks leg): keyed reconciliation must update a

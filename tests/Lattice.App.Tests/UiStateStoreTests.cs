@@ -180,6 +180,41 @@ public class UiStateStoreTests
     }
 
     [Fact]
+    public void Update_applies_the_mutation_to_a_freshly_loaded_state_not_a_stale_argument()
+    {
+        // Codex P2 (PR #45): Update must load fresh from disk before applying
+        // the mutation, so a write that landed on disk after some other holder
+        // cached a UiState snapshot is preserved rather than clobbered.
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        try
+        {
+            var store = new UiStateStore(path);
+
+            // A "foreign" write lands directly on disk, as if a second
+            // consumer of this store already saved a preference.
+            store.Save(new UiState(
+                CompactDensity: false,
+                ColumnVisibility: new Dictionary<string, bool> { ["Elapsed"] = false },
+                ColumnWidths: new Dictionary<string, double>()));
+
+            var updated = store.Update(s => s with { CompactDensity = true });
+
+            Assert.True(updated.CompactDensity);
+            Assert.True(updated.ColumnVisibility.TryGetValue("Elapsed", out var elapsedVisible));
+            Assert.False(elapsedVisible);
+
+            var reloaded = store.Load();
+            Assert.True(reloaded.CompactDensity);
+            Assert.False(reloaded.ColumnVisibility["Elapsed"]);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Default_path_uses_lattice_config_directory()
     {
         var store = new UiStateStore();

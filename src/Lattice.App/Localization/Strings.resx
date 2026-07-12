@@ -491,4 +491,56 @@
   <data name="UpdatedSecondsFmt" xml:space="preserve">
     <value>Updated {0}s ago</value>
   </data>
+  <!-- ===== Transfers ===== -->
+  <data name="TransfersColDirection" xml:space="preserve">
+    <value>Direction</value>
+  </data>
+  <data name="TransfersColFile" xml:space="preserve">
+    <value>File</value>
+  </data>
+  <data name="TransfersColSpeed" xml:space="preserve">
+    <value>Speed</value>
+  </data>
+  <data name="TransfersColStatus" xml:space="preserve">
+    <value>Status</value>
+  </data>
+  <data name="TransfersCountsFmt" xml:space="preserve">
+    <value>{0} transfers · {1} up · {2} down</value>
+  </data>
+  <data name="TransfersDownload" xml:space="preserve">
+    <value>Download</value>
+  </data>
+  <data name="TransfersEmpty" xml:space="preserve">
+    <value>No active transfers</value>
+  </data>
+  <data name="TransfersEmptyCaption" xml:space="preserve">
+    <value>Uploads and downloads will appear here while in progress.</value>
+  </data>
+  <data name="TransfersPartialFmt" xml:space="preserve">
+    <value>{0} of {1} hosts aren't reachable — transfers below cover {2} hosts.</value>
+  </data>
+  <data name="TransfersProgressFmt" xml:space="preserve">
+    <value>{0} / {1} MB</value>
+  </data>
+  <data name="TransfersRetryFmt" xml:space="preserve">
+    <value>Retry in {0} (attempt {1})</value>
+  </data>
+  <data name="TransfersRetryNow" xml:space="preserve">
+    <value>Retry now</value>
+  </data>
+  <data name="TransfersSpeedFmt" xml:space="preserve">
+    <value>{0} MB/s</value>
+  </data>
+  <data name="TransfersStatusActive" xml:space="preserve">
+    <value>Transferring</value>
+  </data>
+  <data name="TransfersStatusQueued" xml:space="preserve">
+    <value>Queued</value>
+  </data>
+  <data name="TransfersTitle" xml:space="preserve">
+    <value>Transfers</value>
+  </data>
+  <data name="TransfersUpload" xml:space="preserve">
+    <value>Upload</value>
+  </data>
 </root>

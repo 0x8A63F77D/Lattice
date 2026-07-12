@@ -1,0 +1,177 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:views="using:Lattice.App.Views"
+             xmlns:controls="using:Lattice.App.Controls"
+             xmlns:loc="using:Lattice.App.Localization"
+             x:Class="Lattice.App.Views.TransfersView"
+             x:DataType="vm:TransfersViewModel">
+
+  <UserControl.KeyBindings>
+    <!-- Same rationale as TasksView: F5 is a pure VM-command gesture, declarative here. -->
+    <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
+  </UserControl.KeyBindings>
+
+  <UserControl.Styles>
+    <!-- Retrying-row tint (design 2b), the Transfers analogue of Tasks' atRisk row. -->
+    <Style Selector="DataGridRow.retrying">
+      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+    </Style>
+    <!-- Progress-fill Border: accent color. Unlike Tasks, Transfers rows have
+         no suspended variant, so there is only the base rule. -->
+    <Style Selector="Border.progressFill">
+      <Setter Property="Background" Value="{DynamicResource LatticeAccentBrush}" />
+    </Style>
+    <!-- Status-cell text: SemiBold warning color while retrying. -->
+    <Style Selector="TextBlock.retryingText">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{DynamicResource LatticeWarningFgBrush}" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Command bar -->
+    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeSurfaceBrush}"
+            BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
+            BorderThickness="0,0,0,1">
+      <DockPanel Margin="16,0" LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="{x:Static loc:Strings.TransfersTitle}" FontSize="16" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
+          <!-- M3 placeholder: control operations (retry now) land with #M3. -->
+          <Button Content="{x:Static loc:Strings.TransfersRetryNow}" IsEnabled="False" Margin="8,0,0,0" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+            <PathIcon Data="{StaticResource IconWarningFilled}" Width="12" Height="12"
+                      Foreground="{DynamicResource LatticeWarningFgBrush}"
+                      IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeWarningFgBrush}"
+                       IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       IsVisible="{Binding !IsUpdateStale}" />
+          </StackPanel>
+          <Button Padding="6" Background="Transparent" Command="{Binding RefreshCommand}"
+                  ToolTip.Tip="{x:Static loc:Strings.RetryNow}">
+            <PathIcon Data="{StaticResource IconArrowClockwiseRegular}" Width="14" Height="14" />
+          </Button>
+          <ToggleButton x:Name="DensityToggle" Padding="6" Background="Transparent"
+                        IsChecked="{Binding IsCompact, Mode=TwoWay}">
+            <PathIcon Data="{StaticResource IconTextLineSpacingRegular}" Width="14" Height="14" />
+          </ToggleButton>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Partial-results warning -->
+    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+                  Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
+                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
+      <ui:FAInfoBar.ActionButton>
+        <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
+      </ui:FAInfoBar.ActionButton>
+    </ui:FAInfoBar>
+
+    <!-- Status bar -->
+    <controls:StatusBarControl DockPanel.Dock="Bottom"
+                                LeftText="{Binding CountsText}"
+                                RightText="{Binding PollingText}" />
+
+    <!-- Grid + overlays -->
+    <Panel>
+      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True">
+        <DataGrid.Columns>
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColFile}" Width="*" MinWidth="140">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TransferRow">
+                <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.Name}" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
+                               Binding="{Binding Data.Project}" Width="140" />
+          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}"
+                               Binding="{Binding Data.DirectionText}" Width="80" />
+          <!-- Progress 190: 56px bar + "34.2 / 51.7 MB" text, same shape as the Tasks Progress cell. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TransferRow">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
+                    <Border Classes="progressFill" HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                            Width="{Binding Data.Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
+                  </Border>
+                  <TextBlock Text="{Binding Data.ProgressText}" FontSize="12" Classes="numeric" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
+                               Binding="{Binding Data.SpeedText}" Width="90" />
+          <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
+               semibold warning color while retrying. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:TransferRow">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <Panel Width="12" Height="12">
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowSyncRegular}"
+                              Foreground="{DynamicResource LatticeSuccessBrush}"
+                              IsVisible="{Binding Data.UiState, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Active}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowClockwiseRegular}"
+                              Foreground="{DynamicResource LatticeWarningFgBrush}"
+                              IsVisible="{Binding Data.UiState, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Retrying}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconClockRegular}"
+                              Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                              IsVisible="{Binding Data.UiState, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Queued}" />
+                  </Panel>
+                  <TextBlock Text="{Binding Data.StatusText}" FontSize="12"
+                             Classes.retryingText="{Binding Data.IsRetrying}" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
+                               Binding="{Binding Data.Host}" Width="80"
+                               IsVisible="{Binding IsAllHostsScope}" />
+        </DataGrid.Columns>
+      </DataGrid>
+
+      <!-- Loading overlay -->
+      <Border Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
+          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
+                     TextWrapping="Wrap" TextAlignment="Center"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Empty overlay (design 2b, the common case): icon + title + caption, no
+           button — Transfers has no "add" affordance the way FirstRun does. The
+           icon's muted foreground follows FirstRunView's established token
+           (LatticeDisabledBrush; there is no separate LatticeTextDisabledBrush
+           token in Tokens.axaml). -->
+      <Border x:Name="EmptyOverlay" IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+          <PathIcon Width="24" Height="24" Data="{StaticResource IconArrowSwapRegular}"
+                    Foreground="{DynamicResource LatticeDisabledBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="{x:Static loc:Strings.TransfersEmpty}" FontSize="13" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="{x:Static loc:Strings.TransfersEmptyCaption}" FontSize="12"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

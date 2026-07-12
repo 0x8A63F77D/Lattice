@@ -235,6 +235,39 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Transfers_page_is_a_TransfersViewModel_and_receives_scope_changes()
+    {
+        var transfers = Assert.IsType<TransfersViewModel>(_shell.Views[2].Page);
+        Assert.Same(_shell.Transfers, transfers);
+        Assert.True(transfers.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, transfers.Scope.HostId);
+    }
+
+    [Fact]
+    public void Density_toggle_on_one_view_syncs_to_the_other_in_session()
+    {
+        // Codex round-3 P2 (PR #45): TasksViewModel and TransfersViewModel each
+        // cached IsCompact at construction with no way to observe a later change
+        // from the other, sibling, long-lived view — flipping density in one
+        // left the other showing the OLD density until app restart.
+        // ShellViewModel wires both through one shared DensityPreference now,
+        // so a toggle on either side must reach the other within the session.
+        Assert.False(_shell.Tasks.IsCompact);
+        Assert.False(_shell.Transfers.IsCompact);
+
+        _shell.Transfers.IsCompact = true;
+        Assert.True(_shell.Tasks.IsCompact);
+
+        _shell.Tasks.IsCompact = false;
+        Assert.False(_shell.Transfers.IsCompact);
+    }
+
+    [Fact]
     public async Task TasksCount_mirrors_the_tasks_view_models_row_count()
     {
         Assert.Equal(0, _shell.TasksCount);
@@ -250,5 +283,42 @@ public class ShellViewModelTests : IAsyncLifetime
         await Wait.UntilAsync(() => _shell.Tasks.Rows.Count == 1);
 
         Assert.Equal(1, _shell.TasksCount);
+    }
+
+    [Fact]
+    public async Task TransfersCount_mirrors_the_transfers_view_models_row_count()
+    {
+        Assert.Equal(0, _shell.TransfersCount);
+
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>([TestData.MakeTransfer(name: "file_a")]),
+        };
+        _fakes["host-a"] = fake;
+        _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        _manager.Start();
+
+        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+
+        Assert.Equal(1, _shell.TransfersCount);
+    }
+
+    [Fact]
+    public async Task HasTransfersCount_is_false_at_zero_and_true_above_zero()
+    {
+        Assert.Equal(0, _shell.TransfersCount);
+        Assert.False(_shell.HasTransfersCount);
+
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>([TestData.MakeTransfer(name: "file_a")]),
+        };
+        _fakes["host-a"] = fake;
+        _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        _manager.Start();
+
+        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+
+        Assert.True(_shell.HasTransfersCount);
     }
 }
