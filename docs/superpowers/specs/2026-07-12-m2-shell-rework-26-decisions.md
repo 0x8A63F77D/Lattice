@@ -97,6 +97,13 @@ ShowToggle = hostCount >= 2 && (not fits || Override <> Auto)
 - Any active manual override (`ForceFlat` / `ForceGrouped`) ⇒ shown, so the user can always undo their own
   choice, even after a resize made it fit again.
 
+The toggle's **next override** (opposite layout, with the Auto-return so the toggle can hide once it fits)
+is decided by the pure `RailLayoutPolicy.toggleOverride` (§6), never hand-wired in the VM — the toggle
+returns to `Auto` exactly when the flip target coincides with what `Auto` would show now. Keeping this in
+the core (not a VM `if`) is deliberate: the single-host scope pin, the collapsed-group scope persistence,
+and the toggle Auto-return are all rail decisions that belong under the transition-table, matching the
+`PartialBarPolicy`/`TasksOverlayPolicy` "born-pure" canon.
+
 ## 5. Compact (48 px) rail vs. height grouping — orthogonal axes; grouped-compact deferred
 
 Controller decision (do not re-litigate): the 48 px compact rail is the **NavigationView pane-collapse
@@ -173,6 +180,12 @@ module RailLayoutPolicy =
     /// an empty tier is skipped; within a tier, registry order is kept.
     /// Attention is always expanded; Healthy honors the persisted flag.
     val compute : RailLayoutInput -> RailLayout
+
+    /// Next override for the list/group toggle (§4): the opposite of the current
+    /// effective layout, collapsing to Auto when that target equals what Auto would
+    /// produce now (so a resize-to-fit can hide the toggle). Total, no wildcard.
+    /// The VM delegates here instead of re-deriving fit/override logic.
+    val toggleOverride : RailOverride -> RailLayoutInput -> RailOverride
 ```
 
 Contract highlights the transition-table tests pin:

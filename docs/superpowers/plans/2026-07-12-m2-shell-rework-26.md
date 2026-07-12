@@ -353,6 +353,34 @@ let ``grouped: an empty tier is skipped`` () =
         [ AllHostsRow; GroupHeaderRow(Attention, 2, true); HostRow a.Id; HostRow b.Id ],
         layout.Rows)
 
+// --- toggleOverride transition table (Auto-return path, decisions §4) ---
+// 2 hosts => flat needs (2+1)*40 = 120px.
+[<Fact>]
+let ``toggle from Auto forces the opposite, then toggling back re-enters Auto (overflow)`` () =
+    let overflow = input [| host Healthy; host Attention |] 100.0   // 120 > 100 => Auto groups
+    let o1 = RailLayoutPolicy.toggleOverride Auto overflow
+    Assert.Equal(ForceFlat, o1)                                     // opposite of Grouped
+    let o2 = RailLayoutPolicy.toggleOverride o1 overflow
+    Assert.Equal(Auto, o2)                                          // target (Grouped) == Auto's output => Auto
+
+[<Fact>]
+let ``toggle from Auto forces the opposite, then toggling back re-enters Auto (fits)`` () =
+    let fitsIn = input [| host Healthy; host Attention |] 1000.0    // 120 <= 1000 => Auto flat
+    let f1 = RailLayoutPolicy.toggleOverride Auto fitsIn
+    Assert.Equal(ForceGrouped, f1)                                  // opposite of Flat
+    let f2 = RailLayoutPolicy.toggleOverride f1 fitsIn
+    Assert.Equal(Auto, f2)                                          // target (Flat) == Auto's output => Auto
+
+[<Fact>]
+let ``toggle keeps forcing (visible flip) when the target differs from Auto's output`` () =
+    // ForceFlat while it fits: Auto would show Flat, so toggling to Grouped is a REAL
+    // visible change => ForceGrouped (NOT Auto — Auto+fits would leave it Flat, a no-op).
+    let fitsIn = input [| host Healthy; host Attention |] 1000.0
+    Assert.Equal(ForceGrouped, RailLayoutPolicy.toggleOverride ForceFlat fitsIn)
+    // ForceGrouped while it overflows: Auto would group, so toggling to Flat is real => ForceFlat.
+    let overflow = input [| host Healthy; host Attention |] 100.0
+    Assert.Equal(ForceFlat, RailLayoutPolicy.toggleOverride ForceGrouped overflow)
+
 // --- generators for the property pass ---
 let private tierGen = Gen.elements [ Attention; Healthy ]
 let private railInputGen =
@@ -437,6 +465,35 @@ Then change the `Grouped` arm in `compute` from `flatRows input.Hosts` to `group
                 | Grouped -> groupedRows input
 ```
 
+Add the pure toggle-decision so the VM never re-derives fit/override logic (decisions §4 —
+the toggle must be able to re-enter `Auto` so it can later hide). Place it at the end of the module
+(reuses the private `fits`):
+
+```fsharp
+    /// Next override when the user clicks the list/group toggle. Targets the opposite of
+    /// the CURRENT effective layout; if that target is exactly what Auto would produce
+    /// right now, returns Auto (re-enter adaptive) so ShowToggle can hide once it fits.
+    /// Total, no wildcard.
+    let toggleOverride (current: RailOverride) (input: RailLayoutInput) : RailOverride =
+        let autoGroups = not (fits input)
+        let currentlyGrouped =
+            match current with
+            | ForceGrouped -> true
+            | ForceFlat -> false
+            | Auto -> autoGroups
+        let wantGrouped = not currentlyGrouped
+        if wantGrouped = autoGroups then Auto
+        elif wantGrouped then ForceGrouped
+        else ForceFlat
+```
+
+> Note on the target semantics: the toggle always produces a **visible** flip except when the flip
+> target coincides with what Auto already shows (then it collapses to `Auto`). This is why
+> `ForceFlat` + *fits* → `ForceGrouped` (a real change) rather than `Auto` (which, being Flat while it
+> fits, would be a no-op click). The Auto-return still happens on the *next* click, and via the
+> `ForceGrouped`/`ForceFlat` == Auto-output cases above — so §4's "can always undo, even after a resize
+> made it fit again" holds (reaching `Auto && fits` hides the toggle).
+
 - [ ] **Step 4: Run — expect PASS**
 
 Run: `dotnet test tests/Lattice.Aggregation.Tests --filter "FullyQualifiedName~RailLayoutTests"`
@@ -444,13 +501,13 @@ Expected: PASS (unit + all three properties).
 
 - [ ] **Step 5: Falsification pass (mutation)**
 
-Temporarily change `tierExpanded`'s `Attention -> true` to `Attention -> false`; re-run — the always-expanded property must go red. Revert.
+Temporarily change `tierExpanded`'s `Attention -> true` to `Attention -> false`; re-run — the always-expanded property must go red. Revert. Then break `toggleOverride`'s Auto-return by changing `if wantGrouped = autoGroups then Auto` to `... then ForceGrouped`; re-run — the two "toggling back re-enters Auto" facts must go red. Revert.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 git add src/Lattice.App.Aggregation/RailLayout.fs tests/Lattice.Aggregation.Tests/RailLayoutTests.fs
-git commit -m "feat(rail): grouped rows (Attention/Healthy) in RailLayout core (design 3a)"
+git commit -m "feat(rail): grouped rows + toggleOverride (Auto-return) in RailLayout core (design 3a)"
 ```
 
 ---
@@ -789,6 +846,20 @@ public void Toggling_grouping_forces_the_opposite_layout_and_persists()
 }
 
 [Fact]
+public void Toggling_back_returns_to_adaptive_so_the_toggle_hides_once_it_fits()
+{
+    AddHosts(4);
+    _shell.SetRailViewportHeight(180.0);               // available ~30 < 200 => Auto => Grouped
+    Assert.True(_shell.ShowRailToggle);
+    _shell.ToggleRailGroupingCommand.Execute(null);    // Auto -> ForceFlat
+    _shell.ToggleRailGroupingCommand.Execute(null);    // ForceFlat(overflow) -> Auto (re-adaptive)
+    // Proof we returned to Auto (not stuck on a Force): growing to fit hides the toggle.
+    _shell.SetRailViewportHeight(1000.0);
+    Assert.False(_shell.ShowRailToggle);
+    Assert.DoesNotContain(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+}
+
+[Fact]
 public void Selecting_a_host_survives_a_rail_rebuild()
 {
     AddHosts(3);
@@ -917,11 +988,28 @@ Add the orchestration members:
     [RelayCommand]
     private void ToggleRailGrouping()
     {
-        // Toggle forces the opposite of the current effective layout, persisted.
-        bool grouped = RailEntries.OfType<GroupHeaderRailItemViewModel>().Any();
-        _grouping = grouped ? RailGroupingMode.Flat : RailGroupingMode.Grouped;
+        // The next override is pure decision logic (opposite layout, with the Auto-return
+        // rule so the toggle can hide once it fits again) — the core owns it; the VM must
+        // NOT re-derive fit/override logic here (this is where the toggle-Auto gap lived).
+        RailOverride next = RailLayoutPolicy.toggleOverride(MapOverride(_grouping), BuildRailInput());
+        _grouping =
+            next.IsForceFlat ? RailGroupingMode.Flat
+            : next.IsForceGrouped ? RailGroupingMode.Grouped
+            : RailGroupingMode.Auto;
         _uiState.Update(s => s with { RailGrouping = _grouping });
         RebuildRail();
+    }
+
+    /// <summary>The shell's measured/persisted inputs as the core's record — the single
+    /// construction point shared by <see cref="RebuildRail"/> and the toggle.</summary>
+    private RailLayoutInput BuildRailInput()
+    {
+        var hosts = _store.Hosts
+            .Select(e => new RailHost(e.Config.Id,
+                RailTierProjection.From(RailStateProjection.From(e.Status))))
+            .ToArray();
+        var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
+        return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), _healthyExpanded);
     }
 
     private void OnGroupToggleRequested(object? sender, RailTier tier)
@@ -950,13 +1038,7 @@ Add the orchestration members:
         // Reading it here means a later expand rebuild still knows the scoped host.
         Guid? scopedHostId = Scope.HostId;
 
-        var hosts = _store.Hosts
-            .Select(e => new RailHost(e.Config.Id,
-                RailTierProjection.From(RailStateProjection.From(e.Status))))
-            .ToArray();
-        var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
-        var input = new RailLayoutInput(hosts, available, RailRowHeight,
-            MapOverride(_grouping), _healthyExpanded);
+        RailLayoutInput input = BuildRailInput();
         RailLayout layout = RailLayoutPolicy.compute(input);
         ShowRailToggle = layout.ShowToggle;
 
@@ -1029,7 +1111,7 @@ Update `Dispose` to dispose host VMs from the map (they no longer all live in `R
 ```
 (Remove the old `RailEntries.OfType<HostRailItemViewModel>()` disposal loop.) Also **delete** the `Settings.Reconcile();` call at the end of `ReconcileHosts` — Settings no longer tracks hosts (Task 14). Leave a note; Task 14 removes `SettingsViewModel.Reconcile`.
 
-> F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier` DU cases are static properties (compare with `.Equals`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
+> F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier`/`RailMode` DU cases are static properties (compare with `.Equals`) and each has an `Is<Case>` predicate (`RailMode.IsSingleHost`, `RailOverride.IsForceFlat`/`.IsForceGrouped`/`.IsAuto`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
 
 - [ ] **Step 4: Run — expect PASS** (new tests + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). If `Settings.Reconcile` removal breaks compile, land Task 14's `SettingsViewModel` change first or stub `Reconcile()` as a no-op until Task 14.
 
