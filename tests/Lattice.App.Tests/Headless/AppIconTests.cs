@@ -14,7 +14,7 @@ namespace Lattice.App.Tests.Headless;
 /// </summary>
 public class AppIconTests
 {
-    private const string IconUri = "avares://Lattice.App/Assets/lattice.ico";
+    private const string IconUri = "avares://Lattice/Assets/lattice.ico";
 
     [AvaloniaFact]
     public void Packaged_icon_asset_is_embedded_and_loadable()

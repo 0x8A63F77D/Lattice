@@ -2,6 +2,12 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
+    <!-- Ship the binary under the app's display name (Lattice.exe / Lattice
+         apphost), not the project name Lattice.App. This is the single source of
+         the executable name every packaging surface references (Info.plist
+         CFBundleExecutable, .desktop Exec); it also becomes the avares assembly
+         base (avares://Lattice/...). Root namespace stays Lattice.App. -->
+    <AssemblyName>Lattice</AssemblyName>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>

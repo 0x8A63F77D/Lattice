@@ -27,6 +27,14 @@ and that `Window.Icon` resolves, so a broken `Link` fails the build's test gate.
 The `.icns` and the hicolor tree are filesystem inputs to the bundle/install
 scripts (not app resources), so they are referenced by path — no embedding needed.
 
+### Binary name
+
+The app project sets `<AssemblyName>Lattice</AssemblyName>`, so the build produces
+`Lattice.exe` / a `Lattice` apphost (not `Lattice.App`). That single name is what
+every launch surface references: `Info.plist`'s `CFBundleExecutable=Lattice` and
+`lattice.desktop`'s `Exec=Lattice`. It is also the avares assembly base
+(`avares://Lattice/…`).
+
 ## Building the platform packages
 
 ```sh
@@ -34,10 +42,15 @@ scripts (not app resources), so they are referenced by path — no embedding nee
 packaging/macos/bundle.sh
 open artifacts/macos/osx-arm64/Lattice.app   # Dock/Finder shows the mark
 
-# Linux hicolor icons + .desktop launcher (per-user by default)
-packaging/linux/install-icons.sh
-# system-wide: sudo packaging/linux/install-icons.sh /usr/share
+# Linux: publish, then install icons + launcher + link the binary onto PATH
+dotnet publish src/Lattice.App -c Release -r linux-x64 --self-contained true -o out/linux
+packaging/linux/install-icons.sh "${XDG_DATA_HOME:-$HOME/.local/share}" out/linux
+# icons/launcher only (binary already on PATH): packaging/linux/install-icons.sh
+# system-wide: sudo packaging/linux/install-icons.sh /usr/share /path/to/publish
 ```
 
+On Linux the `.desktop` `Exec=Lattice` needs a `Lattice` binary on PATH; passing the
+publish dir to `install-icons.sh` links it into the sibling `bin` dir for you.
+
 The Windows `.exe` icon and the running-window icon need no extra step — they are
-wired into the normal `dotnet build` / `dotnet publish` of `Lattice.App`.
+wired into the normal `dotnet build` / `dotnet publish` of the app.
