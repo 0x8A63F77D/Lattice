@@ -48,9 +48,14 @@ jobs:
           else
             VERSION="$DISPATCH_VERSION"
           fi
-          # digits.dots, optional -prerelease (e.g. 1.2.3, 0.0.0-dev). Rejects
-          # anything with shell metacharacters as a side effect.
-          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$'; then
+          # Whole-string validation with bash [[ =~ ]] (NOT line-oriented grep):
+          # digits.dots + optional -prerelease, e.g. 1.2.3 or 0.0.0-dev. Because
+          # [[ =~ ]] anchors ^…$ to the whole string with no multiline mode, an
+          # embedded newline can't sneak extra lines through — which matters
+          # because the value is written to $GITHUB_ENV (each line = an env
+          # entry). Belt-and-suspenders: reject any value spanning >1 line too.
+          if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
+             || ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
             echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
             exit 1
           fi
@@ -95,9 +100,12 @@ jobs:
   release:
     name: publish release
     needs: package
-    # Only a real tag publishes a Release; a workflow_dispatch dry run stops
-    # after the package job (artifacts are still downloadable from the run).
-    if: github.ref_type == 'tag'
+    # Only a real tag PUSH publishes a Release. The event_name guard matters:
+    # a workflow_dispatch started against a tag ref also has ref_type == 'tag',
+    # and dispatches are documented as dry runs — so gate on push explicitly so
+    # a manual tag dispatch can't publish. Dry runs stop after the package job
+    # (artifacts remain downloadable from the run).
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write
