@@ -62,7 +62,7 @@ them on the matching runner and attaches the output to a GitHub Release.
 | Platform | Script | Produces | Notes |
 |----------|--------|----------|-------|
 | **Windows** | [`windows/build-zip.ps1`](windows/build-zip.ps1) | `Lattice-win-x64.zip` (single-file `Lattice.exe`) | Portable, unzip-and-run. Unsigned → SmartScreen prompt. |
-| **macOS** | [`macos/make-dmg.sh`](macos/make-dmg.sh) | `Lattice-osx-arm64.dmg` + `.zip` (and `osx-x64`) | Drag-to-Applications. Unsigned → Gatekeeper prompt. |
+| **macOS** | [`macos/make-dmg.sh`](macos/make-dmg.sh) | `Lattice-osx-arm64.dmg` (and `osx-x64`) | Drag-to-Applications. Ad-hoc signed, not notarized → Gatekeeper prompt. |
 | **Linux** | [`linux/build-appimage.sh`](linux/build-appimage.sh) | `Lattice-x86_64.AppImage` | Primary. Single file, no root, cross-distro. |
 | **Linux** | [`linux/build-tarball.sh`](linux/build-tarball.sh) | `Lattice-<ver>-linux-x64.tar.gz` | Unpack and `./Lattice`. |
 
@@ -112,16 +112,22 @@ a branch push (that is [`ci.yml`](../.github/workflows/ci.yml)'s job).
 
 ### Signing caveats (unsigned for v1)
 
-There are no code-signing certificates (Authenticode / Apple Developer ID are
-paid and out of scope — see issue #56). Users therefore see an OS trust prompt on
+There are no paid code-signing certificates (Authenticode / Apple Developer ID
+are out of scope — see issue #56). Users therefore see an OS trust prompt on
 first launch:
 
-- **macOS (Gatekeeper):** an unsigned/un-notarized `.app` is blocked with "cannot
-  be opened because the developer cannot be verified." Work around it by
-  **right-clicking the app → Open** (then confirm), or:
+- **macOS (Gatekeeper):** the `.app` is **ad-hoc signed** by `bundle.sh`
+  (`codesign --sign -`) but not notarized. Ad-hoc signing matters: without it the
+  hand-assembled bundle has no sealed `_CodeSignature`, so a downloaded
+  (quarantined) copy is rejected as **"damaged" — which right-click-Open cannot
+  bypass.** With it, a quarantined copy reads as the ordinary "unidentified
+  developer," so **right-clicking the app → Open** (then confirm) works. Or drop
+  the quarantine attribute outright:
   ```sh
   xattr -dr com.apple.quarantine /Applications/Lattice.app
   ```
+  Proper Developer-ID signing + notarization (no prompt at all) needs a paid
+  Apple account and is deferred past v1.
 - **Windows (SmartScreen):** an unsigned `.exe` shows "Windows protected your PC."
   Click **More info → Run anyway**.
 - **Linux:** no signing gate. `chmod +x Lattice-x86_64.AppImage && ./Lattice-x86_64.AppImage`.
