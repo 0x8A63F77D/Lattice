@@ -153,20 +153,16 @@ public class HostMonitorStateMachineTests
     {
         var fake = new FakeGuiRpcClient { OnAuthorize = _ => Task.FromResult(false) };
         var controller = new ProbeController();
-        var time = new FakeTimeProvider();
         HostConfig config = TestData.MakeHostConfig(password: "pw", address: "host-a");
-        await using var monitor = new HostMonitor(config, () => fake, time, 5);
+        await using var monitor = new HostMonitor(config, () => fake, new FakeTimeProvider(), 5);
         monitor.InterleaveProbe = controller.Probe;
 
         // Freeze the loop the instant it is about to park in AuthFailed. When
         // WaitForAsync returns, the failed attempt has fully drained and the loop is
-        // pinned at a known point — a deterministic barrier, no wall-clock sleep, so a
-        // spurious wake below has nothing to hide behind.
-        // Everything from the freeze through the pinned assertions runs under try/finally
-        // (same discipline as the sweep harness): the barrier wait ITSELF is inside, so
-        // even a WaitForAsync timeout — or any assertion throw while the loop is blocked
-        // in Probe — still hits Disarm, which releases the frozen loop AND un-arms the
-        // point so it cannot re-freeze during the await-using teardown and hang forever.
+        // pinned at a known point — deterministic, no wall-clock sleep. The pinned
+        // section (the barrier wait included) runs under try/finally so a WaitForAsync
+        // timeout or an assertion throw still hits Disarm, which releases the frozen loop
+        // AND un-arms the point so it cannot re-freeze during await-using teardown and hang.
         controller.FreezeAt(InterleavePoints.BeforeParkWait);
         monitor.Start();
         try
@@ -174,41 +170,25 @@ public class HostMonitorStateMachineTests
             await controller.WaitForAsync(InterleavePoints.BeforeParkWait);
             Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
             Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
-
-            // Land the stale wake while the loop is pinned: neither advancing the clock
-            // nor a RequestRefresh may schedule a fresh attempt. Disarm (below) then lets
-            // the loop enter the park, where a correct loop consumes the wake as a no-op.
-            time.Advance(TimeSpan.FromMinutes(5));
-            monitor.RequestRefresh();
         }
         finally
         {
             controller.Disarm();
         }
 
-        // Deterministic barrier that the stale wake was consumed while STILL AuthFailed,
-        // BEFORE any config change (mirrors SweepTests.AssertRefreshOutcomeAsync's
-        // refused-password branch): pump the scheduler with fake-time advances + yields —
-        // not a wall-clock sleep — so the parked loop provably drains the wake. A wrong
-        // un-park would run another host-a attempt here, recorded before the config
-        // change below can coalesce with it, so the count check catches it deterministically.
-        for (int i = 0; i < 25; i++)
-        {
-            time.Advance(TimeSpan.FromMinutes(1));
-            await Task.Yield();
-        }
-        Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
-        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
-
         // The one thing that legitimately un-parks AuthFailed: a config change. Point it
         // at a NEW address with the right password so its connect is unambiguous, and
         // settle on the resulting Connected (a positive end state, no time ceiling).
+        // That a PARKED AuthFailed loop is immune to refresh/time wakes is a negative
+        // (no-op) property; it is proven deterministically by the interleaving sweep
+        // (SweepTests.AssertRefreshOutcomeAsync, refused-password branch, which pins the
+        // RequestRefresh at each probe point), so it is not re-litigated here.
         fake.OnAuthorize = _ => Task.FromResult(true);
         monitor.UpdateConfig(config with { Address = "host-b", Password = "right" });
         await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
 
-        // Still exactly one host-a connect (the initial failure): the refresh never
-        // re-attempted the parked generation, and recovery went to host-b.
+        // Recovery reconnected exactly once, on the new address — host-a stays at its
+        // single initial failure, host-b is the lone recovery connect.
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-b")));
     }
