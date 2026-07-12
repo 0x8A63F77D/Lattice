@@ -175,10 +175,9 @@ public class HostMonitorStateMachineTests
             Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
             Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
 
-            // AuthFailed parks on a config-change wait, not a timer: neither advancing
-            // the clock nor a RequestRefresh may schedule a fresh attempt. Both land
-            // while the loop is pinned; Disarm (below) lets it enter the park, where a
-            // correct loop consumes the stale wake as a no-op.
+            // Land the stale wake while the loop is pinned: neither advancing the clock
+            // nor a RequestRefresh may schedule a fresh attempt. Disarm (below) then lets
+            // the loop enter the park, where a correct loop consumes the wake as a no-op.
             time.Advance(TimeSpan.FromMinutes(5));
             monitor.RequestRefresh();
         }
@@ -187,6 +186,20 @@ public class HostMonitorStateMachineTests
             controller.Disarm();
         }
 
+        // Deterministic barrier that the stale wake was consumed while STILL AuthFailed,
+        // BEFORE any config change (mirrors SweepTests.AssertRefreshOutcomeAsync's
+        // refused-password branch): pump the scheduler with fake-time advances + yields —
+        // not a wall-clock sleep — so the parked loop provably drains the wake. A wrong
+        // un-park would run another host-a attempt here, recorded before the config
+        // change below can coalesce with it, so the count check catches it deterministically.
+        for (int i = 0; i < 25; i++)
+        {
+            time.Advance(TimeSpan.FromMinutes(1));
+            await Task.Yield();
+        }
+        Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
+        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
+
         // The one thing that legitimately un-parks AuthFailed: a config change. Point it
         // at a NEW address with the right password so its connect is unambiguous, and
         // settle on the resulting Connected (a positive end state, no time ceiling).
@@ -194,10 +207,8 @@ public class HostMonitorStateMachineTests
         monitor.UpdateConfig(config with { Address = "host-b", Password = "right" });
         await Wait.UntilAsync(() => monitor.Status.State == HostConnectionState.Connected);
 
-        // host-a was connected exactly once — the initial failure. A wake-driven revival
-        // would have re-connected host-a (recorded the instant it is attempted, before
-        // the config change ever pointed the loop at host-b), so any count above one is
-        // proof the refresh wrongly revived the parked loop.
+        // Still exactly one host-a connect (the initial failure): the refresh never
+        // re-attempted the parked generation, and recovery went to host-b.
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-b")));
     }
