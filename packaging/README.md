@@ -53,14 +53,18 @@ wired into the normal `dotnet build` / `dotnet publish` of the app.
 
 ## Linux distribution
 
-The planned primary distributable is an **AppImage** (self-contained, no root,
-cross-distro — a good fit given Lattice has no complex native dependencies). The
-AppImage bundles the `Lattice` binary and resolves `Exec=Lattice` through its
-AppRun; it consumes exactly the assets here — `linux/lattice.desktop` and the
-`docs/design/icon/linux/hicolor` tree. Building the AppImage (AppRun + recipe) is
-release-engineering tracked separately, not part of this icon-wiring PR.
+Two distributables are planned; both consume only the assets here.
 
-`install-icons.sh` is scoped to what icon-wiring owns: staging the hicolor theme
-and the launcher into an XDG prefix for local runs / manual installs. Putting the
-`Lattice` binary on PATH belongs to the distribution format (the AppImage, or a
-distro package), not this script.
+- **AppImage** (primary) — a self-contained single file (no root, cross-distro; a
+  good fit since Lattice has no complex native dependencies). It bundles the
+  `Lattice` binary and resolves `Exec=Lattice` via its AppRun, consuming exactly
+  `linux/lattice.desktop` + the `docs/design/icon/linux/hicolor` tree. Building the
+  AppImage (AppRun + recipe) is release-engineering, tracked separately.
+- **Tarball** — a self-contained publish, tarred: unpack and run `./Lattice`
+  directly (the taskbar icon comes from `Window.Icon`). Adding a desktop-menu entry
+  is the user's own business, as with any tarball.
+
+`install-icons.sh` is an optional convenience that stages the hicolor theme and a
+`Exec=Lattice` launcher into an XDG prefix (for a `Lattice` binary already on PATH).
+Neither distributable requires it — placing the binary on PATH is the job of the
+distribution format, not this script.
