@@ -42,9 +42,10 @@ Classifying a response as normal-vs-error status is fine; relaying its substance
 Codex acknowledges a received trigger by reacting 👀 (`eyes`), usually within 1–2 min. **WHERE
 the 👀 lives depends on the round:**
 - **Round 1 (PR-open AUTO review)** has NO trigger comment — the 👀 sits on the **PR body
-  itself** (issue-level reactions). Poll `pull_request_read` `get` (or `issue_read` `get`) →
-  `reactions.eyes` on the PR. (Watching a comment here yields a FALSE no-ack — the documented
-  #61/#65 double-trigger bug.)
+  itself** (issue-level reactions). Poll `issue_read` `get` → `reactions.eyes` on the PR body.
+  Reading reactions REQUIRES `issue_read`: the PR object from `pull_request_read` `get` carries
+  NO `reactions` field — those counts live only on the issue object. (Watching a comment here
+  yields a FALSE no-ack — the documented #61/#65 double-trigger bug.)
 - **Manual post-push re-trigger** has a trigger comment — poll that comment's `reactions.eyes`.
 
 A missing 👀 still has TWO meanings — distinguish before concluding: (1) trigger dropped, no
@@ -52,9 +53,10 @@ review coming; OR (2) Codex already finished and the 👀 cleared on completion 
 dropped trigger). So each Phase-1 cycle checks BOTH signals:
 - **Already-posted result?** `get_reviews` + `get_comments` — a Codex
   (`chatgpt-codex-connector[bot]`) review/comment tied to the head sha (or newer than baseline)?
-  If yes → `Codex: POSTED`. Also, for round 1, a bare **`+1` on the PR body** is Codex's CLEAN
-  verdict (it 👍s instead of commenting when it finds nothing) — treat a PR-body `+1` as a
-  candidate POSTED-clean signal, subject to the attribution caveat below.
+  If yes → `Codex: POSTED` (an AUTHORED artifact is proof). Also, for round 1, a bare **`+1` on
+  the PR body** is how Codex signals a CLEAN verdict (it 👍s instead of commenting when it finds
+  nothing) — but a reaction is an anonymous COUNT, so report a reaction-only `+1` as the distinct
+  `Codex: reactor-UNVERIFIED` status (never bare `POSTED`), per the caveat below.
 - **Ack?** Read `reactions.eyes` on the correct object (PR body for round 1; the trigger comment
   for a manual re-trigger). For a comment, call `get_comments` with **`perPage: 100`** (it
   returns comments oldest-first, paginated — the newest trigger comment falls off a small
@@ -87,17 +89,20 @@ stop the instant Codex posts if the CI matrix is still running (a later leg coul
 - **Round 1: keep watching the PR-body `+1` in Phase 2, not just Phase 1.** A clean completion
   can be reaction-only — Codex 👍s the PR body with NO authored comment, and it may land AFTER
   you entered Phase 2 on the 👀. So re-read the PR-body `reactions.+1` each cycle; a
-  newly-appeared `+1` is a candidate POSTED-clean signal, subject to the reactor-UNVERIFIED
-  caveat above (report it for the controller to exact-match; never assert it was Codex).
+  newly-appeared `+1` is a candidate CLEAN signal — but reactions are anonymous counts, so
+  report it as the distinct `reactor-UNVERIFIED` status (NEVER `POSTED`) for the controller to
+  exact-match the author; never assert it was Codex.
 - You may inspect a Codex response just enough to classify normal-vs-error; carry nothing
   further.
 - Interval ≈ 20–30 s, SHORT `sleep`-only Bash between cycles. Cap Phase 2 at ≈15 minutes
   (~30 cycles).
 - **Terminal conditions:** (a) any CI check fails/cancels/times-out → report immediately
-  (`Codex: <state> · CI: FAILED <name>`), regardless of Codex; (b) Codex has responded AND all
-  CI checks completed `success` → `Codex: POSTED` — where "responded" is an authored
-  review/comment OR (round 1) a newly-appeared PR-body `+1` reported as reactor-UNVERIFIED;
-  (c) Codex posts an error/quota/limit reply
+  (`Codex: <state> · CI: FAILED <name>`), regardless of Codex; (b) an AUTHORED Codex
+  review/comment (`user.login == chatgpt-codex-connector[bot]`) exists AND all CI checks
+  completed `success` → `Codex: POSTED`; (b′) round-1 clean is reaction-only — a PR-body `+1`
+  but NO authored Codex artifact, with CI `success` → `Codex: reactor-UNVERIFIED` (a DISTINCT
+  status, never `POSTED`: an anonymous count is not proof of authorship — the controller
+  exact-matches the reactor before trusting it); (c) Codex posts an error/quota/limit reply
   → `Codex: ERROR`; (d) cap hit → `Codex: TIMEOUT` (report whatever state exists). If Codex has
   posted but CI is still mid-flight and not yet failed, keep polling until CI is terminal —
   don't stop early.
@@ -105,8 +110,10 @@ stop the instant Codex posts if the CI matrix is still running (a later leg coul
 ## Reporting format (status only)
 Report exactly one terminal status, plus the CI rollup and PR URL, then end:
 - `Codex: NO-ACK` — Phase-1 cap hit with no 👀 (trigger dropped; re-trigger needed).
-- `Codex: POSTED` — a new Codex review/comment for the head exists. (Say NOTHING about its
-  contents — the main agent will read them.)
+- `Codex: POSTED` — a new AUTHORED Codex review/comment for the head exists. (Say NOTHING about
+  its contents — the main agent will read them.)
+- `Codex: reactor-UNVERIFIED` — the ONLY clean signal is an anonymous PR-body `+1` (no authored
+  Codex artifact); the controller must exact-match the reactor before treating it as Codex.
 - `Codex: ERROR` — Codex replied with an error/quota/limit message instead of a review.
 - `Codex: TIMEOUT` — Phase-2 cap hit, ACK seen but no review result.
 
