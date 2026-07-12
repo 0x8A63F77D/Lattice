@@ -52,6 +52,10 @@
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
     <Setter Property="Padding" Value="8,0" />
+    <!-- Column-header separators (Rectangle#VerticalSeparator) match the body divider color;
+         the trailing star column's separator auto-collapses (no cell to paint), and gutter
+         headers opt out per-view later via their own class. -->
+    <Setter Property="SeparatorBrush" Value="{DynamicResource LatticeGridDividerBrush}" />
   </Style>
 
   <Style Selector="DataGrid.lattice">
@@ -93,6 +97,19 @@
   <Style Selector="TextBlock.numeric">
     <!-- OpenType tabular (fixed-width) numerals for aligned numeric columns.
          FontFeatures is a TextElement inherited attached property (HarfBuzz tag syntax). -->
+    <Setter Property="FontFeatures" Value="+tnum" />
+  </Style>
+
+  <!-- Gutter/icon columns suppress their column divider. EnsureGridLine owns the part's
+       IsVisible as a local value, so collapse the divider by zeroing its Width (the part is
+       Grid.Column=1, so 0 width also reclaims the layout slot). -->
+  <Style Selector="DataGridCell.noDivider /template/ Rectangle#PART_RightGridLine">
+    <Setter Property="Width" Value="0" />
+  </Style>
+
+  <!-- Numeric text columns: tabular (fixed-width) figures on the generated cell TextBlock.
+       For DataGridTextColumn cells (no direct handle on their TextBlock). -->
+  <Style Selector="DataGridCell.numericCell TextBlock">
     <Setter Property="FontFeatures" Value="+tnum" />
   </Style>
 </Styles>

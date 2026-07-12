@@ -64,6 +64,27 @@ public class DataGridInfraTests
         return grid;
     }
 
+    // A lattice grid whose FIRST column is a gutter marked .noDivider, then two normal
+    // columns + a star column (filler inactive, mirroring the real views). Column 0's
+    // PART_RightGridLine must collapse to zero width.
+    private static DataGrid MakeGutterGrid()
+    {
+        var grid = new DataGrid
+        {
+            ItemsSource = new[] { new Row(), new Row() },
+            Columns =
+            {
+                new DataGridTextColumn { Header = "G", Binding = new Avalonia.Data.Binding("Value"),
+                                         Width = new DataGridLength(24), CellStyleClasses = { "noDivider" } },
+                new DataGridTextColumn { Header = "Name", Binding = new Avalonia.Data.Binding("Name"), Width = new DataGridLength(120) },
+                new DataGridTextColumn { Header = "V2", Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(120) },
+                new DataGridTextColumn { Header = "Star", Binding = new Avalonia.Data.Binding("Name"), Width = new DataGridLength(1, DataGridLengthUnitType.Star) },
+            },
+        };
+        grid.Classes.Add("lattice");
+        return grid;
+    }
+
     private static Window ShowInWindow(Control content)
     {
         var window = new Window
@@ -268,6 +289,72 @@ public class DataGridInfraTests
             "LatticeStrokeBrush", window.ActualThemeVariant, out var stroke));
         var fill = Assert.IsAssignableFrom<ISolidColorBrush>(rule!.Fill);
         Assert.Equal(((ISolidColorBrush)stroke!).Color, fill.Color);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Gutter_cell_class_collapses_the_right_gridline_to_zero_width()
+    {
+        var grid = MakeGutterGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var gutterCells = grid.GetVisualDescendants().OfType<DataGridCell>()
+            .Where(c => c.Classes.Contains("noDivider")).ToList();
+        Assert.NotEmpty(gutterCells);
+        foreach (var cell in gutterCells)
+        {
+            var line = VisualTree.FindInVisualTree<Rectangle>(cell, r => r.Name == "PART_RightGridLine");
+            Assert.NotNull(line);
+            Assert.Equal(0d, line!.Width);
+        }
+
+        // A normal (non-gutter) body cell keeps a 1px divider.
+        var normalCell = grid.GetVisualDescendants().OfType<DataGridCell>()
+            .First(c => !c.Classes.Contains("noDivider") && c.FindAncestorOfType<DataGridRow>() != null);
+        var normalLine = VisualTree.FindInVisualTree<Rectangle>(normalCell, r => r.Name == "PART_RightGridLine");
+        Assert.NotNull(normalLine);
+        Assert.NotEqual(0d, normalLine!.Width);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Header_separator_uses_the_divider_brush_and_header_text_is_secondary()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .First(h => (h.Content as string) == "Name");
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeGridDividerBrush", window.ActualThemeVariant, out var divider));
+        var sep = Assert.IsAssignableFrom<ISolidColorBrush>(header.SeparatorBrush);
+        Assert.Equal(((ISolidColorBrush)divider!).Color, sep.Color);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeTextSecondaryBrush", window.ActualThemeVariant, out var fg));
+        var hfg = Assert.IsAssignableFrom<ISolidColorBrush>(header.Foreground);
+        Assert.Equal(((ISolidColorBrush)fg!).Color, hfg.Color);
+        Assert.Equal(11d, header.FontSize);
+        Assert.Equal(Avalonia.Media.FontWeight.SemiBold, header.FontWeight);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Numeric_cell_class_applies_tabular_figures_to_its_textblock()
+    {
+        var grid = MakeLatticeGrid();
+        grid.Columns[1].CellStyleClasses.Add("numericCell");
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var cell = grid.GetVisualDescendants().OfType<DataGridCell>()
+            .First(c => c.Classes.Contains("numericCell"));
+        var tb = VisualTree.FindInVisualTree<TextBlock>(cell);
+        Assert.NotNull(tb);
+        Assert.NotNull(tb!.FontFeatures);
+        Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
         window.Close();
     }
 }
