@@ -3,7 +3,13 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace Lattice.Tests;
 
-/// <summary>Bounded real-time polling helpers for asserting on background-loop state.</summary>
+/// <summary>
+/// Bounded real-time polling helpers for asserting on background-loop state.
+/// Responsibility split (don't invent a third helper): <see cref="UntilAsync"/> is the
+/// non-dispatcher, background-loop end-state poll (no UI pumping); the dispatcher-pumped
+/// UI equivalent is <c>Lattice.App.Tests.Headless.HeadlessSync.WaitUntilAsync</c>, which
+/// RunJobs()-pumps the Avalonia dispatcher between polls.
+/// </summary>
 public static class Wait
 {
     /// <summary>Polls until the condition holds; throws TimeoutException (failing the test) after 5 seconds.</summary>

@@ -10,6 +10,11 @@ namespace Lattice.App.Tests.Headless;
 /// RunJobs") flake on loaded CI runners (macOS leg, Confirming_remove, 2026-07-10).
 /// Poll the test's observable outcome instead; the generous ceiling only bounds
 /// a genuinely hung dialog.
+///
+/// Responsibility split (don't invent a third helper): this is the dispatcher-pumped
+/// UI end-state poll — it RunJobs()-pumps the Avalonia dispatcher between polls. The
+/// non-dispatcher, background-loop equivalent is <c>Lattice.Tests.Wait.UntilAsync</c>,
+/// which never touches the UI dispatcher.
 /// </summary>
 internal static class HeadlessSync
 {

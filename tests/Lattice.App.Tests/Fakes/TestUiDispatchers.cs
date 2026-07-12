@@ -28,3 +28,21 @@ public sealed class QueueUiDispatcher : IUiDispatcher
         }
     }
 }
+
+/// <summary>
+/// Runs posted work inline (no deferral, so Wait.UntilAsync polling still
+/// works) but serialized under a lock. Plain ImmediateUiDispatcher runs each
+/// post on whatever thread called it; with two ACTUALLY RUNNING monitors
+/// (unlike every other fixture using it, which never starts more than one
+/// live monitor at a time) that means two background threads can both be
+/// inside HostStore.Changed -> the VM's Rebuild() at once, racing the
+/// unsynchronized ObservableCollection Clear()+Add(). Production never hits
+/// this: the real IUiDispatcher marshals every post onto one UI thread.
+/// Shared by the multi-live-monitor VM fixtures (Tasks/Transfers/Projects).
+/// </summary>
+public sealed class LockingUiDispatcher : IUiDispatcher
+{
+    private readonly object _gate = new();
+    public bool CheckAccess() => true;
+    public void Post(Action action) { lock (_gate) action(); }
+}
