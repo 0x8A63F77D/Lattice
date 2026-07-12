@@ -7,6 +7,7 @@
         x:Class="Lattice.App.Views.ShellWindow"
         x:DataType="vm:ShellViewModel"
         Title="{x:Static loc:Strings.AppTitle}"
+        Icon="/Assets/lattice.ico"
         Width="1280" Height="800" MinWidth="1000" MinHeight="700"
         TransparencyLevelHint="Mica, None"
         Background="{DynamicResource LatticeCanvasBrush}">
