@@ -1,220 +1,131 @@
-# Handoff: Lattice M2 — Multi-Host BOINC Monitoring Dashboard (read-only)
+# Handoff: Lattice — M2 (BOINC monitoring desktop app)
 
 ## Overview
+Lattice M2 is a **read-only, multi-host BOINC monitoring** desktop client. It connects to one or
+more BOINC clients over GUI RPC and shows their Tasks, Projects, Transfers and Event log, plus a
+Hosts scope in the sidebar and a Settings screen. M2 is read-only (task/project *control* actions
+are reserved, disabled placeholders for M3).
 
-Lattice is a cross-platform Avalonia (XAML) desktop app using **Fluent 2 via FluentAvalonia** that monitors BOINC clients on multiple hosts — a modern BOINCTasks replacement. **M2 is read-only**: display state only; control actions (suspend/abort/attach) come in M3 but the layout reserves space for them (disabled command-bar buttons).
+This bundle is the **finalized design spec** for M2, authored in the **Fluent 2** design language.
 
-This package specifies the app shell + 5 views + all states. Approved shell direction: option "1c" from the design exploration, **as amended by rev. B (sections 3a/3b)** — hosts rail bottom-docked + management moved out of Settings. Where rev. B conflicts with older sections, rev. B wins.
+## About the design files
+The file in this bundle — `Lattice M2 Spec.html` — is a **design reference created in HTML**. It is
+a self-contained, offline prototype that documents the intended look, layout, copy, states and
+interactions. **It is not production code to copy.**
 
-## About the Design Files
-
-`Lattice M2 Spec.html` is a **design reference created in HTML** — a spec document with pixel-accurate mockups and annotations, NOT production code. The task is to **recreate these designs natively in Avalonia XAML with FluentAvalonia controls**, following the control mapping below. Do not port any HTML/CSS.
-
-Open the file in a browser to view. Sections are labeled: **3a (hosts rail — final) and 3b (host management — final): the rev. B amendments, at the top of the doc**; 1a/1b/1c (shell options — 1c is the approved base), 1d (row anatomy), 1e (state matrix), 1f (dark theme), 1g (tokens), 2a Projects, 2b Transfers, 2c Event log, 2d Settings, 2e Motion, 2f Responsive.
+The target codebase is a **desktop app (Avalonia / .NET, Fluent-styled — e.g. FluentAvalonia)** built
+on the `Lattice.Boinc.GuiRpc` client (Result / Project / Message / connection-state records). The task
+is to **recreate these designs in that environment** using its established controls and patterns
+(`NavigationView`, `DataGrid`, `ContentDialog`, `InfoBar`, `SettingsExpander`, `CommandBar`, `MenuFlyout`,
+`ComboBox`, `TabView`…). Where the spec names a Fluent control, use the codebase's equivalent. If a
+target environment does not yet exist, stand up an Avalonia + Fluent project and implement there.
 
 ## Fidelity
+**High-fidelity.** Final colors, typography, spacing, densities, row heights, dividers, hover and
+motion are specified. Recreate pixel-faithfully using the codebase's Fluent controls; do not restyle.
 
-**High-fidelity.** Colors, spacing, row heights, font sizes, and iconography are final and should be matched. The mockups use web rendering of Segoe UI + Fluent System Icons; in Avalonia use the platform-equivalent theme resources of FluentAvalonia rather than hardcoding hex where a theme resource exists (mapping below).
+## How to read the spec file
+Open `Lattice M2 Spec.html` (double-click; works offline). It is a pannable canvas of cards grouped
+into three "turns". Each card has a **badge id** (e.g. `1c`, `3a`) shown top-left and greyed
+**annotation notes** beneath it — those notes are the authoritative per-screen spec. Card map:
 
-## Data model
+**Turn 3 — Hosts (canonical, supersedes any older placement):**
+- `3a` **Hosts rail — final.** Bottom-docked in the NavigationView **PaneFooter**, above Settings.
+  Four adaptive states: 1 host (degenerate) · flat list (fits) · status groups (Attention/Healthy/Offline
+  when it doesn't fit) · 48px compact. Height-adaptive, not count-based.
+- `3b` **Host management — final.** "+" opens the Add-host dialog directly; host rows get a right-click
+  **MenuFlyout** (Edit / Test connection / Remove); Settings keeps only global groups.
 
-Column and field names split into what exists today vs. what the M2 milestone must add to the RPC/Core layers:
+**Turn 2 — Views (all on the `1c` shell):**
+- `2a` **Projects** — the Tasks DataGrid with one adaptation: hierarchical parent/child rows (chevron + indent).
+- `2b` **Transfers** — active/retrying/queued rows; empty state is the common case.
+- `2c` **Event log** — merged stream + Host column; priority filters; follow-scroll; **has a column header
+  row** (Time / Host / Project / severity / Message) so columns are drag-resizable.
+- `2d` **Settings** — global groups only (Polling · Theme) + the **Add host dialog** spec (fields,
+  validation, error copy). Host add/edit/remove lives in the sidebar (`3b`).
 
-**(a) Available in current `Lattice.Boinc.GuiRpc` models:**
-- `Result` — task state, fraction_done, elapsed time, deadline
-- `Project` — UserTotalCredit, UserExpavgCredit, HostTotalCredit, HostExpavgCredit, SuspendedViaGui, DontRequestMoreWork
-- `Message` — MessagePriority: Info=1, UserAlert=2, InternalError=3
+**Turn 1 — Shell + Tasks + Foundations:**
+- `1c` **Shell C (recommended)** — two-zone left rail (views on top, Hosts scope below); full Tasks view
+  chrome: command bar, partial-results InfoBar, selected/at-risk/running/uploading/waiting row states.
+- `1d` **Tasks table anatomy** — medium (36px) vs compact (28px) density, type ramp, column-width
+  strategy, and the column-detail close-up (full-height dividers + middle-ellipsized task name).
+- `1e` **State matrix** — 5 host connection states · view-level populated/empty/loading/partial · first run.
+- `1f` **Dark theme** — token-substitution mirror of `1c` (no layout differences).
+- `1g` **Tokens** — spacing/size, font fallback stacks, keyboard, semantic colors.
+- `1h` **Motion spec** — per-interaction durations/curves.
+- `1i` **Responsive spec** — min window 1000×700; rail collapse + column shedding; breakpoint table.
 
-**Credit-field mapping (Projects view):** per-host child rows use `HostExpavgCredit` (RAC) and `HostTotalCredit`; the aggregate parent row **sums the host-level values across hosts** — never repeat account-level `User*` totals per host.
+## The DataGrid is the core pattern — Tasks is canonical
+Every table (Tasks, Projects, Transfers, Event log, Responsive, Dark) uses **one** DataGrid design.
+**Tasks (`1c` / `1d`) is the source of truth**; other views only adapt columns + one structural twist.
 
-**Application-column derivation (Tasks view):** `Result` carries no application name. Application = join `Result.WorkunitName` → `Workunit.AppName` → `App.UserFriendlyName`, falling back to `AppName` when the friendly name is absent, using the cached `get_state` snapshot.
+- **Header row**: 32px, `Segoe UI` 600 / 11px, color `#616161`, bottom border `#E0E0E0`, sentence-case labels.
+- **Body rows**: 36px (medium, default) / 28px (compact toolbar toggle); body text 13px `#242424`, secondary `#616161`.
+- **Column dividers**: full-height hairline `#EDEBE9` between columns (quieter than the row rule `#F0F0F0`);
+  none on the last column, none on narrow gutter/icon columns.
+- **Row hover**: whole row → `#F5F5F5` (neutralBackground1Hover), 100ms fade, `cursor:default`; headers do
+  not hover; hover sits **under** state tints (a selected `#EBF3FC` / at-risk `#FFF9F5` row keeps its color;
+  press = one step darker). Dark-theme hover = `#383838`.
+- **Alignment**: all columns (header + content) left-aligned; numeric columns use tabular figures.
+- **Truncation**: the star/Task column takes remaining width and **middle-ellipsizes** (head…tail) so the
+  distinguishing segment stays visible — full value on hover tooltip. Other text columns end-ellipsize.
+- **Resize**: columns are drag-resizable from the header edge; widths persist per machine.
 
-**(b) New M2 data requirements (standard BOINC GUI RPC fields — to be added in M2, not yet implemented):**
-- Remaining/ETA: parse `estimated_cpu_time_remaining` from `<active_task>` in `get_results`
-- `Project.ResourceShare` (from get_state / get_project_status)
-- `FileTransfer` model + `get_file_transfers` RPC (Transfers view)
-- Per-host connection-state machine in the Core layer: `connected / connecting / retrying(backoff, attempt) / unreachable / auth-failed`
+### Default column widths (px; star column takes the `1fr` remainder)
+- **Tasks**: Project 108 · Application 118 · Task 1fr · Progress 112 · Elapsed 68 · Remaining 74 · Deadline 100 · State 112 · Host 76
+- **Projects**: chevron 24 · Project 200 · Hosts 110 · Resource share 140 · Avg credit 100 · Total credit 110 · actions 1fr
+- **Transfers**: File 1fr · Project 140 · Direction 80 · Progress 190 · Speed 90 · Status 210 · Host 80
+- **Event log**: Time 128 · Host 84 · Project 140 · severity 20 · Message 1fr
 
-## App shell (approved: option 1c, amended by rev. B — see 3a)
+## Interactions & behavior
+- **Global scope**: the Hosts selection in the rail is an independent, persistent global filter applied to
+  every view (separate from NavigationView's view selection — both selected states render at once).
+- **Partial results**: when scope = All hosts and ≥1 host is unreachable, show a dismissable `InfoBar`
+  (severity Warning) with a "Retry now" link above the grid.
+- **Host states** (icon + text, never color alone): Connected · Retrying (mm:ss countdown + attempt, ticks
+  every second) · Unreachable · Wrong password · Disconnected. Retry uses warning `#B85C00/#BC4B09`.
+- **Add / Edit host** (`ContentDialog`): Address required (accent focus underline), Port prefilled 31416,
+  info strip explains the `remote_hosts.cfg` prerequisite; Add disabled until Address is non-empty; submit
+  shows an inline ProgressRing; failure → InfoBar. Edit reuses the same dialog retitled, fields prefilled;
+  clicking an auth-failed host opens Edit with the password field in error + focused.
+- **Polling**: interval 2/5/10/30/60s (default 5s); "Updated Ns ago" is a polling-health indicator that
+  turns to warning color + icon on poll failure.
+- **Motion** (see `1h`): 100–300ms, enter decelerate / exit accelerate, no bounce, no infinite loops
+  (spinners excepted), animation never blocks data updates. View switch 150ms decelerateMid (opacity +
+  8px translateY); row enter 100ms (opacity only, no height animation); row remove 150ms accelerateMid;
+  progress bar 200ms easeEase; dialog scrim 200ms in / 150ms out; expander chevron 100ms + height 200ms.
+- **Responsive** (see `1i`): min window 1000×700. ≥1280 full 260px rail + all columns; 1100–1279 rail
+  auto-collapses to 48px; below 1100 shed Elapsed first, then Application (visibility in the overflow menu);
+  Host column hidden in single-host scope. Only the grid body scrolls.
 
-**NavigationView, Left mode, 260px** (collapses to 48px LeftCompact — see Responsive).
+## State management
+- Per-host connection state + polling loop; merged aggregate for "All hosts".
+- Global host-scope selection (persisted per machine).
+- Per-view sort (single column; Tasks default Deadline ↑), filter text, density toggle, column widths
+  (persisted), expand/collapse state (Projects child rows, status groups).
+- Theme (Light / Dark / System).
 
-Three zones in one rail (top → bottom):
-1. **Views (MenuItems, top)**: Tasks, Projects, Transfers, Event log. Item = 36px high, 20px icon (regular at rest, **filled + accent when selected**), 13px label. Selected: 3px accent pill on left + `#EBEBEB` bg. Right-aligned inline counts (Tasks 47, Transfers 2) in 12px secondary; Event log carries a red **InfoBadge** = unread warning+error count.
-2. **Hosts section — bottom-docked in the `PaneFooter` slot, directly above Settings** (rev. B; it is a custom selectable list control, NOT NavigationViewItems — NavigationView single-selection covers views only, the hosts list keeps its own independent selection = the global scope; both selected states render simultaneously). The vertical gap between views and hosts is intentional: MenuItems absorbs remaining height, do not fill it. Header "Hosts" (11px semibold secondary) + "+" button (opens the Add host dialog — see Host management). Row anatomy: 40px two-line entry per host, line 1 = host name (13px), line 2 = connection state (11px). Selecting a host scopes ALL views; scope persists across view switches. All-hosts selected state uses brand tint bg `#EBF3FC` + accent pill. Per-host InfoBadge when that host has alerts.
-   **Scale rule (3a) — height-adaptive, not count-based**: 1 host → single row, no "All hosts" entry (scope pinned to it), header + "+" kept · flat list ("All hosts" first) whenever it fits the footer budget · **doesn't fit → status groups**: Attention (unreachable/auth-failed/retrying — always expanded, 36px rows) · Healthy · Offline (collapsed 28px count rows; expand state persists). Fit test: available list height = window height − ~290px fixed rail chrome (logo + 4 view items + separators/headers + Settings); at 40px/row that's All hosts + ~8 hosts on a 768-high screen, +16 at 1080, +25 at 1440. The rail never scrolls internally in auto mode; window resize across the fit boundary re-evaluates.
-   **Manual override**: a list/group toggle icon in the Hosts header (left of "+"), shown only while auto-grouping is in effect; forces flat (internal scroll, user's choice) or grouped; persisted per machine.
-3. **Footer**: Settings (FooterMenuItems, below the hosts block).
-
-**Host connection states** (icon + text, never color alone):
-- Connected — `checkmark_circle` regular, success color; subtext "Connected · N tasks"
-- Connecting — `arrow_sync` rotating (1.5s/rev linear, the only allowed looping animation), brand color; "Connecting…"
-- Retrying — `arrow_clockwise`, warning color; "Retrying in 12s (attempt 3)" — countdown updates every second, plain text swap, no animation
-- Unreachable — `dismiss_circle`, danger color; tooltip carries last error
-- Auth-failed — `key`, danger color; "Wrong password"; clicking opens the **Edit host dialog** with the password field in error state and focused (rev. B; formerly Settings navigation)
-
-**Host management (rev. B — see 3b):**
-- **"+"** in the Hosts header opens the **Add host ContentDialog** directly (no Settings round-trip).
-- **Right-click a host row → MenuFlyout**: Edit host… (same ContentDialog retitled, fields prefilled) · Test connection (result as inline state-subtext change + tooltip) · Remove host… (ContentDialog confirm). 32px items; danger item `#C50F1F`; icon + label.
-- "All hosts" and group header rows have no context menu in M2 (batch operations = M3 candidate).
-
-## Screens
-
-### Tasks view (primary, ~80% usage)
-
-- **Command bar** (52px): view title "Tasks" (16px semibold) · disabled Suspend/Abort buttons (M3 placeholders) · separator · AutoSuggestBox filter (220px, "Filter by name or project") · State ComboBox ("State: All") · spacer · "Updated 3s ago" (12px secondary; turns warning icon+color if polling fails) · refresh icon-button · density toggle icon-button · overflow (column visibility etc.)
-- **Partial InfoBar** (Warning severity, closable, action link "Retry now"): shown only when scope = All hosts AND ≥1 host unreachable. Copy: "**Partial results.** 2 of 5 hosts aren't reachable — tasks below cover 3 hosts."
-- **DataGrid** (virtualized; must handle 500+ rows). Columns: Project 108 · Application 118 · Task * (min 160, ellipsis + tooltip full name) · Progress 112 · Elapsed 68 · Remaining 74 · Deadline 100 · State 112 · Host 76 (hidden when single-host scope). Header row 32px, 11px semibold secondary. Single-column sorting, default **Deadline ascending**.
-  - **All columns left-aligned** (including numeric — explicit user decision); numeric cells use tabular numerals.
-  - Progress cell: 56×3px bar (2px radius, track `#E0E0E0`, fill accent) + 12px percent text; unknown fraction = empty track + "—" (never indeterminate).
-- **Row states** (36px medium / 28px compact densities):
-  - Normal: 13px primary text; task name in `#424242`
-  - Selected: bg `#EBF3FC` + 3px accent pill at left
-  - Deadline at risk (visual treatment only; logic decided by team): full-row tint `#FFF9F5`, Deadline cell gets filled `warning` icon + semibold `#BC4B09` text
-  - Suspended: all text drops to `#616161`, progress fill turns gray
-  - State cell icons: Running `play`/success · Waiting `clock`/neutral · Suspended `pause`/neutral · Uploading `arrow_upload`/brand
-- **Status bar** (28px, custom control — the only one; trivial): "47 tasks · 8 running · 2 uploading · 1 suspended" · spacer · "⚠ 1 deadline at risk" · "Polling every 5s". Counts cover reachable hosts only.
-
-### Projects view (2a)
-
-Row-based hierarchical DataGrid (or Expander list), NOT cards. Columns: chevron 24 · Project 200 · Hosts 110 · Resource share 140 · Avg credit 100 · Total credit 110 · Status *.
-
-- **Aggregate parent row** (40px, 14px, name semibold) merges by project MasterUrl across hosts.
-- **Resource share and Status are per-host facts** — never fake a single aggregate value:
-  - Share: identical on all hosts → single value + bar on parent; differs → text "Varies · 50–100" on parent, bars only on child rows
-  - Status aggregation, three tiers: all same → "Active on all hosts"; one deviation → "Suspended · 1/2 hosts"; mixed → "Mixed · 1 suspended · 1 no new tasks" (`more_horizontal` icon, ellipsis + tooltip)
-- **Child rows** (32px, 12px secondary): host name, task count, share bar+value, RAC, total credit, status icon+text.
-- Status rendering: icon + text everywhere, **no pill/tag capsules** (explicit decision); status text 12px `#424242`. Active = `checkmark_circle` success; Suspended = `pause` neutral; No new tasks = `hand_right` neutral (config states, not faults — no warning colors). Default sort: Avg credit descending.
-- Single-host scope: hide Hosts column and child rows.
-- Empty state: "No projects attached — attach via the BOINC client on the host."
-
-### Transfers view (2b)
-
-Columns: File * (ellipsis+tooltip) · Project 140 · Direction 80 · Progress 190 · Speed 90 · Status 210 · Host 80. All left-aligned.
-- Progress text = "34.2 / 51.7 MB" (transferred/total), not bare percent.
-- Row states: Active = `arrow_sync` success icon + live speed; **Retrying** = warning row tint + "Retry in 02:41 (attempt 3)" semibold warning, countdown ticks per second; Queued = `clock` neutral, speed "—".
-- Command bar: disabled "Retry now" (M3). Completed rows fade out 150ms accelerate then remove.
-- **Empty state is the common case**: centered 24px `arrow_swap` icon in `#BDBDBD`, "No active transfers" 13px semibold, caption "Uploads and downloads will appear here while in progress." No button.
-
-### Event log view (2c)
-
-**No in-view host tabs** — scope comes from the nav-rail Hosts section like every other view (explicit decision; a TabView variant was rejected as double navigation).
-- All-hosts scope = single time-merged stream **with a Host column (84px)**; single-host scope hides that column, subtitle shows the host name. Title subtitle: "All hosts · merged stream".
-- Filter row: three toggle pills Info / Warning / Error (selected = brand tint `#EBF3FC` + brand border/text + check icon) · search box · spacer · **"Following"** toggle (auto-scroll to newest; scrolling up pauses it and turns it into "Resume following") · copy button.
-- Rows 26px: timestamp `07-04 14:32:08` + message in **Consolas 12px**; host + project columns 12px secondary; priority icon 16px. Warning rows tint `#FFF9F5` + filled warning icon; Error rows tint `#FDF3F4` + filled `error_circle` danger icon.
-- Virtualized; retain last 5,000 messages/host. New rows do NOT animate while Following (high frequency).
-- Status bar: "412 messages · 3 reachable hosts · showing all priorities" / "Following live".
-
-### Settings (2d, amended by rev. B — see 3b)
-
-- **Hosts group: REMOVED** (rev. B). Host management lives in the rail: "+" → Add host dialog; right-click a host → Edit / Test connection / Remove. Settings keeps **global groups only** (Polling, Theme) plus a one-line pointer caption: "Hosts are managed from the sidebar — use '+' to add, right-click a host to edit or remove."
-- **Edit host — ContentDialog** (rev. B): identical to Add host, retitled, fields prefilled; auth-failed deep link opens it with the password field in error state (danger border) + message: "The host refused this password. Check gui_rpc_auth.cfg on mini-01." and a "Test connection" text-button in the footer.
-- **Add host — ContentDialog**: Name (optional, "Defaults to the address") · Address (required; Add disabled while empty) · Port (prefilled 31416) · Password ("From gui_rpc_auth.cfg") · info strip: "Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg." Primary button shows inline ProgressRing while connecting; failure renders an InfoBar in the dialog.
-- **Polling group**: SettingsExpander-style row + ComboBox: 2/5/10/30/60 seconds, default 5. **Theme group** (rev. B): Light / Dark / System ComboBox (dark spec in 1f).
-- First-run empty state (no hosts): centered `server` icon, "Connect your first host", caption "Lattice monitors BOINC clients over GUI RPC (port 31416).", accent button "Add a host" → opens the dialog directly. Nav rail hides the Hosts section in this state.
-
-## States summary (1e)
-
-- **Loading (first connect)**: ProgressRing + "Fetching state from {host}…" + 3 shimmer skeleton lines. Data from already-connected hosts renders immediately — never block on the slowest host.
-- **Empty / First-run**: see per-view specs above.
-- **Partial (3/5 reachable)** communicated on three layers: nav "All hosts" subtext "3 of 5 connected" · warning InfoBar in content · status-bar counts cover reachable hosts only. Never silently drop data. InfoBar is dismissable but reappears when the reachable set changes.
-
-## Interactions & Behavior
-
-- Keyboard: ↑↓ row navigation · Ctrl+F focus filter · F5 refresh now · Ctrl+1..4 switch views · Space on header sorts · all controls tabbable; focus visual = 2px black outline (FocusStroke2), not a glow.
-- "Slide/screen scope" rule: selected host in rail is a global scope shared by all views.
-- Motion spec (2e) — global: 100–300ms, enter decelerate / exit accelerate, no bounce, no loops except spinners; animation never delays data (update value first, transition is cosmetic):
-
-| Interaction | Animation | Duration/curve |
-|---|---|---|
-| View switch | content opacity 0→1 + translateY 8→0 | 150ms decelerateMid |
-| Row enter | opacity 0→1 (no height expand) | 100ms decelerateMid; skip while log Following; skip batches >10 |
-| Row remove | opacity 1→0 then reflow (no FLIP) | 150ms accelerateMid |
-| Progress bar | width to new value | 200ms easyEase; percent text jumps, no interpolation |
-| InfoBar in/out | height+opacity | in 200ms decelerateMax / out 150ms accelerateMid |
-| ContentDialog | scrim 0→.4, panel opacity+scale .96→1 | FluentAvalonia defaults |
-| Expander | chevron 100ms; height 200ms decelerateMid, collapse 150ms |
-| Completed transfer row | opacity 1→0 then remove | 150ms accelerateMid (same as row remove) |
-| NOT animated | retry countdowns, "Updated Ns ago", elapsed/remaining ticks, sort reflow | — |
-
-- Reduce-motion (Windows animation toggle / macOS Reduce Motion): all durations → 0 except spinners/ProgressRing.
-
-## Responsive (2f)
-
-- Breakpoints (window width): **≥1280** full rail + all columns · **1100–1279** rail collapses to 48px LeftCompact (hosts show state icon only, name/subtext/countdown in tooltip) · **1000–1099** hide Elapsed, then Application (available via overflow menu). User-dragged column widths persist and beat breakpoint defaults.
-- Minimum window 1000×700. Command bar/InfoBar/header/status bar fixed; only grid body scrolls.
-- Large screens (≥1600): no max content width; Task star column absorbs slack. Future charts (M4) dock as a collapsible bottom Expander — don't preclude it.
-
-## Design Tokens
-
-**Layout**: nav 260/48 · nav item 36 / host item 40 · command bar 52 · grid header 32 · row 36 (compact 28) · status bar 28 · surface radius 8 · control radius 4 · page padding 16 · gap 8.
-
-**Type** (see font fallback below; Consolas-stack for log): page title 16 semibold · row body 13 (compact 12) · grid header 11 semibold · caption/subtext 12 · nav item 13 · badge 10 semibold. Numeric cells: tabular numerals, left-aligned.
-
-**Font fallback stacks (cross-platform — every platform must resolve to a real font):**
-
-- UI: `Segoe UI` (Windows) → `SF Pro Text` (macOS) → `Ubuntu` / `Noto Sans` (Linux) → `system-ui, sans-serif`
-- Monospace (event log timestamps + messages): `Consolas` (Windows) → `SF Mono` / `Menlo` (macOS) → `DejaVu Sans Mono` (Linux) → `monospace`
-
-Metric note: DejaVu Sans Mono is wider and has taller vertical metrics than Consolas. Keep the 26px log row height by setting an explicit row height / line-height (do not derive from font metrics), keep log font size fixed at 12px, and size the timestamp column (128px) for the widest stack — already validated. SF Pro Text and Ubuntu are metrically close enough to Segoe UI that the 36/28px grid rows need no adjustment.
-
-**Color by role — Light / Dark** (prefer FluentAvalonia theme resources; hexes are the reference values; respect system accent — these brand hexes are defaults only, contrast ≥4.5:1 must hold):
-
-| Role | Light | Dark |
-|---|---|---|
-| Canvas / chrome | #FAFAFA | #1F1F1F |
-| Content surface | #FFFFFF | #292929 |
-| Nav surface | #F5F5F5 | #202020 |
-| Stroke / divider | #E0E0E0 / #F0F0F0 | #3D3D3D / #333333 |
-| Text primary / secondary / tertiary | #242424 / #616161 / #767676 | #FFFFFF / #D6D6D6 / #ADADAD |
-| Accent (selection, links, progress) | #0F6CBD | #479EF5 |
-| Selected row / brand tint | #EBF3FC | #123B5C |
-| Success (icons only, never bg) | #107C10 | #9FD89F |
-| Warning fg / row tint | #BC4B09 / #FFF9F5 | #FAA06B / #3A2A1E |
-| Warning InfoBar bg/border | #FFF9F5 / #FDCFB4 | #411200 / #714224 |
-| Danger fg / error-row tint | #C50F1F / #FDF3F4 | #E37D80 / #3A1E20 |
-| Neutral state fg | #616161 | #ADADAD |
-| Disabled | #BDBDBD | #5C5C5C |
-
-Rule: state semantics always icon + text + color (three channels). Row background tints only for **selection and state-severity, never decoration** — allowed set: selected, deadline-at-risk, transfer-retrying, log-warning, log-error.
-
-Contrast note: the ≥4.5:1 floor applies to all enabled text/icons on their surface. Light tertiary was darkened from #8A8A8A (~3.45:1 on white, below the floor) to **#767676 (≥4.5:1); #8A8A8A is retired for text and may only appear as a decorative/non-text value**; the dark tertiary #ADADAD already passes on #292929 and is unchanged. **Disabled text (#BDBDBD light / #5C5C5C dark) is explicitly exempt**, per the WCAG 1.4.3 exception for inactive UI components — do not lighten it to pass.
-
-**Mica**: Windows 11 — Mica on nav + command bar regions; solid fallbacks above for macOS/Linux/battery. Content surfaces always opaque.
-
-## Control mapping (FluentAvalonia)
-
-| Region | Control |
-|---|---|
-| Shell | NavigationView (Left, PaneDisplayMode auto-compact); views = MenuItems; hosts = **custom selectable list control in `PaneFooter`** (two-line rows; own selection state, independent of NavigationView's) |
-| Host row context menu | MenuFlyout (Edit / Test connection / Remove) |
-| Alert counts | InfoBadge |
-| Partial banner, dialog errors | InfoBar |
-| All lists | DataGrid (virtualized, sortable) |
-| Command bars | CommandBar / Toolbar + AutoSuggestBox + ComboBox |
-| Progress | custom thin 3px bar in cells (stock ProgressBar restyled); ProgressRing for loading |
-| Log filter pills | ToggleButton styled as pill |
-| Settings | SettingsExpander; Add host / confirmations = ContentDialog (TaskDialog ok for confirms) |
-| Status bar | **custom control required** (28px strip; trivial) — the only custom control in M2 |
+## Design tokens (Fluent 2, web light theme)
+- **Colors**: ink `#242424`, secondary `#616161`, tertiary `#767676`, body-alt `#424242`; brand `#0F6CBD`
+  (hover `#0F548C`); selection tint `#EBF3FC`; success `#107C10`, warning `#B85C00`/`#BC4B09`, danger `#C50F1F`.
+  Surfaces: canvas `#FAFAFA`, card `#fff`, rail `#F5F5F5`, hover `#F5F5F5`, pressed/selected-neutral `#E0E0E0`/`#EBEBEB`.
+  Lines: strong `#E0E0E0`, row `#F0F0F0`, column divider `#EDEBE9`, input hairline `#D1D1D1` (bottom `#616161`, focus 2px `#0F6CBD`).
+  Dark: canvas `#1F1F1F`, surface `#292929`, line `#333`, brand `#479EF5`, hover `#383838`, text `#fff`/`#ADADAD`/`#D6D6D6`.
+- **Type**: Segoe UI. Body 13/20; grid header 11 semibold; page title 16 semibold; caption/subtext 12 `#616161`; monospace = Consolas (Event log). Numeric = tabular figures.
+- **Spacing**: 2/4/6/8/10/12/16/20/24/32. Page padding 16; card padding 16; section gap 24–32.
+- **Sizes**: rail 260 (collapsed 48) · nav item 36 / host item 40 · command bar 52 · grid header 32 · rows 36/28 · status bar 28.
+- **Radius**: controls 4, surfaces/cards/dialogs 8, tiny 2, avatars/badges/switch fully round.
+- **Shadows**: cards shadow4 (rest) → shadow8 (hover); menus shadow8; dialogs shadow64. Never shadow + border on the same surface.
 
 ## Assets
-
-- Icons: Fluent System Icons (MIT, microsoft/fluentui-system-icons) — regular at rest, filled when selected/active. Names used: task_list_square_ltr, grid, arrow_swap, document_text, settings, apps_list, server, checkmark_circle, arrow_sync, arrow_clockwise, dismiss_circle, key, play, pause, clock, arrow_upload, arrow_download, warning, error_circle, info, more_horizontal, add, search, chevron_down/up/right, timer, hand_right, text_line_spacing, filter, dismiss, copy, eye, arrow_sort_up/down, arrow_down, checkmark.
-- No logo asset; "Lattice" wordmark = 20px accent rounded square with "L" + Segoe UI Semibold text (placeholder).
+- **Icons**: [Fluent System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) — outlined
+  *regular* at rest, *filled* for selected/active. Sizes 16/20. The spec uses the icon font; in Avalonia
+  use the equivalent Fluent icon set / glyphs.
+- **Font**: Segoe UI (system on Windows; provide the documented fallback stack cross-platform — see `1g`).
+- No bitmap/illustration assets; all UI is type + icons + flat Fluent surfaces.
 
 ## Files
+- `Lattice M2 Spec.html` — the finalized, self-contained HTML spec (open offline; pan/zoom the canvas).
+  The greyed annotation notes under each card are the authoritative per-screen details.
 
-- `Lattice M2 Spec.html` — the full spec document, **fully self-contained** (all runtime scripts, styles, and icon fonts inlined; opens offline from a plain checkout with no network access and no sibling folders required).
-- `support.js` — runtime library used by the original editable source document in the design workspace; not needed to view the bundled spec (kept for package-structure continuity).
-
-## Decision log (from review)
-
-1. Shell = option 1c (two-zone rail); 1a/1b kept in doc for context only.
-2. All table columns left-aligned, including numeric (uniform alignment beats right-aligned numerals).
-3. Projects: resource share & status are per-host facts; aggregate rows show "Varies"/count summaries, never fake single values; Mixed tier exists.
-4. No pill capsules for project status — icon + text everywhere; parent row 14px vs child 12px for hierarchy.
-5. Event log: no in-view host TabView; scope via nav rail; merged stream gets a Host column.
-6. Flat table + Host column for all-hosts task aggregation (no grouping headers — cross-host sorting is the core scenario); grouping toggle possible in M3.
-7. **(rev. B)** Hosts rail bottom-docked in PaneFooter — resolves the FANavigationView slot constraint (PaneCustomContent-on-top was rejected in demo review); the views↔hosts gap is accepted, never filled. Scale-adaptive: single row / flat list / status groups — switch is **height-based ("fits → flat, doesn't → grouped")**, not a fixed host count (a fixed >12 overflows 768-high laptops at 9 hosts and wastes 1440p at 13); manual list/group override in the Hosts header, persisted.
-8. **(rev. B)** Host management moved out of Settings: "+" → Add host dialog; right-click host → MenuFlyout (Edit / Test / Remove); auth-failed click → Edit dialog with password error. Settings = global groups only.
-9. **(rev. B)** Primary persona is single-host/local; multi-host farms (community) drive the scale rule — persistent status list beats a scope-picker flyout for "which node died at a glance".
+_Source of truth in the design project: `Lattice M2 Spec - Final.dc.html`._
