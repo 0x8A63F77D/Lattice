@@ -43,17 +43,24 @@ every launch surface references: `Info.plist`'s `CFBundleExecutable=Lattice` and
 LATTICE_VERSION=0.1.0 packaging/macos/bundle.sh
 open artifacts/macos/osx-arm64/Lattice.app   # Dock/Finder shows the mark
 
-# Linux: publish, then install icons + launcher (Exec pinned to the built binary)
-dotnet publish src/Lattice.App -c Release -r linux-x64 --self-contained true -o out/linux
-packaging/linux/install-icons.sh "${XDG_DATA_HOME:-$HOME/.local/share}" out/linux
-# icons/launcher only (binary already on PATH): packaging/linux/install-icons.sh
-# system-wide: sudo packaging/linux/install-icons.sh /usr/share /path/to/publish
+# Linux: install the hicolor icons + .desktop launcher (per-user by default)
+packaging/linux/install-icons.sh
+# system-wide: sudo packaging/linux/install-icons.sh /usr/share
 ```
-
-Passing the publish dir rewrites the installed launcher's `Exec` to the binary's
-absolute path, so it starts regardless of PATH. Without it, the template ships
-`Exec=Lattice`, which relies on a `Lattice` binary being on PATH (e.g. a distro
-package).
 
 The Windows `.exe` icon and the running-window icon need no extra step — they are
 wired into the normal `dotnet build` / `dotnet publish` of the app.
+
+## Linux distribution
+
+The planned primary distributable is an **AppImage** (self-contained, no root,
+cross-distro — a good fit given Lattice has no complex native dependencies). The
+AppImage bundles the `Lattice` binary and resolves `Exec=Lattice` through its
+AppRun; it consumes exactly the assets here — `linux/lattice.desktop` and the
+`docs/design/icon/linux/hicolor` tree. Building the AppImage (AppRun + recipe) is
+release-engineering tracked separately, not part of this icon-wiring PR.
+
+`install-icons.sh` is scoped to what icon-wiring owns: staging the hicolor theme
+and the launcher into an XDG prefix for local runs / manual installs. Putting the
+`Lattice` binary on PATH belongs to the distribution format (the AppImage, or a
+distro package), not this script.
