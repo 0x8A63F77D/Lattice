@@ -71,11 +71,10 @@ Every table (Tasks, Projects, Transfers, Event log, Responsive, Dark) uses **one
   distinguishing segment stays visible — full value on hover tooltip. Other text columns end-ellipsize.
 - **Resize**: columns are drag-resizable from the header edge; widths persist per machine.
 
-### Default column widths (px; star column takes the `1fr` remainder)
-- **Tasks**: Project 108 · Application 118 · Task 1fr · Progress 112 · Elapsed 68 · Remaining 74 · Deadline 100 · State 112 · Host 76
-- **Projects**: chevron 24 · Project 200 · Hosts 110 · Resource share 140 · Avg credit 100 · Total credit 110 · Status 1fr
-- **Transfers**: File 1fr · Project 140 · Direction 80 · Progress 190 · Speed 90 · Status 210 · Host 80
-- **Event log**: Time 128 · Host 84 · Project 140 · severity 20 · Message 1fr
+### Default column widths
+Per-view default column widths (px) and the star (`1fr`) column live in the spec itself — see the
+**"Default column widths"** note under card **`1c`** in `Lattice M2 Spec.html`. That annotation is the
+single source of truth; this README intentionally does not duplicate the numbers (to avoid drift).
 
 ## Interactions & behavior
 - **Global scope**: the Hosts selection in the rail is an independent, persistent global filter applied to
