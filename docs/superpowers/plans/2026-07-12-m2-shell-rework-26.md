@@ -36,7 +36,7 @@
 - `src/Lattice.App/Views/AddHostDialog.axaml` / `.axaml.cs` — Edit title/buttons, password danger border + focus, secondary Test button.
 - `src/Lattice.App/ViewModels/SettingsViewModel.cs` — drop Hosts group; add `SelectedTheme`.
 - `src/Lattice.App/Views/SettingsView.axaml` / `.axaml.cs` — remove Hosts ItemsControl + remove-confirm handler; add Theme group + pointer caption.
-- `src/Lattice.App/Infrastructure/UiStateStore.cs` — `UiState` gains `RailGrouping`, `RailHealthyExpanded`, `RailOfflineExpanded`, `Theme`; `JsonStringEnumConverter`.
+- `src/Lattice.App/Infrastructure/UiStateStore.cs` — `UiState` gains `RailGrouping`, `RailHealthyExpanded`, `Theme`; `JsonStringEnumConverter`.
 - `src/Lattice.App/App.axaml.cs` — construct + apply `ThemePreference` at startup; pass into `ShellViewModel`.
 - `src/Lattice.App/Localization/Strings.resx` — add new keys; retire Settings host-group keys.
 
@@ -136,8 +136,7 @@ let private input hosts height =
       AvailableHeight = height
       RowHeight = 40.0
       Override = Auto
-      HealthyExpanded = false
-      OfflineExpanded = false }
+      HealthyExpanded = false }
 
 [<Fact>]
 let ``single host is degenerate: no All-hosts row, no toggle`` () =
@@ -193,12 +192,11 @@ namespace Lattice.App.Aggregation
 
 open System
 
-/// Status-group tier for the many-hosts rail. Total over RailState; Offline is
-/// reserved (no M2 per-host state maps to it — decisions spec §2).
+/// Status-group tier for the many-hosts rail. Two tiers only (owner decision,
+/// decisions spec §2); M3 reopens this when a terminal paused/disabled state exists.
 type RailTier =
     | Attention
     | Healthy
-    | Offline
 
 /// User's persisted list/group override; Auto lets the height fit test decide.
 type RailOverride =
@@ -227,8 +225,7 @@ type RailLayoutInput =
       AvailableHeight: float
       RowHeight: float
       Override: RailOverride
-      HealthyExpanded: bool
-      OfflineExpanded: bool }
+      HealthyExpanded: bool }
 
 /// The layout the shell renders.
 type RailLayout =
@@ -301,7 +298,7 @@ git commit -m "feat(rail): pure RailLayout core — flat/single-host fit + overr
 - Modify: `src/Lattice.App.Aggregation/RailLayout.fs`
 - Modify: `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs`
 
-Contract (decisions spec §6): `Grouped` ⇒ `AllHostsRow` then, in fixed order Attention → Healthy → Offline, for each **non-empty** tier a `GroupHeaderRow(tier, count, expanded)` followed by that tier's `HostRow`s **iff expanded**. Attention is always expanded; Healthy/Offline honor the persisted flags. Within a tier, registry order is preserved.
+Contract (decisions spec §6): `Grouped` ⇒ `AllHostsRow` then, in fixed order Attention → Healthy, for each **non-empty** tier a `GroupHeaderRow(tier, count, expanded)` followed by that tier's `HostRow`s **iff expanded**. Attention is always expanded; Healthy honors the persisted flag. Within a tier, registry order is preserved.
 
 - [ ] **Step 1: Write failing grouped-emission tests + a property**
 
@@ -311,18 +308,17 @@ Append to `RailLayoutTests.fs`:
 open FsCheck
 open FsCheck.Xunit
 
-let private grouped hosts healthyExp offlineExp =
+let private grouped hosts healthyExp =
     RailLayoutPolicy.compute
         { input hosts 0.0 with   // height 0 => never fits => Grouped under Auto
             Override = Auto
-            HealthyExpanded = healthyExp
-            OfflineExpanded = offlineExp }
+            HealthyExpanded = healthyExp }
 
 [<Fact>]
 let ``grouped: attention always expands; healthy collapsed hides its hosts`` () =
     let att = host Attention
     let heal = host Healthy
-    let layout = grouped [| att; heal |] false false
+    let layout = grouped [| att; heal |] false
     Assert.Equal<RailRow list>(
         [ AllHostsRow
           GroupHeaderRow(Attention, 1, true); HostRow att.Id
@@ -332,22 +328,22 @@ let ``grouped: attention always expands; healthy collapsed hides its hosts`` () 
 [<Fact>]
 let ``grouped: expanding healthy reveals its hosts in registry order`` () =
     let h1, h2 = host Healthy, host Healthy
-    let layout = grouped [| h1; h2 |] true false
+    let layout = grouped [| h1; h2 |] true
     Assert.Equal<RailRow list>(
         [ AllHostsRow
           GroupHeaderRow(Healthy, 2, true); HostRow h1.Id; HostRow h2.Id ],
         layout.Rows)
 
 [<Fact>]
-let ``grouped: empty tiers are skipped`` () =
+let ``grouped: an empty tier is skipped`` () =
     let a, b = host Attention, host Attention
-    let layout = grouped [| a; b |] false false
+    let layout = grouped [| a; b |] false
     Assert.Equal<RailRow list>(
         [ AllHostsRow; GroupHeaderRow(Attention, 2, true); HostRow a.Id; HostRow b.Id ],
         layout.Rows)
 
 // --- generators for the property pass ---
-let private tierGen = Gen.elements [ Attention; Healthy; Offline ]
+let private tierGen = Gen.elements [ Attention; Healthy ]
 let private railInputGen =
     gen {
         let! n = Gen.choose (0, 8)
@@ -356,9 +352,8 @@ let private railInputGen =
         let! height = Gen.choose (0, 600) |> Gen.map float
         let! ov = Gen.elements [ Auto; ForceFlat; ForceGrouped ]
         let! he = Arb.generate<bool>
-        let! oe = Arb.generate<bool>
         return { Hosts = hosts; AvailableHeight = height; RowHeight = 40.0
-                 Override = ov; HealthyExpanded = he; OfflineExpanded = oe }
+                 Override = ov; HealthyExpanded = he }
     }
 type RailArbs =
     static member Input() = Arb.fromGen railInputGen
@@ -374,8 +369,8 @@ let ``every emitted HostRow id is a real input host`` (inp: RailLayoutInput) =
 [<Property(Arbitrary = [| typeof<RailArbs> |])>]
 let ``flat and expanded-grouped conserve hosts exactly once`` (inp: RailLayoutInput) =
     let layout = RailLayoutPolicy.compute inp
-    // Force everything expanded so grouped emits every host, then compare as a set.
-    let expanded = RailLayoutPolicy.compute { inp with HealthyExpanded = true; OfflineExpanded = true }
+    // Force Healthy expanded so grouped emits every host, then compare as a set.
+    let expanded = RailLayoutPolicy.compute { inp with HealthyExpanded = true }
     match layout.Mode with
     | SingleHost -> true   // degenerate single-host handled by its own unit test
     | Flat ->
@@ -404,14 +399,13 @@ In `RailLayout.fs`, replace the placeholder line and add the helpers. Add above 
 
 ```fsharp
     /// Fixed render order of the status groups.
-    let private tierOrder = [ Attention; Healthy; Offline ]
+    let private tierOrder = [ Attention; Healthy ]
 
-    /// Attention is always expanded; the others honor the persisted flags.
+    /// Attention is always expanded; Healthy honors the persisted flag.
     let private tierExpanded (input: RailLayoutInput) tier =
         match tier with
         | Attention -> true
         | Healthy -> input.HealthyExpanded
-        | Offline -> input.OfflineExpanded
 
     /// Rows for one non-empty tier: header, then its hosts iff expanded.
     let private groupRows (input: RailLayoutInput) tier (members: RailHost[]) =
@@ -445,7 +439,7 @@ Temporarily change `tierExpanded`'s `Attention -> true` to `Attention -> false`;
 
 ```bash
 git add src/Lattice.App.Aggregation/RailLayout.fs tests/Lattice.Aggregation.Tests/RailLayoutTests.fs
-git commit -m "feat(rail): grouped rows (Attention/Healthy/Offline) in RailLayout core (design 3a)"
+git commit -m "feat(rail): grouped rows (Attention/Healthy) in RailLayout core (design 3a)"
 ```
 
 ---
@@ -456,7 +450,7 @@ git commit -m "feat(rail): grouped rows (Attention/Healthy/Offline) in RailLayou
 - Create: `src/Lattice.App/ViewModels/RailTierProjection.cs`
 - Create: `tests/Lattice.App.Tests/RailTierProjectionTests.cs`
 
-Taxonomy (decisions spec §2): Attention ← Unreachable/AuthFailed/Retrying; Healthy ← Connected/Connecting; Offline never produced in M2.
+Taxonomy (decisions spec §2, owner-simplified to two tiers): Attention ← Unreachable/AuthFailed/Retrying; Healthy ← Connected/Connecting. No Offline tier in M2.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -494,10 +488,9 @@ using Lattice.App.Aggregation;
 namespace Lattice.App.ViewModels;
 
 /// <summary>
-/// Buckets the five rail visuals into the many-hosts status groups (design 3a;
-/// decisions spec §2). Total, no wildcard: adding a RailState case must force a
-/// choice here. Offline is reserved — no M2 RailState maps to it (README: Offline
-/// is a group label, not a per-host state).
+/// Buckets the five rail visuals into the two many-hosts status groups (design 3a;
+/// decisions spec §2 — owner-simplified to Attention + Healthy). Total, no wildcard:
+/// adding a RailState case must force a choice here.
 /// </summary>
 public static class RailTierProjection
 {
@@ -550,7 +543,6 @@ public void Rail_and_theme_preferences_round_trip()
     var loaded = new UiStateStore(path).Load();
     Assert.Equal(RailGroupingMode.Grouped, loaded.RailGrouping);
     Assert.True(loaded.RailHealthyExpanded);
-    Assert.False(loaded.RailOfflineExpanded);
     Assert.Equal(AppTheme.Dark, loaded.Theme);
     File.Delete(path);
 }
@@ -600,7 +592,6 @@ public sealed record UiState(
     Dictionary<string, double> ColumnWidths,
     RailGroupingMode RailGrouping = RailGroupingMode.Auto,
     bool RailHealthyExpanded = false,
-    bool RailOfflineExpanded = false,
     AppTheme Theme = AppTheme.System)
 {
     public static UiState Default => new(false, [], []);
@@ -672,7 +663,6 @@ Add to `src/Lattice.App/Localization/Strings.resx` (T1 convention — meaning-ba
 ```xml
   <data name="RailGroupAttentionFmt" xml:space="preserve"><value>Attention · {0}</value></data>
   <data name="RailGroupHealthyFmt" xml:space="preserve"><value>Healthy · {0}</value></data>
-  <data name="RailGroupOfflineFmt" xml:space="preserve"><value>Offline · {0}</value></data>
 ```
 
 Create `GroupHeaderRailItemViewModel.cs`:
@@ -685,19 +675,17 @@ using Lattice.App.Localization;
 namespace Lattice.App.ViewModels;
 
 /// <summary>A status-group header row in the hosts rail (design 3a). Attention is
-/// always expanded (not collapsible); Healthy/Offline toggle, the shell persists.</summary>
+/// always expanded (not collapsible); Healthy toggles, the shell persists.</summary>
 public sealed partial class GroupHeaderRailItemViewModel : ObservableObject
 {
     public GroupHeaderRailItemViewModel(RailTier tier, int count, bool expanded)
     {
         Tier = tier;
         _expanded = expanded;
-        Text = tier switch
-        {
-            var t when t == RailTier.Attention => string.Format(Strings.RailGroupAttentionFmt, count),
-            var t when t == RailTier.Healthy => string.Format(Strings.RailGroupHealthyFmt, count),
-            _ => string.Format(Strings.RailGroupOfflineFmt, count),
-        };
+        // Two tiers (decisions spec §2): Attention or Healthy.
+        Text = tier.Equals(RailTier.Attention)
+            ? string.Format(Strings.RailGroupAttentionFmt, count)
+            : string.Format(Strings.RailGroupHealthyFmt, count);
     }
 
     public RailTier Tier { get; }
@@ -816,7 +804,6 @@ Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the cla
     private double _railViewportHeight;
     private RailGroupingMode _grouping;
     private bool _healthyExpanded;
-    private bool _offlineExpanded;
     private bool _rebuilding;
 
     [ObservableProperty] private bool _showRailToggle;
@@ -828,7 +815,6 @@ In the constructor, capture `uiState` and load persisted rail state (before `Rec
         var ui = uiState.Load();
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
-        _offlineExpanded = ui.RailOfflineExpanded;
 ```
 Keep `RailEntries.Add(_allHosts); SelectedRailEntry = _allHosts;` then `store.Changed += OnStoreChanged; ReconcileHosts();` as today.
 
@@ -882,15 +868,11 @@ Add the orchestration members:
 
     private void OnGroupToggleRequested(object? sender, RailTier tier)
     {
+        // Healthy is the only collapsible tier (Attention is pinned open).
         if (tier.Equals(RailTier.Healthy))
         {
             _healthyExpanded = !_healthyExpanded;
             _uiState.Update(s => s with { RailHealthyExpanded = _healthyExpanded });
-        }
-        else if (tier.Equals(RailTier.Offline))
-        {
-            _offlineExpanded = !_offlineExpanded;
-            _uiState.Update(s => s with { RailOfflineExpanded = _offlineExpanded });
         }
         RebuildRail();
     }
@@ -913,7 +895,7 @@ Add the orchestration members:
             .ToArray();
         var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
         var input = new RailLayoutInput(hosts, available, RailRowHeight,
-            MapOverride(_grouping), _healthyExpanded, _offlineExpanded);
+            MapOverride(_grouping), _healthyExpanded);
         RailLayout layout = RailLayoutPolicy.compute(input);
         ShowRailToggle = layout.ShowToggle;
 
@@ -1979,7 +1961,7 @@ Earlier tasks added strings incrementally; this task audits the set: every new k
 
 - [ ] **Step 1: Confirm the new keys exist (added across Tasks 6–14)**
 
-`RailGroupAttentionFmt`, `RailGroupHealthyFmt`, `RailGroupOfflineFmt`, `RailGroupToggleTooltip`, `EditHostDialogTitle`, `EditHostPrimaryButton`, `EditHostPasswordError`, `EditHostSaveFailedFmt`, `HostMenuEdit`, `HostMenuTest`, `HostMenuRemove`, `HostRemoveConfirmTitleFmt`, `HostRemoveConfirmBody`, `HostRemoveConfirmPrimary`, `HostRemoveConfirmCancel`, `SettingsHostsPointer`, `SettingsThemeSection`, `SettingsThemeHeader`, `SettingsThemeDescription`, `ThemeLight`, `ThemeDark`, `ThemeSystem`.
+`RailGroupAttentionFmt`, `RailGroupHealthyFmt`, `RailGroupToggleTooltip`, `EditHostDialogTitle`, `EditHostPrimaryButton`, `EditHostPasswordError`, `EditHostSaveFailedFmt`, `HostMenuEdit`, `HostMenuTest`, `HostMenuRemove`, `HostRemoveConfirmTitleFmt`, `HostRemoveConfirmBody`, `HostRemoveConfirmPrimary`, `HostRemoveConfirmCancel`, `SettingsHostsPointer`, `SettingsThemeSection`, `SettingsThemeHeader`, `SettingsThemeDescription`, `ThemeLight`, `ThemeDark`, `ThemeSystem`.
 
 - [ ] **Step 2: Retire keys orphaned by the Settings-host removal**
 
@@ -2039,8 +2021,8 @@ git add -A && git commit -m "test(shell): pin rail geometry + final ReservedRail
 
 ## Deferred (noted, not built here)
 
-- **Compact grouped rendering** (design 3a): stacked single-icon per collapsed Healthy/Offline group + 8 px badge dot. M2 renders individual host icons in the compact rail; the stacked-icon visual needs bespoke rendering → **#32 polish wave** (decisions spec §5).
-- **Offline group** is reserved: no M2 `RailState` maps to it (decisions spec §2). Wires up when a terminal/paused host state exists (M3 snooze/host-disable).
+- **Compact grouped rendering** (design 3a): stacked single-icon per collapsed Healthy group + 8 px badge dot. M2 renders individual host icons in the compact rail; the stacked-icon visual needs bespoke rendering → **#32 polish wave** (decisions spec §5).
+- **`Offline · N` group NOT implemented** (owner decision, decisions spec §2): the card `3a` mock's third group folds into `Attention` in M2 — persistently-unreachable hosts are attention-worthy. Re-add when an M3 terminal paused/disabled/snoozed `RailState` exists (F#/C# exhaustiveness will flag the `RailTier` matches to update). **Record this deliberate deviation on the #57 design-fidelity tracker.**
 - **Filled/selected rail icons + InfoBadge refinements** beyond current behavior → #32.
 - **#11 Mica**: opaque `LatticeCanvasBrush` paints over Mica — separate on-hardware pass, out of scope.
 
@@ -2049,6 +2031,6 @@ git add -A && git commit -m "test(shell): pin rail geometry + final ReservedRail
 1. **Spec coverage** — Area 1 (PaneFooter) = Task 1; Area 2 (grouping core) = Tasks 2–8; Area 3 (host mgmt) = Tasks 9–13; Area 4 (auth-failed) = Task 12; Area 5 (Theme) = Task 14; Area 6 (ResX) = Tasks 6–15. ✔
 2. **DU totality** — `RailTierProjection` and every F# `match` are wildcard-free over domain DUs; adding a `RailState`/`RailTier` case is a compile error.
 3. **Determinism** — every UI test settles on expected text / fake calls / registry state via `HeadlessSync.WaitUntilAsync` or synchronous `Layout`; no wall-clock waits; `ManualUiClock`/`FakeTimeProvider` throughout. No `WaitUntilAsync` on a transient that can flip true early — asserts target end-state text/collection contents.
-4. **Type consistency** — F# module `RailLayoutPolicy` vs result record `RailLayout`; C# consumes `RailLayoutPolicy.compute`, `RailRow.HostRow.Item`, `RailRow.GroupHeaderRow.{tier,count,expanded}`, `RailHost(Guid, RailTier)`, `RailLayoutInput(Hosts, AvailableHeight, RowHeight, Override, HealthyExpanded, OfflineExpanded)`. Persisted enums `RailGroupingMode`/`AppTheme` map to F# `RailOverride`/tiers.
+4. **Type consistency** — F# module `RailLayoutPolicy` vs result record `RailLayout`; C# consumes `RailLayoutPolicy.compute`, `RailRow.HostRow.Item`, `RailRow.GroupHeaderRow.{tier,count,expanded}`, `RailHost(Guid, RailTier)`, `RailLayoutInput(Hosts, AvailableHeight, RowHeight, Override, HealthyExpanded)`. Persisted enums `RailGroupingMode`/`AppTheme` map to F# `RailOverride`/tiers.
 5. **No `HostMonitor`/`HostMachine` edits** — App-layer + pure `Lattice.App.Aggregation` only. ✔
 

@@ -30,28 +30,32 @@ than shipping a broken rail.
 Card `3a` annotation prose says **Attention = "unreachable / auth-failed / retrying, always expanded"**,
 yet its 40-host mock simultaneously shows an **`Offline · 2`** group *and* a node in `Attention` that is
 `Unreachable`. Those cannot both be literally true, so the mock's bucket counts are illustrative, not
-normative. The README resolves the direction explicitly:
+normative. The README confirms the direction:
 
 > "'Offline' in `3a` is a status-*group* label in the many-hosts view, **not a per-host state**."
 
-**Resolution (annotation prose wins over the mock):**
+**Owner decision (2026-07-12): ship TWO tiers only — `Attention` and `Healthy`. Do NOT carry a
+speculative `Offline` tier.** This is a deliberate YAGNI simplification *over the mock's `Offline · 2`
+group*: the mock's Offline nodes fold into `Attention` in M2 (persistently-unreachable hosts are
+attention-worthy). No `RailState` distinguishes an "offline/paused/disabled" host from `Unreachable`
+today, so an `Offline` tier would be a DU case that nothing ever produces. When M3 adds a terminal
+paused/disabled/snoozed state, **that** PR reopens the taxonomy — F#/C# exhaustiveness will flag every
+`match`/`switch` to update, which is cheap to add back then.
 
 | Tier | Populated by (over `RailState`, the authoritative per-host enum, spec §9) | Row behavior |
 |---|---|---|
 | **Attention** | `Unreachable` ∪ `AuthFailed` ∪ `Retrying` | header + always-expanded 36 px host rows |
 | **Healthy** | `Connected` ∪ `Connecting` | collapsed 28 px count row; expand state persisted |
-| **Offline** | *(reserved — no M2 `RailState` maps here)* | rendered only when non-empty |
 
-- `Connecting` is neither a problem (not `Attention`) nor terminal (not reserved-`Offline`); it is folded
-  into **Healthy** as "on its way up". Documented in the tier projection.
-- **Offline is reserved, not dead.** `RailState` (spec §9) has no offline/disabled/paused member distinct
-  from `Unreachable`, and the README calls Offline a group label rather than a per-host state, so in M2 the
-  classifier never returns `Offline` and only **Attention + Healthy** ever render. The `Offline` DU case
-  exists so a future terminal/user-paused state (M3 snooze, host-disable) slots in without reopening the
-  taxonomy. The classifier `RailState -> RailTier` stays **total with no wildcard** (CLAUDE.md DU rule);
-  the renderer skips empty tiers, so the reserved case is inert until something maps to it.
+- `Connecting` is not a problem (not `Attention`) so it folds into **Healthy** as "on its way up".
+- The classifier `RailState -> RailTier` is **total with no wildcard** (CLAUDE.md DU rule; `-warnaserror`
+  enforces the C# switch exhaustiveness). The renderer skips an empty tier, so an all-healthy farm shows no
+  Attention header, and in practice `GroupHeaderRow` only ever collapses **Healthy** (Attention is always
+  expanded).
 
-This is the same "restructure the taxonomy rather than special-case" posture as `TasksOverlayPolicy`.
+**Deliberate design deviation to record on the #57 design-fidelity tracker:** the mock's `Offline · 2`
+group is intentionally NOT implemented in M2 (folded into Attention, per owner). This is the same
+"restructure the taxonomy rather than special-case" posture as `TasksOverlayPolicy`.
 
 ## 3. Fit test: pure math in the core, pixel chrome in the shell
 
@@ -120,12 +124,11 @@ namespace Lattice.App.Aggregation
 
 open System
 
-/// Status-group tier for the many-hosts rail. Total over RailState; Offline is
-/// reserved (no M2 per-host state maps to it — see decisions §2).
+/// Status-group tier for the many-hosts rail. Two tiers only (owner decision §2);
+/// M3 reopens this when a terminal paused/disabled state exists.
 type RailTier =
     | Attention
     | Healthy
-    | Offline
 
 /// User's persisted list/group override; Auto lets the height fit test decide.
 type RailOverride =
@@ -154,8 +157,7 @@ type RailLayoutInput =
       AvailableHeight: float   // measured footer budget, px (decisions §3)
       RowHeight: float         // 40px (LatticeHostItemHeight)
       Override: RailOverride
-      HealthyExpanded: bool
-      OfflineExpanded: bool }
+      HealthyExpanded: bool }
 
 /// The layout the shell renders.
 type RailLayout =
@@ -164,9 +166,9 @@ type RailLayout =
       Rows: RailRow list }
 
 module RailLayoutPolicy =
-    /// Total and pure over the input. Group order is fixed Attention → Healthy →
-    /// Offline; empty tiers are skipped; within a tier, registry order is kept.
-    /// Attention is always expanded; Healthy/Offline honor the persisted flags.
+    /// Total and pure over the input. Group order is fixed Attention → Healthy;
+    /// an empty tier is skipped; within a tier, registry order is kept.
+    /// Attention is always expanded; Healthy honors the persisted flag.
     val compute : RailLayoutInput -> RailLayout
 ```
 
@@ -186,8 +188,7 @@ files deserialize to defaults — STJ uses the param default for a missing JSON 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `RailGrouping` | `RailGroupingMode` (`Auto`/`Flat`/`Grouped`) | `Auto` | maps to F# `RailOverride` |
-| `RailHealthyExpanded` | `bool` | `false` | Healthy group expand state |
-| `RailOfflineExpanded` | `bool` | `false` | Offline group expand state |
+| `RailHealthyExpanded` | `bool` | `false` | Healthy group expand state (the only collapsible tier) |
 | `Theme` | `AppTheme` (`Light`/`Dark`/`System`) | `System` | app theme (card `2d`/`1f`) |
 
 Enums persist as **strings** via `JsonStringEnumConverter` added to `UiStateStore.JsonOptions` (robust to
@@ -212,6 +213,6 @@ member reordering, human-editable). `RailGroupingMode` / `AppTheme` are C# enums
 
 ## 9. Deferred to #32 polish wave (noted, not built here)
 
-- Compact grouped rendering: stacked single-icon per collapsed Healthy/Offline group; 8 px badge dot (§5).
+- Compact grouped rendering: stacked single-icon per collapsed Healthy group; 8 px badge dot (§5).
 - Filled/selected rail icons and per-host `InfoBadge` refinements beyond current behavior.
 - #11 Mica (opaque `LatticeCanvasBrush` over Mica) — separate on-hardware pass, out of scope here.
