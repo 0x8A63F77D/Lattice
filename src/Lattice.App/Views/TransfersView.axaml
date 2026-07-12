@@ -14,10 +14,10 @@
   </UserControl.KeyBindings>
 
   <UserControl.Styles>
-    <!-- Retrying-row tint (design 2b), the Transfers analogue of Tasks' atRisk row. -->
-    <Style Selector="DataGridRow.retrying">
-      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
-    </Style>
+    <!-- Retrying-row tint (design 2b), the Transfers analogue of Tasks' atRisk row, is
+         CENTRALIZED in DataGridStyles.axaml (DataGrid.lattice DataGridRow.retrying, plus its
+         :pointerover hover-keep) — it applies here because Grid carries the "lattice" class.
+         No local rule needed. -->
     <!-- Progress-fill Border: accent color. Unlike Tasks, Transfers rows have
          no suspended variant, so there is only the base rule. -->
     <Style Selector="Border.progressFill">
@@ -114,7 +114,8 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
-                               Binding="{Binding Data.SpeedText}" Width="90" />
+                               Binding="{Binding Data.SpeedText}" Width="90"
+                               CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210">

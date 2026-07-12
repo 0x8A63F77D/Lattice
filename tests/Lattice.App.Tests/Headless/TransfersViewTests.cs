@@ -226,4 +226,48 @@ public class TransfersViewTests
         Assert.Equal(0, view.RowSubscriptionCount);
         window.Close();
     }
+
+    // Regression lock (grid-fidelity plan #57 task 7): pins the design-2b
+    // default column widths so a future edit can't silently drift them.
+    // File is the sole star column; the rest are pinned to the plan's pixel
+    // spec.
+    [AvaloniaFact]
+    public void Transfers_default_column_widths_match_the_spec()
+    {
+        var (window, _, _, _, _, _) = MakeView();
+        window.Show();
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        Assert.True(grid.Columns[0].Width.IsStar); // File
+        double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(140, W(1)); // Project
+        Assert.Equal(80, W(2)); // Direction
+        Assert.Equal(190, W(3)); // Progress
+        Assert.Equal(90, W(4)); // Speed
+        Assert.Equal(210, W(5)); // Status
+        Assert.Equal(80, W(6)); // Host
+        window.Close();
+    }
+
+    // Pins tabular figures (+tnum) on the Speed cell, mirroring the Tasks
+    // Elapsed/Remaining columns and Projects' credit columns (#57 task 7).
+    // SpeedText is a plain field on TransferRowViewModel (not computed), so
+    // MakeRow's literal "1.0 MB/s" is already the deterministic probe string.
+    [AvaloniaFact]
+    public void Speed_cell_uses_tabular_figures()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+
+        var row = MakeRow(TransferUiState.Active, Strings.TransfersStatusActive);
+        vm.Rows.Add(new TransferRow(row.Key, row));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        var tb = grid.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "1.0 MB/s");
+        Assert.NotNull(tb.FontFeatures);
+        Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
+        window.Close();
+    }
 }
