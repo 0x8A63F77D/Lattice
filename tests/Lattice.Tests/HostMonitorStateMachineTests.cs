@@ -162,28 +162,29 @@ public class HostMonitorStateMachineTests
         // WaitForAsync returns, the failed attempt has fully drained and the loop is
         // pinned at a known point — a deterministic barrier, no wall-clock sleep, so a
         // spurious wake below has nothing to hide behind.
+        // Everything from the freeze through the pinned assertions runs under try/finally
+        // (same discipline as the sweep harness): the barrier wait ITSELF is inside, so
+        // even a WaitForAsync timeout — or any assertion throw while the loop is blocked
+        // in Probe — still hits Disarm, which releases the frozen loop AND un-arms the
+        // point so it cannot re-freeze during the await-using teardown and hang forever.
         controller.FreezeAt(InterleavePoints.BeforeParkWait);
         monitor.Start();
-        await controller.WaitForAsync(InterleavePoints.BeforeParkWait);
-
-        // The loop is now blocked in Probe until Release; a throw here would otherwise
-        // leave it frozen and hang the await-using teardown, so the frozen section runs
-        // under try/finally (same discipline as the other interleaving tests).
         try
         {
+            await controller.WaitForAsync(InterleavePoints.BeforeParkWait);
             Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
             Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
 
             // AuthFailed parks on a config-change wait, not a timer: neither advancing
             // the clock nor a RequestRefresh may schedule a fresh attempt. Both land
-            // while the loop is pinned; Release (below) lets it enter the park, where a
+            // while the loop is pinned; Disarm (below) lets it enter the park, where a
             // correct loop consumes the stale wake as a no-op.
             time.Advance(TimeSpan.FromMinutes(5));
             monitor.RequestRefresh();
         }
         finally
         {
-            controller.Release();
+            controller.Disarm();
         }
 
         // The one thing that legitimately un-parks AuthFailed: a config change. Point it
