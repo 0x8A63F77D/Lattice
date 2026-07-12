@@ -35,5 +35,19 @@ sed "s#<string>0.0.0</string>#<string>${VERSION}</string>#g" "$PLIST" > "$APP/Co
 cp "$ICNS" "$APP/Contents/Resources/lattice.icns"
 echo "    bundle version: $VERSION"
 
+# Ad-hoc re-sign the ASSEMBLED bundle. `dotnet publish` ad-hoc signs the apphost
+# Mach-O alone; wrapping it in a hand-built .app (Info.plist + Resources + the
+# MacOS/ dylib tree) leaves the bundle with no _CodeSignature/CodeResources, so
+# the apphost's thin signature no longer matches the bundle and Gatekeeper
+# rejects a downloaded (quarantined) copy as "damaged" — right-click-Open can't
+# get past it. Sealing the whole bundle here (identity "-" = ad-hoc, --deep to
+# cover the nested dylibs) makes the signature valid, so a quarantined copy reads
+# as the ordinary "unidentified developer" (right-click → Open works) instead.
+# This is NOT notarization or Developer-ID signing — those need a paid Apple
+# account and stay out of scope for v1 (see packaging/README.md).
+echo "==> Ad-hoc signing $APP"
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
+
 echo "==> Done: $APP"
 echo "    Open with: open '$APP'   (the Dock/Finder icon is the packaged mark)"
