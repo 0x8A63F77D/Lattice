@@ -165,16 +165,26 @@ public class HostMonitorStateMachineTests
         controller.FreezeAt(InterleavePoints.BeforeParkWait);
         monitor.Start();
         await controller.WaitForAsync(InterleavePoints.BeforeParkWait);
-        Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
-        Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
 
-        // AuthFailed parks on a config-change wait, not a timer: neither advancing the
-        // clock nor a RequestRefresh may schedule a fresh attempt. Both land while the
-        // loop is pinned; Release lets it enter the park, where a correct loop consumes
-        // the stale wake as a no-op.
-        time.Advance(TimeSpan.FromMinutes(5));
-        monitor.RequestRefresh();
-        controller.Release();
+        // The loop is now blocked in Probe until Release; a throw here would otherwise
+        // leave it frozen and hang the await-using teardown, so the frozen section runs
+        // under try/finally (same discipline as the other interleaving tests).
+        try
+        {
+            Assert.Equal(HostConnectionState.AuthFailed, monitor.Status.State);
+            Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:host-a")));
+
+            // AuthFailed parks on a config-change wait, not a timer: neither advancing
+            // the clock nor a RequestRefresh may schedule a fresh attempt. Both land
+            // while the loop is pinned; Release (below) lets it enter the park, where a
+            // correct loop consumes the stale wake as a no-op.
+            time.Advance(TimeSpan.FromMinutes(5));
+            monitor.RequestRefresh();
+        }
+        finally
+        {
+            controller.Release();
+        }
 
         // The one thing that legitimately un-parks AuthFailed: a config change. Point it
         // at a NEW address with the right password so its connect is unambiguous, and
