@@ -34,14 +34,27 @@ jobs:
           dotnet-version: 10.0.x
 
       # Version comes from the tag (v1.2.3 -> 1.2.3) or the dispatch input.
+      # The free-form dispatch input is passed via env (never spliced into the
+      # script body) so a value like $(...) can't be evaluated — GitHub's
+      # script-injection guidance. Both sources are then SemVer-validated.
       - name: Resolve version
         shell: bash
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "LATTICE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          if [ "$REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
           else
-            echo "LATTICE_VERSION=${{ github.event.inputs.version }}" >> "$GITHUB_ENV"
+            VERSION="$DISPATCH_VERSION"
           fi
+          # digits.dots, optional -prerelease (e.g. 1.2.3, 0.0.0-dev). Rejects
+          # anything with shell metacharacters as a side effect.
+          if ! printf '%s' "$VERSION" | grep -qE '^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
+            exit 1
+          fi
+          echo "LATTICE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
