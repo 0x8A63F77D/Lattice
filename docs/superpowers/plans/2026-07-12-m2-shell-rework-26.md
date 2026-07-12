@@ -789,6 +789,20 @@ public void Selecting_a_host_survives_a_rail_rebuild()
     _shell.SetRailViewportHeight(1001.0);              // triggers a rebuild
     Assert.Equal(hostVm.HostId, _shell.Scope.HostId);  // scope preserved
 }
+
+[Fact]
+public void Single_host_pins_scope_to_that_host_not_all_hosts()
+{
+    AddHosts(1);
+    _shell.SetRailViewportHeight(1000.0);
+    // Degenerate case (design 3a): the sole host row is selected and scope is pinned
+    // to it — NOT left on the All-hosts sentinel (which isn't rendered here).
+    var row = Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>());
+    Assert.Same(row, _shell.SelectedRailEntry);
+    Assert.Equal(row.HostId, _shell.Scope.HostId);
+    Assert.False(_shell.Scope.IsAllHosts);
+    Assert.DoesNotContain(_shell.RailEntries, e => e is AllHostsRailItemViewModel);
+}
 ```
 
 - [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellViewModelTests"`).
@@ -908,8 +922,14 @@ Add the orchestration members:
             foreach (RailRow row in layout.Rows)
                 RailEntries.Add(MaterializeRow(row));
 
-            SelectedRailEntry = scopedHostId is { } id && _hostRowVms.TryGetValue(id, out var vm)
-                ? vm : _allHosts;
+            SelectedRailEntry =
+                layout.Mode.IsSingleHost
+                    // Degenerate single-host (design 3a): RailLayoutPolicy emits only the
+                    // host row (no All-hosts entry), so pin scope to the sole host — never
+                    // fall back to _allHosts, which isn't even in RailEntries here.
+                    ? RailEntries.OfType<HostRailItemViewModel>().First()
+                    : scopedHostId is { } id && _hostRowVms.TryGetValue(id, out var vm)
+                        ? vm : _allHosts;
         }
         finally { _rebuilding = false; }
 
@@ -1169,14 +1189,31 @@ public async Task Edit_mode_save_updates_the_host_in_the_registry()
     var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
     var cfg = TestData.MakeHostConfig(name: "mini-01");
     registry.AddHost(cfg);
-    // Connect succeeds by default with FakeGuiRpcClient.
     var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false)
     { Name = "mini-01-renamed" };
+
+    await vm.AddCommand.ExecuteAsync(null);   // edit-save persists without a connection test
+
+    Assert.True(vm.Succeeded);
+    Assert.Equal("mini-01-renamed", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+}
+
+[Fact]
+public async Task Edit_mode_saves_local_changes_even_when_the_host_is_unreachable()
+{
+    var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+    var cfg = TestData.MakeHostConfig(name: "mini-01");
+    registry.AddHost(cfg);
+    // Connection FAILS — Save must still persist (unlike Add, which needs a live host).
+    var vm = AddHostViewModel.ForEdit(registry,
+        () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("refused") },
+        cfg, authError: false) { Address = "192.168.1.99" };
 
     await vm.AddCommand.ExecuteAsync(null);
 
     Assert.True(vm.Succeeded);
-    Assert.Equal("mini-01-renamed", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    Assert.Null(vm.ErrorText);
+    Assert.Equal("192.168.1.99", registry.Hosts.Single(h => h.Id == cfg.Id).Address);
 }
 
 [Fact]
@@ -1234,19 +1271,44 @@ Add fields + a private full constructor + the two factories, and mode-dependent 
 
 > `_editId` is `readonly`; set it through the constructor rather than an object initializer. Cleanest: add a private ctor `AddHostViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, Guid editId, HostDialogMode mode)` that assigns `_editId`/`Mode`, and have `ForEdit` call it then set the bindable props. Keep the existing public `(registry, clientFactory)` ctor for Add (it sets `_editId = Guid.Empty`, `Mode = Add`).
 
-Rework `AddAsync` to branch on mode after a successful test:
+Rework `AddAsync` to branch on mode. **Edit-save persists WITHOUT the connection test** —
+mirroring the old Settings card, which saved rename/address/password changes to an
+unreachable host without contacting it. The test is the separate advisory secondary
+button (Add mode still tests-before-registering, design 2d):
 ```csharp
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private async Task AddAsync()
+    {
+        IsBusy = true;
+        try
+        {
+            HostConfig candidate = Candidate();   // CanAdd already gated address/port
+            if (Mode == HostDialogMode.Edit)
+            {
+                // Save is local-only: never blocked by an unreachable host.
+                if (Register(candidate, edit: true) is { } error) ErrorText = error;
+                else { Succeeded = true; ErrorText = null; }
+                return;
+            }
+            using var cts = new CancellationTokenSource(TestTimeout);
+            TestConnectionResult result =
+                await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
             if (result.Success)
             {
-                var op = Mode == HostDialogMode.Edit
-                    ? (Func<string?>)(() => Register(candidate with { Id = _editId }, edit: true))
-                    : () => Register(candidate, edit: false);
-                if (op() is { } error) ErrorText = error;
+                if (Register(candidate, edit: false) is { } error) ErrorText = error;
                 else { Succeeded = true; ErrorText = null; }
             }
-```
-where `candidate` is built as today (`new HostConfig(Guid.NewGuid(), …)` for Add) and:
-```csharp
+            else ErrorText = result.Error;
+        }
+        catch (OperationCanceledException) { ErrorText = Strings.AddHostTimeoutError; }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>Field values as a HostConfig; keeps the edited host's id (new id in Add).</summary>
+    private HostConfig Candidate() =>
+        new(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
+            Name.Trim(), Address.Trim(), int.Parse(PortText), Password);
+
     private string? Register(HostConfig cfg, bool edit) =>
         RegistryGuard.TryMutate(() => { if (edit) _registry.UpdateHost(cfg); else _registry.AddHost(cfg); }) is { } err
             ? string.Format(edit ? Strings.EditHostSaveFailedFmt : Strings.AddHostSaveFailedFmt, err)
@@ -1517,8 +1579,44 @@ public class HostRailMenuTests
         Assert.Contains("8", row.TestResultText!); // "Connected · BOINC 8.x.x"
         window.Close();
     }
+
+    [AvaloniaFact]
+    public async Task Remove_write_failure_surfaces_on_the_row_and_keeps_the_host()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+
+        // Turn the config path into a directory so RemoveHost's save-rename throws
+        // (same failure-injection as SettingsViewModelTests.MakeConfigPathUnwritable).
+        File.Delete(path);
+        Directory.CreateDirectory(path);
+        try
+        {
+            shell.RemoveHostCommand.Execute(cfg.Id);
+            Dispatcher.UIThread.RunJobs();
+            var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
+            dialog.Hide(FAContentDialogResult.Primary);
+
+            var row = shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+            await HeadlessSync.WaitUntilAsync(() =>
+                row.TestResultText is not null
+                && row.TestResultText.StartsWith(string.Format(Strings.HostRemoveFailedFmt, "")));
+            Assert.Single(registry.Hosts);   // write failed → host still registered, not silently lost
+        }
+        finally { Directory.Delete(path); window.Close(); }
+    }
 }
 ```
+Add `using Lattice.App.Localization;` for `Strings`.
 
 - [ ] **Step 2: Run — expect FAIL** (no `EditHostCommand`/`RemoveHostCommand`/`TestHostCommand`, no `TestResultText`).
 
@@ -1623,15 +1721,21 @@ In `AttachShell`, subscribe/unsubscribe the three events alongside `AddHostReque
                 DefaultButton = FAContentDialogButton.Close,
             };
             if (await dialog.ShowAsync(top) == FAContentDialogResult.Primary
-                && shell.FindHostConfig(id) is not null)
-                RegistryGuard.TryMutate(() => shell.Registry.RemoveHost(id));
+                && shell.FindHostConfig(id) is not null
+                // Persistence can fail (unwritable config.json); the old Settings card
+                // surfaced that error and kept the host rather than closing silently.
+                && RegistryGuard.TryMutate(() => shell.Registry.RemoveHost(id)) is { } error
+                && shell.FindHostRow(id) is { } row)
+                row.TestResultText = string.Format(Strings.HostRemoveFailedFmt, error);
         }
         finally { _removeConfirmInFlight = false; }
     }
 ```
 (Add `using Lattice.Core;` / `using Lattice.App.Infrastructure;` / `using Lattice.App.Localization;` as needed.)
 
-Add strings (final pass Task 15): `HostMenuEdit` ("Edit host…"), `HostMenuTest` ("Test connection"), `HostMenuRemove` ("Remove host…"), `HostRemoveConfirmTitleFmt` ("Remove {0}?"), `HostRemoveConfirmBody` ("Lattice stops monitoring this host. The BOINC client on the host is not affected."), `HostRemoveConfirmPrimary` ("Remove"), `HostRemoveConfirmCancel` ("Cancel").
+Add strings (final pass Task 15): `HostMenuEdit` ("Edit host…"), `HostMenuTest` ("Test connection"), `HostMenuRemove` ("Remove host…"), `HostRemoveConfirmTitleFmt` ("Remove {0}?"), `HostRemoveConfirmBody` ("Lattice stops monitoring this host. The BOINC client on the host is not affected."), `HostRemoveConfirmPrimary` ("Remove"), `HostRemoveConfirmCancel` ("Cancel"), `HostRemoveFailedFmt` ("Couldn’t remove host: {0}").
+
+> The host row's inline subtext surface (`HostRailItemViewModel.TestResultText`, from Task 11 Step 3) doubles as the transient action-result line — it carries the Test-connection result and, on a Remove write-failure, the persistence error. It clears on the next store `Refresh()`. (Its display name reads "test result" but it is the row's one generic action-result channel; keep it single to avoid a second transient subtext path.)
 
 - [ ] **Step 7: Run — expect PASS** (`HostRailMenuTests` + prior suites).
 
@@ -1961,7 +2065,7 @@ Earlier tasks added strings incrementally; this task audits the set: every new k
 
 - [ ] **Step 1: Confirm the new keys exist (added across Tasks 6–14)**
 
-`RailGroupAttentionFmt`, `RailGroupHealthyFmt`, `RailGroupToggleTooltip`, `EditHostDialogTitle`, `EditHostPrimaryButton`, `EditHostPasswordError`, `EditHostSaveFailedFmt`, `HostMenuEdit`, `HostMenuTest`, `HostMenuRemove`, `HostRemoveConfirmTitleFmt`, `HostRemoveConfirmBody`, `HostRemoveConfirmPrimary`, `HostRemoveConfirmCancel`, `SettingsHostsPointer`, `SettingsThemeSection`, `SettingsThemeHeader`, `SettingsThemeDescription`, `ThemeLight`, `ThemeDark`, `ThemeSystem`.
+`RailGroupAttentionFmt`, `RailGroupHealthyFmt`, `RailGroupToggleTooltip`, `EditHostDialogTitle`, `EditHostPrimaryButton`, `EditHostPasswordError`, `EditHostSaveFailedFmt`, `HostMenuEdit`, `HostMenuTest`, `HostMenuRemove`, `HostRemoveConfirmTitleFmt`, `HostRemoveConfirmBody`, `HostRemoveConfirmPrimary`, `HostRemoveConfirmCancel`, `HostRemoveFailedFmt`, `SettingsHostsPointer`, `SettingsThemeSection`, `SettingsThemeHeader`, `SettingsThemeDescription`, `ThemeLight`, `ThemeDark`, `ThemeSystem`.
 
 - [ ] **Step 2: Retire keys orphaned by the Settings-host removal**
 
