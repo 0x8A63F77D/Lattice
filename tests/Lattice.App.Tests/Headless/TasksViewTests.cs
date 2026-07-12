@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -429,6 +430,47 @@ public class TasksViewTests
         Assert.Equal(1, recreated.StateFilterBox.SelectedIndex);
         // Attaching the view must not clobber the VM's filter either.
         Assert.Equal(TaskStateKind.Running, vm.StateFilter);
+        window.Close();
+    }
+
+    // Bug 3 (coupled to Bug 1's resize enablement): once columns can be dragged wider
+    // than the viewport, a horizontal scrollbar MUST surface so the overflow is reachable.
+    // The star-sized Task column normally absorbs slack so total == viewport and no scrollbar
+    // ever shows; here we reproduce the post-resize overflow by widening a FIXED column past
+    // the viewport (the star column collapses to its MinWidth and the total overflows) — the
+    // same end-state a user's drag produces, without touching the production column sizing.
+    // Probed on the REAL Tasks grid inside its Panel+overlays wrapper, to prove that wrapper
+    // does not clip or suppress the DataGrid's own horizontal ScrollBar (PART_HorizontalScrollbar).
+    [AvaloniaFact]
+    public void Widening_a_column_past_the_viewport_surfaces_the_horizontal_scrollbar()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        var row = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "—",
+            Deadline: null, StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        window.Show();
+        Layout(window);
+
+        var scrollbar = window.GetVisualDescendants().OfType<ScrollBar>()
+            .Single(s => s.Name == "PART_HorizontalScrollbar");
+        // Baseline: the star column exactly fills the viewport, so nothing overflows.
+        Assert.False(scrollbar.IsVisible, "no horizontal overflow before a column is widened");
+
+        // Widen the fixed Project column far past the 1280px viewport — the end-state of a
+        // user dragging it wide. This is a runtime manipulation of the live grid, NOT an edit
+        // to the view's declared column widths.
+        view.Grid.Columns[0].Width = new DataGridLength(2000);
+        Layout(window);
+
+        Assert.True(scrollbar.IsVisible,
+            "widening a column past the viewport must surface the DataGrid's horizontal scrollbar");
+        // A genuine scroll extent: Maximum is the scrollable range (total content minus viewport),
+        // which is strictly positive only when content actually overflows horizontally.
+        Assert.True(scrollbar.Maximum > 0,
+            $"the grid must expose a positive horizontal scroll extent, was {scrollbar.Maximum}");
         window.Close();
     }
 
