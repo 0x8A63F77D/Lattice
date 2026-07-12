@@ -130,6 +130,96 @@ public class ShellViewModelTests : IAsyncLifetime
         Assert.Equal(host.Id, tasks.Scope.HostId);
     }
 
+    // A per-host message batch raised straight on the manager (real polling
+    // couples messages with snapshots; this is the only way to exercise the
+    // message-only path). ImmediateUiDispatcher makes MessagesReceived fire
+    // synchronously, so no drain is needed.
+    private static Message Alert(int seqno, string body) =>
+        new("Proj", MessagePriority.UserAlert, seqno,
+            new DateTimeOffset(2026, 7, 11, 12, 0, seqno, TimeSpan.Zero), body);
+
+    [Fact]
+    public void EventLog_page_is_an_EventLogViewModel_and_receives_scope_changes()
+    {
+        var eventLog = Assert.IsType<EventLogViewModel>(_shell.Views[3].Page);
+        Assert.Same(_shell.EventLog, eventLog);
+        Assert.True(eventLog.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, eventLog.Scope.HostId);
+    }
+
+    [Fact]
+    public void EventLogUnread_mirrors_the_event_log_view_models_unread_count()
+    {
+        var host = TestData.MakeHostConfig(name: "host-a", address: "host-a");
+        _registry.AddHost(host);
+        Assert.Equal(0, _shell.EventLogUnread);
+        Assert.False(_shell.HasEventLogUnread);
+
+        // The Event log is not the current page (shell starts on Tasks), so a
+        // warning message accrues into the unread badge.
+        ManagerTestAccess.RaiseMessagesAdded(
+            _manager, new MessagesAddedEventArgs(host.Id, [Alert(1, "boom")]));
+
+        Assert.Equal(1, _shell.EventLogUnread);
+        Assert.True(_shell.HasEventLogUnread);
+    }
+
+    [Fact]
+    public void Navigating_to_the_event_log_zeroes_the_unread_badge()
+    {
+        var host = TestData.MakeHostConfig(name: "host-a", address: "host-a");
+        _registry.AddHost(host);
+        ManagerTestAccess.RaiseMessagesAdded(
+            _manager, new MessagesAddedEventArgs(host.Id, [Alert(1, "boom")]));
+        Assert.Equal(1, _shell.EventLogUnread);
+
+        _shell.SelectViewCommand.Execute("3");
+
+        Assert.Same(_shell.EventLog, _shell.CurrentPage);
+        Assert.Equal(0, _shell.EventLogUnread);
+        Assert.False(_shell.HasEventLogUnread);
+    }
+
+    [Fact]
+    public void Navigating_away_from_the_event_log_re_enables_unread_counting()
+    {
+        var host = TestData.MakeHostConfig(name: "host-a", address: "host-a");
+        _registry.AddHost(host);
+
+        // Activate (zeroes + stops counting), then leave for Tasks.
+        _shell.SelectViewCommand.Execute("3");
+        _shell.SelectViewCommand.Execute("0");
+
+        ManagerTestAccess.RaiseMessagesAdded(
+            _manager, new MessagesAddedEventArgs(host.Id, [Alert(1, "boom")]));
+
+        Assert.Equal(1, _shell.EventLogUnread);
+        Assert.True(_shell.HasEventLogUnread);
+    }
+
+    [Fact]
+    public void NavigateToSettings_deactivates_the_event_log()
+    {
+        var host = TestData.MakeHostConfig(name: "host-a", address: "host-a");
+        _registry.AddHost(host);
+
+        _shell.SelectViewCommand.Execute("3");
+        Assert.True(_shell.EventLog.IsViewActive);
+
+        _shell.NavigateToSettings();
+        Assert.False(_shell.EventLog.IsViewActive);
+
+        // Counting resumes once the Event log is no longer the current page.
+        ManagerTestAccess.RaiseMessagesAdded(
+            _manager, new MessagesAddedEventArgs(host.Id, [Alert(1, "boom")]));
+        Assert.Equal(1, _shell.EventLogUnread);
+    }
+
     [Fact]
     public void Projects_page_is_a_ProjectsViewModel_and_receives_scope_changes()
     {

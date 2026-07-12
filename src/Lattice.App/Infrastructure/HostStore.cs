@@ -41,6 +41,7 @@ public sealed class HostStore : IDisposable
         registry.Changed += OnRegistryChanged;
         manager.StatusChanged += OnStatusChanged;
         manager.SnapshotUpdated += OnSnapshotUpdated;
+        manager.MessagesAdded += OnMessagesAdded;
     }
 
     public IReadOnlyList<HostEntry> Hosts => _hosts;
@@ -59,6 +60,16 @@ public sealed class HostStore : IDisposable
     /// <summary>Raised on the UI thread whenever any entry (or the list) changed.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>
+    /// Raised on the UI thread with each host's freshly polled message batch.
+    /// Deliberately separate from <see cref="Changed"/>: messages arrive every
+    /// poll tick and must not trigger a full rebuild of the snapshot-driven
+    /// views. Consumers own retention/dedup (EventLogViewModel's MessageLog —
+    /// reconnect replays are deduped there by message identity, so this event
+    /// forwards batches verbatim, replay or not).
+    /// </summary>
+    public event EventHandler<MessagesAddedEventArgs>? MessagesReceived;
+
     public void Dispose()
     {
         // Runs on the UI thread, as do the queued Post closures below — the
@@ -67,7 +78,9 @@ public sealed class HostStore : IDisposable
         _registry.Changed -= OnRegistryChanged;
         _manager.StatusChanged -= OnStatusChanged;
         _manager.SnapshotUpdated -= OnSnapshotUpdated;
+        _manager.MessagesAdded -= OnMessagesAdded;
         Changed = null;
+        MessagesReceived = null;
     }
 
     private static ConnectionStatus InitialStatus(Guid hostId) =>
@@ -120,5 +133,17 @@ public sealed class HostStore : IDisposable
                 entry.Snapshot = snapshot;
                 Changed?.Invoke(this, EventArgs.Empty);
             }
+        });
+
+    private void OnMessagesAdded(object? sender, MessagesAddedEventArgs e) =>
+        _dispatcher.Post(() =>
+        {
+            if (_disposed) return;
+            // Same guard as the status/snapshot paths: a batch can be queued
+            // behind the host's removal (or arrive while the removed monitor is
+            // still disposing) — forwarding it would resurrect a deleted host's
+            // rows after the prune already ran (Codex P2, round 2).
+            if (Find(e.HostId) is null) return;
+            MessagesReceived?.Invoke(this, e);
         });
 }

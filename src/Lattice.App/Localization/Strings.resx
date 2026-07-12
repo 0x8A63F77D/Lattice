@@ -165,6 +165,40 @@
   <data name="AppTitle" xml:space="preserve">
     <value>Lattice</value>
   </data>
+  <!-- ===== EventLog ===== -->
+  <data name="EventLogCountsFmt" xml:space="preserve">
+    <value>{0} messages · {1} reachable hosts</value>
+  </data>
+  <data name="EventLogTitle" xml:space="preserve">
+    <value>Event log</value>
+  </data>
+  <data name="EventLogSubtitleAll" xml:space="preserve">
+    <value>All hosts · merged stream</value>
+  </data>
+  <data name="EventLogPillInfo" xml:space="preserve">
+    <value>Info</value>
+  </data>
+  <data name="EventLogPillWarning" xml:space="preserve">
+    <value>Warning</value>
+  </data>
+  <data name="EventLogPillError" xml:space="preserve">
+    <value>Error</value>
+  </data>
+  <data name="EventLogFollowing" xml:space="preserve">
+    <value>Following</value>
+  </data>
+  <data name="EventLogResumeFollowing" xml:space="preserve">
+    <value>Resume following</value>
+  </data>
+  <data name="EventLogCopy" xml:space="preserve">
+    <value>Copy</value>
+  </data>
+  <data name="EventLogFollowingLive" xml:space="preserve">
+    <value>Following live</value>
+  </data>
+  <data name="EventLogEmpty" xml:space="preserve">
+    <value>No messages yet.</value>
+  </data>
   <!-- ===== FirstRun ===== -->
   <data name="FirstRunAddHost" xml:space="preserve">
     <value>Add a host</value>

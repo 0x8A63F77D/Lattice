@@ -1,0 +1,214 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:views="using:Lattice.App.Views"
+             xmlns:controls="using:Lattice.App.Controls"
+             xmlns:loc="using:Lattice.App.Localization"
+             x:Class="Lattice.App.Views.EventLogView"
+             x:DataType="vm:EventLogViewModel">
+
+  <UserControl.Resources>
+    <!-- Cross-platform monospace stack for the log's timestamp + message cells
+         (design 2c §Font fallback). Consolas is Windows-only; Menlo covers macOS
+         (SF Mono is not always name-resolvable), DejaVu Sans Mono covers Linux,
+         and the generic "monospace" is the guaranteed floor. The 26px row height
+         is set explicitly (RowHeight below), never derived from these metrics —
+         DejaVu is taller than Consolas (design metric note). -->
+    <FontFamily x:Key="LatticeLogMonoFont">Consolas, Menlo, DejaVu Sans Mono, monospace</FontFamily>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- Filter pills (design 2c): ToggleButton restyled as a pill. Given its own
+         template so the checked tint is fully controlled here instead of fighting
+         the FluentAvalonia ToggleButton accent visual states (the same override
+         discipline DataGridStyles documents for selection). Selected = brand tint
+         + accent border/text + a leading check icon (the check's visibility is
+         bound to the backing VM bool per pill, so no selector-into-content). -->
+    <Style Selector="ToggleButton.pill">
+      <Setter Property="Background" Value="{DynamicResource LatticeSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeStrokeBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="Height" Value="28" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Background="{TemplateBinding Background}"
+                  BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}"
+                  CornerRadius="{StaticResource LatticeControlRadius}"
+                  Padding="{TemplateBinding Padding}">
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.pill:pointerover">
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeAccentBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.pill:checked">
+      <Setter Property="Background" Value="{DynamicResource LatticeSelectedTintBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeAccentBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource LatticeAccentBrush}" />
+    </Style>
+
+    <!-- Row-severity tints (design 2c): warning + error rows only. Info rows are
+         untinted. Set via RowClassBinder in code-behind (holder-tracking, so an
+         in-place Data swap re-applies) — the same liveness kit TasksView rides. -->
+    <Style Selector="DataGridRow.warning">
+      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+    </Style>
+    <Style Selector="DataGridRow.error">
+      <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
+    </Style>
+    <!-- The lattice DataGrid theme's row height is 36; the log wants 26. RowHeight
+         on the grid is a local value that already beats the theme setter, but the
+         theme also floors the row at a MinHeight, so pin DataGridRow height too and
+         geometry-assert it (M2c-1 lesson: a row-height fight is verified, not
+         assumed). -->
+    <Style Selector="DataGrid.eventlog DataGridRow">
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="Height" Value="26" />
+    </Style>
+    <!-- Dedicated 20px priority-icon column (mockup §2c grid-template-columns
+         128px 84px 140px 20px 1fr): the theme's 8,0 cell padding would leave a
+         4px content box in a 20px column, so its cells zero the padding. -->
+    <Style Selector="DataGrid.eventlog DataGridCell.priorityIcon">
+      <Setter Property="Padding" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Command bar -->
+    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeSurfaceBrush}"
+            BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
+            BorderThickness="0,0,0,1">
+      <DockPanel Margin="16,0" LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <StackPanel Orientation="Vertical" VerticalAlignment="Center">
+            <TextBlock Text="{x:Static loc:Strings.EventLogTitle}" FontSize="16" FontWeight="SemiBold"
+                       Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+            <TextBlock Text="{x:Static loc:Strings.EventLogSubtitleAll}" FontSize="12"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       IsVisible="{Binding IsAllHostsScope}" />
+          </StackPanel>
+          <Separator Margin="8,0" />
+          <!-- Priority pills: two-way bound to the VM filter bools. -->
+          <ToggleButton Classes="pill" IsChecked="{Binding ShowInfo, Mode=TwoWay}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
+                        IsVisible="{Binding ShowInfo}" />
+              <TextBlock Text="{x:Static loc:Strings.EventLogPillInfo}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <ToggleButton Classes="pill" IsChecked="{Binding ShowWarning, Mode=TwoWay}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
+                        IsVisible="{Binding ShowWarning}" />
+              <TextBlock Text="{x:Static loc:Strings.EventLogPillWarning}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <ToggleButton Classes="pill" IsChecked="{Binding ShowError, Mode=TwoWay}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
+                        IsVisible="{Binding ShowError}" />
+              <TextBlock Text="{x:Static loc:Strings.EventLogPillError}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+          <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220" Margin="8,0,0,0"
+                   Text="{Binding FilterText, Mode=TwoWay}"
+                   PlaceholderText="{x:Static loc:Strings.FilterPlaceholder}" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <!-- Following toggle: content swaps via the dual-TextBlock IsVisible trick. -->
+          <ToggleButton x:Name="FollowingToggle" IsChecked="{Binding IsFollowing, Mode=TwoWay}">
+            <Panel>
+              <TextBlock Text="{x:Static loc:Strings.EventLogFollowing}" IsVisible="{Binding IsFollowing}" />
+              <TextBlock Text="{x:Static loc:Strings.EventLogResumeFollowing}" IsVisible="{Binding !IsFollowing}" />
+            </Panel>
+          </ToggleButton>
+          <Button x:Name="CopyButton" Content="{x:Static loc:Strings.EventLogCopy}"
+                  Background="Transparent" Click="OnCopyClicked" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Status bar -->
+    <controls:StatusBarControl DockPanel.Dock="Bottom"
+                                LeftText="{Binding CountsText}"
+                                RightText="{Binding IsFollowing, Converter={x:Static views:BoolToTextConverter.Instance}, ConverterParameter={x:Static loc:Strings.EventLogFollowingLive}}" />
+
+    <!-- Grid + empty overlay -->
+    <Panel>
+      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice eventlog"
+                ItemsSource="{Binding Rows}" IsReadOnly="True"
+                RowHeight="26" HeadersVisibility="None"
+                CanUserSortColumns="False" CanUserReorderColumns="False">
+        <DataGrid.Columns>
+          <!-- Column plan = the mockup's grid-template-columns: 128px 84px 140px
+               20px 1fr (Time · Host · Project · priority icon · Message). Time is
+               128px for the widest mono timestamp stack alone (design README:159:
+               "size the timestamp column (128px) for the widest stack"). -->
+          <DataGridTemplateColumn Width="128">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:EventLogRow">
+                <TextBlock Text="{Binding Data.TimestampText}" VerticalAlignment="Center"
+                           FontFamily="{StaticResource LatticeLogMonoFont}" FontSize="12" Classes="numeric" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Binding="{Binding Data.Host}" Width="84"
+                              FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                              IsVisible="{Binding IsAllHostsScope}" />
+          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140"
+                              FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          <!-- Priority icon: its own 20px column on EVERY row (mockup §2c) —
+               info rows get the regular gray glyph, warning/error the filled
+               colored ones. -->
+          <DataGridTemplateColumn Width="20" CellStyleClasses="priorityIcon">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:EventLogRow">
+                <Panel Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconInfoRegular}"
+                            Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Info}" />
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconWarningFilled}"
+                            Foreground="{DynamicResource LatticeWarningFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Warning}" />
+                  <PathIcon Width="16" Height="16" Data="{StaticResource IconErrorCircleFilled}"
+                            Foreground="{DynamicResource LatticeDangerFgBrush}"
+                            IsVisible="{Binding Data.Priority, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Error}" />
+                </Panel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTemplateColumn Width="*">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:EventLogRow">
+                <!-- Single line with ellipsis: the mockup's message span is
+                     overflow:hidden; text-overflow:ellipsis; white-space:nowrap
+                     (design wins over the plan's "TextTrimming off"). -->
+                <TextBlock Text="{Binding Data.Body}" VerticalAlignment="Center"
+                           FontFamily="{StaticResource LatticeLogMonoFont}" FontSize="12"
+                           TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+        </DataGrid.Columns>
+      </DataGrid>
+
+      <!-- Empty overlay -->
+      <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+        <TextBlock Text="{x:Static loc:Strings.EventLogEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

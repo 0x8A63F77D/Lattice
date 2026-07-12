@@ -182,4 +182,81 @@ public class HostStoreTests : IAsyncLifetime
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void MessagesReceived_fires_after_drain_with_the_host_id_and_batch()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        MessagesAddedEventArgs? received = null;
+        store.MessagesReceived += (_, e) => received = e;
+
+        var batch = new[] { TestData.MakeMessage(1), TestData.MakeMessage(2) };
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, batch));
+
+        // Marshaling contract: nothing is delivered until the UI queue runs.
+        Assert.Null(received);
+        queue.Drain();
+
+        Assert.NotNull(received);
+        Assert.Equal(host.Id, received!.HostId);
+        Assert.Same(batch, received.Messages);   // forwarded verbatim
+    }
+
+    [Fact]
+    public void Message_batch_does_not_raise_Changed()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var changes = 0;
+        store.Changed += (_, _) => changes++;
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        queue.Drain();
+
+        // Batches arrive every poll tick; forwarding one must NOT rebuild the
+        // snapshot-driven views — it rides its own channel, not Changed.
+        Assert.Equal(0, changes);
+        Assert.Equal(1, received);
+    }
+
+    [Fact]
+    public void Disposed_store_drops_queued_message_batch()
+    {
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(host.Id, [TestData.MakeMessage(1)]));
+        store.Dispose();
+        queue.Drain();
+
+        Assert.Equal(0, received);
+    }
+
+    [Fact]
+    public void Message_batch_for_a_host_not_in_the_store_is_dropped()
+    {
+        _registry.AddHost(TestData.MakeHostConfig());
+        var queue = new QueueUiDispatcher();
+        var store = new HostStore(_registry, _manager, queue);
+        var received = 0;
+        store.MessagesReceived += (_, _) => received++;
+
+        // HostId absent from the store (as after a removal that raced the queued
+        // batch). The Find guard drops it, same as the status/snapshot paths.
+        ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(Guid.NewGuid(), [TestData.MakeMessage(1)]));
+        queue.Drain();
+
+        Assert.Equal(0, received);
+    }
 }

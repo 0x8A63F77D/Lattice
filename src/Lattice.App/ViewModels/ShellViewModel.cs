@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
+using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
@@ -28,17 +29,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Settings = new SettingsViewModel(registry, store, clientFactory);
         Tasks = new TasksViewModel(store, clock, uiState);
         Projects = new ProjectsViewModel(store, clock);
+        EventLog = new EventLogViewModel(store);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
             new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", Projects),
             new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
-            new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel(Strings.NavEventLog)),
+            new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", EventLog),
         ];
         _selectedView = Views[0];
         _currentPage = Views[0].Page;
         Tasks.Rows.CollectionChanged += OnTasksRowsChanged;
         _tasksCount = Tasks.Rows.Count;
+        EventLog.PropertyChanged += OnEventLogPropertyChanged;
         // The All-hosts sentinel always leads the rail; host entries follow it
         // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
         RailEntries.Add(_allHosts);
@@ -59,6 +62,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// scope changes into it (same rail-scope contract as <see cref="Tasks"/>).</summary>
     public ProjectsViewModel Projects { get; }
 
+    /// <summary>The Event-log page (Views[3].Page); the shell pushes scope into it,
+    /// toggles its active flag as it becomes / leaves CurrentPage (which zeroes the
+    /// unread badge on activation), and mirrors its unread count for the nav badge.</summary>
+    public EventLogViewModel EventLog { get; }
+
     [ObservableProperty] private NavItemViewModel? _selectedView;
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
@@ -72,6 +80,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasTasksCount => TasksCount > 0;
 
+    /// <summary>Mirrors <see cref="EventLogViewModel.UnreadCount"/>; drives the Event-log
+    /// nav item's InfoBadge (unread warning+error count while the page is not active).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEventLogUnread))]
+    private int _eventLogUnread;
+
+    public bool HasEventLogUnread => EventLogUnread > 0;
+
     partial void OnSelectedRailEntryChanged(object? value) =>
         Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
 
@@ -82,10 +98,17 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         Tasks.Scope = value;
         Projects.Scope = value;
+        EventLog.Scope = value;
     }
 
     private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         TasksCount = Tasks.Rows.Count;
+
+    private void OnEventLogPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(EventLogViewModel.UnreadCount))
+            EventLogUnread = EventLog.UnreadCount;
+    }
 
     /// <summary>Raised when a view needs to open the Add-host dialog.</summary>
     public event EventHandler? AddHostRequested;
@@ -95,6 +118,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         if (value is not null)
             CurrentPage = value.Page;
     }
+
+    // The Event log counts unread warnings/errors only while it is NOT the visible
+    // page; becoming CurrentPage activates it (zeroing the badge), leaving it (any
+    // path, including NavigateToSettings) resumes counting. Every CurrentPage change
+    // funnels through here, so the flag stays truthful without per-call plumbing.
+    partial void OnCurrentPageChanged(object value) =>
+        EventLog.IsViewActive = ReferenceEquals(value, EventLog);
 
     [RelayCommand]
     private void SelectView(string index)
@@ -155,8 +185,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
+        EventLog.PropertyChanged -= OnEventLogPropertyChanged;
         Tasks.Dispose();
         Projects.Dispose();
+        EventLog.Dispose();
         foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();
     }

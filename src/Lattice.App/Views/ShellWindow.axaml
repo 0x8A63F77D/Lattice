@@ -85,6 +85,9 @@
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
           </ui:FANavigationViewItem.IconSource>
+          <ui:FANavigationViewItem.InfoBadge>
+            <ui:FAInfoBadge Value="{Binding EventLogUnread}" IsVisible="{Binding HasEventLogUnread}" />
+          </ui:FANavigationViewItem.InfoBadge>
         </ui:FANavigationViewItem>
       </ui:FANavigationView.MenuItems>
 
@@ -181,6 +184,9 @@
           </DataTemplate>
           <DataTemplate DataType="vm:ProjectsViewModel">
             <v:ProjectsView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:EventLogViewModel">
+            <v:EventLogView />
           </DataTemplate>
         </ContentControl.DataTemplates>
       </ContentControl>
