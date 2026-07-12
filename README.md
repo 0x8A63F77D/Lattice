@@ -1,8 +1,8 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/design/icon/png/dark/lattice-128.png">
-  <img src="docs/design/icon/png/light/lattice-128.png" alt="Lattice" width="120" height="120">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/design/icon/png/dark/lattice-256.png">
+  <img src="docs/design/icon/png/light/lattice-256.png" alt="Lattice" width="120" height="120">
 </picture>
 
 # Lattice
