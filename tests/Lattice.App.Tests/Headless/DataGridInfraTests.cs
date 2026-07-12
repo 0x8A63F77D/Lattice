@@ -357,4 +357,81 @@ public class DataGridInfraTests
         Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
         window.Close();
     }
+
+    private static DataGridRow BodyRow(DataGrid grid, int index) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>().Single(r => r.Index == index);
+
+    [AvaloniaFact]
+    public void Hovering_a_plain_row_paints_the_hover_brush()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var row = BodyRow(grid, 0);
+        // Clear the row's Background fade (a local value overriding the style's Transitions
+        // setter) so hover snaps to the settled brush and the synchronous read below is
+        // deterministic — no animation-clock or wall-clock dependency. The fade ships in
+        // production; see the DataGridStyles.axaml comment on the DataGridRow style.
+        row.Transitions = null;
+        var mid = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(mid, RawInputModifiers.None);
+        Layout(window);
+
+        Assert.Contains(":pointerover", row.Classes);
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeRowHoverBrush", window.ActualThemeVariant, out var hover));
+        var bg = Assert.IsAssignableFrom<ISolidColorBrush>(row.Background);
+        Assert.Equal(((ISolidColorBrush)hover!).Color, bg.Color);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Hovering_an_at_risk_row_keeps_its_warning_tint()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var row = BodyRow(grid, 0);
+        // See sibling test: clear the fade so the hovered Background snaps to its settled
+        // brush and the read below is deterministic without touching any animation clock.
+        row.Transitions = null;
+        row.Classes.Add("atRisk");
+        Layout(window);
+        var mid = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(mid, RawInputModifiers.None);
+        Layout(window);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeWarningTintBrush", window.ActualThemeVariant, out var warn));
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeRowHoverBrush", window.ActualThemeVariant, out var hover));
+        var bg = Assert.IsAssignableFrom<ISolidColorBrush>(row.Background);
+        Assert.Equal(((ISolidColorBrush)warn!).Color, bg.Color);
+        Assert.NotEqual(((ISolidColorBrush)hover!).Color, bg.Color);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Column_header_does_not_change_background_on_hover()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .First(h => (h.Content as string) == "Name");
+        var root = VisualTree.FindInVisualTree<Grid>(header, g => g.Name == "PART_ColumnHeaderRoot");
+        Assert.NotNull(root);
+        var before = (root!.Background as ISolidColorBrush)?.Color;
+
+        var pt = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(pt, RawInputModifiers.None);
+        Layout(window);
+
+        var after = (root.Background as ISolidColorBrush)?.Color;
+        Assert.Equal(before, after);
+        window.Close();
+    }
 }

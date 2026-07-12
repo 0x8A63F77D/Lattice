@@ -112,4 +112,80 @@
   <Style Selector="DataGridCell.numericCell TextBlock">
     <Setter Property="FontFeatures" Value="+tnum" />
   </Style>
+
+  <!-- Row hover: whole row -> #F5F5F5 / #383838 with a 100ms fade. Sits UNDER the state
+       tints — the .tint:pointerover rules below re-assert each tint so a hovered at-risk /
+       retrying / warning / error row keeps its color. Selection paints on the row's
+       BackgroundRectangle overlay (already above Background), so selected rows are unaffected.
+
+       The BrushTransition fade IS present in production (design spec; owner visually verifies
+       motion at the merge gate). Headless color tests reconcile with determinism WITHOUT
+       depending on the animation clock: they set `row.Transitions = null` as a local value on
+       the probed row (overriding this style setter), so Background snaps to the settled target
+       on hover and a synchronous read returns the final color. That keeps the tests off the
+       internal HeadlessRenderTimer Stopwatch (no public force-complete API; ForceTick()/
+       IGlobalClock/Clock are all `internal`, confirmed via ilspycmd) and off any wall-clock
+       settle — the fade stays in the shipped styles, only the test opts out per-row. -->
+  <Style Selector="DataGrid.lattice DataGridRow">
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.1" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeRowHoverBrush}" />
+  </Style>
+
+  <!-- Base state tints (shared so hover-keep is uniform). Per-view files declared these
+       before; they are being centralized here. -->
+  <Style Selector="DataGrid.lattice DataGridRow.atRisk">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.retrying">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.warning">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.error">
+    <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
+  </Style>
+  <!-- Hover-keep: re-assert the tint explicitly under :pointerover as defense-in-depth against
+       declaration-order drift. Empirically (Avalonia 12.1), a bare class selector (.atRisk) and
+       a bare pseudo-class selector (:pointerover) tie on specificity here and the LATER-DECLARED
+       rule wins — not the strict "pseudo-class always out-specifies class" tiering the Avalonia
+       docs table implies. Verified via mutation-testing this file both ways: (a) deleting just
+       these combo rules, with the base .tint rules still declared after the plain :pointerover
+       rule above, leaves the tint-keeping tests green (declaration order alone protects them
+       today); (b) reordering the base .tint rules to BEFORE the plain :pointerover rule, with
+       these combo rules removed, turns Hovering_an_at_risk_row_keeps_its_warning_tint red (hover
+       wins). So these combo selectors are the real, order-independent guarantee — keep them so
+       tint-keeping does not silently break if the rules above get reordered later. -->
+  <Style Selector="DataGrid.lattice DataGridRow.atRisk:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.retrying:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.warning:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.error:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
+  </Style>
+
+  <!-- Headers do not hover: baseline the root part to Transparent unconditionally (so "before"
+       and "after" hover are the literal same brush, not null-vs-Transparent), then re-assert it
+       under :pointerover/:pressed — those pseudo-classed selectors out-specify the Fluent
+       theme's own "^:pointerover /template/ Grid#PART_ColumnHeaderRoot" background swap. -->
+  <Style Selector="DataGridColumnHeader /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="DataGridColumnHeader:pointerover /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="DataGridColumnHeader:pressed /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
 </Styles>
