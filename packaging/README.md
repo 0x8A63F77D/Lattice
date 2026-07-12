@@ -38,8 +38,9 @@ every launch surface references: `Info.plist`'s `CFBundleExecutable=Lattice` and
 ## Building the platform packages
 
 ```sh
-# macOS .app bundle (default runtime osx-arm64; pass osx-x64 for Intel)
-packaging/macos/bundle.sh
+# macOS .app bundle (default runtime osx-arm64; pass osx-x64 for Intel).
+# LATTICE_VERSION stamps CFBundle*Version (default 0.0.0).
+LATTICE_VERSION=0.1.0 packaging/macos/bundle.sh
 open artifacts/macos/osx-arm64/Lattice.app   # Dock/Finder shows the mark
 
 # Linux: publish, then install icons + launcher + link the binary onto PATH

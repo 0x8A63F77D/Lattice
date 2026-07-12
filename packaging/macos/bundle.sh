@@ -27,8 +27,13 @@ dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
 echo "==> Assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
-cp "$PLIST" "$APP/Contents/Info.plist"
+# Stamp the bundle version so every .app carries a real value rather than the
+# template default. Override with LATTICE_VERSION=1.2.3; sed-on-copy keeps this
+# portable across BSD/GNU sed (no in-place -i).
+VERSION="${LATTICE_VERSION:-0.0.0}"
+sed "s#<string>0.0.0</string>#<string>${VERSION}</string>#g" "$PLIST" > "$APP/Contents/Info.plist"
 cp "$ICNS" "$APP/Contents/Resources/lattice.icns"
+echo "    bundle version: $VERSION"
 
 echo "==> Done: $APP"
 echo "    Open with: open '$APP'   (the Dock/Finder icon is the packaged mark)"

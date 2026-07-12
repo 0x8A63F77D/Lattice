@@ -24,7 +24,8 @@
     <string>11.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
-    <!-- Populated from the build at bundle time. -->
+    <!-- Template default; bundle.sh substitutes LATTICE_VERSION here at package
+         time (both keys), so release .apps carry a real version. -->
     <key>CFBundleShortVersionString</key>
     <string>0.0.0</string>
     <key>CFBundleVersion</key>
