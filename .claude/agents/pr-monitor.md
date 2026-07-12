@@ -74,7 +74,12 @@ was Codex.
 
 Interval ≈ 15–20 s, SHORT Bash `sleep` between polls. **Total Phase-1 cap = 5 minutes.** Resolve:
 - **A result already posted →** `Codex: POSTED` and stop (do not wait further).
-- **`eyes >= 1` (and no result yet) →** `Codex: ACK`, proceed to Phase 2.
+- **`eyes >= 1` (and no result yet) →** `Codex: ACK — reactor-UNVERIFIED`, proceed to Phase 2.
+  The 👀 is an anonymous count (could be the owner/controller/anyone, not necessarily Codex), so
+  the ack is a HINT, not proof — carry the UNVERIFIED flag into Phase 2 and anchor the terminal
+  decision on an AUTHORED artifact. (Advancing on the 👀 rather than declaring NO-ACK avoids the
+  #61/#65 false-NO-ACK double-trigger; the UNVERIFIED flag is how a coincidental non-Codex 👀 is
+  caught downstream instead of silently costing a lost re-trigger.)
 - **5 min elapse with `eyes == 0` AND still no posted result →** `Codex: NO-ACK — trigger not
   received, no review coming` and STOP. (The main agent re-posts the trigger.) Only declare
   NO-ACK after confirming no result exists — never on absent eyes alone.
@@ -103,9 +108,12 @@ stop the instant Codex posts if the CI matrix is still running (a later leg coul
   but NO authored Codex artifact, with CI `success` → `Codex: reactor-UNVERIFIED` (a DISTINCT
   status, never `POSTED`: an anonymous count is not proof of authorship — the controller
   exact-matches the reactor before trusting it); (c) Codex posts an error/quota/limit reply
-  → `Codex: ERROR`; (d) cap hit → `Codex: TIMEOUT` (report whatever state exists). If Codex has
-  posted but CI is still mid-flight and not yet failed, keep polling until CI is terminal —
-  don't stop early.
+  → `Codex: ERROR`; (d) cap hit → `Codex: TIMEOUT` (report whatever state exists) — and if the
+  ack that opened Phase 2 was `reactor-UNVERIFIED` and NO authored Codex artifact ever appeared,
+  say so (`ack was reactor-UNVERIFIED — trigger may not have reached Codex; consider re-posting`)
+  so a coincidental non-Codex 👀 is surfaced for re-trigger, not written off as Codex being slow.
+  If Codex has posted but CI is still mid-flight and not yet failed, keep polling until CI is
+  terminal — don't stop early.
 
 ## Reporting format (status only)
 Report exactly one terminal status, plus the CI rollup and PR URL, then end:
@@ -115,9 +123,11 @@ Report exactly one terminal status, plus the CI rollup and PR URL, then end:
 - `Codex: reactor-UNVERIFIED` — the ONLY clean signal is an anonymous PR-body `+1` (no authored
   Codex artifact); the controller must exact-match the reactor before treating it as Codex.
 - `Codex: ERROR` — Codex replied with an error/quota/limit message instead of a review.
-- `Codex: TIMEOUT` — Phase-2 cap hit, ACK seen but no review result.
+- `Codex: TIMEOUT` — Phase-2 cap hit, ACK seen but no review result. If that ack was
+  `reactor-UNVERIFIED` with no authored artifact, add `ack unverified — trigger may have dropped`.
 
-Interim gate signal allowed: `Codex: ACK` (end of Phase 1, before starting Phase 2).
+Interim gate signal allowed: `Codex: ACK — reactor-UNVERIFIED` (end of Phase 1, before starting
+Phase 2; the 👀 is an anonymous count, so the ack is a hint — never asserted as Codex).
 Always include: `CI: N/M passed` (+ any failing check names) · `mergeable: <state>` · PR URL.
 Never include review verdicts, findings, P-levels, or any excerpt of the review text.
 
