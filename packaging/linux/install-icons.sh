@@ -59,4 +59,8 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 echo "==> Done. 'Icon=lattice' resolves from the hicolor theme."
-[ -z "$APP_DIR" ] && echo "    (No app dir given — the launcher's Exec=Lattice needs a Lattice binary on PATH.)"
+# if-block, not `[ -z ] && echo`: as the script's last command the latter would
+# exit 1 on the (non-empty APP_DIR) success path and fail CI/package callers.
+if [ -z "$APP_DIR" ]; then
+    echo "    (No app dir given — the launcher's Exec=Lattice needs a Lattice binary on PATH.)"
+fi
