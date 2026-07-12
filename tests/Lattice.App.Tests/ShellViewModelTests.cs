@@ -5,6 +5,7 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -23,7 +24,10 @@ public class ShellViewModelTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
+        // Frozen fake clock: the count-mirroring facts settle on the immediate first
+        // poll, so no natural steady-state poll is needed (shared rationale on
+        // TasksViewModelTests).
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
         _clock = new ManualUiClock();
         _shell = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
@@ -280,7 +284,11 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
         _manager.Start();
 
-        await Wait.UntilAsync(() => _shell.Tasks.Rows.Count == 1);
+        // Settle on the mirror itself, not Tasks.Rows.Count: the count is bumped
+        // by ObservableCollection.Add BEFORE the CollectionChanged handler that
+        // syncs TasksCount runs, so waiting on the collection races the mirror
+        // (and a frozen fake clock never re-polls to paper over the gap).
+        await Wait.UntilAsync(() => _shell.TasksCount == 1);
 
         Assert.Equal(1, _shell.TasksCount);
     }
@@ -298,7 +306,9 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
         _manager.Start();
 
-        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+        // Settle on the mirror itself, not Transfers.Rows.Count (same proxy race
+        // as TasksCount above).
+        await Wait.UntilAsync(() => _shell.TransfersCount == 1);
 
         Assert.Equal(1, _shell.TransfersCount);
     }
@@ -317,7 +327,9 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
         _manager.Start();
 
-        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+        // Settle on the mirror itself, not Transfers.Rows.Count (same proxy race
+        // as TasksCount above); HasTransfersCount derives from TransfersCount.
+        await Wait.UntilAsync(() => _shell.TransfersCount == 1);
 
         Assert.True(_shell.HasTransfersCount);
     }

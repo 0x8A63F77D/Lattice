@@ -4,6 +4,7 @@ using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -19,7 +20,7 @@ public class AllHostsRailTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), TimeProvider.System);
+        _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
         _clock = new ManualUiClock();
         return ValueTask.CompletedTask;

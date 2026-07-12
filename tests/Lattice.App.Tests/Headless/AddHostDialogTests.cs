@@ -12,6 +12,7 @@ using Lattice.App.Views;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Lattice.Tests.HeadlessLayout;
 
@@ -26,7 +27,7 @@ public class AddHostDialogTests
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         Func<IGuiRpcClient> f = factory ?? (() => new FakeGuiRpcClient());
         // Manager never started: no sockets, no background threads in headless tests.
-        var manager = new HostMonitorManager(registry, f, TimeProvider.System);
+        var manager = new HostMonitorManager(registry, f, new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
         var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, f);

@@ -13,6 +13,7 @@ using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Lattice.Tests.HeadlessLayout;
 
@@ -32,7 +33,7 @@ public class ProjectsViewTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var manager = new HostMonitorManager(
-            registry, () => new RoutingGuiRpcClient(new Dictionary<string, FakeGuiRpcClient>()), TimeProvider.System);
+            registry, () => new RoutingGuiRpcClient(new Dictionary<string, FakeGuiRpcClient>()), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
         var vm = new ProjectsViewModel(store, clock);

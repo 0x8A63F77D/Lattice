@@ -5,6 +5,7 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -28,7 +29,7 @@ public class EventLogViewModelTests : IAsyncLifetime
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), TimeProvider.System);
+        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
         _queue = new QueueUiDispatcher();
         _store = new HostStore(_registry, _manager, _queue);
         return ValueTask.CompletedTask;

@@ -14,6 +14,7 @@ using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Lattice.Tests.HeadlessLayout;
 
@@ -27,7 +28,12 @@ public class TasksViewTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var fakes = new Dictionary<string, FakeGuiRpcClient>();
-        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
+        // Frozen fake clock (never advanced): every manager-driven settle below is
+        // reached by the immediate first poll (fires on Start before any interval
+        // wait) or by an explicit RequestRefresh/F5 wake — none needs the clock to
+        // tick. Freezing removes all background natural polls, so the settles are
+        // deterministic with no real-time ceiling on the poll cadence.
+        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
         var clock = new ManualUiClock();
         uiState ??= new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
@@ -238,7 +244,7 @@ public class TasksViewTests
         window.Show();
         manager.Start();
 
-        await Wait.UntilAsync(() => !vm.IsLoading, "the first (empty) snapshot should land");
+        await HeadlessSync.WaitUntilAsync(() => !vm.IsLoading);
         Layout(window);
 
         Assert.True(vm.IsEmpty);
@@ -290,36 +296,27 @@ public class TasksViewTests
     [AvaloniaFact]
     public async Task F5_triggers_an_immediate_refresh_poll_via_the_key_binding()
     {
-        // Bespoke setup (not MakeView): a 3600s polling interval guarantees no
-        // natural steady-state poll can land inside the 5s Wait window below —
-        // any extra get_results after the keypress is attributable to F5 alone.
-        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-        var registry = new HostRegistry(new LatticeConfig(3600, []), path);
+        // The frozen fake clock (MakeView) is what guarantees "attributable to F5
+        // alone": with the clock never advanced, no natural steady-state poll can
+        // ever land, so any extra get_results after the keypress comes from F5's
+        // RequestRefresh wake — the earlier 3600s-interval hack is now redundant.
+        var (window, view, vm, registry, manager, fakes) = MakeView();
         var fake = new FakeGuiRpcClient();
-        var fakes = new Dictionary<string, FakeGuiRpcClient> { ["host-a"] = fake };
-        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), TimeProvider.System);
-        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
-        var vm = new TasksViewModel(store, new ManualUiClock(), uiState, new DensityPreference(uiState));
-        var view = new TasksView { DataContext = vm };
-        var window = new Window { Width = 1280, Height = 800, Content = view };
-        registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        AddHost(registry, fakes, "host-a", fake);
 
         window.Show();
         manager.Start();
-        await Wait.UntilAsync(() => !vm.IsLoading, "first snapshot should land");
+        await HeadlessSync.WaitUntilAsync(() => !vm.IsLoading);
         Layout(window);
 
         var pollsBefore = fake.Calls.Count(c => c == "get_results");
         view.Grid.Focus();
         window.KeyPress(Key.F5, RawInputModifiers.None, PhysicalKey.F5, null);
 
-        await Wait.UntilAsync(() => fake.Calls.Count(c => c == "get_results") > pollsBefore,
-            "F5 should trigger an immediate refresh poll through the XAML KeyBinding");
+        await HeadlessSync.WaitUntilAsync(() => fake.Calls.Count(c => c == "get_results") > pollsBefore);
 
         await manager.DisposeAsync();
         window.Close();
-        File.Delete(path);
     }
 
     [AvaloniaFact]
@@ -484,7 +481,7 @@ public class TasksViewTests
         window.Show();
         manager.Start();
 
-        await Wait.UntilAsync(() => vm.ShowPartialBar, "partial bar should appear for the AuthFailed host");
+        await HeadlessSync.WaitUntilAsync(() => vm.ShowPartialBar);
         Layout(window);
 
         // Scoping to the healthy host hides the bar through the IsOpen binding;
