@@ -50,6 +50,37 @@
     <Style Selector="ToggleButton.chevron:checked /template/ ContentPresenter">
       <Setter Property="RenderTransform" Value="rotate(90deg)" />
     </Style>
+
+    <!-- De-tint: the Fluent ToggleButton control theme paints its checked / hover / pressed
+         background onto the template part ContentPresenter#PART_ContentPresenter via "/template/"
+         setters bound to the ToggleButtonBackground* theme resource keys (checked =
+         ToggleButtonBackgroundChecked / ToggleButtonBackgroundCheckedPointerOver /
+         ToggleButtonBackgroundCheckedPressed, the accent overlay) — NOT via the Background
+         property. So the chevron's local Background="Transparent" is template-bound only in the
+         default state and loses to those part-targeted setters; an expanded chevron would show the
+         accent fill. Re-target the SAME part to keep it a bare rotating glyph in every state.
+         These styles live in ProjectsView's UserControl.Styles, so they cannot reach ToggleButtons
+         in other views — the Event-log filter pills and density/following toggles keep their
+         legitimate checked tint because of that UserControl boundary, not the class name. The
+         .chevron qualifier is defensive within THIS view (and moot today, since ProjectsView has
+         no other ToggleButton). Same theme-overlay trap solved for DataGrid selection in
+         Theming/DataGridStyles.axaml. Keys/part verified against the Avalonia Fluent ToggleButton
+         control theme (resource keys above; part PART_ContentPresenter). -->
+    <Style Selector="ToggleButton.chevron:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel>
