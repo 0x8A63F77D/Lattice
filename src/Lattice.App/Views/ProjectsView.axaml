@@ -81,6 +81,14 @@
     <Style Selector="ToggleButton.chevron:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
     </Style>
+
+    <!-- Chevron gutter column: no header divider (spec .dg-p>*:first-child). Body divider is
+         off via CellStyleClasses="noDivider" on the column; the header separator has no
+         per-column style-class hook, so target the first header positionally (chevron is
+         always column 0). -->
+    <Style Selector="DataGridColumnHeadersPresenter > DataGridColumnHeader:nth-child(1)">
+      <Setter Property="AreSeparatorsVisible" Value="False" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -141,7 +149,7 @@
                 ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
         <DataGrid.Columns>
           <!-- Chevron 24 -->
-          <DataGridTemplateColumn Width="24">
+          <DataGridTemplateColumn Width="24" CellStyleClasses="noDivider">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <ToggleButton Classes="chevron" Background="Transparent" Padding="2"
@@ -177,7 +185,7 @@
                Host column; the single-host headless test asserts it. -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
                                Binding="{Binding Data.HostsText}" Width="110"
-                               IsVisible="{Binding IsAllHostsScope}" />
+                               IsVisible="{Binding IsAllHostsScope}" CellStyleClasses="numericCell" />
           <!-- Resource share 140: bar (when ShowShareBar) + text -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140">
             <DataGridTemplateColumn.CellTemplate>
@@ -198,9 +206,9 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}"
-                               Binding="{Binding Data.AvgCreditText}" Width="100" />
+                               Binding="{Binding Data.AvgCreditText}" Width="100" CellStyleClasses="numericCell" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
-                               Binding="{Binding Data.TotalCreditText}" Width="110" />
+                               Binding="{Binding Data.TotalCreditText}" Width="110" CellStyleClasses="numericCell" />
           <!-- Status *: icon + text, no pills (explicit design decision) -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="*">
             <DataGridTemplateColumn.CellTemplate>

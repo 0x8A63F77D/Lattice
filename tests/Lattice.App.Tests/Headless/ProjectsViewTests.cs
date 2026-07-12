@@ -15,6 +15,7 @@ using Lattice.Core;
 using Lattice.Tests;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
+using Rectangle = Avalonia.Controls.Shapes.Rectangle;
 using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
@@ -284,6 +285,63 @@ public class ProjectsViewTests
         Assert.Equal(neutral, expandedColor);
         // Design invariant: glyph color is identical collapsed vs expanded (only rotation differs).
         Assert.Equal(collapsedColor, expandedColor);
+        window.Close();
+    }
+
+    // Chevron gutter column (index 0, width 24) must carry no divider anywhere: the body
+    // cells opt out via CellStyleClasses="noDivider" (shared DataGridStyles mechanism, already
+    // verified elsewhere), and the header's vertical separator — which has no per-column
+    // style-class hook — is targeted positionally (chevron is always the first column).
+    [AvaloniaFact]
+    public void Chevron_gutter_column_has_no_body_divider_and_no_header_separator()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll, showChevron: true));
+        Layout(window);
+        var grid = view.Grid;
+
+        var gutterCells = grid.GetVisualDescendants().OfType<DataGridCell>()
+            .Where(c => c.Classes.Contains("noDivider")).ToList();
+        Assert.NotEmpty(gutterCells);
+        foreach (var c in gutterCells)
+        {
+            var line = VisualTree.FindInVisualTree<Rectangle>(c, r => r.Name == "PART_RightGridLine");
+            Assert.NotNull(line);
+            Assert.Equal(0d, line!.Width);
+        }
+
+        // DataGridColumnHeader.OwningColumn is internal (no InternalsVisibleTo into this test
+        // assembly), so identify the real, realized column headers positionally: the template
+        // also instantiates a corner header and a filler-column header, both unarranged (zero
+        // width) in this layout, so filtering to Width > 0 isolates the 7 user columns, ordered
+        // left-to-right by X — the same "positional, chevron is always first" contract the fix
+        // itself relies on.
+        var headers = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.Bounds.Width > 0)
+            .OrderBy(h => h.Bounds.X).ToList();
+        Assert.False(headers[0].AreSeparatorsVisible);  // chevron gutter: no header separator
+        Assert.True(headers[1].AreSeparatorsVisible);   // Project column: keeps its separator
+        window.Close();
+    }
+
+    // Regression lock for the design-spec column widths (chevron 24 / Project 200 / Hosts 110 /
+    // Resource share 140 / Avg credit 100 / Total credit 110 / Status *).
+    [AvaloniaFact]
+    public void Projects_default_column_widths_match_the_spec()
+    {
+        var (window, view, _) = MakeView();
+        window.Show();
+        Layout(window);
+        var grid = view.Grid;
+        double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(24, W(0)); // chevron
+        Assert.Equal(200, W(1)); // Project
+        Assert.Equal(110, W(2)); // Hosts
+        Assert.Equal(140, W(3)); // Resource share
+        Assert.Equal(100, W(4)); // Avg credit
+        Assert.Equal(110, W(5)); // Total credit
+        Assert.True(grid.Columns[6].Width.IsStar); // Status
         window.Close();
     }
 
