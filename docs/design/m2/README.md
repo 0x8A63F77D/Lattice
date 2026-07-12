@@ -73,7 +73,7 @@ Every table (Tasks, Projects, Transfers, Event log, Responsive, Dark) uses **one
 
 ### Default column widths (px; star column takes the `1fr` remainder)
 - **Tasks**: Project 108 · Application 118 · Task 1fr · Progress 112 · Elapsed 68 · Remaining 74 · Deadline 100 · State 112 · Host 76
-- **Projects**: chevron 24 · Project 200 · Hosts 110 · Resource share 140 · Avg credit 100 · Total credit 110 · actions 1fr
+- **Projects**: chevron 24 · Project 200 · Hosts 110 · Resource share 140 · Avg credit 100 · Total credit 110 · Status 1fr
 - **Transfers**: File 1fr · Project 140 · Direction 80 · Progress 190 · Speed 90 · Status 210 · Host 80
 - **Event log**: Time 128 · Host 84 · Project 140 · severity 20 · Message 1fr
 
@@ -82,8 +82,12 @@ Every table (Tasks, Projects, Transfers, Event log, Responsive, Dark) uses **one
   every view (separate from NavigationView's view selection — both selected states render at once).
 - **Partial results**: when scope = All hosts and ≥1 host is unreachable, show a dismissable `InfoBar`
   (severity Warning) with a "Retry now" link above the grid.
-- **Host states** (icon + text, never color alone): Connected · Retrying (mm:ss countdown + attempt, ticks
-  every second) · Unreachable · Wrong password · Disconnected. Retry uses warning `#B85C00/#BC4B09`.
+- **Host states** (icon + text, never color alone; canonical set is the `1e` matrix): **Connected** (`checkmark_circle`,
+  success `#107C10`) · **Connecting…** (`arrow_sync` rotating / ProgressRing, brand `#0F6CBD` — first connect / full
+  fetch) · **Retrying in Ns (attempt N)** (`arrow_clockwise`, warning `#B85C00`, countdown ticks every second) ·
+  **Unreachable** (`dismiss_circle`, danger `#C50F1F`, tooltip = last error) · **Wrong password** (`key`, danger
+  `#C50F1F`, click opens the Edit host dialog per `3b`). ("Offline" in `3a` is a status-*group* label in the
+  many-hosts view, not a per-host state.)
 - **Add / Edit host** (`ContentDialog`): Address required (accent focus underline), Port prefilled 31416,
   info strip explains the `remote_hosts.cfg` prerequisite; Add disabled until Address is non-empty; submit
   shows an inline ProgressRing; failure → InfoBar. Edit reuses the same dialog retitled, fields prefilled;
