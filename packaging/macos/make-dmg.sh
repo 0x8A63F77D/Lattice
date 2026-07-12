@@ -21,6 +21,11 @@ OUT_DIR="$REPO_ROOT/artifacts/macos/$RID"
 APP="$OUT_DIR/Lattice.app"
 DMG="$OUT_DIR/Lattice-$RID.dmg"
 
+# Evict a stale zipped-.app from a prior build: this script no longer produces
+# one, but the release workflow's Stage step globs *.zip out of artifacts/, so a
+# leftover in a reused/self-hosted/local workspace would still get uploaded.
+rm -f "$OUT_DIR/Lattice-$RID.zip"
+
 # Assemble Lattice.app (self-contained publish + Info.plist + .icns).
 "$REPO_ROOT/packaging/macos/bundle.sh" "$RID"
 
