@@ -8,6 +8,7 @@
   <ItemGroup>
     <Compile Include="ReconcileTests.fs" />
     <Compile Include="ViewSliceTests.fs" />
+    <Compile Include="ProjectRowsTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />

@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="Reconcile.fs" />
     <Compile Include="ViewSlice.fs" />
+    <Compile Include="ProjectRows.fs" />
   </ItemGroup>
 
 </Project>

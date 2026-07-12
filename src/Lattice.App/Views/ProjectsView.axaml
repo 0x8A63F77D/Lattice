@@ -1,0 +1,217 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:views="using:Lattice.App.Views"
+             xmlns:controls="using:Lattice.App.Controls"
+             xmlns:loc="using:Lattice.App.Localization"
+             x:Class="Lattice.App.Views.ProjectsView"
+             x:DataType="vm:ProjectsViewModel">
+
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="F5" Command="{Binding RefreshCommand}" />
+  </UserControl.KeyBindings>
+
+  <UserControl.Styles>
+    <!-- Hierarchy row heights (design 2a: 40px parent / 32px child). The DataGrid's
+         "lattice" class sets a uniform RowHeight; an explicit per-row Height set from
+         the row class overrides it, so parents and children measure to their design
+         heights. The geometry headless test is the acceptance gate for this. -->
+    <Style Selector="DataGridRow.projectParent">
+      <Setter Property="Height" Value="40" />
+    </Style>
+    <Style Selector="DataGridRow.projectChild">
+      <Setter Property="Height" Value="32" />
+    </Style>
+    <Style Selector="DataGridRow.projectParent TextBlock.projectName">
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FontSize" Value="14" />
+    </Style>
+    <Style Selector="DataGridRow.projectChild TextBlock">
+      <Setter Property="FontSize" Value="12" />
+    </Style>
+
+    <!-- Chevron: a borderless toggle whose glyph rotates 90° when the group is
+         expanded. IsChecked is driven OneWay by Data.IsExpanded (the command owns
+         the state), so the rotation follows the model, not local toggle state. -->
+    <Style Selector="ToggleButton.chevron">
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Width" Value="20" />
+      <Setter Property="Height" Value="20" />
+    </Style>
+    <Style Selector="ToggleButton.chevron /template/ ContentPresenter">
+      <Setter Property="RenderTransform" Value="rotate(0deg)" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked /template/ ContentPresenter">
+      <Setter Property="RenderTransform" Value="rotate(90deg)" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Command bar: title + disabled M3 placeholders (left); freshness + refresh +
+         density (right, stamped from TasksView minus the filter/overflow chrome). -->
+    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeSurfaceBrush}"
+            BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
+            BorderThickness="0,0,0,1">
+      <DockPanel Margin="16,0" LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Text="{x:Static loc:Strings.ProjectsTitle}" FontSize="16" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
+          <Button Content="{x:Static loc:Strings.ProjectsUpdate}" IsEnabled="False" Margin="8,0,0,0" />
+          <Button Content="{x:Static loc:Strings.Suspend}" IsEnabled="False" />
+          <Button Content="{x:Static loc:Strings.ProjectsNoNewTasks}" IsEnabled="False" />
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+            <PathIcon Data="{StaticResource IconWarningFilled}" Width="12" Height="12"
+                      Foreground="{DynamicResource LatticeWarningFgBrush}"
+                      IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeWarningFgBrush}"
+                       IsVisible="{Binding IsUpdateStale}" />
+            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                       Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                       IsVisible="{Binding !IsUpdateStale}" />
+          </StackPanel>
+          <!-- No density toggle here: design 2a fixes Projects row heights at
+               40/32 (the medium/compact densities are a Tasks-only concept). -->
+          <Button Padding="6" Background="Transparent" Command="{Binding RefreshCommand}"
+                  ToolTip.Tip="{x:Static loc:Strings.RetryNow}">
+            <PathIcon Data="{StaticResource IconArrowClockwiseRegular}" Width="14" Height="14" />
+          </Button>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- Partial-results warning -->
+    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+                  Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
+                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
+      <ui:FAInfoBar.ActionButton>
+        <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
+      </ui:FAInfoBar.ActionButton>
+    </ui:FAInfoBar>
+
+    <!-- Status bar -->
+    <controls:StatusBarControl DockPanel.Dock="Bottom"
+                                LeftText="{Binding CountsText}"
+                                RightText="{Binding PollingText}" />
+
+    <!-- Grid + overlays -->
+    <Panel>
+      <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice"
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
+        <DataGrid.Columns>
+          <!-- Chevron 24 -->
+          <DataGridTemplateColumn Width="24">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ProjectRow">
+                <ToggleButton Classes="chevron" Background="Transparent" Padding="2"
+                              IsVisible="{Binding Data.ShowChevron}"
+                              IsChecked="{Binding Data.IsExpanded, Mode=OneWay}"
+                              Command="{Binding $parent[UserControl].((vm:ProjectsViewModel)DataContext).ToggleExpandCommand}"
+                              CommandParameter="{Binding Data.MasterUrl}">
+                  <PathIcon Width="10" Height="10" Data="{StaticResource IconChevronRightRegular}" />
+                </ToggleButton>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <!-- Project 200 (parent: name; child: host name) -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ProjectRow">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
+                  <TextBlock Classes="projectName" Text="{Binding Data.Name}"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.Name}" />
+                  <TextBlock Text="{Binding Data.TasksText}" FontSize="12"
+                             Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <!-- Hidden in single-host scope (design 2a): same treatment as the Tasks
+               Host column; the single-host headless test asserts it. -->
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
+                               Binding="{Binding Data.HostsText}" Width="110"
+                               IsVisible="{Binding IsAllHostsScope}" />
+          <!-- Resource share 140: bar (when ShowShareBar) + text -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ProjectRow">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <!-- Track is 56px because FractionToWidthConverter hard-codes a 56px
+                       track (TaskGridConverters.cs); do not shrink it without
+                       parameterizing the converter (Codex P2, round 2). -->
+                  <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}"
+                          IsVisible="{Binding Data.ShowShareBar}">
+                    <Border Background="{DynamicResource LatticeAccentBrush}" HorizontalAlignment="Left"
+                            Height="3" CornerRadius="2"
+                            Width="{Binding Data.ShareFraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
+                  </Border>
+                  <TextBlock Text="{Binding Data.ShareText}" FontSize="12" Classes="numeric" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}"
+                               Binding="{Binding Data.AvgCreditText}" Width="100" />
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
+                               Binding="{Binding Data.TotalCreditText}" Width="110" />
+          <!-- Status *: icon + text, no pills (explicit design decision) -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="*">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate x:DataType="vm:ProjectRow">
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                  <Panel Width="12" Height="12">
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconCheckmarkCircleRegular}"
+                              Foreground="{DynamicResource LatticeSuccessBrush}"
+                              IsVisible="{Binding Data.StatusKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Active}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconPauseRegular}"
+                              Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                              IsVisible="{Binding Data.StatusKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Suspended}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconHandRightRegular}"
+                              Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                              IsVisible="{Binding Data.StatusKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=NoNewTasks}" />
+                    <PathIcon Width="12" Height="12" Data="{StaticResource IconMoreHorizontalRegular}"
+                              Foreground="{DynamicResource LatticeNeutralFgBrush}"
+                              IsVisible="{Binding Data.StatusKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Mixed}" />
+                  </Panel>
+                  <!-- Inherits the grid foreground (TasksView State-column idiom;
+                       design: status text 12px #424242, near primary). -->
+                  <TextBlock Text="{Binding Data.StatusText}" FontSize="12"
+                             TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.StatusText}" />
+                </StackPanel>
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
+        </DataGrid.Columns>
+      </DataGrid>
+
+      <!-- Loading overlay -->
+      <Border Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
+          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
+          <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
+                     TextWrapping="Wrap" TextAlignment="Center"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+          <Border Height="12" CornerRadius="2" Background="{DynamicResource LatticeStrokeSubtleBrush}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Empty overlay (design 2a: same text in both scopes) -->
+      <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+        <TextBlock Text="{x:Static loc:Strings.ProjectsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

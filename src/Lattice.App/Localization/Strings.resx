@@ -301,6 +301,64 @@
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <!-- ===== Projects ===== -->
+  <data name="ProjectsColAvgCredit" xml:space="preserve">
+    <value>Avg credit</value>
+  </data>
+  <data name="ProjectsColHosts" xml:space="preserve">
+    <value>Hosts</value>
+  </data>
+  <data name="ProjectsColShare" xml:space="preserve">
+    <value>Resource share</value>
+  </data>
+  <data name="ProjectsColTotalCredit" xml:space="preserve">
+    <value>Total credit</value>
+  </data>
+  <data name="ProjectsCountsFmt" xml:space="preserve">
+    <value>{0} projects · {1} hosts</value>
+  </data>
+  <data name="ProjectsEmpty" xml:space="preserve">
+    <value>No projects attached — attach via the BOINC client on the host.</value>
+  </data>
+  <data name="ProjectsNoNewTasks" xml:space="preserve">
+    <value>No new tasks</value>
+  </data>
+  <data name="ProjectsPartialFmt" xml:space="preserve">
+    <value>{0} of {1} hosts aren't reachable — projects below cover {2} hosts.</value>
+  </data>
+  <data name="ProjectsTaskCountFmt" xml:space="preserve">
+    <value>{0} tasks</value>
+  </data>
+  <data name="ProjectsShareVariesFmt" xml:space="preserve">
+    <value>Varies · {0}–{1}</value>
+  </data>
+  <data name="ProjectsStatusActive" xml:space="preserve">
+    <value>Active</value>
+  </data>
+  <data name="ProjectsStatusSuspended" xml:space="preserve">
+    <value>Suspended</value>
+  </data>
+  <data name="ProjectsStatusNoNewTasks" xml:space="preserve">
+    <value>No new tasks</value>
+  </data>
+  <data name="ProjectsStatusActiveAll" xml:space="preserve">
+    <value>Active on all hosts</value>
+  </data>
+  <data name="ProjectsStatusAllFmt" xml:space="preserve">
+    <value>{0} on all hosts</value>
+  </data>
+  <data name="ProjectsStatusDeviationFmt" xml:space="preserve">
+    <value>{0} · {1}/{2} hosts</value>
+  </data>
+  <data name="ProjectsStatusMixedFmt" xml:space="preserve">
+    <value>Mixed · {0} suspended · {1} no new tasks</value>
+  </data>
+  <data name="ProjectsTitle" xml:space="preserve">
+    <value>Projects</value>
+  </data>
+  <data name="ProjectsUpdate" xml:space="preserve">
+    <value>Update</value>
+  </data>
   <!-- ===== Tasks ===== -->
   <data name="Abort" xml:space="preserve">
     <value>Abort</value>

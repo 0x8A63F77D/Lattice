@@ -27,10 +27,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _clock = clock;
         Settings = new SettingsViewModel(registry, store, clientFactory);
         Tasks = new TasksViewModel(store, clock, uiState);
+        Projects = new ProjectsViewModel(store, clock);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
-            new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", new PlaceholderViewModel(Strings.NavProjects)),
+            new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", Projects),
             new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", new PlaceholderViewModel(Strings.NavTransfers)),
             new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", new PlaceholderViewModel(Strings.NavEventLog)),
         ];
@@ -54,6 +55,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// can push scope changes into it and mirror its row count for the nav badge.</summary>
     public TasksViewModel Tasks { get; }
 
+    /// <summary>The Projects page VM (Views[1].Page); exposed so the shell can push
+    /// scope changes into it (same rail-scope contract as <see cref="Tasks"/>).</summary>
+    public ProjectsViewModel Projects { get; }
+
     [ObservableProperty] private NavItemViewModel? _selectedView;
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
@@ -70,10 +75,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     partial void OnSelectedRailEntryChanged(object? value) =>
         Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
 
-    // Design rule: selecting a host scopes every view. Tasks is the only real
-    // (non-Placeholder) page today, so it is the only one wired here; later
-    // views will get the same partial-method push when they graduate.
-    partial void OnScopeChanged(ScopeSelection value) => Tasks.Scope = value;
+    // Design rule: selecting a host scopes every view. Each graduated (non-
+    // Placeholder) page gets the same partial-method push; Placeholders don't
+    // scope until they graduate.
+    partial void OnScopeChanged(ScopeSelection value)
+    {
+        Tasks.Scope = value;
+        Projects.Scope = value;
+    }
 
     private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         TasksCount = Tasks.Rows.Count;
@@ -147,6 +156,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
         Tasks.Dispose();
+        Projects.Dispose();
         foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
             item.Dispose();
     }
