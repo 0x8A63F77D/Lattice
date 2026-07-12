@@ -5,6 +5,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
@@ -498,6 +499,69 @@ public class TasksViewTests
             "returning to All hosts must re-show the partial bar: the user never dismissed it");
 
         await manager.DisposeAsync();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Task_column_middle_ellipsizes_and_other_text_columns_end_ellipsize()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var row = new TaskRowViewModel(
+            Project: "einstein", Application: "O3AS", Name: "h1_1234_long_task_name_0_1",
+            Fraction: 0.2, PercentText: "20%", ElapsedText: "1m 00s", RemainingText: "5m 00s",
+            DeadlineText: "07-11 00:00", Deadline: DateTimeOffset.UtcNow.AddHours(1),
+            StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        var taskTb = grid.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "h1_1234_long_task_name_0_1");
+        Assert.Same(TextTrimming.PrefixCharacterEllipsis, taskTb.TextTrimming);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Tasks_default_column_widths_match_the_spec()
+    {
+        var (window, _, _, _, _, _) = MakeView();
+        window.Show();
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(108, W(0)); // Project
+        Assert.Equal(118, W(1)); // Application
+        Assert.True(grid.Columns[2].Width.IsStar); // Task
+        Assert.Equal(112, W(3)); // Progress
+        Assert.Equal(68,  W(4)); // Elapsed
+        Assert.Equal(74,  W(5)); // Remaining
+        Assert.Equal(100, W(6)); // Deadline
+        Assert.Equal(112, W(7)); // State
+        Assert.Equal(76,  W(8)); // Host
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Elapsed_and_remaining_cells_use_tabular_figures()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var row = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "07-11 00:00",
+            Deadline: DateTimeOffset.UtcNow.AddHours(1), StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        foreach (var text in new[] { "1m 00s", "5m 00s" })
+        {
+            var tb = grid.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == text);
+            Assert.NotNull(tb.FontFeatures);
+            Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
+        }
         window.Close();
     }
 }

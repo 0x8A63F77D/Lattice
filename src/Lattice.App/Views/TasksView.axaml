@@ -16,14 +16,13 @@
   </UserControl.KeyBindings>
 
   <UserControl.Styles>
-    <!-- Row-class overrides (design §Task 11): at-risk tint + suspended dimming.
-         Selection tint intentionally wins when a row is both selected and at-risk
-         (deferred design decision, resolved): the Deadline cell's warning icon
-         still marks the risk, so nothing is lost, and DataGridStyles.axaml already
-         documents why fighting the theme's selection overlay is a losing game. -->
-    <Style Selector="DataGridRow.atRisk">
-      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
-    </Style>
+    <!-- Row-class overrides (design §Task 11): suspended dimming.
+         The at-risk row tint now lives centrally in DataGridStyles.axaml
+         (DataGrid.lattice DataGridRow.atRisk) alongside its :pointerover
+         hover-keep, so it is not duplicated here. Selection tint intentionally
+         wins when a row is both selected and at-risk (deferred design decision,
+         resolved): the Deadline cell's warning icon still marks the risk, so
+         nothing is lost. -->
     <Style Selector="DataGridRow.suspended">
       <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
     </Style>
@@ -140,7 +139,7 @@
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.Name}" />
+                           TextTrimming="PrefixCharacterEllipsis" ToolTip.Tip="{Binding Data.Name}" />
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
@@ -159,9 +158,11 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
-                               Binding="{Binding Data.ElapsedText}" Width="68" />
+                               Binding="{Binding Data.ElapsedText}" Width="68"
+                               CellStyleClasses="numericCell" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
-                               Binding="{Binding Data.RemainingText}" Width="74" />
+                               Binding="{Binding Data.RemainingText}" Width="74"
+                               CellStyleClasses="numericCell" />
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
@@ -169,7 +170,7 @@
                   <PathIcon Width="10" Height="10" Data="{StaticResource IconWarningFilled}"
                             IsVisible="{Binding Data.IsDeadlineAtRisk}"
                             Foreground="{DynamicResource LatticeWarningFgBrush}" />
-                  <TextBlock Text="{Binding Data.DeadlineText}" FontSize="12"
+                  <TextBlock Text="{Binding Data.DeadlineText}" FontSize="12" Classes="numeric"
                              Classes.atRiskText="{Binding Data.IsDeadlineAtRisk}" />
                 </StackPanel>
               </DataTemplate>
