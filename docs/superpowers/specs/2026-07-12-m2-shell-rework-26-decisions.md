@@ -48,12 +48,17 @@ paused/disabled/snoozed state, **that** PR reopens the taxonomy — F#/C# exhaus
 | **Healthy** | `Connected` ∪ `Connecting` | collapsed 28 px count row; expand state persisted |
 
 - `Connecting` is not a problem (not `Attention`) so it folds into **Healthy** as "on its way up".
-- The classifier `RailState -> RailTier` is **total with no wildcard** (CLAUDE.md DU rule). A new
-  `RailState` makes the C# `switch` raise CS8509; `Lattice.App.csproj` sets no `TreatWarningsAsErrors`, so a
-  local build only warns, but **CI promotes it to an error solution-wide** via
-  `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`) — the gate nothing
-  merges past. (The F# `RailLayoutPolicy` match is additionally covered by `Lattice.App.Aggregation.fsproj`'s
-  own `TreatWarningsAsErrors`.) The renderer skips an empty tier, so an all-healthy farm shows no Attention
+- The classifier `RailState -> RailTier` is **total with no wildcard** (CLAUDE.md DU rule). Two distinct C#
+  diagnostics apply to a no-`_` enum switch: **CS8509** fires when a **named** value is unhandled (the guard
+  we want — a new `RailState` must force a choice here); **CS8524** fires for the residual *unnamed* value
+  (an out-of-range cast) even when all named values are covered. So the switch **suppresses CS8524 only**
+  (`#pragma warning disable CS8524` at the switch) and keeps CS8509 live — a `_` arm would defeat CS8509 and
+  is forbidden. `Lattice.App.csproj` sets no `TreatWarningsAsErrors`, so a local un-flagged build only warns,
+  but **CI promotes both to errors solution-wide** via `dotnet build Lattice.sln -c Release -warnaserror`
+  (`.github/workflows/ci.yml:26`) — hence CS8524 *must* be suppressed or the plan's own build fails before
+  any new case exists. (No repo precedent for a no-`_` enum switch; only CS1591 doc pragmas exist today. The
+  F# `RailLayoutPolicy` match is additionally covered by `Lattice.App.Aggregation.fsproj`'s own
+  `TreatWarningsAsErrors`.) The renderer skips an empty tier, so an all-healthy farm shows no Attention
   header, and in practice `GroupHeaderRow` only ever collapses **Healthy** (Attention is always expanded).
 
 **Deliberate design deviation to record on the #57 design-fidelity tracker:** the mock's `Offline · 2`

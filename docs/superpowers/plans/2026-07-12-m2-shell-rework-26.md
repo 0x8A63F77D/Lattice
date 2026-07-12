@@ -562,17 +562,33 @@ namespace Lattice.App.ViewModels;
 /// </summary>
 public static class RailTierProjection
 {
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailState left
+    // unhandled) must stay a build error so the taxonomy is revisited. CS8524 is the residual
+    // "unnamed enum value" case — an out-of-range cast like (RailState)999, unreachable for a
+    // well-formed RailState — and is suppressed here; a `_` arm would silence CS8509 too and
+    // defeat the guard. (No repo precedent for this pragma — RailTierProjection is the first
+    // no-`_` enum switch; only CS1591 doc pragmas exist today.)
     public static RailTier From(RailState state) => state switch
     {
         RailState.Unreachable or RailState.AuthFailed or RailState.Retrying => RailTier.Attention,
         RailState.Connected or RailState.Connecting => RailTier.Healthy,
     };
+#pragma warning restore CS8524
 }
 ```
 
-> `RailTier` is an F# DU; from C# its cases are `RailTier.Attention` etc. (static properties). The `switch` has no `_` arm, so a new `RailState` raises CS8509 (non-exhaustive switch). `Lattice.App.csproj` does **not** set `TreatWarningsAsErrors`, so a local un-flagged `dotnet build` only *warns* — but CI promotes it to an error solution-wide via `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`), and nothing merges without CI green. That is the gate the guard relies on; do **not** add `<WarningsAsErrors>` to the csproj (redundant with CI).
+> Diagnostic mechanism (verified): a switch expression over an `enum` that covers every **named**
+> value but has no `_` arm still emits **CS8524** ("the switch expression does not handle some values of
+> its input type (it is not exhaustive), for example the value '(RailState)N'"), which is **distinct from
+> CS8509**. Under CI's `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`)
+> CS8524 would fail the build *immediately* — before any new case ever exists — so it must be suppressed
+> at the switch. The design guard (a new **named** `RailState` must force a choice here) is **CS8509**, a
+> separate diagnostic that stays active and, under the same `-warnaserror`, becomes the error we want.
+> `Lattice.App.csproj` sets no `TreatWarningsAsErrors`, so a local un-flagged `dotnet build` only warns;
+> CI is the gate. Do **not** add a `_` arm (defeats CS8509) and do **not** add `<WarningsAsErrors>` to the
+> csproj (CI already covers all projects).
 
-- [ ] **Step 4: Run — expect PASS.** Then `dotnet build src/Lattice.App` to confirm the exhaustiveness guard compiles clean.
+- [ ] **Step 4: Run — expect PASS.** Then `dotnet build src/Lattice.App -warnaserror` to confirm it compiles clean under CI's flag: CS8524 is suppressed at the switch, and with all named cases handled there is no CS8509 today. (Sanity-check the guard once, locally: temporarily add a 6th `RailState` case — the build must fail with **CS8509**, not pass; revert.)
 
 - [ ] **Step 5: Commit**
 
@@ -1899,6 +1915,7 @@ git commit -m "feat(hosts): rail row MenuFlyout — edit/test/remove (design 3b)
 **Files:**
 - Modify: `src/Lattice.App/Views/ShellWindow.axaml.cs`
 - Modify: `tests/Lattice.App.Tests/Headless/AuthFailedLinkageTests.cs`
+- Modify: `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs` (end-to-end auth-fail flow — retarget to the Edit dialog; it consumes the removed `Settings.Hosts`)
 
 Clicking an auth-failed host now opens Edit with the password field in error + focused (Task 10/11 built the pieces), replacing the old "navigate to Settings expander".
 
@@ -1942,6 +1959,38 @@ Replace the body of `Selecting_an_auth_failed_host_lands_in_settings_with_that_h
 
 Add `using Avalonia.VisualTree;`, `using FluentAvalonia.UI.Controls;`, `using Lattice.App.Views;` as needed. Drop the old assertions on `shell.Settings.Hosts` / `IsExpanded` (that surface is gone after Task 13).
 
+Also rewrite the end-to-end journey `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs`, whose middle currently jumps to the Settings expander and consumes the removed `Settings.Hosts`. Replace everything from the `HostList.SelectedIndex = 1` line through the old `settingsItem.SaveCommand.Execute(null)` block with the Edit-dialog path (correct the password IN the dialog, Save persists via edit-mode `UpdateHost`, the parked AuthFailed loop wakes and reconnects):
+
+```csharp
+        // Auth-failed click now opens the Edit host dialog (Task 12), not Settings.
+        harness.Window.HostList.SelectedIndex = 1;   // index 0 = All-hosts sentinel
+        await harness.SettleAsync(
+            () => harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Any(),
+            "auth-failed click should open the Edit host dialog");
+        var dialog = harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Single();
+        var vm = Assert.IsType<AddHostViewModel>(dialog.DataContext);
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.True(vm.HasPasswordError);
+        Assert.Equal(host.Id, harness.Shell.Scope.HostId);
+
+        // Correct the password, let the daemon accept it, then Save. Edit-save persists
+        // without a connection test (Task 9), waking the parked AuthFailed loop → reconnect.
+        vm.Password = "correct-pw";
+        fake.OnAuthorize = _ => Task.FromResult(true);
+        var save = harness.Window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "PrimaryButton");
+        save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        await harness.SettleAsync(
+            () => railItem.State == RailState.Connected,
+            "rail should reach Connected once the corrected password is saved");
+        harness.Layout();
+
+        Assert.Equal(string.Format(Strings.RailConnectedFmt, 0), railItem.StateText);
+        Assert.Equal("correct-pw", harness.Registry.Hosts.Single().Password);
+```
+Update the class-doc summary to describe the Edit-dialog path, and add `using Avalonia.Controls;`, `using Avalonia.Interactivity;`, `using Avalonia.VisualTree;`, `using Lattice.App.Views;`.
+
 - [ ] **Step 2: Run — expect FAIL** (Task 8 left `NavigateToSettings` in place as the interim).
 
 - [ ] **Step 3: Swap the handler line**
@@ -1957,7 +2006,8 @@ In `ShellWindow.axaml.cs` `OnHostSelectionChanged`, replace the interim auth-fai
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/Lattice.App/Views/ShellWindow.axaml.cs tests/Lattice.App.Tests/Headless/AuthFailedLinkageTests.cs
+git add src/Lattice.App/Views/ShellWindow.axaml.cs tests/Lattice.App.Tests/Headless/AuthFailedLinkageTests.cs \
+        tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs
 git commit -m "feat(hosts): auth-failed rail click opens the edit dialog (design 3b)"
 ```
 
@@ -1972,7 +2022,7 @@ git commit -m "feat(hosts): auth-failed rail click opens the edit dialog (design
 - Modify: `src/Lattice.App/ViewModels/SettingsViewModel.cs`
 - Modify: `src/Lattice.App/Views/SettingsView.axaml` / `.axaml.cs`
 - Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs` (`NavigateToSettings` loses the host focus; drop the `Settings.Reconcile()` call)
-- Modify: `tests/Lattice.App.Tests/SettingsViewModelTests.cs`, `tests/Lattice.App.Tests/Headless/SettingsViewTests.cs`
+- Modify: `tests/Lattice.App.Tests/SettingsViewModelTests.cs`, `tests/Lattice.App.Tests/Headless/SettingsViewTests.cs`, `tests/Lattice.App.Tests/ShellViewModelTests.cs` (delete the removed-member consumer — see Step 1)
 
 - [ ] **Step 1: Update the tests to the new shape (red)**
 
@@ -1996,7 +2046,11 @@ In `SettingsViewTests.cs`: delete the host-expander/remove tests (`Renders_one_e
         window.Close();
     }
 ```
-Simplify `MakeView` (no `store.Changed += Reconcile`; keep adding two hosts to prove they do NOT appear). In `SettingsViewModelTests.cs`, delete any assertions touching `Hosts`, `Reconcile`, `ExpandHost`, or `Remove`.
+Simplify `MakeView` (no `store.Changed += Reconcile`; keep adding two hosts to prove they do NOT appear).
+
+In `SettingsViewModelTests.cs`: this file is almost entirely `HostSettingsItemViewModel`-based, so **delete the `AddHost` helper and every test that uses it or a host item** — `Save_*`, `Save_rejects_*`, `Save_surfaces_persistence_failure_*`, `Remove_*`, `Auth_failed_host_exposes_*`, `TestConnection*`, `MakeConfigPathUnwritable`/`RestoreConfigPath` if now unused by remaining tests. **Keep only the global-group tests**: `Polling_interval_*` (including `Polling_interval_persistence_failure_*`, which uses its own path-unwritable seam) and `AllowedPollingIntervals`. Theme tests arrive in Task 14.
+
+In `ShellViewModelTests.cs`: **delete `NavigateToSettings_shows_settings_page_and_expands_target_host`** (lines ~111–121) — its premise (navigate to Settings + `Settings.Hosts.Single(...).IsExpanded`) is gone (`NavigateToSettings` is now parameterless; the auth-failed path opens the Edit dialog per Task 12). Keep `NavigateToSettings_deactivates_the_event_log` (~line 210) — it calls the parameterless `NavigateToSettings()`.
 
 - [ ] **Step 2: Run — expect FAIL / non-compiling** (references to removed members).
 
@@ -2032,12 +2086,24 @@ Change `NavigateToSettings` to drop the host-focus param and body:
 ```
 Update the caller in `ShellWindow.axaml.cs` `OnNavSelectionChanged` (`_shell.NavigateToSettings()` — already parameterless there). Remove the now-removed `Settings.Reconcile();` line from `ReconcileHosts` (Task 7 left it/stubbed).
 
-- [ ] **Step 7: Run — expect PASS**
+- [ ] **Step 7: Removed-member sweep (close the class, not one file per review round)**
 
-Run: `dotnet test tests/Lattice.App.Tests`
-Expected: PASS. Add string `SettingsHostsPointer` ("Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.").
+Before declaring green, grep the WHOLE repo (src + tests) for every member this task removes and update or delete every straggler **in this task** — a filtered `dotnet test` will not surface a *non-compiling* consumer, which is how these slipped past twice (the Task 13/14 Theme expander and this `ShellViewModelTests` consumer):
 
-- [ ] **Step 8: Commit**
+```bash
+grep -rnE 'Settings\.Hosts|Settings\.Reconcile|\.ExpandHost|Settings\.Remove\b|RemoveRequested|HasRemoveSubscribersForTests|HostSettingsItemViewModel|NavigateToSettings\([^)]' \
+     src tests --include='*.cs' --include='*.axaml'
+```
+Expected residue after this task's edits: **none in `src/`**, and in `tests/` only the parameterless `NavigateToSettings()` calls (which stay). Known consumers to have handled by now: `AuthFailedLinkageTests` (rewritten in Task 12), `AuthFailJourney.cs` (rewritten in Task 12), `ShellViewModelTests` (test deleted in Step 1), `SettingsViewTests`/`SettingsViewModelTests` (pruned in Step 1). If the grep prints anything else, fix it here and note it in the commit body.
+
+Add string `SettingsHostsPointer` ("Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.").
+
+- [ ] **Step 8: Run — expect PASS (full build is the gate, not a filtered test run)**
+
+Run: `dotnet build src/Lattice.App -warnaserror && dotnet build tests/Lattice.App.Tests && dotnet test tests/Lattice.App.Tests`
+Expected: all PASS. The two `dotnet build`s are the gate that catches a non-compiling straggler the sweep might have missed — a filtered `dotnet test` alone would report the removed-member consumer as an unrelated build error, not a red test.
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add -A
