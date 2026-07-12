@@ -19,6 +19,30 @@
          than copied so the generated artifacts stay single-source. -->
     <ApplicationIcon>../../docs/design/icon/windows/lattice.ico</ApplicationIcon>
   </PropertyGroup>
+  <!-- Release-publish knobs (issue #56). Guarded on RuntimeIdentifier so a
+       RID-less `dotnet build` / `dotnet test` (what CI runs) is completely
+       unaffected: these engage only for a per-RID `dotnet publish -r <rid>`,
+       which is how the packaging scripts and the release workflow build. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <!-- End users need no .NET install: bundle the runtime. -->
+    <SelfContained>true</SelfContained>
+    <!-- One executable by default (the Windows portable exe path). The .app
+         and AppDir builders opt out (-p:PublishSingleFile=false) because they
+         already ship a directory layout with a plain apphost. -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- Skia/HarfBuzz native libs live inside the single file, self-extracted
+         on first run — required for a genuinely single-file Avalonia app. -->
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- Trimming stays OFF: Avalonia resolves controls, converters and styles
+         via reflection the trimmer cannot see, so trimming risks a runtime
+         MissingMethodException. Left off until proven safe per-RID (see
+         packaging/README.md). -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <!-- ReadyToRun off too: avoids cross-arch crossgen surprises (e.g. building
+         osx-x64 on an arm64 runner) and keeps publish fast. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.0" />

@@ -1,6 +1,7 @@
 # Packaging
 
-Per-platform wire-up for the Lattice application icon (issue #39, packaging leg).
+Per-platform icon wire-up (issue #39/#53) **and** the release-artifact build
+scripts + tag-driven release workflow (issue #56).
 
 The mark itself lives in [`docs/design/icon/`](../docs/design/icon) — the finalized
 Claude Design package. It is a **generated artifact**: everything here references it
@@ -50,6 +51,87 @@ packaging/linux/install-icons.sh
 
 The Windows `.exe` icon and the running-window icon need no extra step — they are
 wired into the normal `dotnet build` / `dotnet publish` of the app.
+
+## Release artifacts (issue #56)
+
+Every platform ships a **self-contained** build — the .NET runtime is bundled, so
+end users need nothing installed. Each format has a build script; the release
+workflow ([`.github/workflows/release.yml`](../.github/workflows/release.yml)) runs
+them on the matching runner and attaches the output to a GitHub Release.
+
+| Platform | Script | Produces | Notes |
+|----------|--------|----------|-------|
+| **Windows** | [`windows/build-zip.ps1`](windows/build-zip.ps1) | `Lattice-win-x64.zip` (single-file `Lattice.exe`) | Portable, unzip-and-run. Unsigned → SmartScreen prompt. |
+| **macOS** | [`macos/make-dmg.sh`](macos/make-dmg.sh) | `Lattice-osx-arm64.dmg` + `.zip` (and `osx-x64`) | Drag-to-Applications. Unsigned → Gatekeeper prompt. |
+| **Linux** | [`linux/build-appimage.sh`](linux/build-appimage.sh) | `Lattice-x86_64.AppImage` | Primary. Single file, no root, cross-distro. |
+| **Linux** | [`linux/build-tarball.sh`](linux/build-tarball.sh) | `Lattice-<ver>-linux-x64.tar.gz` | Unpack and `./Lattice`. |
+
+All scripts honor `LATTICE_VERSION` (default `0.0.0`) to stamp the assembly /
+bundle version and the artifact filename. Default RIDs are `win-x64`, `osx-arm64`,
+`osx-x64`, `linux-x64`; `*-arm64` for Windows/Linux is an easy future addition
+(the AppImage cross-arch build is the only non-trivial one).
+
+```sh
+# Local builds (each writes under artifacts/<platform>/<rid>/)
+LATTICE_VERSION=0.1.0 packaging/macos/make-dmg.sh osx-arm64
+LATTICE_VERSION=0.1.0 packaging/linux/build-appimage.sh linux-x64
+LATTICE_VERSION=0.1.0 packaging/linux/build-tarball.sh linux-x64
+pwsh packaging/windows/build-zip.ps1 -Rid win-x64 -Version 0.1.0
+```
+
+### Self-contained publish settings
+
+The per-RID publish knobs live in a `RuntimeIdentifier`-guarded `<PropertyGroup>`
+in [`src/Lattice.App/Lattice.App.csproj`](../src/Lattice.App/Lattice.App.csproj),
+so a RID-less `dotnet build` / `dotnet test` (what CI runs) is untouched — they
+engage only for `dotnet publish -r <rid>`:
+
+- `SelfContained=true` — bundle the runtime.
+- `PublishSingleFile=true` + `IncludeNativeLibrariesForSelfExtract=true` +
+  `EnableCompressionInSingleFile=true` — the Windows portable-exe path. The `.app`
+  and AppDir builders opt out (`-p:PublishSingleFile=false`) since they already
+  ship a directory layout.
+- **`PublishTrimmed=false` (deliberate).** Avalonia resolves controls, converters
+  and styles through reflection the IL trimmer cannot see, so trimming risks a
+  runtime `MissingMethodException`. It stays off until proven safe per-RID. This
+  is the documented, intentional trade-off (larger artifacts for correctness).
+- `PublishReadyToRun=false` — avoids cross-arch crossgen issues (e.g. building
+  `osx-x64` on an Apple-Silicon runner).
+
+### Release workflow
+
+`release.yml` triggers on a `v*` tag **or** manual `workflow_dispatch` — never on
+a branch push (that is [`ci.yml`](../.github/workflows/ci.yml)'s job).
+
+- **Tag push** (`git tag v0.1.0 && git push --tags`): builds all platforms, then
+  a `release` job publishes a GitHub Release with every artifact attached. The
+  version is derived from the tag (`v0.1.0` → `0.1.0`).
+- **`workflow_dispatch`**: a dry run — builds and uploads the artifacts as
+  workflow-run artifacts (downloadable from the run) but publishes **no** Release.
+  Use it to exercise packaging on a branch before cutting a real tag.
+
+### Signing caveats (unsigned for v1)
+
+There are no code-signing certificates (Authenticode / Apple Developer ID are
+paid and out of scope — see issue #56). Users therefore see an OS trust prompt on
+first launch:
+
+- **macOS (Gatekeeper):** an unsigned/un-notarized `.app` is blocked with "cannot
+  be opened because the developer cannot be verified." Work around it by
+  **right-clicking the app → Open** (then confirm), or:
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/Lattice.app
+  ```
+- **Windows (SmartScreen):** an unsigned `.exe` shows "Windows protected your PC."
+  Click **More info → Run anyway**.
+- **Linux:** no signing gate. `chmod +x Lattice-x86_64.AppImage && ./Lattice-x86_64.AppImage`.
+
+### AppImage / FUSE
+
+`build-appimage.sh` runs `appimagetool` with `APPIMAGE_EXTRACT_AND_RUN=1`, so the
+build host needs no FUSE. The produced AppImage, however, uses the standard
+runtime, which needs FUSE **on the end user's machine**; on a FUSE-less system a
+user can still run it with `./Lattice-x86_64.AppImage --appimage-extract-and-run`.
 
 ## Linux distribution
 

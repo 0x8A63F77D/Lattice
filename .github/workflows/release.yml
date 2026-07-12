@@ -1,0 +1,127 @@
+name: Release
+
+# Runs ONLY on version tags (v1.2.3) or a manual dispatch. Never on branch
+# pushes — normal CI lives in ci.yml. A tag build publishes a GitHub Release
+# with every platform's artifacts attached; workflow_dispatch is a dry run that
+# builds and uploads the artifacts but publishes nothing.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to stamp for a dry-run build (no release is published)'
+        required: false
+        default: '0.0.0-dev'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: package (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Version comes from the tag (v1.2.3 -> 1.2.3) or the dispatch input.
+      # The free-form dispatch input is passed via env (never spliced into the
+      # script body) so a value like $(...) can't be evaluated — GitHub's
+      # script-injection guidance. Both sources are then SemVer-validated.
+      - name: Resolve version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ github.event.inputs.version }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$DISPATCH_VERSION"
+          fi
+          # Whole-string validation with bash [[ =~ ]] (NOT line-oriented grep):
+          # digits.dots + optional -prerelease, e.g. 1.2.3 or 0.0.0-dev. Because
+          # [[ =~ ]] anchors ^…$ to the whole string with no multiline mode, an
+          # embedded newline can't sneak extra lines through — which matters
+          # because the value is written to $GITHUB_ENV (each line = an env
+          # entry). Belt-and-suspenders: reject any value spanning >1 line too.
+          if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
+             || ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
+            exit 1
+          fi
+          echo "LATTICE_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./packaging/windows/build-zip.ps1 -Rid win-x64 -Version $env:LATTICE_VERSION
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          packaging/macos/make-dmg.sh osx-arm64
+          packaging/macos/make-dmg.sh osx-x64
+
+      - name: Package (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          packaging/linux/build-appimage.sh linux-x64
+          packaging/linux/build-tarball.sh linux-x64
+
+      # Collect just the shippable artifacts (skip the intermediate publish/
+      # AppDir/.app trees). merge-multiple in the release job flattens these.
+      - name: Stage artifacts
+        shell: bash
+        run: |
+          mkdir -p dist
+          find artifacts -type f \
+            \( -name '*.zip' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.tar.gz' \) \
+            -exec cp {} dist/ \;
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lattice-${{ matrix.os }}
+          path: dist/**
+          if-no-files-found: error
+
+  release:
+    name: publish release
+    needs: package
+    # Only a real tag PUSH publishes a Release. The event_name guard matters:
+    # a workflow_dispatch started against a tag ref also has ref_type == 'tag',
+    # and dispatches are documented as dry runs — so gate on push explicitly so
+    # a manual tag dispatch can't publish. Dry runs stop after the package job
+    # (artifacts remain downloadable from the run).
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "Assets:" && ls -lh dist
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Lattice $GITHUB_REF_NAME" \
+            --generate-notes \
+            $(find dist -type f | sort)
