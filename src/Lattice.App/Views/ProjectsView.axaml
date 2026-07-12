@@ -149,7 +149,13 @@
                               IsChecked="{Binding Data.IsExpanded, Mode=OneWay}"
                               Command="{Binding $parent[UserControl].((vm:ProjectsViewModel)DataContext).ToggleExpandCommand}"
                               CommandParameter="{Binding Data.MasterUrl}">
-                  <PathIcon Width="10" Height="10" Data="{StaticResource IconChevronRightRegular}" />
+                  <!-- Pin the glyph color as a LOCAL value (highest Avalonia precedence) so it wins
+                       over the Fluent ToggleButton's checked-state Foreground, which otherwise swaps
+                       to a light on-accent color the glyph would inherit — making the expanded chevron
+                       invisible on the light row. Neutral token (theme-aware) matches the Status-column
+                       indicator glyphs; identical in collapsed and expanded, only the rotation differs. -->
+                  <PathIcon Width="10" Height="10" Data="{StaticResource IconChevronRightRegular}"
+                            Foreground="{DynamicResource LatticeNeutralFgBrush}" />
                 </ToggleButton>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>

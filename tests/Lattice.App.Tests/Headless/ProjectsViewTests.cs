@@ -42,11 +42,13 @@ public class ProjectsViewTests
     }
 
     private static ProjectRow ParentHolder(
-        ProjectStatusKind statusKind, string statusText, bool showChevron = false, bool isExpanded = false)
+        ProjectStatusKind statusKind, string statusText, bool showChevron = false, bool isExpanded = false,
+        string? url = null)
     {
+        url ??= Url;
         var data = new ProjectRowViewModel(
-            Key: ProjectRowKey.NewParentKey(Url),
-            MasterUrl: Url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
+            Key: ProjectRowKey.NewParentKey(url),
+            MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: "P", HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
             StatusKind: statusKind, StatusText: statusText);
@@ -228,6 +230,59 @@ public class ProjectsViewTests
 
         var bg = Assert.IsAssignableFrom<ISolidColorBrush>(part!.Background);
         Assert.Equal(accent.Color, bg.Color); // the theme really does tint the part in headless
+        window.Close();
+    }
+
+    // The expanded chevron's PathIcon at row <paramref name="rowIndex"/>.
+    private static PathIcon ChevronGlyph(ProjectsView view, int rowIndex)
+    {
+        var chevron = VisualTree.FindInVisualTree<ToggleButton>(
+            VisualTree.FindRow(view.Grid, rowIndex), t => t.Classes.Contains("chevron"));
+        Assert.NotNull(chevron);
+        var glyph = VisualTree.FindInVisualTree<PathIcon>(chevron!);
+        Assert.NotNull(glyph);
+        return glyph!;
+    }
+
+    // The glyph's effective (possibly inherited) foreground color.
+    private static Color GlyphColor(PathIcon glyph) =>
+        Assert.IsAssignableFrom<ISolidColorBrush>(glyph.Foreground).Color;
+
+    // Visibility regression (this branch): the accent-background de-tint (commit 358d264) fixed the
+    // checked-state Background, but the Fluent ToggleButton checked visual state ALSO swaps the
+    // Foreground to an on-accent (light) color meant to contrast the accent fill. The chevron's
+    // PathIcon carries no local Foreground, so in the EXPANDED (checked) state it INHERITS that light
+    // color and the glyph vanishes against the light row. Pin the glyph to the neutral token (a local
+    // value, highest precedence) so it renders the same VISIBLE neutral in both states — only the
+    // rotation differs. Probe the effective glyph foreground, and encode the "identical in both
+    // states" design invariant by comparing expanded vs collapsed.
+    [AvaloniaFact]
+    public void Expanded_chevron_glyph_stays_the_visible_neutral_color()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(
+            ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll,
+            showChevron: true, isExpanded: true, url: "http://expanded/"));   // checked chevron
+        vm.Rows.Add(ParentHolder(
+            ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll,
+            showChevron: true, isExpanded: false, url: "http://collapsed/")); // unchecked chevron
+        Layout(window);
+
+        var expandedGlyph = ChevronGlyph(view, 0);
+        var collapsedGlyph = ChevronGlyph(view, 1);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeNeutralFgBrush", window.ActualThemeVariant, out var neutralObj));
+        var neutral = ((ISolidColorBrush)neutralObj!).Color;
+
+        var expandedColor = GlyphColor(expandedGlyph);
+        var collapsedColor = GlyphColor(collapsedGlyph);
+
+        // The expanded glyph is the visible neutral, NOT the light on-accent checked foreground.
+        Assert.Equal(neutral, expandedColor);
+        // Design invariant: glyph color is identical collapsed vs expanded (only rotation differs).
+        Assert.Equal(collapsedColor, expandedColor);
         window.Close();
     }
 
