@@ -235,6 +235,22 @@ public class EventLogViewModelTests : IAsyncLifetime
         Assert.Equal($"{Ts(1)}\thost-a\tline1 line2 col mid last", vm.BuildClipboardText());
     }
 
+    // Host display names are user-entered config (DisplayName => Name), so they
+    // can carry the same interior tabs/newlines as bodies and must be flattened
+    // too — otherwise a single host name corrupts every exported row's columns.
+    [Fact]
+    public void Clipboard_text_flattens_control_characters_in_the_host_name()
+    {
+        var host = TestData.MakeHostConfig(name: "host\tA\nnode", address: "addr-a");
+        _fakes["addr-a"] = new FakeGuiRpcClient();
+        _registry.AddHost(host);
+        var vm = MakeVm();
+        Raise(host.Id, Msg(1, 1, "body"));
+        _queue.Drain();
+
+        Assert.Equal($"{Ts(1)}\thost A node\tbody", vm.BuildClipboardText());
+    }
+
     [Fact]
     public void Host_removal_prunes_its_rows_on_store_changed()
     {

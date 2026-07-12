@@ -145,6 +145,31 @@ public class EventLogViewTests
         window.Close();
     }
 
+    // Badge flow: messages accrue while the Event log page is hidden, so the VM
+    // already holds rows before the view is realized. Opening the page (still
+    // Following) must jump to the newest row — otherwise the grid sits at the top
+    // while the status bar claims "Following live" until the next message.
+    [AvaloniaFact]
+    public void Opening_the_log_with_prepopulated_rows_scrolls_to_the_newest()
+    {
+        var (window, view, vm, registry, manager, fakes) = MakeView();
+        var host = AddHost(registry, fakes, "host-a");
+
+        // Populate BEFORE the view is shown/realized.
+        Raise(manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"), Msg(3, 3, "c"));
+        Assert.True(vm.IsFollowing);
+        Assert.Equal(3, vm.Rows.Count);
+
+        object? scrolled = null;
+        view.ScrollRowIntoViewOverride = item => scrolled = item;
+
+        window.Show();
+        Layout(window);
+
+        Assert.Same(vm.Rows[^1], scrolled);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void No_auto_scroll_request_is_made_while_not_following()
     {

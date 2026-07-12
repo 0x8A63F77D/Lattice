@@ -89,6 +89,13 @@ public partial class EventLogView : UserControl
         _verticalScrollBar = e.NameScope.Find<ScrollBar>("PART_VerticalScrollbar");
         if (_verticalScrollBar is not null)
             _verticalScrollBar.PropertyChanged += OnVerticalScrollBarPropertyChanged;
+
+        // Initial catch-up: when the page is opened via the unread badge, the VM
+        // already holds rows that arrived while it was hidden, so no later Add /
+        // IsFollowing change fires. The grid is only now realizable, so anchor it
+        // to the newest row if we are still Following — otherwise it would sit at
+        // the top while the status bar claims "Following live".
+        ScrollToNewestIfFollowing();
     }
 
     private void OnRowsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
