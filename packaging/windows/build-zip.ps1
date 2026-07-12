@@ -40,12 +40,19 @@ if (Test-Path $Zip) { Remove-Item -Force $Zip }
 New-Item -ItemType Directory -Force -Path $Publish | Out-Null
 
 # Single-file self-contained is the csproj default for a per-RID publish; pass
-# it explicitly here so the script is self-describing. -p:DebugType=none keeps a
-# loose .pdb out of the portable drop.
+# it explicitly here so the script is self-describing. Symbol/XML suppression
+# lives in the csproj RID-publish group (DebugType=none etc.), so it needn't be
+# repeated here.
 dotnet publish $Project -c Release -r $Rid --self-contained true `
-    -p:PublishSingleFile=true -p:DebugType=none -p:Version=$Version `
+    -p:PublishSingleFile=true -p:Version=$Version `
     -o $Publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
+
+# SkiaSharp/HarfBuzzSharp ship native .pdb symbols next to their win-x64 .dll.
+# These are native package assets (not reference-related files), so the csproj
+# publish knobs don't drop them — sweep any stray loose .pdb so the zip carries
+# only the runnable single-file exe.
+Get-ChildItem -Path $Publish -Filter *.pdb -File -Recurse | Remove-Item -Force
 
 Write-Host "==> Zipping to $Zip"
 Compress-Archive -Path (Join-Path $Publish '*') -DestinationPath $Zip -Force
