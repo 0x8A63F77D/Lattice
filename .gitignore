@@ -434,6 +434,11 @@ test-results/
 Icon
 
 
+# Re-include the design icon package: the macOS `Icon` rule above matches
+# our `docs/design/icon/` directory case-insensitively (core.ignorecase).
+!docs/design/icon/
+!docs/design/icon/**
+
 # Thumbnails
 ._*
 
