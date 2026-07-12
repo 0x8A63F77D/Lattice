@@ -42,6 +42,20 @@
     <!-- ReadyToRun off too: avoids cross-arch crossgen surprises (e.g. building
          osx-x64 on an arm64 runner) and keeps publish fast. -->
     <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Keep the shipped drop clean: no debug symbols, no XML doc files. This is
+         the single source for every packaging surface (win zip, mac .app, linux
+         AppDir/tarball) — DebugType/DebugSymbols drop this app's own .pdb, and
+         AllowedReferenceRelatedFileExtensions (default .pdb;.xml;.pri;…) is
+         narrowed so the referenced projects' .pdb + .xml (Lattice.Core.xml,
+         Lattice.Boinc.GuiRpc.xml, …) aren't dragged in as reference-related
+         files. GenerateDocumentationFile stays ON in the class libs (the GuiRpc
+         NuGet still ships its XML) — we just don't COPY docs into the app.
+         Only engages for a per-RID publish, so CI's RID-less build/test keeps
+         full symbols. Windows-native .pdb (libSkiaSharp/libHarfBuzzSharp) are
+         package assets, not reference-related — swept in build-zip.ps1. -->
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <AllowedReferenceRelatedFileExtensions>.none</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
