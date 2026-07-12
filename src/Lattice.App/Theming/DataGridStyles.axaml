@@ -83,6 +83,22 @@
     <Setter Property="FontSize" Value="12" />
   </Style>
 
+  <!-- Pin the per-row Height to the density pitch so the horizontal row rule sits INSIDE it.
+       GridLinesVisibility=All draws the horizontal rule ADDITIVELY below a RowHeight-sized row,
+       which would push a Tasks/Transfers row's measured height to 37/29 (36/28 + 1px) — 1px over
+       the spec, whose mockup uses box-sizing:border-box (the 1px bottom rule lives inside the 36px
+       pitch). Setting an explicit Height (which the DataGridRow bounds honor even with an additive
+       gridline — same reason EventLog's pinned 26px and Projects' pinned 40/32 rows never grew)
+       keeps the pitch at exactly 36/28 with the rule inside. No MinHeight: it would floor Projects'
+       32px child rows. Projects (.projectParent/.projectChild) and EventLog (.eventlog DataGridRow)
+       set their own more-specific/local Heights and override these. -->
+  <Style Selector="DataGrid.lattice DataGridRow">
+    <Setter Property="Height" Value="{DynamicResource LatticeRowHeight}" />
+  </Style>
+  <Style Selector="DataGrid.lattice.compact DataGridRow">
+    <Setter Property="Height" Value="{DynamicResource LatticeRowHeightCompact}" />
+  </Style>
+
   <!-- The header bottom rule is a template part painted from the system DataGridGridLinesBrush;
        repaint it to the Lattice stroke (#E0E0E0 / #3D3D3D) per the 32px-header bottom border. -->
   <Style Selector="DataGrid.lattice /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">

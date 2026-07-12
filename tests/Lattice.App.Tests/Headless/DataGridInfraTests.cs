@@ -97,6 +97,23 @@ public class DataGridInfraTests
         return window;
     }
 
+    // GridLinesVisibility=All draws the horizontal rule ADDITIVELY below a RowHeight-sized row,
+    // which would push a lattice row's measured height to 37 (36 + 1px). The shared style pins an
+    // explicit DataGridRow.Height so the rule sits INSIDE the spec pitch (box-sizing:border-box in
+    // the mockup) and the row stays at exactly 36px. Removing the pin regresses this to 37.
+    [AvaloniaFact]
+    public void Lattice_row_height_absorbs_the_horizontal_rule_and_stays_at_spec_pitch()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        Assert.Equal(Avalonia.Controls.DataGridGridLinesVisibility.All, grid.GridLinesVisibility);
+        var row = grid.GetVisualDescendants().OfType<DataGridRow>().First();
+        Assert.Equal(36, (int)row.Bounds.Height);
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void DataGrid_with_themed_window_renders_and_header_style_resolves()
     {
