@@ -55,6 +55,11 @@
   </Style>
 
   <Style Selector="DataGrid.lattice">
+    <!-- Avalonia's DataGrid.CanUserResizeColumns defaults to false (WPF defaults it true —
+         a migration trap). Enable it once here so all four data views inherit resizable
+         columns via the shared "lattice" class. Orthogonal to CanUserSortColumns, which each
+         view sets for itself (Projects keeps sort off to preserve its parent/child hierarchy). -->
+    <Setter Property="CanUserResizeColumns" Value="True" />
     <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeight}" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />

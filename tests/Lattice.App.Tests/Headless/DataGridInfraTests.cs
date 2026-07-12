@@ -3,11 +3,14 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Xunit;
+using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -41,6 +44,25 @@ public class DataGridInfraTests
             new DataGridTextColumn { Header = "Value", Binding = new Avalonia.Data.Binding("Value") }
         }
     };
+
+    // A themed DataGrid carrying the shared "lattice" class with two fixed-width
+    // columns, so a resize drag produces a measurable width delta.
+    private static DataGrid MakeLatticeGrid(string extraClasses = "")
+    {
+        var grid = new DataGrid
+        {
+            ItemsSource = new[] { new Row(), new Row() },
+            Columns =
+            {
+                new DataGridTextColumn { Header = "Name", Binding = new Avalonia.Data.Binding("Name"), Width = new DataGridLength(120) },
+                new DataGridTextColumn { Header = "Value", Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(120) },
+            },
+        };
+        grid.Classes.Add("lattice");
+        foreach (var c in extraClasses.Split(' ', System.StringSplitOptions.RemoveEmptyEntries))
+            grid.Classes.Add(c);
+        return grid;
+    }
 
     private static Window ShowInWindow(Control content)
     {
@@ -142,5 +164,72 @@ public class DataGridInfraTests
             .ToArray();
 
         Assert.Equal(["alpha", "bravo", "charlie"], orderedProjects);
+    }
+
+    // Negative control / trap documentation: Avalonia's DataGrid.CanUserResizeColumns
+    // defaults to FALSE (WPF defaults it TRUE — the migration trap this fix targets).
+    // A plain DataGrid with NO "lattice" class stays non-resizable; proven empirically,
+    // not from docs. This test passes before and after the fix and stands as documentation.
+    [AvaloniaFact]
+    public void Plain_DataGrid_defaults_CanUserResizeColumns_to_false()
+    {
+        var grid = MakeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        Assert.False(grid.CanUserResizeColumns);
+    }
+
+    // The fix: the shared DataGrid.lattice style enables column resizing, proven by a real
+    // interaction probe — Avalonia has NO resize-Thumb in the DataGridColumnHeader template
+    // (resize is a 5px pointer hit-region at the header edge, gated by
+    // DataGridColumn.ActualCanUserResize -> OwningGrid.CanUserResizeColumns), so the honest
+    // geometry probe is an actual header-edge drag that widens the column. The column-widened
+    // assertion is deliberately the SOLE failure point here: no pre-drag property assert to
+    // short-circuit it, so the geometry probe carries its own red-first weight under mutation.
+    // (The bare CanUserResizeColumns property gate is covered by the class-combination theory.)
+    [AvaloniaFact]
+    public void Lattice_DataGrid_enables_resize_and_header_edge_drag_widens_the_column()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var firstColumn = grid.Columns[0];
+        var startWidth = firstColumn.ActualWidth;
+
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == "Name");
+
+        // The resize hit-region is the rightmost 5px of the header; press 2px inside the
+        // right edge, drag right by 48px, and the column must grow.
+        var edge = header.TranslatePoint(new Point(header.Bounds.Width - 2, header.Bounds.Height / 2), window)!.Value;
+        var target = edge.WithX(edge.X + 48);
+        window.MouseMove(edge, RawInputModifiers.None);
+        window.MouseDown(edge, MouseButton.Left, RawInputModifiers.None);
+        window.MouseMove(target, RawInputModifiers.None);
+        window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
+        Layout(window);
+
+        Assert.True(
+            firstColumn.ActualWidth > startWidth + 20,
+            $"resize drag should widen the column: start={startWidth}, now={firstColumn.ActualWidth}");
+    }
+
+    // All four data views resolve to the same DataGrid.lattice style, but each mounts it
+    // with a different class string ("lattice", "lattice compact", "lattice eventlog").
+    // Verify the selector's resize setter lands under every real class combination so the
+    // fix is confirmed for all four grids, not just the bare class.
+    [AvaloniaTheory]
+    [InlineData("")]           // Projects / EventLog base ("lattice")
+    [InlineData("compact")]    // Tasks / Transfers density toggle ("lattice compact")
+    [InlineData("eventlog")]   // EventLog ("lattice eventlog")
+    public void Lattice_class_combinations_all_enable_column_resize(string extraClasses)
+    {
+        var grid = MakeLatticeGrid(extraClasses);
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        Assert.True(grid.CanUserResizeColumns);
     }
 }
