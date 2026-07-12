@@ -50,23 +50,6 @@ internal sealed class RoutingGuiRpcClient(IReadOnlyDictionary<string, FakeGuiRpc
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }
 
-/// <summary>
-/// Runs posted work inline (no deferral, so Wait.UntilAsync polling still
-/// works) but serialized under a lock. Plain ImmediateUiDispatcher runs each
-/// post on whatever thread called it; with two ACTUALLY RUNNING monitors
-/// (unlike every other fixture using it, which never starts more than one
-/// live monitor at a time) that means two background threads can both be
-/// inside HostStore.Changed -> TasksViewModel.Rebuild() at once, racing the
-/// unsynchronized ObservableCollection Clear()+Add(). Production never hits
-/// this: the real IUiDispatcher marshals every post onto one UI thread.
-/// </summary>
-internal sealed class LockingUiDispatcher : IUiDispatcher
-{
-    private readonly object _gate = new();
-    public bool CheckAccess() => true;
-    public void Post(Action action) { lock (_gate) action(); }
-}
-
 public class TasksViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
