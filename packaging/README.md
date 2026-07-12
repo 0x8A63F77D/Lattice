@@ -43,15 +43,17 @@ every launch surface references: `Info.plist`'s `CFBundleExecutable=Lattice` and
 LATTICE_VERSION=0.1.0 packaging/macos/bundle.sh
 open artifacts/macos/osx-arm64/Lattice.app   # Dock/Finder shows the mark
 
-# Linux: publish, then install icons + launcher + link the binary onto PATH
+# Linux: publish, then install icons + launcher (Exec pinned to the built binary)
 dotnet publish src/Lattice.App -c Release -r linux-x64 --self-contained true -o out/linux
 packaging/linux/install-icons.sh "${XDG_DATA_HOME:-$HOME/.local/share}" out/linux
 # icons/launcher only (binary already on PATH): packaging/linux/install-icons.sh
 # system-wide: sudo packaging/linux/install-icons.sh /usr/share /path/to/publish
 ```
 
-On Linux the `.desktop` `Exec=Lattice` needs a `Lattice` binary on PATH; passing the
-publish dir to `install-icons.sh` links it into the sibling `bin` dir for you.
+Passing the publish dir rewrites the installed launcher's `Exec` to the binary's
+absolute path, so it starts regardless of PATH. Without it, the template ships
+`Exec=Lattice`, which relies on a `Lattice` binary being on PATH (e.g. a distro
+package).
 
 The Windows `.exe` icon and the running-window icon need no extra step — they are
 wired into the normal `dotnet build` / `dotnet publish` of the app.

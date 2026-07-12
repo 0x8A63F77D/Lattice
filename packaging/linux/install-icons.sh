@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Install Lattice's freedesktop hicolor icons, .desktop entry, and (optionally)
-# the app binary so the launcher actually starts the app.
+# Install Lattice's freedesktop hicolor icons and .desktop launcher.
 #
 # Stages the finalized design artifacts (docs/design/icon/linux/hicolor) into an
-# XDG icon theme prefix so the .desktop entry's `Icon=lattice` resolves, installs
-# the launcher, and — when given a published build — links the `Lattice` binary
-# onto PATH so `Exec=Lattice` resolves. Icons are referenced in place, never
-# hand-edited here.
+# XDG icon theme prefix so `Icon=lattice` resolves, and installs the launcher.
+# When given a published build, the installed launcher's Exec is rewritten to the
+# ABSOLUTE path of the Lattice binary, so it starts regardless of PATH; otherwise
+# the template's `Exec=Lattice` is kept (which relies on a Lattice binary being on
+# PATH, e.g. from a distro package). Icons and the desktop template are referenced
+# in place, never hand-edited here.
 #
 # Usage:
 #   packaging/linux/install-icons.sh [data-prefix] [published-app-dir]
 #     data-prefix       : default $XDG_DATA_HOME (or ~/.local/share). Per-user.
 #                         For a system install: sudo … /usr/share
 #     published-app-dir : optional output of `dotnet publish -r linux-x64` for
-#                         src/Lattice.App. If given, the `Lattice` binary is linked
-#                         into the sibling bin dir so the launcher's Exec resolves.
+#                         src/Lattice.App. If given, the installed launcher points
+#                         Exec at "<published-app-dir>/Lattice" (absolute).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -37,20 +38,20 @@ done
 
 echo "==> Installing launcher to $APPS_DIR"
 mkdir -p "$APPS_DIR"
-cp "$DESKTOP_SRC" "$APPS_DIR/lattice.desktop"
-
+DEST_DESKTOP="$APPS_DIR/lattice.desktop"
 if [ -n "$APP_DIR" ]; then
-    # Absolutize first: a relative target in `ln -s` is stored verbatim and
-    # resolves against the link's own dir (~/.local/bin), not the cwd — so a
-    # relative publish dir like out/linux would produce a dangling link.
+    # Absolute Exec = no PATH lookup, so the launcher works for any data-prefix.
+    # (A symlink into a sibling bin dir is not guaranteed to be on the desktop
+    # environment's PATH, and unqualified Exec= resolves through PATH.)
     APP_DIR="$(cd "$APP_DIR" 2>/dev/null && pwd)" || { echo "error: publish dir not found: $2" >&2; exit 1; }
     APP_BIN="$APP_DIR/Lattice"
     [ -x "$APP_BIN" ] || { echo "error: no executable 'Lattice' in $APP_DIR" >&2; exit 1; }
-    # ~/.local/share -> ~/.local/bin ; /usr/share -> /usr/bin
-    BIN_DIR="$(dirname "$PREFIX")/bin"
-    echo "==> Linking $APP_BIN -> $BIN_DIR/Lattice"
-    mkdir -p "$BIN_DIR"
-    ln -sf "$APP_BIN" "$BIN_DIR/Lattice"
+    # Rewrite the single Exec line; quote the path so spaces survive Desktop-Entry
+    # parsing. The template has one [Desktop Entry] group, so appending is safe.
+    { grep -v '^Exec=' "$DESKTOP_SRC"; printf 'Exec="%s"\n' "$APP_BIN"; } > "$DEST_DESKTOP"
+    echo "    Exec -> \"$APP_BIN\""
+else
+    cp "$DESKTOP_SRC" "$DEST_DESKTOP"
 fi
 
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then
@@ -58,4 +59,4 @@ if command -v gtk-update-icon-cache >/dev/null 2>&1; then
 fi
 
 echo "==> Done. 'Icon=lattice' resolves from the hicolor theme."
-[ -z "$APP_DIR" ] && echo "    (No app dir given — ensure a 'Lattice' binary is on PATH for Exec=Lattice.)"
+[ -z "$APP_DIR" ] && echo "    (No app dir given — the launcher's Exec=Lattice needs a Lattice binary on PATH.)"
