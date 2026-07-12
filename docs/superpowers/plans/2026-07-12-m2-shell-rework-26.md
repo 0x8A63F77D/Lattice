@@ -814,7 +814,40 @@ public void Single_host_pins_scope_to_that_host_not_all_hosts()
     Assert.False(_shell.Scope.IsAllHosts);
     Assert.DoesNotContain(_shell.RailEntries, e => e is AllHostsRailItemViewModel);
 }
+
+[Fact]
+public void Scope_persists_when_the_scoped_hosts_group_collapses()
+{
+    AddHosts(3);                              // all Healthy tier (Disconnected → Connecting → Healthy)
+    _shell.SetRailViewportHeight(1000.0);     // fits → Flat, every host row present
+    var row = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
+    _shell.SelectedRailEntry = row;
+    var scopedId = row.HostId;
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+
+    // Force Grouped; Healthy defaults collapsed, so the scoped host's row is NOT emitted.
+    _shell.ToggleRailGroupingCommand.Execute(null);
+    Assert.DoesNotContain(_shell.RailEntries.OfType<HostRailItemViewModel>(),
+        h => h.HostId == scopedId);
+
+    // Intended behavior: scope persists as DATA even with no highlighted row — it must
+    // NOT silently fall back to All hosts (regression: SelectedItem-not-in-Items → null).
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+    Assert.False(_shell.Scope.IsAllHosts);
+
+    // Expanding the group again re-highlights the row without changing scope.
+    var healthyHeader = _shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+        .Single(g => g.Tier.Equals(RailTier.Healthy));
+    healthyHeader.ToggleCommand.Execute(null);
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+}
 ```
+
+> Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
+> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. The code above
+> sidesteps it by setting `SelectedRailEntry = null` deliberately for the hidden-row case and deriving
+> `Scope` from `nextScope` (not from the selection). If Avalonia happens to preserve the assignment, this
+> test still locks the intended scope-as-data contract.
 
 - [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellViewModelTests"`).
 
@@ -912,7 +945,10 @@ Add the orchestration members:
 
     private void RebuildRail()
     {
-        Guid? scopedHostId = SelectedRailEntry is HostRailItemViewModel h ? h.HostId : null;
+        // Scope (data) is the source of truth for what is scoped — NOT SelectedRailEntry,
+        // which may be null when the scoped host's row is hidden in a collapsed group.
+        // Reading it here means a later expand rebuild still knows the scoped host.
+        Guid? scopedHostId = Scope.HostId;
 
         var hosts = _store.Hosts
             .Select(e => new RailHost(e.Config.Id,
@@ -924,6 +960,7 @@ Add the orchestration members:
         RailLayout layout = RailLayoutPolicy.compute(input);
         ShowRailToggle = layout.ShowToggle;
 
+        ScopeSelection nextScope;
         _rebuilding = true;
         try
         {
@@ -933,20 +970,34 @@ Add the orchestration members:
             foreach (RailRow row in layout.Rows)
                 RailEntries.Add(MaterializeRow(row));
 
-            SelectedRailEntry =
-                layout.Mode.IsSingleHost
-                    // Degenerate single-host (design 3a): RailLayoutPolicy emits only the
-                    // host row (no All-hosts entry), so pin scope to the sole host — never
-                    // fall back to _allHosts, which isn't even in RailEntries here.
-                    ? RailEntries.OfType<HostRailItemViewModel>().First()
-                    : scopedHostId is { } id && _hostRowVms.TryGetValue(id, out var vm)
-                        ? vm : _allHosts;
+            // Decide highlight (SelectedRailEntry) and scope (data) independently:
+            if (layout.Mode.IsSingleHost)
+            {
+                // Degenerate single-host (design 3a): only the host row is emitted (no
+                // All-hosts entry) — pin scope to the sole host, never _allHosts.
+                var only = RailEntries.OfType<HostRailItemViewModel>().First();
+                SelectedRailEntry = only;
+                nextScope = new ScopeSelection(only.HostId);
+            }
+            else if (scopedHostId is { } id && _hostRowVms.TryGetValue(id, out var vm))
+            {
+                // Scoped host still exists. If its row is visible, highlight it; if it is
+                // hidden (its group collapsed), keep scope as DATA with no highlight —
+                // do NOT let the ListBox reset SelectedItem-not-in-Items to All hosts.
+                SelectedRailEntry = RailEntries.Contains(vm) ? vm : null;
+                nextScope = new ScopeSelection(id);
+            }
+            else
+            {
+                // No host scoped (or the scoped host was removed): All hosts.
+                SelectedRailEntry = _allHosts;
+                nextScope = ScopeSelection.AllHosts;
+            }
         }
         finally { _rebuilding = false; }
 
-        // Apply scope once from the restored selection (side effects were suppressed).
-        Scope = SelectedRailEntry is HostRailItemViewModel sh
-            ? new ScopeSelection(sh.HostId) : ScopeSelection.AllHosts;
+        // Apply the decided scope once (side effects were suppressed during the rebuild).
+        Scope = nextScope;
     }
 
     private object MaterializeRow(RailRow row)
@@ -1801,8 +1852,7 @@ Replace the body of `Selecting_an_auth_failed_host_lands_in_settings_with_that_h
         var vm = Assert.IsType<AddHostViewModel>(dialog.DataContext);
         Assert.Equal(HostDialogMode.Edit, vm.Mode);
         Assert.True(vm.HasPasswordError);
-        Assert.Same(shell.Settings, shell.CurrentPage is SettingsViewModel ? shell.CurrentPage : shell.Settings); // NOT navigated to Settings
-        Assert.IsNotType<SettingsViewModel>(shell.CurrentPage);
+        Assert.IsNotType<SettingsViewModel>(shell.CurrentPage);   // did NOT navigate to Settings
         dialog.Hide();
         window.Close();
     }
@@ -1853,8 +1903,11 @@ In `SettingsViewTests.cs`: delete the host-expander/remove tests (`Renders_one_e
         window.Show();
         Layout(window);
 
+        // Exclude BOTH global-group expanders (Polling now, Theme after Task 14) so
+        // this stays green across the sequence; the assertion is "no host-bound
+        // expander remains" — every remaining expander is a named global one.
         Assert.Empty(window.GetVisualDescendants().OfType<FASettingsExpander>()
-            .Where(e => e.Name != "PollingExpander"));
+            .Where(e => e.Name is not ("PollingExpander" or "ThemeExpander")));
         var caption = window.GetVisualDescendants().OfType<TextBlock>()
             .SingleOrDefault(t => t.Text == Strings.SettingsHostsPointer);
         Assert.NotNull(caption);
@@ -2030,7 +2083,8 @@ Add a `ThemeLabelConverter` (in `TaskGridConverters.cs` or a new `ThemeLabelConv
 ```xml
       <TextBlock Text="{x:Static loc:Strings.SettingsThemeSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-      <ui:FASettingsExpander Header="{x:Static loc:Strings.SettingsThemeHeader}"
+      <ui:FASettingsExpander x:Name="ThemeExpander"
+                             Header="{x:Static loc:Strings.SettingsThemeHeader}"
                              Description="{x:Static loc:Strings.SettingsThemeDescription}">
         <ui:FASettingsExpander.Footer>
           <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllThemes}"
