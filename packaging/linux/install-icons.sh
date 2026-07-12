@@ -40,10 +40,14 @@ mkdir -p "$APPS_DIR"
 cp "$DESKTOP_SRC" "$APPS_DIR/lattice.desktop"
 
 if [ -n "$APP_DIR" ]; then
-    # ~/.local/share -> ~/.local/bin ; /usr/share -> /usr/bin
-    BIN_DIR="$(dirname "$PREFIX")/bin"
+    # Absolutize first: a relative target in `ln -s` is stored verbatim and
+    # resolves against the link's own dir (~/.local/bin), not the cwd — so a
+    # relative publish dir like out/linux would produce a dangling link.
+    APP_DIR="$(cd "$APP_DIR" 2>/dev/null && pwd)" || { echo "error: publish dir not found: $2" >&2; exit 1; }
     APP_BIN="$APP_DIR/Lattice"
     [ -x "$APP_BIN" ] || { echo "error: no executable 'Lattice' in $APP_DIR" >&2; exit 1; }
+    # ~/.local/share -> ~/.local/bin ; /usr/share -> /usr/bin
+    BIN_DIR="$(dirname "$PREFIX")/bin"
     echo "==> Linking $APP_BIN -> $BIN_DIR/Lattice"
     mkdir -p "$BIN_DIR"
     ln -sf "$APP_BIN" "$BIN_DIR/Lattice"
