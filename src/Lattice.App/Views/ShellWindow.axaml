@@ -76,7 +76,15 @@
             <ui:FAPathIconSource Data="{StaticResource IconGridRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavTransfers" Content="{x:Static loc:Strings.NavTransfers}" Tag="2">
+        <ui:FANavigationViewItem x:Name="NavTransfers" Tag="2">
+          <ui:FANavigationViewItem.Content>
+            <DockPanel LastChildFill="False">
+              <TextBlock Text="{x:Static loc:Strings.NavTransfers}" DockPanel.Dock="Left" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding TransfersCount}" FontSize="12" DockPanel.Dock="Right"
+                         VerticalAlignment="Center" IsVisible="{Binding HasTransfersCount}"
+                         Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+            </DockPanel>
+          </ui:FANavigationViewItem.Content>
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
           </ui:FANavigationViewItem.IconSource>

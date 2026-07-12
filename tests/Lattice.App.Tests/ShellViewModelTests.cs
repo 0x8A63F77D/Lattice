@@ -284,4 +284,41 @@ public class ShellViewModelTests : IAsyncLifetime
 
         Assert.Equal(1, _shell.TasksCount);
     }
+
+    [Fact]
+    public async Task TransfersCount_mirrors_the_transfers_view_models_row_count()
+    {
+        Assert.Equal(0, _shell.TransfersCount);
+
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>([TestData.MakeTransfer(name: "file_a")]),
+        };
+        _fakes["host-a"] = fake;
+        _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        _manager.Start();
+
+        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+
+        Assert.Equal(1, _shell.TransfersCount);
+    }
+
+    [Fact]
+    public async Task HasTransfersCount_is_false_at_zero_and_true_above_zero()
+    {
+        Assert.Equal(0, _shell.TransfersCount);
+        Assert.False(_shell.HasTransfersCount);
+
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>([TestData.MakeTransfer(name: "file_a")]),
+        };
+        _fakes["host-a"] = fake;
+        _registry.AddHost(TestData.MakeHostConfig(name: "host-a", address: "host-a"));
+        _manager.Start();
+
+        await Wait.UntilAsync(() => _shell.Transfers.Rows.Count == 1);
+
+        Assert.True(_shell.HasTransfersCount);
+    }
 }

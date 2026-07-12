@@ -47,6 +47,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _currentPage = Views[0].Page;
         Tasks.Rows.CollectionChanged += OnTasksRowsChanged;
         _tasksCount = Tasks.Rows.Count;
+        Transfers.Rows.CollectionChanged += OnTransfersRowsChanged;
+        _transfersCount = Transfers.Rows.Count;
         EventLog.PropertyChanged += OnEventLogPropertyChanged;
         // The All-hosts sentinel always leads the rail; host entries follow it
         // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
@@ -90,6 +92,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasTasksCount => TasksCount > 0;
 
+    /// <summary>Mirrors <see cref="TransfersViewModel.Rows"/>.Count; drives the Transfers nav item's inline count badge.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasTransfersCount))]
+    private int _transfersCount;
+
+    public bool HasTransfersCount => TransfersCount > 0;
+
     /// <summary>Mirrors <see cref="EventLogViewModel.UnreadCount"/>; drives the Event-log
     /// nav item's InfoBadge (unread warning+error count while the page is not active).</summary>
     [ObservableProperty]
@@ -114,6 +123,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
         TasksCount = Tasks.Rows.Count;
+
+    private void OnTransfersRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        TransfersCount = Transfers.Rows.Count;
 
     private void OnEventLogPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -196,6 +208,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
+        Transfers.Rows.CollectionChanged -= OnTransfersRowsChanged;
         EventLog.PropertyChanged -= OnEventLogPropertyChanged;
         Tasks.Dispose();
         Projects.Dispose();
