@@ -120,8 +120,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           echo "Assets:" && ls -lh dist
+          # Flag SemVer pre-releases so GitHub doesn't mark them "Latest".
+          # GitHub only excludes a release from "Latest" when it's flagged as a
+          # pre-release; without the flag a tag like v0.1.0-beta.1 would publish
+          # as a normal release and become the repo's Latest — shadowing a later
+          # stable v1 and misdirecting download links / auto-updaters. A tag is a
+          # pre-release exactly when its name carries a SemVer pre-release suffix,
+          # i.e. it contains a '-' (v1.2.3 -> stable; v0.1.0-beta.1 -> pre-release).
+          # Build-metadata tags (SemVer '+') never reach here: the Resolve-version
+          # regex rejects '+', so a bare '-' test is sufficient.
+          PRERELEASE=""
+          case "$GITHUB_REF_NAME" in *-*) PRERELEASE="--prerelease" ;; esac
           gh release create "$GITHUB_REF_NAME" \
             --repo "$GITHUB_REPOSITORY" \
             --title "Lattice $GITHUB_REF_NAME" \
             --generate-notes \
+            $PRERELEASE \
             $(find dist -type f | sort)
