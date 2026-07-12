@@ -8,6 +8,10 @@
     <ApplicationTitle>Lattice</ApplicationTitle>
     <ResXFileCodeGenerator_PublicClass>true</ResXFileCodeGenerator_PublicClass>
     <ResXFileCodeGenerator_NullForgivingOperators>true</ResXFileCodeGenerator_NullForgivingOperators>
+    <!-- Windows PE icon (taskbar/Explorer/Alt-Tab for the .exe). The mark is the
+         finalized design package (docs/design/icon), referenced in place rather
+         than copied so the generated artifacts stay single-source. -->
+    <ApplicationIcon>../../docs/design/icon/windows/lattice.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.0" />
@@ -16,6 +20,12 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.0.1" />
     <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Embed the .ico as an Avalonia asset so Window.Icon can load it at
+         avares:///Assets/lattice.ico. Link places the out-of-project file at a
+         clean logical path; the physical file stays in docs/design/icon. -->
+    <AvaloniaResource Include="../../docs/design/icon/windows/lattice.ico" Link="Assets/lattice.ico" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Lattice.Core/Lattice.Core.csproj" />

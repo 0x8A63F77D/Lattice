@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Lattice</string>
+    <key>CFBundleDisplayName</key>
+    <string>Lattice</string>
+    <key>CFBundleExecutable</key>
+    <string>Lattice</string>
+    <!-- Placeholder reverse-DNS id; the maintainer finalizes this before any
+         signed/notarized distribution. -->
+    <key>CFBundleIdentifier</key>
+    <string>io.github.0x8a63f77d.lattice</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <!-- Icon resource: bundle.sh copies docs/design/icon/macos/lattice.icns to
+         Contents/Resources/lattice.icns. The .icns extension is implied. -->
+    <key>CFBundleIconFile</key>
+    <string>lattice</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <!-- Populated from the build at bundle time. -->
+    <key>CFBundleShortVersionString</key>
+    <string>0.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>0.0.0</string>
+</dict>
+</plist>

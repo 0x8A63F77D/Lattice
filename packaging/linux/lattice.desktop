@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Lattice
+GenericName=BOINC Monitor
+Comment=Multi-host BOINC monitoring dashboard
+# Icon-theme name (no path/extension): resolved from the hicolor theme installed
+# by install-icons.sh, which stages docs/design/icon/linux/hicolor/*/apps/lattice.*
+Icon=lattice
+Exec=Lattice
+Terminal=false
+Categories=Utility;Monitor;Network;
+Keywords=BOINC;monitoring;distributed;computing;
+StartupWMClass=Lattice
