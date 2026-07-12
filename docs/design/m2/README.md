@@ -109,16 +109,10 @@ single source of truth; this README intentionally does not duplicate the numbers
 - Theme (Light / Dark / System).
 
 ## Design tokens (Fluent 2, web light theme)
-- **Colors**: ink `#242424`, secondary `#616161`, tertiary `#767676`, body-alt `#424242`; brand `#0F6CBD`
-  (hover `#0F548C`); selection tint `#EBF3FC`; success `#107C10`, warning `#B85C00`/`#BC4B09`, danger `#C50F1F`.
-  Surfaces: canvas `#FAFAFA`, card `#fff`, rail `#F5F5F5`, hover `#F5F5F5`, pressed/selected-neutral `#E0E0E0`/`#EBEBEB`.
-  Lines: strong `#E0E0E0`, row `#F0F0F0`, column divider `#EDEBE9`, input hairline `#D1D1D1` (bottom `#616161`, focus 2px `#0F6CBD`).
-  Dark: canvas `#1F1F1F`, surface `#292929`, line `#333`, brand `#479EF5`, hover `#383838`, text `#fff`/`#ADADAD`/`#D6D6D6`.
-- **Type**: Segoe UI. Body 13/20; grid header 11 semibold; page title 16 semibold; caption/subtext 12 `#616161`; monospace = Consolas (Event log). Numeric = tabular figures.
-- **Spacing**: 2/4/6/8/10/12/16/20/24/32. Page padding 16; card padding 16; section gap 24–32.
-- **Sizes**: rail 260 (collapsed 48) · nav item 36 / host item 40 · command bar 52 · grid header 32 · rows 36/28 · status bar 28.
-- **Radius**: controls 4, surfaces/cards/dialogs 8, tiny 2, avatars/badges/switch fully round.
-- **Shadows**: cards shadow4 (rest) → shadow8 (hover); menus shadow8; dialogs shadow64. Never shadow + border on the same surface.
+The full token set — semantic colors (light + dark), type ramp, spacing, sizes, radius, and shadows —
+lives in the spec itself. See the **Tokens** note under card **`1g`** in `Lattice M2 Spec.html` (which the
+dark-theme mirror `1f` reads from). That annotation is the single source of truth; this README
+intentionally does not duplicate the values (to avoid drift).
 
 ## Assets
 - **Icons**: [Fluent System Icons](https://github.com/microsoft/fluentui-system-icons) (MIT) — outlined
