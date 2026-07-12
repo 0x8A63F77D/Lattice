@@ -50,6 +50,37 @@
     <Style Selector="ToggleButton.chevron:checked /template/ ContentPresenter">
       <Setter Property="RenderTransform" Value="rotate(90deg)" />
     </Style>
+
+    <!-- De-tint: the Fluent ToggleButton control theme paints its checked / hover / pressed
+         background onto the template part ContentPresenter#PART_ContentPresenter via "/template/"
+         setters bound to the ToggleButtonBackground* theme resource keys (checked =
+         ToggleButtonBackgroundChecked / ToggleButtonBackgroundCheckedPointerOver /
+         ToggleButtonBackgroundCheckedPressed, the accent overlay) — NOT via the Background
+         property. So the chevron's local Background="Transparent" is template-bound only in the
+         default state and loses to those part-targeted setters; an expanded chevron would show the
+         accent fill. Re-target the SAME part to keep it a bare rotating glyph in every state.
+         These styles live in ProjectsView's UserControl.Styles, so they cannot reach ToggleButtons
+         in other views — the Event-log filter pills and density/following toggles keep their
+         legitimate checked tint because of that UserControl boundary, not the class name. The
+         .chevron qualifier is defensive within THIS view (and moot today, since ProjectsView has
+         no other ToggleButton). Same theme-overlay trap solved for DataGrid selection in
+         Theming/DataGridStyles.axaml. Keys/part verified against the Avalonia Fluent ToggleButton
+         control theme (resource keys above; part PART_ContentPresenter). -->
+    <Style Selector="ToggleButton.chevron:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ToggleButton.chevron:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -118,7 +149,13 @@
                               IsChecked="{Binding Data.IsExpanded, Mode=OneWay}"
                               Command="{Binding $parent[UserControl].((vm:ProjectsViewModel)DataContext).ToggleExpandCommand}"
                               CommandParameter="{Binding Data.MasterUrl}">
-                  <PathIcon Width="10" Height="10" Data="{StaticResource IconChevronRightRegular}" />
+                  <!-- Pin the glyph color as a LOCAL value (highest Avalonia precedence) so it wins
+                       over the Fluent ToggleButton's checked-state Foreground, which otherwise swaps
+                       to a light on-accent color the glyph would inherit — making the expanded chevron
+                       invisible on the light row. Neutral token (theme-aware) matches the Status-column
+                       indicator glyphs; identical in collapsed and expanded, only the rotation differs. -->
+                  <PathIcon Width="10" Height="10" Data="{StaticResource IconChevronRightRegular}"
+                            Foreground="{DynamicResource LatticeNeutralFgBrush}" />
                 </ToggleButton>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>

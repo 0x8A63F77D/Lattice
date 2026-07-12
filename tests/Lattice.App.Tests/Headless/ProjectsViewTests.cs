@@ -1,7 +1,9 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
@@ -40,11 +42,13 @@ public class ProjectsViewTests
     }
 
     private static ProjectRow ParentHolder(
-        ProjectStatusKind statusKind, string statusText, bool showChevron = false, bool isExpanded = false)
+        ProjectStatusKind statusKind, string statusText, bool showChevron = false, bool isExpanded = false,
+        string? url = null)
     {
+        url ??= Url;
         var data = new ProjectRowViewModel(
-            Key: ProjectRowKey.NewParentKey(Url),
-            MasterUrl: Url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
+            Key: ProjectRowKey.NewParentKey(url),
+            MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: "P", HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
             StatusKind: statusKind, StatusText: statusText);
@@ -159,6 +163,126 @@ public class ProjectsViewTests
         Assert.Same(dataGridRow, VisualTree.FindRow(view.Grid, 0));
         Assert.DoesNotContain(Strings.ProjectsStatusActiveAll, TextsIn(dataGridRow));
         Assert.Contains(suspendedAll, TextsIn(dataGridRow));
+        window.Close();
+    }
+
+    // Visual defect (design 2a): an EXPANDED chevron must stay a bare rotating glyph, never a
+    // filled accent surface. The FluentAvalonia ToggleButton ControlTheme paints its checked
+    // background onto the template part ContentPresenter#PART_ContentPresenter via a
+    // "/template/" setter bound to the accent ToggleButtonBackgroundChecked key — NOT via the
+    // Background property — so the chevron's local Background="Transparent" (template-bound only
+    // in the default state) loses, and the theme overlay shows through. Probe the actual painted
+    // part, not a property read, and compare against the resolved accent so the assertion bites.
+    [AvaloniaFact]
+    public void Expanded_chevron_shows_no_accent_background_fill()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(
+            ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll,
+            showChevron: true, isExpanded: true));
+        Layout(window);
+
+        var chevron = VisualTree.FindInVisualTree<ToggleButton>(
+            VisualTree.FindRow(view.Grid, 0), t => t.Classes.Contains("chevron"));
+        Assert.NotNull(chevron);
+        Assert.True(chevron!.IsChecked, "the expanded parent's chevron is checked");
+
+        var part = VisualTree.FindInVisualTree<ContentPresenter>(
+            chevron, cp => cp.Name == "PART_ContentPresenter");
+        Assert.NotNull(part);
+
+        // The accent overlay the FA theme would otherwise paint — resolved so the comparison
+        // is meaningful rather than an unconditioned "is it transparent" read.
+        Assert.True(chevron.TryFindResource("ToggleButtonBackgroundChecked", out var accentObj));
+        var accent = Assert.IsAssignableFrom<ISolidColorBrush>(accentObj);
+        Assert.NotEqual((byte)0, accent.Color.A); // sanity: the overlay is opaque, so red != green
+
+        var bg = part!.Background;
+        var isTransparent = bg is null || (bg is ISolidColorBrush scb && scb.Color.A == 0);
+        Assert.True(isTransparent, $"expanded chevron must have no background fill, was {bg}");
+        Assert.False(
+            bg is ISolidColorBrush accentPaint && accentPaint.Color == accent.Color,
+            "chevron background must not be the accent overlay");
+        window.Close();
+    }
+
+    // Anti-vacuity baseline for the chevron probe above. That test only bites if the Fluent
+    // ToggleButton theme actually paints ToggleButtonBackgroundChecked onto PART_ContentPresenter
+    // in this headless setup — a chevron carrying no paint at all would otherwise be a false
+    // green. This pins that baseline: a plain checked ToggleButton's PART_ContentPresenter DOES
+    // carry the resolved accent brush. It does NOT test scoping — the chevron de-tint lives in
+    // ProjectsView's UserControl.Styles and is structurally confined to that subtree, so it could
+    // never reach a ToggleButton built in this separate window regardless of the .chevron class.
+    [AvaloniaFact]
+    public void Fluent_toggle_button_paints_its_checked_accent_on_the_content_presenter()
+    {
+        var toggle = new ToggleButton { IsChecked = true, Content = "x" };
+        var window = new Window { Width = 200, Height = 100, Content = toggle };
+        window.Show();
+        Layout(window);
+
+        var part = VisualTree.FindInVisualTree<ContentPresenter>(
+            toggle, cp => cp.Name == "PART_ContentPresenter");
+        Assert.NotNull(part);
+        Assert.True(toggle.TryFindResource("ToggleButtonBackgroundChecked", out var accentObj));
+        var accent = Assert.IsAssignableFrom<ISolidColorBrush>(accentObj);
+
+        var bg = Assert.IsAssignableFrom<ISolidColorBrush>(part!.Background);
+        Assert.Equal(accent.Color, bg.Color); // the theme really does tint the part in headless
+        window.Close();
+    }
+
+    // The expanded chevron's PathIcon at row <paramref name="rowIndex"/>.
+    private static PathIcon ChevronGlyph(ProjectsView view, int rowIndex)
+    {
+        var chevron = VisualTree.FindInVisualTree<ToggleButton>(
+            VisualTree.FindRow(view.Grid, rowIndex), t => t.Classes.Contains("chevron"));
+        Assert.NotNull(chevron);
+        var glyph = VisualTree.FindInVisualTree<PathIcon>(chevron!);
+        Assert.NotNull(glyph);
+        return glyph!;
+    }
+
+    // The glyph's effective (possibly inherited) foreground color.
+    private static Color GlyphColor(PathIcon glyph) =>
+        Assert.IsAssignableFrom<ISolidColorBrush>(glyph.Foreground).Color;
+
+    // Visibility regression (this branch): the accent-background de-tint (commit 358d264) fixed the
+    // checked-state Background, but the Fluent ToggleButton checked visual state ALSO swaps the
+    // Foreground to an on-accent (light) color meant to contrast the accent fill. The chevron's
+    // PathIcon carries no local Foreground, so in the EXPANDED (checked) state it INHERITS that light
+    // color and the glyph vanishes against the light row. Pin the glyph to the neutral token (a local
+    // value, highest precedence) so it renders the same VISIBLE neutral in both states — only the
+    // rotation differs. Probe the effective glyph foreground, and encode the "identical in both
+    // states" design invariant by comparing expanded vs collapsed.
+    [AvaloniaFact]
+    public void Expanded_chevron_glyph_stays_the_visible_neutral_color()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(
+            ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll,
+            showChevron: true, isExpanded: true, url: "http://expanded/"));   // checked chevron
+        vm.Rows.Add(ParentHolder(
+            ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll,
+            showChevron: true, isExpanded: false, url: "http://collapsed/")); // unchecked chevron
+        Layout(window);
+
+        var expandedGlyph = ChevronGlyph(view, 0);
+        var collapsedGlyph = ChevronGlyph(view, 1);
+
+        Assert.True(Application.Current!.TryGetResource(
+            "LatticeNeutralFgBrush", window.ActualThemeVariant, out var neutralObj));
+        var neutral = ((ISolidColorBrush)neutralObj!).Color;
+
+        var expandedColor = GlyphColor(expandedGlyph);
+        var collapsedColor = GlyphColor(collapsedGlyph);
+
+        // The expanded glyph is the visible neutral, NOT the light on-accent checked foreground.
+        Assert.Equal(neutral, expandedColor);
+        // Design invariant: glyph color is identical collapsed vs expanded (only rotation differs).
+        Assert.Equal(collapsedColor, expandedColor);
         window.Close();
     }
 
