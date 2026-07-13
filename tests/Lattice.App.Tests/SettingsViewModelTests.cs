@@ -11,6 +11,7 @@ namespace Lattice.App.Tests;
 public class SettingsViewModelTests : IAsyncLifetime
 {
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+    private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private HostStore _store = null!;
@@ -21,7 +22,7 @@ public class SettingsViewModelTests : IAsyncLifetime
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
-        _settings = new SettingsViewModel(_registry, _store, () => new FakeGuiRpcClient());
+        _settings = new SettingsViewModel(_registry, _store, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(_uiPath)));
         return ValueTask.CompletedTask;
     }
 
@@ -29,6 +30,7 @@ public class SettingsViewModelTests : IAsyncLifetime
     {
         await _manager.DisposeAsync();
         File.Delete(_path);
+        File.Delete(_uiPath);
     }
 
     [Fact]

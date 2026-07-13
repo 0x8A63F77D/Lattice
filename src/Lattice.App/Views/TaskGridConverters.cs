@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using Avalonia.Data.Converters;
+using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 
 namespace Lattice.App.Views;
 
@@ -36,6 +38,27 @@ public sealed class EnumMatchConverter : IValueConverter
 
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         value is not null && string.Equals(value.ToString(), parameter as string, StringComparison.Ordinal);
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
+/// <summary>
+/// AppTheme -> localized label (Light/Dark/System) for the Settings theme
+/// ComboBox item template (design 2d/1f).
+/// </summary>
+public sealed class ThemeLabelConverter : IValueConverter
+{
+    public static readonly ThemeLabelConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value switch
+        {
+            AppTheme.Light => Strings.ThemeLight,
+            AppTheme.Dark => Strings.ThemeDark,
+            AppTheme.System => Strings.ThemeSystem,
+            _ => string.Empty,
+        };
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

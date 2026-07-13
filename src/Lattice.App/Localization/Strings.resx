@@ -382,6 +382,24 @@
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
   </data>
+  <data name="SettingsThemeSection" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="SettingsThemeHeader" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="SettingsThemeDescription" xml:space="preserve">
+    <value>How Lattice follows light or dark mode</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>System</value>
+  </data>
   <!-- ===== Projects ===== -->
   <data name="ProjectsColAvgCredit" xml:space="preserve">
     <value>Avg credit</value>

@@ -24,7 +24,8 @@ public class SettingsViewTests
         // Manager never started: no sockets, no background threads in headless tests.
         var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var settings = new SettingsViewModel(registry, store, () => new FakeGuiRpcClient());
+        var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
+        var settings = new SettingsViewModel(registry, store, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(uiPath)));
         // Hosts are added to prove they do NOT render as expanders in this view
         // any more — host management lives entirely in the rail (design 3b).
         registry.AddHost(TestData.MakeHostConfig(name: "a"));

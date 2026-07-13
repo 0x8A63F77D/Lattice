@@ -3,6 +3,8 @@
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              xmlns:vm="using:Lattice.App.ViewModels"
              xmlns:loc="using:Lattice.App.Localization"
+             xmlns:infra="using:Lattice.App.Infrastructure"
+             xmlns:v="using:Lattice.App.Views"
              x:Class="Lattice.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <ScrollViewer>
@@ -26,6 +28,23 @@
       <TextBlock Text="{Binding PollingError}" FontSize="12"
                  IsVisible="{Binding PollingError, Converter={x:Static ObjectConverters.IsNotNull}}"
                  Foreground="{DynamicResource LatticeDangerFgBrush}" />
+
+      <TextBlock Text="{x:Static loc:Strings.SettingsThemeSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="ThemeExpander"
+                             Header="{x:Static loc:Strings.SettingsThemeHeader}"
+                             Description="{x:Static loc:Strings.SettingsThemeDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllThemes}"
+                    SelectedItem="{Binding SelectedTheme, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="infra:AppTheme">
+                <TextBlock Text="{Binding Converter={x:Static v:ThemeLabelConverter.Instance}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
     </StackPanel>
   </ScrollViewer>
 </UserControl>
