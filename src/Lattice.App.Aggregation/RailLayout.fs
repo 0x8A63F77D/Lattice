@@ -78,7 +78,7 @@ module RailLayoutPolicy =
         match input.Hosts.Length with
         | 0 ->
             { Mode = Flat; ShowToggle = false; Rows = [ AllHostsRow ] }
-        | 1 when input.Override = Auto ->
+        | 1 ->
             { Mode = SingleHost; ShowToggle = false; Rows = [ HostRow input.Hosts.[0].Id ] }
         | _ ->
             let doesFit = fits input

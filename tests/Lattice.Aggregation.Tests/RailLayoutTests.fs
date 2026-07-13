@@ -23,6 +23,15 @@ let ``single host is degenerate: no All-hosts row, no toggle`` () =
     Assert.Equal<RailRow list>([ HostRow h.Id ], layout.Rows)
 
 [<Fact>]
+let ``single host ignores a stale persisted override: stays SingleHost`` () =
+    let h = host Healthy
+    for ov in [ ForceFlat; ForceGrouped ] do
+        let layout = RailLayoutPolicy.compute { input [| h |] 1000.0 with Override = ov }
+        Assert.Equal(SingleHost, layout.Mode)
+        Assert.False layout.ShowToggle
+        Assert.Equal<RailRow list>([ HostRow h.Id ], layout.Rows)
+
+[<Fact>]
 let ``flat when the list fits: All-hosts leads, hosts in registry order`` () =
     let a, b = host Healthy, host Attention
     // (2 hosts + All-hosts) * 40 = 120 <= 200 => fits
@@ -166,7 +175,9 @@ let ``flat and expanded-grouped conserve hosts exactly once`` (inp: RailLayoutIn
 let ``grouped attention rows always follow their header (always expanded)`` (inp: RailLayoutInput) =
     let layout = RailLayoutPolicy.compute { inp with Override = ForceGrouped }
     let attentionCount = inp.Hosts |> Array.filter (fun h -> h.Tier = Attention) |> Array.length
-    if attentionCount = 0 then
+    if layout.Mode = SingleHost then
+        true   // degenerate single-host handled by its own unit test
+    elif attentionCount = 0 then
         layout.Rows |> List.forall (function GroupHeaderRow(Attention, _, _) -> false | _ -> true)
     else
         layout.Rows |> List.exists (function GroupHeaderRow(Attention, c, ex) -> c = attentionCount && ex | _ -> false)
