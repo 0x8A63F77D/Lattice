@@ -14,15 +14,13 @@ public class SettingsViewModelTests : IAsyncLifetime
     private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
-    private HostStore _store = null!;
     private SettingsViewModel _settings = null!;
 
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
-        _store = new HostStore(_registry, _manager, new ImmediateUiDispatcher());
-        _settings = new SettingsViewModel(_registry, _store, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(_uiPath)));
+        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(_uiPath)));
         return ValueTask.CompletedTask;
     }
 

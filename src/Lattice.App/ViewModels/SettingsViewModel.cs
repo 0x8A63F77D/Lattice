@@ -12,10 +12,7 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly Func<IGuiRpcClient> _clientFactory;
     private readonly ThemePreference _theme;
 
-    // `store` is accepted for signature parity with call sites (ShellViewModel
-    // wires the same three dependencies as the Add-host flow); the Hosts group
-    // that consumed it was removed in this task.
-    public SettingsViewModel(HostRegistry registry, HostStore store, Func<IGuiRpcClient> clientFactory, ThemePreference theme)
+    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme)
     {
         _registry = registry;
         _clientFactory = clientFactory;

@@ -66,9 +66,11 @@ public sealed class ThemeLabelConverter : IValueConverter
 
 /// <summary>
 /// Named funcs consumed via <c>{x:Static v:TaskGridConverters.Member}</c> in XAML.
-/// Despite the file/class name (historically Tasks-DataGrid-only), <see cref="ChevronAngle"/>
-/// is shared with the host rail's group-header chevron in ShellWindow.axaml — it is not
-/// Tasks-scoped like <see cref="FractionToWidthConverter"/> and <see cref="EnumMatchConverter"/> above.
+/// Despite the file/class name (historically Tasks-DataGrid-only), this file also holds a
+/// small number of app-wide converters that aren't Tasks-DataGrid-specific: <see cref="ChevronAngle"/>
+/// below (shared with the host rail's group-header chevron in ShellWindow.axaml) and
+/// <see cref="ThemeLabelConverter"/> above (used by the Settings theme picker) — neither is
+/// Tasks-scoped like <see cref="FractionToWidthConverter"/> and <see cref="EnumMatchConverter"/>.
 /// </summary>
 public static class TaskGridConverters
 {

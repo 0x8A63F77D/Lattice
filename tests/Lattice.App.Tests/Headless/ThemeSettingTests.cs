@@ -11,7 +11,6 @@ using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 using static Lattice.Tests.HeadlessLayout;
 
@@ -33,10 +32,7 @@ public class ThemeSettingTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
-        // Manager never started: no sockets, no background threads in headless tests.
-        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
-        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var settings = new SettingsViewModel(registry, store, () => new FakeGuiRpcClient(),
+        var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(),
             new ThemePreference(new UiStateStore(uiPath)));
 
         var window = new Window { Width = 900, Height = 700, Content = new SettingsView { DataContext = settings } };
@@ -84,9 +80,7 @@ public class ThemeSettingTests
             uiStore.Save(UiState.Default with { Theme = AppTheme.Light });
             var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
             var registry = new HostRegistry(new LatticeConfig(5, []), path);
-            var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
-            var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-            var settings = new SettingsViewModel(registry, store, () => new FakeGuiRpcClient(),
+            var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(),
                 new ThemePreference(uiStore));
 
             var window = new Window { Width = 900, Height = 700, Content = new SettingsView { DataContext = settings } };
