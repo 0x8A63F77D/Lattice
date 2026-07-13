@@ -234,13 +234,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public HostRegistry Registry => Settings.Registry;
     public Func<IGuiRpcClient> ClientFactory => Settings.ClientFactory;
 
-    /// <summary>Auth-failed rail linkage and the Settings footer both land here.</summary>
-    public void NavigateToSettings(Guid? focusHostId = null)
+    public void NavigateToSettings()
     {
         SelectedView = null;
         CurrentPage = Settings;
-        if (focusHostId is { } id)
-            Settings.ExpandHost(id);
     }
 
     private void OnStoreChanged(object? sender, EventArgs e) => ReconcileHosts();
@@ -270,8 +267,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var connected = _store.Hosts.Count(h => RailStateProjection.From(h.Status) == RailState.Connected);
         _allHosts.Update(connected, _store.Hosts.Count);
         HasHosts = _store.Hosts.Count > 0;
-        // Keep the Settings Hosts group synced until Task 13 deletes both it and this call.
-        Settings.Reconcile();
         RebuildRail();
     }
 

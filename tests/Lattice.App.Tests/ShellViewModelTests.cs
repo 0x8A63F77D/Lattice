@@ -111,18 +111,6 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public void NavigateToSettings_shows_settings_page_and_expands_target_host()
-    {
-        var host = TestData.MakeHostConfig();
-        _registry.AddHost(host);
-
-        _shell.NavigateToSettings(host.Id);
-
-        Assert.Same(_shell.Settings, _shell.CurrentPage);
-        Assert.True(_shell.Settings.Hosts.Single(h => h.HostId == host.Id).IsExpanded);
-    }
-
-    [Fact]
     public void Tasks_page_is_a_TasksViewModel_and_receives_scope_changes()
     {
         var tasks = Assert.IsType<TasksViewModel>(_shell.Views[0].Page);

@@ -340,8 +340,8 @@
   <data name="SettingsFieldPortInvalid" xml:space="preserve">
     <value>Port must be a number between 1 and 65535.</value>
   </data>
-  <data name="SettingsHostsSection" xml:space="preserve">
-    <value>Hosts</value>
+  <data name="SettingsHostsPointer" xml:space="preserve">
+    <value>Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.</value>
   </data>
   <data name="SettingsIntervalSaveFailedFmt" xml:space="preserve">
     <value>Saving the polling interval failed: {0}</value>
