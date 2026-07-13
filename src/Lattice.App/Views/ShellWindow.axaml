@@ -100,7 +100,7 @@
         </ui:FANavigationViewItem>
       </ui:FANavigationView.MenuItems>
 
-      <ui:FANavigationView.PaneCustomContent>
+      <ui:FANavigationView.PaneFooter>
         <StackPanel Margin="4,8,4,0">
           <DockPanel Margin="12,0,8,4">
             <Button DockPanel.Dock="Right" Padding="4" Background="Transparent"
@@ -170,7 +170,7 @@
             </ListBox.DataTemplates>
           </ListBox>
         </StackPanel>
-      </ui:FANavigationView.PaneCustomContent>
+      </ui:FANavigationView.PaneFooter>
 
       <ui:FANavigationView.FooterMenuItems>
         <ui:FANavigationViewItem x:Name="NavSettings" Content="{x:Static loc:Strings.NavSettings}" Tag="settings">

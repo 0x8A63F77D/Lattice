@@ -166,4 +166,27 @@ public class ShellRailTests
             }
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Hosts_block_is_hosted_in_the_pane_footer_slot()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        Layout(window);
+
+        // Design 3a: the hosts block lives in the PaneFooter slot, NOT the rejected
+        // on-top PaneCustomContent slot. This discriminates the two layouts (order alone
+        // does not — PaneCustomContent also sits above the footer menu).
+        Assert.Null(window.Nav.PaneCustomContent);
+        var footer = Assert.IsAssignableFrom<Control>(window.Nav.PaneFooter);
+        Assert.Contains(window.HostList.GetVisualAncestors(), a => ReferenceEquals(a, footer));
+
+        // Secondary sanity: still renders above Settings (FooterMenuItems).
+        var hostsTop = window.HostList.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        var settingsTop = window.NavSettings.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        Assert.True(hostsTop < settingsTop,
+            $"hosts (y={hostsTop}) must render above Settings (y={settingsTop})");
+        window.Close();
+    }
 }
