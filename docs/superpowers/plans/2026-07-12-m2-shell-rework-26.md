@@ -1271,12 +1271,45 @@ Update `Dispose` to dispose host VMs from the map (they no longer all live in `R
 
 > F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier`/`RailMode` DU cases are static properties (compare with `.Equals`) and each has an `Is<Case>` predicate (`RailMode.IsSingleHost`, `RailOverride.IsForceFlat`/`.IsForceGrouped`/`.IsAuto`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
 
-- [ ] **Step 4: Run — expect PASS** (new tests + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). If `Settings.Reconcile` removal breaks compile, land Task 14's `SettingsViewModel` change first or stub `Reconcile()` as a no-op until Task 14.
+- [ ] **Step 4: Migrate every sentinel-assuming test for `SingleHost` mode (repo-wide sweep)**
 
-- [ ] **Step 5: Commit**
+This task makes a **one-host** rail render as `SingleHost` — no All-hosts sentinel, the host at index 0
+(design 3a: "1 host → no 'All hosts' entry, scope pinned"). Every existing test that builds a **one-host**
+shell and assumes the sentinel leads the rail (`RailEntries[0]` is `AllHostsRailItemViewModel`, or
+`SelectedIndex = 1` selects "the host") now breaks. This is a class, not two spots — **sweep it**:
+```bash
+grep -rnE 'RailEntries\[0\]|SelectedIndex = 1|SelectedRailEntry = shell.RailEntries\[0\]' \
+     tests --include='*.cs'
+```
+For each hit, if the test builds exactly one host, convert it to **two hosts** so the rail is `Flat`
+(sentinel at 0, hosts at 1..N) — a shown/laid-out window fits two hosts into `Flat` via the Task-8 viewport
+wiring; VM-level tests with no viewport get `Grouped` at height 0 but still keep the sentinel at
+`RailEntries[0]`. Confirmed breakers to fix:
+- `tests/Lattice.App.Tests/Headless/ShellRailTests.cs` — `First_rail_row_renders_the_all_hosts_label`,
+  `Selecting_a_host_then_switching_views_leaves_scope_unchanged`, `Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`
+  (each adds one host + asserts the sentinel / `SelectedIndex = 1`): add a second host.
+- `tests/Lattice.App.Tests/AllHostsRailTests.cs` — the **one-host** cases that assert
+  `RailEntries[0]` is `AllHostsRailItemViewModel` (or select `RailEntries[0]` as the sentinel): add a second
+  host so the sentinel exists (the existing two-host case is unaffected).
+
+Confirmed **safe** (leave as-is): one-host tests that never assume the sentinel/index —
+`Navigating_to_tasks_renders_a_TasksView`, `Selecting_tasks_swaps_its_icon…`, `Every_nav_icon_key_resolves…`
+(no rail index), and `PersistenceJourney` (filters `RailEntries.OfType<HostRailItemViewModel>()`, sentinel-
+agnostic); the ≥2-host journeys (`ProjectsScopeJourney`, `PartialResultsJourney`, `TasksScopeJourney`,
+`EventLogJourney`) already keep the sentinel. The new `SingleHost` behavior itself is covered by
+`Single_host_pins_scope_to_that_host_not_all_hosts` (Step 1). The `AuthFailedLinkageTests` /
+`AuthFailJourney` one-host→two-host conversions are handled in Task 12.
+
+Gate: a full `dotnet build tests/Lattice.App.Tests` (not a filtered `dotnet test`) — a non-migrated
+sentinel test that no longer compiles/realizes surfaces as a build/red failure here, not silently.
+
+- [ ] **Step 5: Run — expect PASS** (new tests + the converted `ShellRailTests` + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). If `Settings.Reconcile` removal breaks compile, land Task 14's `SettingsViewModel` change first or stub `Reconcile()` as a no-op until Task 14.
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add src/Lattice.App/ViewModels/ShellViewModel.cs tests/Lattice.App.Tests/ShellViewModelTests.cs
+git add src/Lattice.App/ViewModels/ShellViewModel.cs tests/Lattice.App.Tests/ShellViewModelTests.cs \
+        tests/Lattice.App.Tests/Headless/ShellRailTests.cs tests/Lattice.App.Tests/AllHostsRailTests.cs
 git commit -m "feat(rail): height-adaptive rail orchestration via RailLayoutPolicy (design 3a)"
 ```
 
@@ -2183,14 +2216,18 @@ Replace the body of `Selecting_an_auth_failed_host_lands_in_settings_with_that_h
         window.Show();
         Layout(window);
 
+        // TWO hosts: with one host the rail is SingleHost (no sentinel, host auto-selected/scoped),
+        // so re-selecting it raises no SelectionChanged and the dialog never opens. Two hosts → Flat
+        // list (sentinel at 0), and the auth-failed host (added first) sits at index 1, unselected.
         var host = TestData.MakeHostConfig(name: "office-pc");
         registry.AddHost(host);
+        registry.AddHost(TestData.MakeHostConfig(name: "other"));
         store.Hosts[0].Status = new ConnectionStatus(
             host.Id, HostConnectionState.AuthFailed, 1, null, "unauthorized", null);
-        shell.RailEntries.OfType<HostRailItemViewModel>().Single().Refresh();
+        foreach (var row in shell.RailEntries.OfType<HostRailItemViewModel>()) row.Refresh();
         Layout(window);
 
-        window.HostList.SelectedIndex = 1;   // index 0 is the All-hosts sentinel
+        window.HostList.SelectedIndex = 1;   // sentinel at 0; the auth-failed host is at 1
         await HeadlessSync.WaitUntilAsync(() => window.GetVisualDescendants().OfType<AddHostDialog>().Any());
 
         var dialog = Assert.Single(window.GetVisualDescendants().OfType<AddHostDialog>());
@@ -2205,11 +2242,11 @@ Replace the body of `Selecting_an_auth_failed_host_lands_in_settings_with_that_h
 
 Add `using Avalonia.VisualTree;`, `using FluentAvalonia.UI.Controls;`, `using Lattice.App.Views;` as needed. Drop the old assertions on `shell.Settings.Hosts` / `IsExpanded` (that surface is gone after Task 13).
 
-Also rewrite the end-to-end journey `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs`, whose middle currently jumps to the Settings expander and consumes the removed `Settings.Hosts`. Replace everything from the `HostList.SelectedIndex = 1` line through the old `settingsItem.SaveCommand.Execute(null)` block with the Edit-dialog path (correct the password IN the dialog, Save persists via edit-mode `UpdateHost`, the parked AuthFailed loop wakes and reconnects):
+Also rewrite the end-to-end journey `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs`, whose middle currently jumps to the Settings expander and consumes the removed `Settings.Hosts`. Two setup changes first, both because one host now renders as `SingleHost` (no sentinel, host auto-selected — a re-select raises no `SelectionChanged`, so the dialog never opens): (1) **add a second, healthy host** right after the existing `harness.AddHost(...)` so the rail is a `Flat` list with the sentinel and the auth-failed host at index 1, unselected; (2) change the `railItem` lookup from `.Single()` to `.Single(h => h.HostId == host.Id)` (there are two host rows now). Then replace everything from the `HostList.SelectedIndex = 1` line through the old `settingsItem.SaveCommand.Execute(null)` block with the Edit-dialog path (correct the password IN the dialog, Save persists via edit-mode `UpdateHost`, the parked AuthFailed loop wakes and reconnects):
 
 ```csharp
         // Auth-failed click now opens the Edit host dialog (Task 12), not Settings.
-        harness.Window.HostList.SelectedIndex = 1;   // index 0 = All-hosts sentinel
+        harness.Window.HostList.SelectedIndex = 1;   // sentinel at 0; the auth-failed host is at 1
         await harness.SettleAsync(
             () => harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Any(),
             "auth-failed click should open the Edit host dialog");
@@ -2233,7 +2270,7 @@ Also rewrite the end-to-end journey `tests/Lattice.App.Tests/Headless/Journeys/A
         harness.Layout();
 
         Assert.Equal(string.Format(Strings.RailConnectedFmt, 0), railItem.StateText);
-        Assert.Equal("correct-pw", harness.Registry.Hosts.Single().Password);
+        Assert.Equal("correct-pw", harness.Registry.Hosts.Single(h => h.Id == host.Id).Password);
 ```
 Update the class-doc summary to describe the Edit-dialog path, and add `using Avalonia.Controls;`, `using Avalonia.Interactivity;`, `using Avalonia.VisualTree;`, `using Lattice.App.Views;`.
 
