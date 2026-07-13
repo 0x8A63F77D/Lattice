@@ -113,7 +113,8 @@ public sealed class UiStateStore
 }
 
 /// <summary>
-/// Per-user UI state: density mode, column visibility, and column widths.
+/// Per-user UI state: density mode, column visibility, column widths, rail
+/// list/group override, Healthy-group expand state, app theme, and host scope.
 /// Load-mutate-save DTO — not thread-safe; UI-thread use only.
 /// </summary>
 public sealed record UiState(
