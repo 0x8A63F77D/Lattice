@@ -4,7 +4,7 @@
 
 **Goal:** Rework the NavigationView shell to the rev. B design — hosts rail bottom-docked in `PaneFooter` above Settings, height-adaptive flat↔status-group layout driven by a pure F# core, host management moved out of Settings into a right-click rail menu, and a new Theme setting.
 
-**Architecture:** A born-pure F# decision core (`Lattice.App.Aggregation/RailLayout.fs`) decides `SingleHost | Flat | Grouped` layout from measured footer height + host tiers + persisted override/expand state. `ShellViewModel` measures/persists the inputs, calls the core, and reconciles `RailEntries` (All-hosts sentinel · host rows · group-header rows). Host add/edit/remove/test move to a mode-aware `AddHostDialog` launched from a rail `MenuFlyout`; Settings keeps global groups (Polling + new Theme) only. Compact (48 px) rail is the orthogonal pane-collapse axis and is unchanged by the core.
+**Architecture:** TWO born-pure F# decision cores in `Lattice.App.Aggregation`, each FsCheck-tested and consumed by a shell that only translates: (1) `RailLayout.fs` decides `SingleHost | Flat | Grouped` layout from measured footer height + host tiers + persisted override/expand state; (2) `ScopeMachine.fs` owns the global host-scope state machine — `step : Scope -> ScopeEvent -> ScopeDecision` (which host every view filters to, plus the persistence side effect) and the pure `highlightOf` derivation. `ShellViewModel` measures/persists the layout inputs and reconciles `RailEntries` (All-hosts sentinel · host rows · group-header rows); every scope mutation goes UI-occurrence → `ScopeEvent` → `step` → apply. Host add/edit/remove/test move to a mode-aware `AddHostDialog` launched from a rail `MenuFlyout`; Settings keeps global groups (Polling + new Theme) only. Compact (48 px) rail is the orthogonal pane-collapse axis and is unchanged by either core.
 
 **Tech Stack:** .NET 10, Avalonia 12.1, FluentAvalonia 3.0.1 (`FANavigationView` / `FAContentDialog` / `MenuFlyout`), CommunityToolkit.Mvvm, F# + FsCheck (`Lattice.App.Aggregation`), xUnit + `Avalonia.Headless.XUnit`.
 
@@ -20,6 +20,8 @@
 **Create:**
 - `src/Lattice.App.Aggregation/RailLayout.fs` — pure grouping/fit core (types + `RailLayoutPolicy.compute`).
 - `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs` — FsCheck + transition-table tests for the core.
+- `src/Lattice.App.Aggregation/ScopeMachine.fs` — pure scope/selection/persistence state machine (types + `ScopeMachine.step` / `highlightOf` / `restoreEvent`).
+- `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs` — transition-table + FsCheck property tests for the scope core.
 - `src/Lattice.App/ViewModels/RailTierProjection.cs` — `RailState → RailTier` (C#, total, no wildcard).
 - `src/Lattice.App/ViewModels/GroupHeaderRailItemViewModel.cs` — a status-group header rail row.
 - `src/Lattice.App/Infrastructure/ThemePreference.cs` — persisted `AppTheme`, applies to `Application` (two consumers: startup + Settings, so a shared class like `DensityPreference`). Rail override/expand state has a single consumer (`ShellViewModel`) and is persisted inline there via `UiStateStore.Update`, no separate class.
@@ -27,8 +29,8 @@
 - `tests/Lattice.App.Tests/Headless/HostRailMenuTests.cs`, `HostRailGroupingTests.cs`, `EditHostDialogTests.cs`, `ThemeSettingTests.cs`.
 
 **Modify:**
-- `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` — add `RailLayout.fs` to compile order.
-- `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` — add `RailLayoutTests.fs`.
+- `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` — add `RailLayout.fs` and `ScopeMachine.fs` to compile order.
+- `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` — add `RailLayoutTests.fs` and `ScopeMachineTests.fs`.
 - `src/Lattice.App/Views/ShellWindow.axaml` — hosts block `PaneCustomContent` → `PaneFooter`; group-header template; header list/group toggle; host-row `MenuFlyout`.
 - `src/Lattice.App/Views/ShellWindow.axaml.cs` — viewport-height wiring; MenuFlyout/dialog handlers; auth-failed → Edit dialog; remove-confirm machinery (moved from SettingsView).
 - `src/Lattice.App/ViewModels/ShellViewModel.cs` — rail orchestration (viewport, override, expand, reconcile via core); host-command events; drop `Settings.ExpandHost`.
@@ -116,7 +118,7 @@ git commit -m "feat(shell): dock hosts rail in PaneFooter above Settings (design
 
 ---
 
-## Phase B — Height-adaptive grouping core (born pure) + wiring
+## Phase B — Born-pure cores (rail layout + scope machine) + wiring
 
 ### Task 2: Pure F# core — types + `Flat` / `SingleHost` modes
 
@@ -819,38 +821,308 @@ git commit -m "feat(rail): group-header rail row view-model (design 3a)"
 
 ---
 
-### Rail scope invariants (AUTHORITATIVE — every task that touches scope/selection/persistence obeys these)
+### Task 6B: Pure F# core — `ScopeMachine` (scope / selection / persistence state machine)
 
-These five invariants dissolve the SingleHost/scope collision class (owner decision after R5/R9/R10 — three
-same-class findings shared one root: `SingleHost` coupled a *presentation* special case with a *semantic*
-one). Do not restate scope rules per task; reference these.
+**Files:**
+- Create: `src/Lattice.App.Aggregation/ScopeMachine.fs`
+- Modify: `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` (add `<Compile Include="ScopeMachine.fs" />` after `RailLayout.fs`; the module is independent of `RailLayout`, so its position is not load-order-critical — put it last for tidiness)
+- Create: `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs`
+- Modify: `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` (add `<Compile Include="ScopeMachineTests.fs" />` after `RailLayoutTests.fs`)
 
-- **I1 — `SingleHost` is PRESENTATION ONLY.** With exactly one host: no All-hosts sentinel row; the sole
-  host row is rendered and visually highlighted. It **never** mutates `Scope`.
-- **I2 — `Scope` mutates ONLY via explicit user selection of a real scope carrier**
-  (`HostRailItemViewModel` → that host, `AllHostsRailItemViewModel` → All hosts). Header selections, `null`
-  selections, and every rebuild-driven `SelectedRailEntry` change **never** mutate `Scope` (the R5 invariant,
-  now mode-independent).
-- **I3 — `RebuildRail` never mutates `Scope`.** It only derives the highlight (`SelectedRailEntry`) from the
-  current `Scope` + the current rail contents.
-- **I4 — Persistence records ONLY explicit selections** (the `ScopeHostId` write lives in
-  `OnSelectedRailEntryChanged`, guarded by `_rebuilding`). Restore on construction; unknown/missing host-id →
-  All hosts.
-- **I5 — With one host, `Scope = AllHosts` and `Scope = host` are data-identical in every view**; the rail
-  shows the host row highlighted either way. Therefore view-layer "aggregate presentation" (Host column,
-  Projects child rows, partial bar, "Active on all hosts" text) must key on **genuine multi-host**
-  (`Scope.IsAllHosts && hostCount > 1`), NOT on `Scope.IsAllHosts` alone (Task 7B).
+**Why this core exists (root cause of the R5 / R9 / R10 / R11 scope-finding class — owner decision):**
+eleven review rounds hand-enumerated a scope/selection/persistence transition table one row at a time — R5
+the header-click row, R9 / R10 the single-host rows, R11 the host-removed row — because that logic lived as
+C# prose scattered across `OnSelectedRailEntryChanged` / `ReconcileHosts` / the ctor restore. `RailLayoutPolicy`
+(the layout core, Tasks 2–3) took **zero** findings across the same eleven rounds. The structural fix is the
+same move `RailLayoutPolicy` already embodies: extract the scope state machine into a born-pure,
+exhaustively-tested F# core. The shell then shrinks to a translator — **UI occurrence → `ScopeEvent` → `step`
+→ apply the `ScopeDecision`** — and a new scope-boundary case becomes a missing `match` arm the compiler
+flags, not a review round.
 
-Consequence: there is **no** single-host auto-pin, no `_wasSingleHost` reset, no `_pendingScopeRestore`
-staging. Restore sets `Scope` once in the ctor; `RebuildRail` is highlight-only.
+The closed `ScopeEvent` DU **is** the former "rail scope invariants" prose, now compiler-checked. Three
+occurrences are deliberately **not** events — **rail rebuild, host-added, and mode-change** — and the module
+documents this: a rebuild re-selecting a row is not a user choice (that was the R5 header-click bug). Those
+are handled by `highlightOf` (pure highlight derivation, never mutates scope) and by "no event at all"
+(host-added never pins; the single-host presentation lives entirely in `RailLayout`).
 
-### Task 7: `ShellViewModel` rail orchestration — measure, reconcile, highlight via the core
+- [ ] **Step 1: Write the failing transition-table + property tests**
+
+Create `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs`:
+```fsharp
+module Lattice.App.Aggregation.ScopeMachineTests
+
+open System
+open Xunit
+open FsCheck.Xunit
+open Lattice.App.Aggregation
+open Lattice.App.Aggregation.ScopeMachine
+
+let private h = Guid.NewGuid()
+let private other = Guid.NewGuid()
+
+// --- exhaustive transition table: every ScopeEvent × state class (was the I1–I6 prose) ---
+
+[<Fact>]
+let ``ExplicitSelect All hosts -> AllHosts, persist null`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = PersistExplicit None }, step (Host h) (ExplicitSelect AllHostsCarrier))
+    Assert.Equal({ Scope = AllHosts; Persist = PersistExplicit None }, step AllHosts (ExplicitSelect AllHostsCarrier))
+
+[<Fact>]
+let ``ExplicitSelect a host -> that host, persist its id`` () =
+    Assert.Equal({ Scope = Host h; Persist = PersistExplicit (Some h) }, step AllHosts (ExplicitSelect (HostCarrier h)))
+    Assert.Equal({ Scope = Host h; Persist = PersistExplicit (Some h) }, step (Host other) (ExplicitSelect (HostCarrier h)))
+
+[<Fact>]   // R11: the currently-scoped host is removed
+let ``HostRemoved of the scoped host -> AllHosts + ClearPersisted`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = ClearPersisted }, step (Host h) (HostRemoved h))
+
+[<Fact>]
+let ``HostRemoved of a different host -> scope unchanged, no persist`` () =
+    Assert.Equal({ Scope = Host h; Persist = NoPersistChange }, step (Host h) (HostRemoved other))
+    Assert.Equal({ Scope = AllHosts; Persist = NoPersistChange }, step AllHosts (HostRemoved other))
+
+[<Fact>]
+let ``RestoreAtStartup None -> AllHosts, no persist`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = NoPersistChange }, step AllHosts (RestoreAtStartup(None, [| h |])))
+
+[<Fact>]
+let ``RestoreAtStartup a known id -> that host, no persist`` () =
+    Assert.Equal({ Scope = Host h; Persist = NoPersistChange }, step AllHosts (RestoreAtStartup(Some h, [| h; other |])))
+
+[<Fact>]   // R10: the saved id no longer exists
+let ``RestoreAtStartup an unknown id -> AllHosts + ClearPersisted`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = ClearPersisted }, step AllHosts (RestoreAtStartup(Some h, [| other |])))
+
+[<Fact>]
+let ``restoreEvent bridges the C# nullable saved id`` () =
+    Assert.Equal(RestoreAtStartup(None, [| h |]), restoreEvent (Nullable()) [| h |])
+    Assert.Equal(RestoreAtStartup(Some h, [| h |]), restoreEvent (Nullable h) [| h |])
+
+// --- highlightOf: pure derivation (never stored, never an event) ---
+
+[<Fact>]
+let ``highlightOf: SingleHost highlights the sole row regardless of scope`` () =
+    Assert.Equal(HighlightHostRow h, highlightOf AllHosts (Nullable h) [||])
+
+[<Fact>]
+let ``highlightOf: scoped+visible -> that host; hidden -> none; AllHosts -> sentinel`` () =
+    Assert.Equal(HighlightHostRow h, highlightOf (Host h) (Nullable()) [| h; other |])
+    Assert.Equal(NoHighlight, highlightOf (Host h) (Nullable()) [| other |])
+    Assert.Equal(HighlightAllHostsRow, highlightOf AllHosts (Nullable()) [| h |])
+
+// --- FsCheck properties ---
+// FsCheck supplies only primitive arbitraries (Guid list / int / bool); we derive a
+// well-formed scenario from them, so there are no hand-written generators to drift.
+// Encoded precondition: an ExplicitSelect(HostCarrier) always carries a KNOWN host id
+// (you can only click a rendered row); the other events may reference any id.
+
+let private nonneg (i: int) = i &&& Int32.MaxValue
+let private pickFrom (arr: Guid[]) (i: int) = arr.[nonneg i % arr.Length]
+
+let private scenario (knownRaw: Guid list) (stateKnown: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let known = knownRaw |> List.distinct |> List.toArray
+    let state = if stateKnown && known.Length > 0 then Host (pickFrom known idSel) else AllHosts
+    let anyId = if idKnown && known.Length > 0 then pickFrom known idSel else Guid.NewGuid()
+    let ev =
+        match (nonneg evSel) % (if known.Length = 0 then 4 else 5) with
+        | 0 -> ExplicitSelect AllHostsCarrier
+        | 1 -> HostRemoved anyId
+        | 2 -> RestoreAtStartup(Some anyId, known)
+        | 3 -> RestoreAtStartup(None, known)
+        | _ -> ExplicitSelect (HostCarrier (pickFrom known idSel))   // known-only carrier
+    known, state, ev
+
+[<Property>]   // P1: result scope is always valid (AllHosts, or a host that still exists)
+let ``P1 valid scope`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let known, state, ev = scenario knownRaw sk evSel idKnown idSel
+    let postKnown = match ev with | HostRemoved id -> known |> Array.filter ((<>) id) | _ -> known
+    match (step state ev).Scope with
+    | AllHosts -> true
+    | Host id -> Array.contains id postKnown
+
+[<Property>]   // P2: persistence changes only on ExplicitSelect or an invalidation path
+let ``P2 persistence discipline`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let _, state, ev = scenario knownRaw sk evSel idKnown idSel
+    match (step state ev).Persist with
+    | NoPersistChange -> true
+    | PersistExplicit _ | ClearPersisted ->
+        match ev with
+        | ExplicitSelect _ -> true
+        | HostRemoved id -> state = Host id
+        | RestoreAtStartup(Some id, known) -> not (Array.contains id known)
+        | RestoreAtStartup(None, _) -> false
+
+[<Property>]   // P3: a Host scope arises ONLY from an explicit choice or a valid restore (never a spontaneous pin)
+let ``P3 no spontaneous pin`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let _, state, ev = scenario knownRaw sk evSel idKnown idSel
+    match (step state ev).Scope with
+    | AllHosts -> true
+    | Host resid ->
+        match ev with
+        | ExplicitSelect (HostCarrier id) -> id = resid
+        | ExplicitSelect AllHostsCarrier -> false
+        | RestoreAtStartup(Some id, known) -> id = resid && Array.contains id known
+        | RestoreAtStartup(None, _) -> false
+        | HostRemoved _ -> state = Host resid        // unchanged, not newly pinned
+```
+Add `<Compile Include="ScopeMachineTests.fs" />` to `Lattice.Aggregation.Tests.fsproj` (after `RailLayoutTests.fs`).
+
+- [ ] **Step 2: Run — expect FAIL** (the module does not exist yet).
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests`
+Expected: compile failure (`ScopeMachine` / its types are undefined).
+
+- [ ] **Step 3: Implement `ScopeMachine.fs` (born pure)**
+
+Create `src/Lattice.App.Aggregation/ScopeMachine.fs`:
+```fsharp
+namespace Lattice.App.Aggregation
+
+open System
+
+/// The global host scope: which host every data view filters to. Mirrors the C#
+/// `ScopeSelection` (AllHosts | one host) but lives in the pure core so the shell
+/// owns none of the transition logic.
+type Scope =
+    | AllHosts
+    | Host of Guid
+
+/// A rail row the user can click to CHOOSE a scope. Group headers and the transient
+/// `null` selection are deliberately NOT carriers (see `step`'s doc comment).
+type ScopeCarrier =
+    | AllHostsCarrier
+    | HostCarrier of Guid
+
+/// The only occurrences that move scope. Closed by construction — this DU IS the
+/// former "rail scope invariants" prose, now compiler-checked.
+/// NOT events (the shell must never fabricate one for them):
+///   * rail REBUILD  — re-selecting a row during a rebuild is not a user choice (R5);
+///                     the new highlight is derived by `highlightOf`, not `step`.
+///   * host ADDED    — never pins a lone host; single-host is presentation only,
+///                     owned by `RailLayout` (Scope stays AllHosts — data-identical).
+///   * MODE change   — flat↔grouped is a `RailLayout` concern; it moves no scope.
+type ScopeEvent =
+    | ExplicitSelect of ScopeCarrier
+    | HostRemoved of Guid
+    | RestoreAtStartup of savedHostId: Guid option * knownHostIds: Guid[]
+
+/// The persistence side effect the shell applies after a transition.
+/// `PersistExplicit`/`ClearPersisted` both write `ScopeHostId` (an id / null);
+/// `NoPersistChange` leaves it untouched. Kept distinct so the transition table
+/// reads intent (a user choice vs. discarding a stale id), not just the byte written.
+type PersistAction =
+    | PersistExplicit of Guid option
+    | ClearPersisted
+    | NoPersistChange
+
+/// `step`'s output: the next scope plus the persistence action.
+type ScopeDecision =
+    { Scope: Scope
+      Persist: PersistAction }
+
+/// Which rail row the shell should highlight. Derived from scope + rail contents by
+/// `highlightOf`; never stored, never produced by an event.
+type RailHighlight =
+    | HighlightAllHostsRow
+    | HighlightHostRow of Guid
+    | NoHighlight
+
+module ScopeMachine =
+
+    /// The whole scope/selection/persistence state machine: state in, decision out.
+    /// Total over the event DU; no wildcard on domain cases (CLAUDE.md F# canon).
+    let step (state: Scope) (event: ScopeEvent) : ScopeDecision =
+        match event with
+        | ExplicitSelect AllHostsCarrier ->
+            { Scope = AllHosts; Persist = PersistExplicit None }
+        | ExplicitSelect (HostCarrier id) ->
+            { Scope = Host id; Persist = PersistExplicit (Some id) }
+        | HostRemoved id ->
+            match state with
+            | Host scoped when scoped = id ->
+                // R11: the scoped host is gone — fall back to All hosts, wipe the stale id.
+                { Scope = AllHosts; Persist = ClearPersisted }
+            | AllHosts
+            | Host _ ->
+                { Scope = state; Persist = NoPersistChange }
+        | RestoreAtStartup (savedHostId, knownHostIds) ->
+            match savedHostId with
+            | Some id when Array.contains id knownHostIds ->
+                { Scope = Host id; Persist = NoPersistChange }
+            | Some _ ->
+                // R10: the saved host no longer exists — fall back, wipe the stale id.
+                { Scope = AllHosts; Persist = ClearPersisted }
+            | None ->
+                { Scope = AllHosts; Persist = NoPersistChange }
+
+    /// Which row RebuildRail should select — a pure function of scope + what the rail
+    /// currently shows. CONSUMER-SHAPED (Nullable / array) for the C# shell (F# canon
+    /// pt.: C#-consumed signatures may stay consumer-shaped):
+    ///   * soleHost      = the lone host id in SingleHost presentation, else null. The
+    ///                     sole row is highlighted regardless of scope (scope stays
+    ///                     AllHosts — data-identical for one host).
+    ///   * visibleHostIds = host ids that actually have a rendered row (a scoped host
+    ///                     hidden inside a collapsed group has none ⇒ NoHighlight).
+    let highlightOf (scope: Scope) (soleHost: Nullable<Guid>) (visibleHostIds: Guid[]) : RailHighlight =
+        if soleHost.HasValue then HighlightHostRow soleHost.Value
+        else
+            match scope with
+            | Host id when Array.contains id visibleHostIds -> HighlightHostRow id
+            | Host _ -> NoHighlight
+            | AllHosts -> HighlightAllHostsRow
+
+    /// C#-friendly constructor for the startup restore event: converts the nullable
+    /// persisted id at the boundary so the shell never touches `FSharpOption` (F# canon:
+    /// convert exception/nullable-style .NET shapes to Option at the boundary).
+    let restoreEvent (savedHostId: Nullable<Guid>) (knownHostIds: Guid[]) : ScopeEvent =
+        RestoreAtStartup((if savedHostId.HasValue then Some savedHostId.Value else None), knownHostIds)
+```
+Add `<Compile Include="ScopeMachine.fs" />` to `Lattice.App.Aggregation.fsproj`.
+
+- [ ] **Step 4: Run — expect PASS**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests`
+Expected: PASS — the 10 table `[<Fact>]`s and the 3 `[<Property>]`s are green. The project's own
+`TreatWarningsAsErrors` (`.fsproj`) additionally proves the two `match`es are exhaustive with no wildcard.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App.Aggregation/ScopeMachine.fs src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj \
+        tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj
+git commit -m "feat(scope): born-pure ScopeMachine core (scope state machine, closes R5/R9/R10/R11 class)"
+```
+
+---
+
+### Scope semantics live in `ScopeMachine` (Task 6B) — the shell only translates
+
+Every task below that touches scope/selection/persistence obeys `ScopeMachine`, not restated prose. The
+contract, in one place:
+
+- **The shell never decides scope.** It maps a UI occurrence to a `ScopeEvent`, calls `ScopeMachine.step`,
+  and applies the returned `ScopeDecision` (set `Scope`, then run its `PersistAction`). The only occurrences
+  that are events: an explicit rail selection (`ExplicitSelect`), a host removal (`HostRemoved`), and startup
+  restore (`RestoreAtStartup`).
+- **A rail rebuild is NOT an event.** `RebuildRail` rematerializes rows and sets the highlight from
+  `ScopeMachine.highlightOf(scope, soleHost, visibleHostIds)`; it never calls `step`, so it can never mutate
+  or persist `Scope` (the R5 structural guarantee, now enforced by the type — there is no event to construct).
+- **A group-header or `null` selection is NOT a scope carrier.** `OnSelectedRailEntryChanged` builds a
+  `ScopeCarrier` only for `HostRailItemViewModel` / `AllHostsRailItemViewModel`; anything else constructs no
+  event (R5 header-click).
+- **SingleHost is presentation only** (owned by `RailLayout`, Task 2). One host ⇒ no sentinel row, the sole
+  host row highlighted, but `Scope` stays `AllHosts` — data-identical for one host. Consequence for the data
+  views: aggregate presentation must key on **genuine multi-host** (`Scope.IsAllHosts && hostCount > 1`), not
+  on `Scope.IsAllHosts` alone (Task 7B). There is **no** single-host auto-pin, no `_wasSingleHost`, no
+  `_pendingScopeRestore`.
+
+### Task 7: `ShellViewModel` rail orchestration — measure, reconcile, translate scope to the cores
 
 **Files:**
 - Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs`
 - Modify: `tests/Lattice.App.Tests/ShellViewModelTests.cs`
 
-Replaces the layout-agnostic `ReconcileHosts` host-VM churn with: a persistent host-VM map keyed by id (owns clock subscriptions), plus a `RebuildRail()` that materializes `RailLayoutPolicy.compute(...)` output into `RailEntries` and sets the **highlight only** (invariant I3). New inputs: viewport height (fed by the view), override + expand state (loaded/persisted via `UiStateStore`). `Scope` is set only in the ctor (restore) and on explicit user selection (I2/I4); `RebuildRail` derives `SelectedRailEntry` from it.
+Replaces the layout-agnostic `ReconcileHosts` host-VM churn with: a persistent host-VM map keyed by id (owns clock subscriptions), plus a `RebuildRail()` that materializes `RailLayoutPolicy.compute(...)` output into `RailEntries` and sets the **highlight only** (via `ScopeMachine.highlightOf` — no scope mutation). New inputs: viewport height (fed by the view), override + expand state (loaded/persisted via `UiStateStore`). Every scope move is a `ScopeMachine` transition: the shell translates a UI occurrence (ctor restore / explicit rail selection / host removal) into a `ScopeEvent`, calls `ScopeMachine.step`, and applies the `ScopeDecision` — it never re-derives scope or persistence rules (Task 6B). `RebuildRail` derives `SelectedRailEntry` from `highlightOf` and constructs no event.
 
 Constants: `RailRowHeight = 40.0` (= `LatticeHostItemHeight`), `ReservedRailChrome = 150.0` (Hosts header + Settings item + paddings; the exact value is pinned by the headless geometry test in Task 8 — tune it there, keep it here).
 
@@ -931,8 +1203,9 @@ public void Single_host_is_presentation_only_scope_stays_all_hosts_host_highligh
 {
     AddHosts(1);
     _shell.SetRailViewportHeight(1000.0);
-    // I1/I5: SingleHost renders + highlights the sole host row but does NOT mutate Scope;
-    // Scope stays All hosts (data-identical for one host). No sentinel row.
+    // SingleHost is presentation only (owned by RailLayout): it renders + highlights the sole
+    // host row but does NOT mutate Scope (host-added is not a ScopeEvent). Scope stays All hosts
+    // (data-identical for one host). No sentinel row.
     var row = Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>());
     Assert.Same(row, _shell.SelectedRailEntry);          // host row highlighted
     Assert.True(_shell.Scope.IsAllHosts);                // ...but scope is All hosts
@@ -1045,7 +1318,7 @@ public void Explicit_click_on_the_sole_host_scopes_and_persists_and_survives_a_s
     _registry.AddHost(solo);
     _shell.SetRailViewportHeight(1000.0);
 
-    // I2: an explicit click on the sole host row IS a real selection — scope + persist.
+    // An explicit click on the sole host row IS a real selection (ExplicitSelect) — scope + persist.
     _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>().Single();
     Assert.Equal(solo.Id, _shell.Scope.HostId);
     Assert.Equal(solo.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
@@ -1060,26 +1333,49 @@ public void Adding_a_second_host_without_an_explicit_selection_stays_all_hosts()
 {
     _registry.AddHost(TestData.MakeHostConfig(name: "solo"));
     _shell.SetRailViewportHeight(1000.0);
-    Assert.True(_shell.Scope.IsAllHosts);            // I1: no auto-pin
+    Assert.True(_shell.Scope.IsAllHosts);            // no auto-pin (host-added is not a ScopeEvent)
 
     _registry.AddHost(TestData.MakeHostConfig(name: "second"));
     // Still All hosts, and the (now-present) sentinel is highlighted.
     Assert.True(_shell.Scope.IsAllHosts);
     Assert.IsType<AllHostsRailItemViewModel>(_shell.SelectedRailEntry);
 }
+
+[Fact]   // R11 at the shell boundary: removing the scoped host fires HostRemoved → step clears scope
+public void Removing_the_scoped_host_falls_back_to_all_hosts_and_clears_persistence()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    _shell.SetRailViewportHeight(1000.0);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
+        .Single(h => h.HostId == h2.Id);
+    Assert.Equal(h2.Id, _shell.Scope.HostId);
+    Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    _registry.RemoveHost(h2.Id);   // ReconcileHosts → ScopeMachine.HostRemoved(h2) → AllHosts + ClearPersisted
+
+    Assert.True(_shell.Scope.IsAllHosts);                              // no longer pointing at a dead host
+    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);        // stale id wiped
+    // Removing a NON-scoped host leaves the surviving scope alone (covered by ScopeMachine table row 4).
+}
 ```
 
 > Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
-> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. `ResolveHighlight`
-> already returns `null` for the hidden-row case, and because `RebuildRail` never mutates `Scope` (I3),
-> that write-back is harmless — `Scope` holds the host regardless of the highlight. This test locks the
-> scope-as-data contract either way.
+> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. That write-back lands
+> in `OnSelectedRailEntryChanged` with `value == null`, which is **not** a scope carrier, so it constructs no
+> `ScopeEvent` and `Scope` is untouched — the host stays scoped regardless of the highlight. This test locks
+> the scope-as-data contract either way.
 
 - [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellViewModelTests"`).
 
 - [ ] **Step 3: Rework `ShellViewModel`**
 
-Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the class:
+Add usings: `using Lattice.App.Aggregation;` and an alias for the F# scope type (its name `Scope`
+collides with the shell's `Scope` property): `using ScopeState = Lattice.App.Aggregation.Scope;`. Add fields
+near the top of the class:
 ```csharp
     private const double RailRowHeight = 40.0;         // LatticeHostItemHeight — flat/single host + All-hosts rows AND the fit-math row unit
     private const double GroupedHostRowHeight = 36.0;   // LatticeRowHeight — denser host rows inside status groups (design 3a)
@@ -1089,7 +1385,7 @@ Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the cla
     private double _railViewportHeight;
     private RailGroupingMode _grouping;
     private bool _healthyExpanded;
-    private bool _rebuilding;   // guards OnSelectedRailEntryChanged so RebuildRail's highlight never mutates/persists Scope (I2/I3)
+    private bool _rebuilding;   // set during RebuildRail so its highlight assignment is not read as a user selection
 
     [ObservableProperty] private bool _showRailToggle;
 
@@ -1107,16 +1403,17 @@ In the constructor, capture `uiState` and load persisted rail state (before `Rec
         _healthyExpanded = ui.RailHealthyExpanded;
 ```
 Keep `RailEntries.Add(_allHosts);`. Do **not** set `SelectedRailEntry = _allHosts` in the ctor any more —
-`RebuildRail` derives the highlight (I3), and an explicit ctor selection would fire `OnSelectedRailEntryChanged`
-and clobber the persisted `ScopeHostId` (I4). Instead **restore the persisted scope by setting the `Scope`
-property once** (design README:80/108 / invariant I4), which fires `OnScopeChanged` → the view-models sync;
-it does not persist (persistence is on the explicit-selection path only). Unknown/removed host id → All hosts:
+`RebuildRail` derives the highlight, and an explicit ctor selection would fire `OnSelectedRailEntryChanged`.
+Instead **restore the persisted scope through the pure core**: translate the nullable saved id + the current
+host set into a `RestoreAtStartup` event, let `ScopeMachine.step` decide (known id → that host; unknown/removed
+id → All hosts **and** clear the stale persisted id, R10), and apply the decision. `ApplyScopeDecision` sets
+`Scope` (firing `OnScopeChanged` → the view-models sync) and runs the decision's persistence action:
 ```csharp
-        // Restore the persisted host scope (README:80/108, I4). Setting the property (not the backing
-        // field) fires OnScopeChanged so the views sync; it does NOT persist (OnScopeChanged is
-        // view-push only). ReconcileHosts → RebuildRail then derives the matching highlight.
-        Scope = ui.ScopeHostId is { } persistedScope && store.Hosts.Any(h => h.Config.Id == persistedScope)
-            ? new ScopeSelection(persistedScope) : ScopeSelection.AllHosts;
+        // Restore the persisted host scope via ScopeMachine (README:80/108). The core owns the
+        // known/unknown-id decision — no inline `store.Hosts.Any(...)` fallback here.
+        var knownHostIds = store.Hosts.Select(h => h.Config.Id).ToArray();
+        ApplyScopeDecision(ScopeMachine.step(ScopeState.AllHosts,
+            ScopeMachine.restoreEvent(ui.ScopeHostId, knownHostIds)));
 
         store.Changed += OnStoreChanged;
         ReconcileHosts();
@@ -1141,6 +1438,10 @@ Replace the body of `ReconcileHosts` (host-VM management stays; row layout moves
         {
             _hostRowVms[gone].Dispose();
             _hostRowVms.Remove(gone);
+            // Host removal is a ScopeEvent. If the removed host was the scoped one, ScopeMachine
+            // falls back to All hosts + clears the persisted id (R11); otherwise it is a pure no-op
+            // (same scope, no persist). RebuildRail below then re-derives the highlight.
+            ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewHostRemoved(gone)));
         }
         var connected = _store.Hosts.Count(h => RailStateProjection.From(h.Status) == RailState.Connected);
         _allHosts.Update(connected, _store.Hosts.Count);
@@ -1206,6 +1507,26 @@ Add the orchestration members:
             _ => RailOverride.Auto,
         };
 
+    // --- scope translation boundary: the shell's ScopeSelection <-> the core's Scope, and the
+    //     single place a ScopeDecision is applied. This is the ENTIRE scope logic in the shell. ---
+    private static ScopeState ToScope(ScopeSelection s) =>
+        s.IsAllHosts ? ScopeState.AllHosts : ScopeState.NewHost(s.HostId!.Value);
+
+    private static ScopeSelection ToSelection(ScopeState s) =>
+        s is ScopeState.Host h ? new ScopeSelection(h.Item) : ScopeSelection.AllHosts;
+
+    /// <summary>Apply a ScopeMachine decision: set the scope (fires OnScopeChanged → view-push)
+    /// and run its persistence action. The ONLY place the shell writes Scope or ScopeHostId.</summary>
+    private void ApplyScopeDecision(ScopeDecision decision)
+    {
+        Scope = ToSelection(decision.Scope);
+        if (decision.Persist is PersistAction.PersistExplicit pe)
+            _uiState.Update(s => s with { ScopeHostId = pe.Item is null ? (Guid?)null : pe.Item.Value });
+        else if (decision.Persist.IsClearPersisted)
+            _uiState.Update(s => s with { ScopeHostId = null });
+        // PersistAction.NoPersistChange → leave persistence untouched.
+    }
+
     private void RebuildRail()
     {
         RailLayoutInput input = BuildRailInput();
@@ -1213,9 +1534,9 @@ Add the orchestration members:
         ShowRailToggle = layout.ShowToggle;
         HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
 
-        // I3: RebuildRail NEVER mutates Scope. It rematerializes the rows and derives the
-        // highlight from the current Scope. The _rebuilding guard makes the SelectedRailEntry
-        // assignment inert w.r.t. OnSelectedRailEntryChanged (no scope mutation, no persist).
+        // RebuildRail constructs NO ScopeEvent, so it cannot mutate or persist Scope. It
+        // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf. The
+        // _rebuilding guard makes the SelectedRailEntry assignment inert w.r.t. OnSelectedRailEntryChanged.
         _rebuilding = true;
         try
         {
@@ -1230,16 +1551,20 @@ Add the orchestration members:
         finally { _rebuilding = false; }
     }
 
-    /// <summary>Highlight derived from Scope + current rows (I3). SingleHost highlights the
-    /// sole host row even though Scope stays All hosts (I1/I5); a scoped host hidden in a
-    /// collapsed group yields no highlight (Scope still holds it); otherwise the All-hosts row.</summary>
+    /// <summary>Highlight = the pure ScopeMachine.highlightOf(scope, soleHost, visibleHostIds) —
+    /// never a scope mutation. SingleHost highlights the sole host row even though Scope stays
+    /// All hosts; a scoped host hidden in a collapsed group yields no highlight (Scope still holds
+    /// it); otherwise the All-hosts sentinel.</summary>
     private object? ResolveHighlight(RailLayout layout)
     {
-        if (layout.Mode.IsSingleHost)
-            return RailEntries.OfType<HostRailItemViewModel>().First();
-        if (Scope.HostId is { } id && _hostRowVms.TryGetValue(id, out var vm))
-            return RailEntries.Contains(vm) ? vm : null;
-        return _allHosts;
+        var visibleHostIds = RailEntries.OfType<HostRailItemViewModel>().Select(h => h.HostId).ToArray();
+        Guid? soleHost = layout.Mode.IsSingleHost
+            ? RailEntries.OfType<HostRailItemViewModel>().First().HostId
+            : (Guid?)null;
+        RailHighlight highlight = ScopeMachine.highlightOf(ToScope(Scope), soleHost, visibleHostIds);
+        if (highlight is RailHighlight.HighlightHostRow hr)
+            return _hostRowVms.TryGetValue(hr.Item, out var vm) ? vm : null;
+        return highlight.IsHighlightAllHostsRow ? _allHosts : null;   // else NoHighlight (hidden scoped host)
     }
 
     private object MaterializeRow(RailRow row)
@@ -1253,41 +1578,30 @@ Add the orchestration members:
     }
 ```
 
-Update `OnSelectedRailEntryChanged` to suppress side effects during a rebuild AND to make only the
-two real scope carriers change `Scope`. This is the structural invariant that closes the whole
-group-header scope-loss class (both the collapsed-group case and the header-**click** case): a
-`GroupHeaderRailItemViewModel` — or a transient `null` — is **not** a scope, so selecting one must leave
-`Scope` untouched. Without this, the ListBox's two-way `SelectedItem` binding routes a header click through
-here to `AllHosts` *before* the view's `ToggleCommand`/`RebuildRail` runs, so `RebuildRail` captures a null
-`scopedHostId` and collapsing the group drops the host scope:
-This is also the ONLY place scope is **mutated by selection** and the ONLY place it is **persisted** — the
-explicit-user-selection path (I2/I4), guarded by `_rebuilding` so `RebuildRail`'s highlight assignments never
-reach it:
+Rewrite `OnSelectedRailEntryChanged` as a **translator**: a rail selection becomes a `ScopeCarrier` only for
+the two real carriers; a `GroupHeaderRailItemViewModel` or a transient `null` is **not** a carrier, so it
+constructs **no event** and leaves scope untouched. That is the structural close of the whole group-header
+scope-loss class (both the collapsed-group case and the header-**click** case, R5): without it the ListBox's
+two-way `SelectedItem` binding would route a header click to `AllHosts`. The persistence side effect is not
+decided here — it rides on the `ScopeDecision` that `ApplyScopeDecision` runs:
 ```csharp
     partial void OnSelectedRailEntryChanged(object? value)
     {
-        if (_rebuilding) return;   // RebuildRail sets the highlight only; it never mutates/persists Scope (I3)
-        switch (value)
+        if (_rebuilding) return;   // RebuildRail sets the highlight only — not a user selection
+        ScopeCarrier? carrier = value switch
         {
-            case HostRailItemViewModel h:
-                Scope = new ScopeSelection(h.HostId);
-                _uiState.Update(s => s with { ScopeHostId = h.HostId });   // explicit user choice → persist
-                break;
-            case AllHostsRailItemViewModel:
-                Scope = ScopeSelection.AllHosts;
-                _uiState.Update(s => s with { ScopeHostId = null });
-                break;
-            // Group header or null: NOT a scope change — keep the current scope, persist nothing.
-            // (A header click briefly lands here via the ListBox binding; letting it fall to
-            // AllHosts is the round-5 scope-loss. RebuildRail resets the highlight afterwards.)
-        }
+            HostRailItemViewModel h => ScopeCarrier.NewHostCarrier(h.HostId),
+            AllHostsRailItemViewModel => ScopeCarrier.AllHostsCarrier,
+            _ => null,   // group header or transient null: NOT a scope carrier → construct no event (R5)
+        };
+        if (carrier is null) return;
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewExplicitSelect(carrier)));
     }
 ```
 
-Leave the existing `OnScopeChanged` as a pure view-push — it does **not** persist (persistence is on the
-explicit-selection path above, I4). It fires for the ctor restore and for explicit selections; `RebuildRail`
-never calls it (I3), so a single-host view — `Scope = AllHosts`, host row merely highlighted (I1) — is never
-recorded as a host scope:
+Leave the existing `OnScopeChanged` as a pure view-push — it never persists and never re-enters
+`ScopeMachine` (persistence is the `ScopeDecision` the shell already applied). It fires for the ctor restore,
+explicit selections, and host removal; `RebuildRail` never triggers it (it sets the highlight, not `Scope`):
 ```csharp
     partial void OnScopeChanged(ScopeSelection value)
     {
@@ -1308,6 +1622,7 @@ Update `Dispose` to dispose host VMs from the map (they no longer all live in `R
 (Remove the old `RailEntries.OfType<HostRailItemViewModel>()` disposal loop.) **Keep** the `Settings.Reconcile();` call at the end of `ReconcileHosts` for now — the Settings Hosts group still exists through Tasks 8–12, and its expanders (and the existing Settings tests) rely on this shell call to track host add/remove. Task 13 deletes both the group and this call in the same step, so removing it here would leave the expanders stale (production + tests) in the interim.
 
 > F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier`/`RailMode` DU cases are static properties (compare with `.Equals`) and each has an `Is<Case>` predicate (`RailMode.IsSingleHost`, `RailOverride.IsForceFlat`/`.IsForceGrouped`/`.IsAuto`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
+> `ScopeMachine` interop: DU **case constructors** from C# are `New<Case>(...)` — `ScopeEvent.NewExplicitSelect`/`NewHostRemoved`, `ScopeCarrier.NewHostCarrier`, `ScopeState.NewHost` — nullary cases are static properties (`ScopeCarrier.AllHostsCarrier`, `ScopeState.AllHosts`). Data cases match via type-pattern with `.Item` (`decision.Persist is PersistAction.PersistExplicit pe` → `pe.Item` is `FSharpOption<Guid>`, whose `None` is a `null` reference; `highlight is RailHighlight.HighlightHostRow hr` → `hr.Item`); nullary cases via `Is<Case>` (`decision.Persist.IsClearPersisted`, `highlight.IsHighlightAllHostsRow`, `s is ScopeState.Host h` → `h.Item`). `restoreEvent(Guid?, Guid[])` and `highlightOf(Scope, Guid?, Guid[])` take C# `Guid?`/arrays directly (consumer-shaped, no `FSharpOption` at those calls).
 
 - [ ] **Step 4: Migrate every sentinel-assuming test for `SingleHost` mode (repo-wide sweep)**
 
@@ -1348,12 +1663,12 @@ sentinel test that no longer compiles/realizes surfaces as a build/red failure h
 ```bash
 git add src/Lattice.App/ViewModels/ShellViewModel.cs tests/Lattice.App.Tests/ShellViewModelTests.cs \
         tests/Lattice.App.Tests/Headless/ShellRailTests.cs tests/Lattice.App.Tests/AllHostsRailTests.cs
-git commit -m "feat(rail): height-adaptive rail orchestration via RailLayoutPolicy (design 3a)"
+git commit -m "feat(rail): rail orchestration via RailLayoutPolicy + scope via ScopeMachine (design 3a)"
 ```
 
 ---
 
-### Task 7B: Re-key view-layer "aggregate presentation" from `IsAllHosts` to genuine multi-host (invariant I5)
+### Task 7B: Re-key view-layer "aggregate presentation" from `IsAllHosts` to genuine multi-host
 
 **Files:**
 - Modify: `src/Lattice.App/ViewModels/TasksViewModel.cs`, `ProjectsViewModel.cs`, `TransfersViewModel.cs`, `EventLogViewModel.cs`
@@ -1362,8 +1677,9 @@ git commit -m "feat(rail): height-adaptive rail orchestration via RailLayoutPoli
 **Why (downstream-consumer check, verified against current main):** before this rework a one-host user had
 `Scope = host` (the old auto-pin), so `IsAllHostsScope = Scope.IsAllHosts` was `false` and every view showed
 single-host presentation (no Host column, Projects hides child rows / shows host-specific status instead of
-"Active on all hosts", no partial bar). Under I1/I5 a one-host user now has `Scope = AllHosts`, so
-`Scope.IsAllHosts` is `true` — the views would wrongly switch to **aggregate** presentation for a single host.
+"Active on all hosts", no partial bar). Under `ScopeMachine` a one-host user now has `Scope = AllHosts` (no
+auto-pin; `SingleHost` is presentation only), so `Scope.IsAllHosts` is `true` — the views would wrongly switch
+to **aggregate** presentation for a single host.
 Re-key the aggregate flag to **genuine multi-host** so behavior is preserved. Confirmed consumers (grep
 `IsAllHostsScope` / `Scope.IsAllHosts` under `src/Lattice.App*`):
 - `TasksViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` + `ShowPartialBar = _partialBar.Advance(…, Scope.IsAllHosts)` (Host column + "Elapsed/…" arms in `TasksView.axaml` bind `IsAllHostsScope` / `!IsAllHostsScope`).
@@ -1378,7 +1694,7 @@ Re-key the aggregate flag to **genuine multi-host** so behavior is preserved. Co
 [Fact]
 public void Single_host_registry_is_not_aggregate_presentation()
 {
-    // One host, scope = All hosts (I5). Aggregate UI (Host column etc.) must stay OFF.
+    // One host, scope = All hosts (ScopeMachine: no auto-pin). Aggregate UI (Host column etc.) must stay OFF.
     var host = TestData.MakeHostConfig();
     _registry.AddHost(host);
     // ...drive a poll so rows exist (mirror the existing TasksViewModel test setup)...
@@ -1414,7 +1730,7 @@ flag to the partial bar:
 git add src/Lattice.App/ViewModels/TasksViewModel.cs src/Lattice.App/ViewModels/ProjectsViewModel.cs \
         src/Lattice.App/ViewModels/TransfersViewModel.cs src/Lattice.App/ViewModels/EventLogViewModel.cs \
         tests/Lattice.App.Tests/
-git commit -m "fix(views): key aggregate presentation on genuine multi-host, not IsAllHosts (invariant I5)"
+git commit -m "fix(views): key aggregate presentation on genuine multi-host, not IsAllHosts (ScopeMachine)"
 ```
 
 ---
@@ -2732,9 +3048,9 @@ git add -A && git commit -m "test(shell): pin rail geometry + final ReservedRail
 
 ## Self-review checklist (run before opening the code PR)
 
-1. **Spec coverage** — Area 1 (PaneFooter) = Task 1; Area 2 (grouping core) = Tasks 2–8; Area 3 (host mgmt) = Tasks 9–13; Area 4 (auth-failed) = Task 12; Area 5 (Theme) = Task 14; Area 6 (ResX) = Tasks 6–15. ✔
-2. **DU totality** — `RailTierProjection` and every F# `match` are wildcard-free over domain DUs; adding a `RailState`/`RailTier` case is a compile error.
+1. **Spec coverage** — Area 1 (PaneFooter) = Task 1; Area 2 (grouping core) = Tasks 2–3, 6, 7–8; scope core (`ScopeMachine`) = Task 6B, wired in Task 7; Area 3 (host mgmt) = Tasks 9–13; Area 4 (auth-failed) = Task 12; Area 5 (Theme) = Task 14; Area 6 (ResX) = Tasks 6–15. ✔
+2. **DU totality** — `RailTierProjection` and every F# `match` (both `RailLayoutPolicy` and `ScopeMachine`, the latter enforced by the project's `TreatWarningsAsErrors`) are wildcard-free over domain DUs; adding a `RailState`/`RailTier`/`ScopeEvent`/`ScopeCarrier` case is a compile error. **Scope is a pure state machine, not shell prose** — the shell only translates UI occurrences into `ScopeEvent`s (no scope/persist decision lives in `ShellViewModel`).
 3. **Determinism** — every UI test settles on expected text / fake calls / registry state via `HeadlessSync.WaitUntilAsync` or synchronous `Layout`; no wall-clock waits; `ManualUiClock`/`FakeTimeProvider` throughout. No `WaitUntilAsync` on a transient that can flip true early — asserts target end-state text/collection contents.
-4. **Type consistency** — F# module `RailLayoutPolicy` vs result record `RailLayout`; C# consumes `RailLayoutPolicy.compute`, `RailRow.HostRow.Item`, `RailRow.GroupHeaderRow.{tier,count,expanded}`, `RailHost(Guid, RailTier)`, `RailLayoutInput(Hosts, AvailableHeight, RowHeight, Override, HealthyExpanded)`. Persisted enums `RailGroupingMode`/`AppTheme` map to F# `RailOverride`/tiers.
+4. **Type consistency** — F# module `RailLayoutPolicy` vs result record `RailLayout`; C# consumes `RailLayoutPolicy.compute`, `RailRow.HostRow.Item`, `RailRow.GroupHeaderRow.{tier,count,expanded}`, `RailHost(Guid, RailTier)`, `RailLayoutInput(Hosts, AvailableHeight, RowHeight, Override, HealthyExpanded)`. `ScopeMachine`: module `ScopeMachine` (`step`/`highlightOf`/`restoreEvent`) with types `Scope` (aliased `ScopeState` in the shell), `ScopeCarrier`, `ScopeEvent`, `PersistAction`, `ScopeDecision`, `RailHighlight`; C# uses `New<Case>` constructors, `Is<Case>` predicates, and `.Item` accessors. Persisted enums `RailGroupingMode`/`AppTheme` map to F# `RailOverride`/tiers; `ScopeHostId` (`Guid?`) round-trips through `restoreEvent` + `ApplyScopeDecision`.
 5. **No `HostMonitor`/`HostMachine` edits** — App-layer + pure `Lattice.App.Aggregation` only. ✔
 

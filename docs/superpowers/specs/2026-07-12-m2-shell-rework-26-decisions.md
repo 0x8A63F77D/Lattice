@@ -105,9 +105,11 @@ ShowToggle = hostCount >= 2 && (not fits || Override <> Auto)
 The toggle's **next override** (opposite layout, with the Auto-return so the toggle can hide once it fits)
 is decided by the pure `RailLayoutPolicy.toggleOverride` (§6), never hand-wired in the VM — the toggle
 returns to `Auto` exactly when the flip target coincides with what `Auto` would show now. Keeping this in
-the core (not a VM `if`) is deliberate: the single-host scope pin, the collapsed-group scope persistence,
-and the toggle Auto-return are all rail decisions that belong under the transition-table, matching the
-`PartialBarPolicy`/`TasksOverlayPolicy` "born-pure" canon.
+the core (not a VM `if`) is deliberate: the layout/override/Auto-return decisions belong under
+`RailLayoutPolicy`'s transition-table, and the **scope**/selection/persistence decisions belong under the
+sibling `ScopeMachine` core (plan Task 6B) — matching the `PartialBarPolicy`/`TasksOverlayPolicy` "born-pure"
+canon. No rail or scope decision is hand-wired in the VM; the shell only translates UI occurrences into core
+inputs/events.
 
 ## 5. Compact (48 px) rail vs. height grouping — orthogonal axes; grouped-compact deferred
 
@@ -211,7 +213,7 @@ files deserialize to defaults — STJ uses the param default for a missing JSON 
 | `RailGrouping` | `RailGroupingMode` (`Auto`/`Flat`/`Grouped`) | `Auto` | maps to F# `RailOverride` |
 | `RailHealthyExpanded` | `bool` | `false` | Healthy group expand state (the only collapsible tier) |
 | `Theme` | `AppTheme` (`Light`/`Dark`/`System`) | `System` | app theme (card `2d`/`1f`) |
-| `ScopeHostId` | `Guid?` | `null` | persisted global host scope; null/absent = All hosts. **Design requires this**: README:80 ("independent, persistent global filter") + README:108 ("Global host-scope selection (persisted per machine)"). Unknown/removed id on load → All-hosts fallback. **Only EXPLICIT rail selections persist** (`OnSelectedRailEntryChanged`). There is **no** single-host auto-pin: `SingleHost` is presentation-only (highlights the sole host, `Scope` stays All hosts — data-identical, I1/I5), so nothing is written for a lone host unless the user explicitly clicks it. See the plan's "Rail scope invariants" (I1–I5) — the root-cause dissolution of the R5/R9/R10 scope/mode class. |
+| `ScopeHostId` | `Guid?` | `null` | persisted global host scope; null/absent = All hosts. **Design requires this**: README:80 ("independent, persistent global filter") + README:108 ("Global host-scope selection (persisted per machine)"). Unknown/removed id on load → All-hosts fallback. Writes are decided by the pure `ScopeMachine.step`, not the shell: **only `ExplicitSelect` persists an id** (or clears it for All hosts), and the **invalidation paths** clear a stale id (a scoped host removed, R11; an unknown saved id on restore, R10). There is **no** single-host auto-pin: `SingleHost` is presentation-only (highlights the sole host, `Scope` stays All hosts — data-identical), so nothing is written for a lone host unless the user explicitly clicks it. See the plan's Task 6B (`ScopeMachine`) — the born-pure core that closes the R5/R9/R10/R11 scope-finding class. |
 
 Enums persist as **strings** via `JsonStringEnumConverter` added to `UiStateStore.JsonOptions` (robust to
 member reordering, human-editable). `RailGroupingMode` / `AppTheme` are C# enums in
