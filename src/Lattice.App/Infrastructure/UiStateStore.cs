@@ -3,6 +3,12 @@ using Lattice.Core;
 
 namespace Lattice.App.Infrastructure;
 
+/// <summary>Persisted rail list/group override (maps to F# RailOverride in the shell).</summary>
+public enum RailGroupingMode { Auto, Flat, Grouped }
+
+/// <summary>Persisted app theme (design 2d/1f). System follows the OS.</summary>
+public enum AppTheme { Light, Dark, System }
+
 /// <summary>
 /// Persists per-user UI preferences (density, column visibility/widths) in JSON.
 /// Defaults and disposal on error: safe fallback for UI state (unlike the host registry).
@@ -14,6 +20,7 @@ public sealed class UiStateStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
     public string Path { get; }
@@ -112,7 +119,11 @@ public sealed class UiStateStore
 public sealed record UiState(
     bool CompactDensity,
     Dictionary<string, bool> ColumnVisibility,
-    Dictionary<string, double> ColumnWidths)
+    Dictionary<string, double> ColumnWidths,
+    RailGroupingMode RailGrouping = RailGroupingMode.Auto,
+    bool RailHealthyExpanded = false,
+    AppTheme Theme = AppTheme.System,
+    Guid? ScopeHostId = null)
 {
     /// <summary>Factory default: standard density, all columns visible, auto widths.
     /// Fresh instance per call — the dictionaries are mutable, so a shared

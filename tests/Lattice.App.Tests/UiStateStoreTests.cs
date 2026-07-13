@@ -224,4 +224,40 @@ public class UiStateStoreTests
         );
         Assert.Equal(expected, store.Path);
     }
+
+    [Fact]
+    public void Rail_and_theme_preferences_round_trip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        var store = new UiStateStore(path);
+        var scoped = Guid.NewGuid();
+        store.Save(UiState.Default with
+        {
+            RailGrouping = RailGroupingMode.Grouped,
+            RailHealthyExpanded = true,
+            Theme = AppTheme.Dark,
+            ScopeHostId = scoped,
+        });
+
+        var loaded = new UiStateStore(path).Load();
+        Assert.Equal(RailGroupingMode.Grouped, loaded.RailGrouping);
+        Assert.True(loaded.RailHealthyExpanded);
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(scoped, loaded.ScopeHostId);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void Legacy_state_file_without_new_fields_loads_defaults()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        // A pre-rework file: only the original three members present.
+        File.WriteAllText(path, """{"compactDensity":true,"columnVisibility":{},"columnWidths":{}}""");
+        var loaded = new UiStateStore(path).Load();
+        Assert.True(loaded.CompactDensity);
+        Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
+        Assert.Equal(AppTheme.System, loaded.Theme);
+        Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
+        File.Delete(path);
+    }
 }
