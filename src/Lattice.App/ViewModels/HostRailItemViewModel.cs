@@ -61,11 +61,23 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(IsAuthFailed));
     }
 
+    /// <summary>Store-driven full refresh: re-derives live state AND drops any transient
+    /// action result (Test / Remove-failure) carried on the previous cycle, reverting the
+    /// subtext to live state. Call only from a store-reconcile path, never from the clock
+    /// tick (see <see cref="RefreshLiveState"/>).</summary>
     public void Refresh()
     {
         // A fresh store poll reverts the subtext to live state: drop any transient
         // action result (Test / Remove-failure) carried on the previous cycle.
         TestResultText = null;
+        RefreshLiveState();
+    }
+
+    /// <summary>Re-derives Name/State/StateText/Tooltip from the live entry without touching
+    /// TestResultText, so a Test-connection result or Remove write-failure showing on a
+    /// Retrying row survives clock ticks; only a store-driven <see cref="Refresh"/> clears it.</summary>
+    private void RefreshLiveState()
+    {
         Name = _entry.Config.DisplayName;
         State = RailStateProjection.From(_entry.Status);
         StateText = State switch
@@ -79,7 +91,11 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             RailState.AuthFailed => Strings.RailAuthFailed,
             _ => "",
         };
-        Tooltip = BuildTooltip();
+        // Tooltip priority mirrors SubtextDisplay (kept in sync by OnTestResultTextChanged):
+        // a transient action result wins over live state, so only rebuild the live tooltip
+        // when no transient result is currently showing.
+        if (TestResultText is not { Length: > 0 })
+            Tooltip = BuildTooltip();
         OnPropertyChanged(nameof(SubtextDisplay));
     }
 
@@ -95,7 +111,7 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     private void OnTick(object? sender, EventArgs e)
     {
         if (State == RailState.Retrying)
-            Refresh();
+            RefreshLiveState();
     }
 
     public void Dispose() => _clock.Tick -= OnTick;

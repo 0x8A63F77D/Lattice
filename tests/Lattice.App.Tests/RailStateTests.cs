@@ -60,6 +60,30 @@ public class RailStateTests
         Assert.Equal(string.Format(Strings.RailRetryingFmt, 7, 3), vm.StateText);
     }
 
+    // Codex finding: TestResultText's own doc says it "clears on the next STORE
+    // Refresh()" — the clock-driven countdown tick must NOT clear it, or a Test
+    // result / Remove-failure shown on a Retrying row gets wiped within ~1 s.
+    [Fact]
+    public void TestResultText_survives_a_clock_tick_and_clears_only_on_a_store_refresh()
+    {
+        var clock = new ManualUiClock();
+        var entry = MakeEntry(Status(
+            HostConnectionState.Retrying, attempt: 3, nextAt: clock.Now.AddSeconds(12), error: "boom"));
+        var vm = new HostRailItemViewModel(entry, clock);
+        vm.Refresh();
+
+        vm.TestResultText = "Connected · BOINC 8.2.0";
+        clock.Advance(TimeSpan.FromSeconds(1)); // fires OnTick; State is still Retrying
+
+        Assert.Equal("Connected · BOINC 8.2.0", vm.TestResultText);
+        Assert.Equal("Connected · BOINC 8.2.0", vm.SubtextDisplay);
+        Assert.Equal("office-pc — Connected · BOINC 8.2.0", vm.Tooltip);
+
+        vm.Refresh(); // store-driven reconcile: the transient result must clear
+        Assert.Null(vm.TestResultText);
+        Assert.Equal(vm.StateText, vm.SubtextDisplay); // reverted to live state, not the stale result
+    }
+
     // The compact rail hides the text entirely, so the tooltip is the only way
     // to tell identical state icons apart — it must carry name + subtext in
     // EVERY state, not just the error states (Codex P2).

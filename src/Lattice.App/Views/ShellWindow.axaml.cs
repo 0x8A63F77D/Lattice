@@ -18,6 +18,10 @@ public partial class ShellWindow : Window
     private bool _addHostInFlight;
     private bool _editHostInFlight;
     private bool _removeConfirmInFlight;
+    // Same-row reentrancy guard only: two Tests on the SAME host racing would both
+    // write row.TestResultText. Different rows testing concurrently is fine, so this
+    // is per-host rather than the single bool Edit/Remove use.
+    private readonly HashSet<Guid> _testHostsInFlight = [];
     private bool _revertingRailSelection;
     private IDisposable? _navBoundsSubscription;
 
@@ -108,7 +112,8 @@ public partial class ShellWindow : Window
     private async void OnTestHostRequested(object? sender, Guid id)
     {
         if (_shell is not { } shell || shell.FindHostConfig(id) is not { } cfg
-            || shell.FindHostRow(id) is not { } row)
+            || shell.FindHostRow(id) is not { } row
+            || !_testHostsInFlight.Add(id))
             return;
         row.TestResultText = Strings.SettingsTestConnectionBusy;
         try
@@ -120,6 +125,7 @@ public partial class ShellWindow : Window
                 : r.Error;
         }
         catch (OperationCanceledException) { row.TestResultText = Strings.SettingsTestConnectionTimeout; }
+        finally { _testHostsInFlight.Remove(id); }
     }
 
     private async void OnRemoveHostRequested(object? sender, Guid id)

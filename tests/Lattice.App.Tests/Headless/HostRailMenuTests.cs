@@ -9,6 +9,7 @@ using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Microsoft.Extensions.Time.Testing;
@@ -85,6 +86,51 @@ public class HostRailMenuTests
             && !row.TestResultText.Equals(Strings.SettingsTestConnectionBusy));
 
         Assert.Contains("8", row.TestResultText!); // "Connected · BOINC 8.x.x"
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Test_host_command_ignores_a_second_invoke_on_the_same_row_while_one_is_in_flight()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var gate = new TaskCompletionSource();
+        var clientsCreated = 0;
+        // A distinct factory from the store's monitors: gating it only blocks the
+        // Test-connection path (OnTestHostRequested), never the background monitors.
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () =>
+        {
+            Interlocked.Increment(ref clientsCreated);
+            var client = new FakeGuiRpcClient();
+            client.OnExchangeVersions = async () => { await gate.Task; return new VersionInfo(8, 2, 0); };
+            return client;
+        });
+        var window = new ShellWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+        var row = shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+
+        shell.TestHostCommand.Execute(cfg.Id);
+        await HeadlessSync.WaitUntilAsync(() => clientsCreated == 1);
+        Assert.Equal(Strings.SettingsTestConnectionBusy, row.TestResultText);
+
+        // Same-row reentrancy: the guard must no-op this second invoke while the
+        // first is still in flight — no second client, no second RPC round-trip.
+        shell.TestHostCommand.Execute(cfg.Id);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1, clientsCreated);
+
+        gate.SetResult();
+        await HeadlessSync.WaitUntilAsync(() => row.TestResultText is not null
+            && !row.TestResultText.Equals(Strings.SettingsTestConnectionBusy));
+
+        Assert.Contains("8", row.TestResultText!); // "Connected · BOINC 8.x.x"
+        Assert.Equal(1, clientsCreated); // guard held for the whole in-flight window
         window.Close();
     }
 
