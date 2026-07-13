@@ -165,6 +165,19 @@
   <data name="AppTitle" xml:space="preserve">
     <value>Lattice</value>
   </data>
+  <!-- ===== EditHost ===== -->
+  <data name="EditHostDialogTitle" xml:space="preserve">
+    <value>Edit host</value>
+  </data>
+  <data name="EditHostPasswordError" xml:space="preserve">
+    <value>The host refused this password. Check gui_rpc_auth.cfg on {0}.</value>
+  </data>
+  <data name="EditHostPrimaryButton" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="EditHostSaveFailedFmt" xml:space="preserve">
+    <value>Couldn’t save changes: {0}</value>
+  </data>
   <!-- ===== EventLog ===== -->
   <data name="EventLogCountsFmt" xml:space="preserve">
     <value>{0} messages · {1} reachable hosts</value>

@@ -117,4 +117,68 @@ public class AddHostViewModelTests
         Assert.Equal("Connection timed out.", vm.ErrorText);
         Assert.Empty(registry.Hosts);
     }
+
+    private static string NewPath() => Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+
+    [Fact]
+    public void Edit_mode_prefills_from_the_host_and_titles_for_editing()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01", address: "192.168.1.40");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.Equal("mini-01", vm.Name);
+        Assert.Equal("192.168.1.40", vm.Address);
+        Assert.Equal(Strings.EditHostDialogTitle, vm.DialogTitle);
+        Assert.Equal(Strings.EditHostPrimaryButton, vm.PrimaryButtonText);
+        Assert.True(vm.ShowTestButton);
+    }
+
+    [Fact]
+    public async Task Edit_mode_save_updates_the_host_in_the_registry()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+        vm.Name = "mini-01-renamed";
+
+        await vm.AddCommand.ExecuteAsync(null);   // edit-save persists without a connection test
+
+        Assert.True(vm.Succeeded);
+        Assert.Equal("mini-01-renamed", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
+
+    [Fact]
+    public async Task Edit_mode_saves_local_changes_even_when_the_host_is_unreachable()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        // Connection FAILS — Save must still persist (unlike Add, which needs a live host).
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("refused") },
+            cfg, authError: false);
+        vm.Address = "192.168.1.99";
+
+        await vm.AddCommand.ExecuteAsync(null);
+
+        Assert.True(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("192.168.1.99", registry.Hosts.Single(h => h.Id == cfg.Id).Address);
+    }
+
+    [Fact]
+    public void Auth_failed_edit_opens_with_the_password_error_shown()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: true);
+
+        Assert.True(vm.HasPasswordError);
+        Assert.Equal(string.Format(Strings.EditHostPasswordError, "mini-01"), vm.PasswordErrorText);
+    }
 }
