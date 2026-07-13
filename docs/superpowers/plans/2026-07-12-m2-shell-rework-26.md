@@ -1013,6 +1013,21 @@ public void Selecting_a_host_persists_the_scope_id()
     _shell.SelectedRailEntry = _shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
     Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);   // All hosts clears the id
 }
+
+[Fact]
+public void Single_host_pin_is_not_persisted_and_clears_when_a_second_host_is_added()
+{
+    _registry.AddHost(TestData.MakeHostConfig(name: "solo"));
+    _shell.SetRailViewportHeight(1000.0);
+    // The sole host is auto-pinned in memory (design 3a / round-1) but that is NOT an explicit
+    // choice, so it must not be persisted...
+    Assert.False(_shell.Scope.IsAllHosts);
+    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    _registry.AddHost(TestData.MakeHostConfig(name: "second"));
+    // ...and leaving single-host mode reverts to All hosts, not the old sole host (round-10).
+    Assert.True(_shell.Scope.IsAllHosts);
+}
 ```
 
 > Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
@@ -1037,6 +1052,7 @@ Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the cla
     private bool _healthyExpanded;
     private bool _rebuilding;
     private Guid? _pendingScopeRestore;   // persisted scope staged for the first RebuildRail (consumed once)
+    private bool _wasSingleHost;          // was the previous layout SingleHost? (drives the leave-single-host scope reset)
 
     [ObservableProperty] private bool _showRailToggle;
 
@@ -1159,17 +1175,22 @@ Add the orchestration members:
 
     private void RebuildRail()
     {
-        // Scope (data) is the source of truth for what is scoped — NOT SelectedRailEntry,
-        // which may be null when the scoped host's row is hidden in a collapsed group.
-        // On the first build a persisted scope is staged in _pendingScopeRestore (consumed
-        // once); afterwards Scope.HostId is authoritative.
-        Guid? scopedHostId = _pendingScopeRestore ?? Scope.HostId;
-        _pendingScopeRestore = null;
-
         RailLayoutInput input = BuildRailInput();
         RailLayout layout = RailLayoutPolicy.compute(input);
         ShowRailToggle = layout.ShowToggle;
         HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
+
+        // Scope (data) is the source of truth for what is scoped — NOT SelectedRailEntry,
+        // which may be null when the scoped host's row is hidden in a collapsed group.
+        // Two mode-boundary rules:
+        //  - a persisted scope is staged for the first build (_pendingScopeRestore, consumed once);
+        //  - LEAVING single-host mode discards the sole-host auto-pin (it was never an explicit
+        //    choice), so adding a 2nd host reverts to All hosts instead of silently keeping host1
+        //    (round-10 fix).
+        bool leavingSingleHost = _wasSingleHost && !layout.Mode.IsSingleHost;
+        Guid? scopedHostId = leavingSingleHost ? null : (_pendingScopeRestore ?? Scope.HostId);
+        _pendingScopeRestore = null;
+        _wasSingleHost = layout.Mode.IsSingleHost;
 
         ScopeSelection nextScope;
         _rebuilding = true;
@@ -1229,26 +1250,35 @@ group-header scope-loss class (both the collapsed-group case and the header-**cl
 `Scope` untouched. Without this, the ListBox's two-way `SelectedItem` binding routes a header click through
 here to `AllHosts` *before* the view's `ToggleCommand`/`RebuildRail` runs, so `RebuildRail` captures a null
 `scopedHostId` and collapsing the group drops the host scope:
+This is also the ONLY place scope is **persisted** — it is the explicit-user-selection path (guarded by
+`_rebuilding`, so `RebuildRail`'s auto-pins/restores never reach it). Persisting here, not in
+`OnScopeChanged`, is what keeps the single-host auto-pin out of `ui-state.json`:
 ```csharp
     partial void OnSelectedRailEntryChanged(object? value)
     {
-        if (_rebuilding) return;   // RebuildRail applies Scope itself, once
-        Scope = value switch
+        if (_rebuilding) return;   // RebuildRail applies Scope itself; its auto-pins are NOT persisted
+        switch (value)
         {
-            HostRailItemViewModel h => new ScopeSelection(h.HostId),
-            AllHostsRailItemViewModel => ScopeSelection.AllHosts,
-            // Group header or null: NOT a scope change — keep the current scope. (A header
-            // click briefly lands here via the ListBox binding; letting it fall to AllHosts
-            // is exactly the round-5 scope-loss. RebuildRail resets the highlight afterwards.)
-            _ => Scope,
-        };
+            case HostRailItemViewModel h:
+                Scope = new ScopeSelection(h.HostId);
+                _uiState.Update(s => s with { ScopeHostId = h.HostId });   // explicit user choice → persist
+                break;
+            case AllHostsRailItemViewModel:
+                Scope = ScopeSelection.AllHosts;
+                _uiState.Update(s => s with { ScopeHostId = null });
+                break;
+            // Group header or null: NOT a scope change — keep the current scope, persist nothing.
+            // (A header click briefly lands here via the ListBox binding; letting it fall to
+            // AllHosts is the round-5 scope-loss. RebuildRail resets the highlight afterwards.)
+        }
     }
 ```
 
-Extend the existing `OnScopeChanged` (which pushes scope into the view VMs) to **persist** the scope, so it
-survives restart (design README:80/108). The `[ObservableProperty]` equality guard means this only fires on
-a real scope change (a viewport resize that keeps the same host re-assigns an equal `ScopeSelection` and
-does not notify), so it is not a per-resize write:
+Leave the existing `OnScopeChanged` as a pure view-push — it does **not** persist. Persistence lives on the
+explicit-selection path (`OnSelectedRailEntryChanged`, above) so that the single-host **auto-pin** — which
+`RebuildRail` sets via `Scope = nextScope`, never through `OnSelectedRailEntryChanged` — is not written to
+disk (round-10 fix: a sole-host user is not "explicitly scoped to host1"; persisting that would re-scope
+them to host1 after they add a second host):
 ```csharp
     partial void OnScopeChanged(ScopeSelection value)
     {
@@ -1256,7 +1286,6 @@ does not notify), so it is not a per-resize write:
         Projects.Scope = value;
         Transfers.Scope = value;
         EventLog.Scope = value;
-        _uiState.Update(s => s with { ScopeHostId = value.HostId });   // null = All hosts
     }
 ```
 
@@ -1267,7 +1296,7 @@ Update `Dispose` to dispose host VMs from the map (they no longer all live in `R
         foreach (HostRailItemViewModel item in _hostRowVms.Values)
             item.Dispose();
 ```
-(Remove the old `RailEntries.OfType<HostRailItemViewModel>()` disposal loop.) Also **delete** the `Settings.Reconcile();` call at the end of `ReconcileHosts` — Settings no longer tracks hosts (Task 14). Leave a note; Task 14 removes `SettingsViewModel.Reconcile`.
+(Remove the old `RailEntries.OfType<HostRailItemViewModel>()` disposal loop.) **Keep** the `Settings.Reconcile();` call at the end of `ReconcileHosts` for now — the Settings Hosts group still exists through Tasks 8–12, and its expanders (and the existing Settings tests) rely on this shell call to track host add/remove. Task 13 deletes both the group and this call in the same step, so removing it here would leave the expanders stale (production + tests) in the interim.
 
 > F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier`/`RailMode` DU cases are static properties (compare with `.Equals`) and each has an `Is<Case>` predicate (`RailMode.IsSingleHost`, `RailOverride.IsForceFlat`/`.IsForceGrouped`/`.IsAuto`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
 
@@ -1303,7 +1332,7 @@ agnostic); the ≥2-host journeys (`ProjectsScopeJourney`, `PartialResultsJourne
 Gate: a full `dotnet build tests/Lattice.App.Tests` (not a filtered `dotnet test`) — a non-migrated
 sentinel test that no longer compiles/realizes surfaces as a build/red failure here, not silently.
 
-- [ ] **Step 5: Run — expect PASS** (new tests + the converted `ShellRailTests` + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). If `Settings.Reconcile` removal breaks compile, land Task 14's `SettingsViewModel` change first or stub `Reconcile()` as a no-op until Task 14.
+- [ ] **Step 5: Run — expect PASS** (new tests + the converted `ShellRailTests` + `AllHostsRailTests` + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). `Settings.Reconcile()` stays wired here, so the existing Settings host tests keep passing until Task 13 removes the group.
 
 - [ ] **Step 6: Commit**
 
@@ -2367,7 +2396,7 @@ Change `NavigateToSettings` to drop the host-focus param and body:
         CurrentPage = Settings;
     }
 ```
-Update the caller in `ShellWindow.axaml.cs` `OnNavSelectionChanged` (`_shell.NavigateToSettings()` — already parameterless there). Remove the now-removed `Settings.Reconcile();` line from `ReconcileHosts` (Task 7 left it/stubbed).
+Update the caller in `ShellWindow.axaml.cs` `OnNavSelectionChanged` (`_shell.NavigateToSettings()` — already parameterless there). Now remove the `Settings.Reconcile();` line from `ReconcileHosts` (Task 7 deliberately kept it) — in the SAME task that deletes `SettingsViewModel.Reconcile` and the Hosts group, so the expanders never go stale in between.
 
 - [ ] **Step 7: Removed-member sweep (close the class, not one file per review round)**
 
