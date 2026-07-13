@@ -771,10 +771,18 @@ public sealed partial class GroupHeaderRailItemViewModel : ObservableObject
     {
         Tier = tier;
         _expanded = expanded;
-        // Two tiers (decisions spec §2): Attention or Healthy.
-        Text = tier.Equals(RailTier.Attention)
-            ? string.Format(Strings.RailGroupAttentionFmt, count)
-            : string.Format(Strings.RailGroupHealthyFmt, count);
+        // Exhaustive over the RailTier DU (decisions §2). The `_ => throw` is a SANCTIONED
+        // guard, NOT a silent catch-all: it mirrors RailStateProjection.From so that adding
+        // an M3 tier (e.g. Offline) fails loudly here instead of mislabelling it "Healthy · N".
+        // Do not "simplify" it back to a two-way ternary. (RailTier is an F# DU, so this uses
+        // its generated Is<Case> predicates as property patterns, not enum constants.)
+        Text = tier switch
+        {
+            { IsAttention: true } => string.Format(Strings.RailGroupAttentionFmt, count),
+            { IsHealthy: true } => string.Format(Strings.RailGroupHealthyFmt, count),
+            _ => throw new ArgumentOutOfRangeException(nameof(tier), tier,
+                "RailTier grew — add its group-header label (decisions §2)."),
+        };
     }
 
     public RailTier Tier { get; }
@@ -1412,6 +1420,27 @@ public class HostRailGroupingTests
         Assert.Equal(36.0, hostRow.Bounds.Height, precision: 0);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Compact_pane_collapses_group_header_rows_to_no_blank_row()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+        Assert.Contains(shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+
+        window.Nav.IsPaneOpen = false;   // 48px compact
+        Layout(window);
+
+        // Decisions §5: compact shows individual host icons; a group-header row has no visible
+        // content in compact, so its container collapses — no blank 28px row.
+        var headerRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is GroupHeaderRailItemViewModel);
+        Assert.True(headerRow.Bounds.Height < 1.0,
+            $"compact group-header row should collapse, was {headerRow.Bounds.Height}px");
+        window.Close();
+    }
 }
 ```
 
@@ -1426,7 +1455,11 @@ one). Design 3a heights (decisions §2, card `1g` "rows 36/28"): the group-heade
 **28 px** (`LatticeRowHeightCompact`), NOT the 40 px flat-row height:
 ```xml
               <DataTemplate x:DataType="vm:GroupHeaderRailItemViewModel">
-                <DockPanel Height="{StaticResource LatticeRowHeightCompact}" Background="Transparent">
+                <!-- Hidden in the 48px compact pane (decisions §5: "compact shows individual host
+                     icons"). Otherwise an Attention header — text hidden, chevron hidden because it
+                     is not collapsible — would render a blank 28px row above its host icons. -->
+                <DockPanel Height="{StaticResource LatticeRowHeightCompact}" Background="Transparent"
+                           IsVisible="{Binding #Nav.IsPaneOpen}">
                   <PathIcon DockPanel.Dock="Left" Width="12" Height="12" Margin="6,0,0,0"
                             VerticalAlignment="Center"
                             IsVisible="{Binding IsCollapsible}"
