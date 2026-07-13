@@ -181,4 +181,39 @@ public class AddHostViewModelTests
         Assert.True(vm.HasPasswordError);
         Assert.Equal(string.Format(Strings.EditHostPasswordError, "mini-01"), vm.PasswordErrorText);
     }
+
+    [Fact]
+    public async Task Test_connection_success_shows_result_inline_without_closing_the_dialog()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Format(Strings.SettingsTestConnectionSuccess, 8, 2, 0), vm.TestResultText);
+        Assert.False(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("mini-01", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
+
+    [Fact]
+    public async Task Test_connection_failure_shows_result_inline_without_closing_the_dialog()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("Connection refused") },
+            cfg, authError: false);
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.NotNull(vm.TestResultText);
+        Assert.Contains("Connection refused", vm.TestResultText);
+        Assert.False(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("mini-01", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
 }
