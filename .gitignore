@@ -491,3 +491,6 @@ $RECYCLE.BIN/
 
 # Stryker.NET mutation reports
 StrykerOutput/
+
+# Verify visual-regression received snapshots (issue #82) — verified.* are committed, received.* never are
+*.received.*
