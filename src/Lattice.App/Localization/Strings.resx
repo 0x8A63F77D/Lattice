@@ -253,6 +253,12 @@
   <data name="RailConnecting" xml:space="preserve">
     <value>Connecting…</value>
   </data>
+  <data name="RailGroupAttentionFmt" xml:space="preserve">
+    <value>Attention · {0}</value>
+  </data>
+  <data name="RailGroupHealthyFmt" xml:space="preserve">
+    <value>Healthy · {0}</value>
+  </data>
   <data name="RailRetrying" xml:space="preserve">
     <value>Retrying…</value>
   </data>
