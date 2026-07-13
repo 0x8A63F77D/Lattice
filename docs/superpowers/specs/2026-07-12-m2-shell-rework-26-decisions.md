@@ -211,6 +211,7 @@ files deserialize to defaults — STJ uses the param default for a missing JSON 
 | `RailGrouping` | `RailGroupingMode` (`Auto`/`Flat`/`Grouped`) | `Auto` | maps to F# `RailOverride` |
 | `RailHealthyExpanded` | `bool` | `false` | Healthy group expand state (the only collapsible tier) |
 | `Theme` | `AppTheme` (`Light`/`Dark`/`System`) | `System` | app theme (card `2d`/`1f`) |
+| `ScopeHostId` | `Guid?` | `null` | persisted global host scope; null/absent = All hosts. **Design requires this**: README:80 ("independent, persistent global filter") + README:108 ("Global host-scope selection (persisted per machine)"). Unknown/removed id on load → All-hosts fallback. |
 
 Enums persist as **strings** via `JsonStringEnumConverter` added to `UiStateStore.JsonOptions` (robust to
 member reordering, human-editable). `RailGroupingMode` / `AppTheme` are C# enums in

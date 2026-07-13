@@ -36,7 +36,7 @@
 - `src/Lattice.App/Views/AddHostDialog.axaml` / `.axaml.cs` — Edit title/buttons, password danger border + focus, secondary Test button.
 - `src/Lattice.App/ViewModels/SettingsViewModel.cs` — drop Hosts group; add `SelectedTheme`.
 - `src/Lattice.App/Views/SettingsView.axaml` / `.axaml.cs` — remove Hosts ItemsControl + remove-confirm handler; add Theme group + pointer caption.
-- `src/Lattice.App/Infrastructure/UiStateStore.cs` — `UiState` gains `RailGrouping`, `RailHealthyExpanded`, `Theme`; `JsonStringEnumConverter`.
+- `src/Lattice.App/Infrastructure/UiStateStore.cs` — `UiState` gains `RailGrouping`, `RailHealthyExpanded`, `Theme`, `ScopeHostId`; `JsonStringEnumConverter`.
 - `src/Lattice.App/App.axaml.cs` — construct + apply `ThemePreference` at startup; pass into `ShellViewModel`.
 - `src/Lattice.App/Localization/Strings.resx` — add new keys; retire Settings host-group keys.
 
@@ -599,13 +599,13 @@ git commit -m "feat(rail): RailState -> RailTier projection (design 3a taxonomy)
 
 ---
 
-### Task 5: Persist rail override + group expand + theme in `UiState`
+### Task 5: Persist rail override + group expand + theme + host scope in `UiState`
 
 **Files:**
 - Modify: `src/Lattice.App/Infrastructure/UiStateStore.cs`
 - Modify: `tests/Lattice.App.Tests/UiStateStoreTests.cs`
 
-Add C# enums + four `UiState` fields (decisions spec §7). Enums persist as strings.
+Add C# enums + four new `UiState` fields — `RailGrouping`, `RailHealthyExpanded`, `Theme`, `ScopeHostId` (decisions spec §7). Enums persist as strings; `ScopeHostId` is a nullable `Guid` (native STJ).
 
 - [ ] **Step 1: Write the failing round-trip test**
 
@@ -617,17 +617,20 @@ public void Rail_and_theme_preferences_round_trip()
 {
     var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
     var store = new UiStateStore(path);
+    var scoped = Guid.NewGuid();
     store.Save(UiState.Default with
     {
         RailGrouping = RailGroupingMode.Grouped,
         RailHealthyExpanded = true,
         Theme = AppTheme.Dark,
+        ScopeHostId = scoped,
     });
 
     var loaded = new UiStateStore(path).Load();
     Assert.Equal(RailGroupingMode.Grouped, loaded.RailGrouping);
     Assert.True(loaded.RailHealthyExpanded);
     Assert.Equal(AppTheme.Dark, loaded.Theme);
+    Assert.Equal(scoped, loaded.ScopeHostId);
     File.Delete(path);
 }
 
@@ -641,6 +644,7 @@ public void Legacy_state_file_without_new_fields_loads_defaults()
     Assert.True(loaded.CompactDensity);
     Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
     Assert.Equal(AppTheme.System, loaded.Theme);
+    Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
     File.Delete(path);
 }
 ```
@@ -676,7 +680,8 @@ public sealed record UiState(
     Dictionary<string, double> ColumnWidths,
     RailGroupingMode RailGrouping = RailGroupingMode.Auto,
     bool RailHealthyExpanded = false,
-    AppTheme Theme = AppTheme.System)
+    AppTheme Theme = AppTheme.System,
+    Guid? ScopeHostId = null)
 {
     public static UiState Default => new(false, [], []);
 }
@@ -949,6 +954,57 @@ public void Selecting_a_group_header_is_not_a_scope_change()
     Assert.Equal(scopedId, _shell.Scope.HostId);
     Assert.False(_shell.Scope.IsAllHosts);
 }
+
+// --- persisted global host scope (design README:80/108) ---
+
+[Fact]
+public void Persisted_scope_restores_the_host_on_construction()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    new UiStateStore(_uiPath).Save(UiState.Default with { ScopeHostId = h2.Id });
+
+    // Fresh shell over the same registry + ui-state restores the persisted scope. Two hosts
+    // (not the degenerate single-host pin) so the default would otherwise be All hosts.
+    var shell2 = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+        () => new RoutingGuiRpcClient(_fakes));
+    shell2.SetRailViewportHeight(1000.0);
+    Assert.Equal(h2.Id, shell2.Scope.HostId);
+    shell2.Dispose();
+}
+
+[Fact]
+public void Unknown_persisted_scope_falls_back_to_all_hosts()
+{
+    _registry.AddHost(TestData.MakeHostConfig(name: "a"));
+    _registry.AddHost(TestData.MakeHostConfig(name: "b"));
+    new UiStateStore(_uiPath).Save(UiState.Default with { ScopeHostId = Guid.NewGuid() }); // no such host
+
+    var shell2 = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+        () => new RoutingGuiRpcClient(_fakes));
+    shell2.SetRailViewportHeight(1000.0);
+    Assert.True(shell2.Scope.IsAllHosts);   // missing id → fallback, no throw
+    shell2.Dispose();
+}
+
+[Fact]
+public void Selecting_a_host_persists_the_scope_id()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    _shell.SetRailViewportHeight(1000.0);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
+        .Single(h => h.HostId == h2.Id);
+    Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
+    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);   // All hosts clears the id
+}
 ```
 
 > Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
@@ -963,7 +1019,8 @@ public void Selecting_a_group_header_is_not_a_scope_change()
 
 Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the class:
 ```csharp
-    private const double RailRowHeight = 40.0;      // LatticeHostItemHeight
+    private const double RailRowHeight = 40.0;         // LatticeHostItemHeight — flat/single host + All-hosts rows AND the fit-math row unit
+    private const double GroupedHostRowHeight = 36.0;   // LatticeRowHeight — denser host rows inside status groups (design 3a)
     private const double ReservedRailChrome = 150.0; // header + Settings + paddings (pinned by Task 8)
     private readonly UiStateStore _uiState;
     private readonly Dictionary<Guid, HostRailItemViewModel> _hostRowVms = [];
@@ -971,8 +1028,14 @@ Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the cla
     private RailGroupingMode _grouping;
     private bool _healthyExpanded;
     private bool _rebuilding;
+    private Guid? _pendingScopeRestore;   // persisted scope staged for the first RebuildRail (consumed once)
 
     [ObservableProperty] private bool _showRailToggle;
+
+    /// <summary>Height every host row binds to: 40 px flat/single, 36 px inside a status group
+    /// (design 3a). Group-header rows are a fixed 28 px in XAML; the "All hosts" row stays 40 px.
+    /// This is RENDERING only — the RailLayoutPolicy fit test still counts 40 px flat rows.</summary>
+    [ObservableProperty] private double _hostRowHeight = RailRowHeight;
 ```
 
 In the constructor, capture `uiState` and load persisted rail state (before `ReconcileHosts`):
@@ -982,7 +1045,25 @@ In the constructor, capture `uiState` and load persisted rail state (before `Rec
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
 ```
-Keep `RailEntries.Add(_allHosts); SelectedRailEntry = _allHosts;` then `store.Changed += OnStoreChanged; ReconcileHosts();` as today.
+Keep `RailEntries.Add(_allHosts); SelectedRailEntry = _allHosts;` (which leaves `Scope` at All hosts). Then
+**stage the persisted global host scope** (design README:80/108 — the Hosts selection is a persistent global
+filter) for the first `RebuildRail` to apply. Unknown/removed host id → All hosts:
+```csharp
+        // Restore the persisted host scope (README:80/108): stage it for the FIRST RebuildRail,
+        // which resolves the row AND (because Scope is still All hosts here) raises the single
+        // scope notification so the view-models sync. An id whose host no longer exists falls
+        // back to All hosts.
+        _pendingScopeRestore = ui.ScopeHostId is { } persistedScope
+            && _store.Hosts.Any(h => h.Config.Id == persistedScope) ? persistedScope : null;
+
+        store.Changed += OnStoreChanged;
+        ReconcileHosts();
+```
+(Do **not** seed the `_scope` backing field directly: if `Scope` already equalled the restored host,
+`RebuildRail`'s trailing `Scope = nextScope` would be an equality no-op and `OnScopeChanged` would never
+fire, leaving `Tasks`/`Projects`/… scoped to All hosts while the rail shows the host. Staging via
+`_pendingScopeRestore` keeps `Scope` at All hosts until `RebuildRail` sets it, so the notification fires
+exactly once.)
 
 Replace the body of `ReconcileHosts` (host-VM management stays; row layout moves to `RebuildRail`):
 ```csharp
@@ -1072,12 +1153,15 @@ Add the orchestration members:
     {
         // Scope (data) is the source of truth for what is scoped — NOT SelectedRailEntry,
         // which may be null when the scoped host's row is hidden in a collapsed group.
-        // Reading it here means a later expand rebuild still knows the scoped host.
-        Guid? scopedHostId = Scope.HostId;
+        // On the first build a persisted scope is staged in _pendingScopeRestore (consumed
+        // once); afterwards Scope.HostId is authoritative.
+        Guid? scopedHostId = _pendingScopeRestore ?? Scope.HostId;
+        _pendingScopeRestore = null;
 
         RailLayoutInput input = BuildRailInput();
         RailLayout layout = RailLayoutPolicy.compute(input);
         ShowRailToggle = layout.ShowToggle;
+        HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
 
         ScopeSelection nextScope;
         _rebuilding = true;
@@ -1150,6 +1234,21 @@ here to `AllHosts` *before* the view's `ToggleCommand`/`RebuildRail` runs, so `R
             // is exactly the round-5 scope-loss. RebuildRail resets the highlight afterwards.)
             _ => Scope,
         };
+    }
+```
+
+Extend the existing `OnScopeChanged` (which pushes scope into the view VMs) to **persist** the scope, so it
+survives restart (design README:80/108). The `[ObservableProperty]` equality guard means this only fires on
+a real scope change (a viewport resize that keeps the same host re-assigns an equal `ScopeSelection` and
+does not notify), so it is not a per-resize write:
+```csharp
+    partial void OnScopeChanged(ScopeSelection value)
+    {
+        Tasks.Scope = value;
+        Projects.Scope = value;
+        Transfers.Scope = value;
+        EventLog.Scope = value;
+        _uiState.Update(s => s with { ScopeHostId = value.HostId });   // null = All hosts
     }
 ```
 
@@ -1289,6 +1388,30 @@ public class HostRailGroupingTests
         Assert.False(shell.Scope.IsAllHosts);
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Grouped_rows_use_the_spec_heights_28_header_36_host()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);   // grouped (overflow); all hosts are Healthy tier
+
+        // Expand Healthy so host rows are realized alongside the header.
+        shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy)).ToggleCommand.Execute(null);
+        Layout(window);
+
+        var headerRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is GroupHeaderRailItemViewModel);
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is HostRailItemViewModel);
+
+        // Design 3a: 28 px collapsed count/header rows, 36 px grouped host rows — NOT the 40 px flat height.
+        Assert.Equal(28.0, headerRow.Bounds.Height, precision: 0);
+        Assert.Equal(36.0, hostRow.Bounds.Height, precision: 0);
+        window.Close();
+    }
 }
 ```
 
@@ -1298,10 +1421,12 @@ public class HostRailGroupingTests
 
 - [ ] **Step 3: Add the group-header template + toggle in `ShellWindow.axaml`**
 
-Add a third `DataTemplate` inside `HostList`'s `ListBox.DataTemplates` (after the `HostRailItemViewModel` one):
+Add a third `DataTemplate` inside `HostList`'s `ListBox.DataTemplates` (after the `HostRailItemViewModel`
+one). Design 3a heights (decisions §2, card `1g` "rows 36/28"): the group-header/collapsed count row is
+**28 px** (`LatticeRowHeightCompact`), NOT the 40 px flat-row height:
 ```xml
               <DataTemplate x:DataType="vm:GroupHeaderRailItemViewModel">
-                <DockPanel Height="{StaticResource LatticeHostItemHeight}" Background="Transparent">
+                <DockPanel Height="{StaticResource LatticeRowHeightCompact}" Background="Transparent">
                   <PathIcon DockPanel.Dock="Left" Width="12" Height="12" Margin="6,0,0,0"
                             VerticalAlignment="Center"
                             IsVisible="{Binding IsCollapsible}"
@@ -1329,6 +1454,23 @@ In the Hosts header `DockPanel` (currently the `Button` + `HostsHeader` TextBloc
 ```
 
 > Icons `IconChevronRightRegular` and `IconGroupListRegular` must exist in `Theming/Icons.axaml`. If absent, add them from Fluent System Icons in this step (regular 16 glyph paths) and cover them in `ThemeResourceTests`'s icon-resolution theory. `TaskGridConverters.ChevronAngle` (bool→0/90) may already exist for Projects child rows — reuse it; if not, add a one-line `IValueConverter` there returning `90.0` when true else `0.0`.
+
+Also change the **host-row** `DataTemplate` (the `HostRailItemViewModel` one moved in Task 1) so its
+`DockPanel` height is data-bound to the shell's mode-aware `HostRowHeight` instead of the fixed
+`LatticeHostItemHeight`, so grouped host rows render at 36 px while flat/single stay 40 px (design 3a):
+```xml
+                <DockPanel Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).HostRowHeight}"
+                           ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+```
+Leave the `AllHostsRailItemViewModel` template at `LatticeHostItemHeight` (40 px — the aggregate row is not a
+grouped host row). Do **NOT** touch `RailLayoutPolicy` / `BuildRailInput`: the fit test still counts 40 px
+flat rows (`RailRowHeight`); `HostRowHeight` is rendering-only. (This note is here so the execution chip does
+not "helpfully" change the fit math to 36.)
+
+The `ListBox.hostRail ListBoxItem` style currently pins `MinHeight="{StaticResource LatticeHostItemHeight}"`
+(40 px), which would override the shorter 28/36 px rows. Change that setter to `MinHeight="0"` so each
+container sizes to its template's explicit `DockPanel` height (28 header / 36 grouped host / 40 flat &
+All-hosts). Keep the `MinWidth="0"` compact-rail fix and the `Padding="8,0"` (horizontal only) as-is.
 
 Add the string:
 ```xml
