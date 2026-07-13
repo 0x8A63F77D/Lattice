@@ -928,6 +928,27 @@ public void Scope_persists_when_the_scoped_hosts_group_collapses()
     healthyHeader.ToggleCommand.Execute(null);
     Assert.Equal(scopedId, _shell.Scope.HostId);
 }
+
+[Fact]
+public void Selecting_a_group_header_is_not_a_scope_change()
+{
+    // Reproduces the REAL header-click path the ToggleCommand test misses: the ListBox
+    // two-way binding assigns SelectedRailEntry = header. That must NOT reset scope to
+    // All hosts (round-5 P2 — the structural invariant behind the collapsed-group loss).
+    AddHosts(3);
+    _shell.SetRailViewportHeight(1000.0);
+    var host = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
+    _shell.SelectedRailEntry = host;
+    var scopedId = host.HostId;
+    _shell.ToggleRailGroupingCommand.Execute(null);         // ForceGrouped => a header exists
+
+    var header = _shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+        .Single(g => g.Tier.Equals(RailTier.Healthy));
+    _shell.SelectedRailEntry = header;                       // the binding's assignment
+
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+    Assert.False(_shell.Scope.IsAllHosts);
+}
 ```
 
 > Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
@@ -1109,12 +1130,26 @@ Add the orchestration members:
     }
 ```
 
-Update `OnSelectedRailEntryChanged` to suppress side effects during a rebuild:
+Update `OnSelectedRailEntryChanged` to suppress side effects during a rebuild AND to make only the
+two real scope carriers change `Scope`. This is the structural invariant that closes the whole
+group-header scope-loss class (both the collapsed-group case and the header-**click** case): a
+`GroupHeaderRailItemViewModel` — or a transient `null` — is **not** a scope, so selecting one must leave
+`Scope` untouched. Without this, the ListBox's two-way `SelectedItem` binding routes a header click through
+here to `AllHosts` *before* the view's `ToggleCommand`/`RebuildRail` runs, so `RebuildRail` captures a null
+`scopedHostId` and collapsing the group drops the host scope:
 ```csharp
     partial void OnSelectedRailEntryChanged(object? value)
     {
         if (_rebuilding) return;   // RebuildRail applies Scope itself, once
-        Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
+        Scope = value switch
+        {
+            HostRailItemViewModel h => new ScopeSelection(h.HostId),
+            AllHostsRailItemViewModel => ScopeSelection.AllHosts,
+            // Group header or null: NOT a scope change — keep the current scope. (A header
+            // click briefly lands here via the ListBox binding; letting it fall to AllHosts
+            // is exactly the round-5 scope-loss. RebuildRail resets the highlight afterwards.)
+            _ => Scope,
+        };
     }
 ```
 
@@ -1216,6 +1251,37 @@ public class HostRailGroupingTests
         // header is not left selected.
         Assert.True(shell.Scope.IsAllHosts);
         Assert.IsNotType<GroupHeaderRailItemViewModel>(window.HostList.SelectedItem);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Clicking_a_group_header_keeps_the_scoped_host_end_to_end()
+    {
+        // Round-5 P2, real path: scope a host, then click a header through the actual
+        // ListBox SelectedItem binding (not a direct ToggleCommand). Scope must survive.
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+
+        // Grouped (overflow). Expand Healthy so a host row is visible + selectable.
+        var healthy = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy));
+        healthy.ToggleCommand.Execute(null);
+        Layout(window);
+        var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().First();
+        window.HostList.SelectedItem = hostRow;      // scope a host via the real binding
+        Layout(window);
+        Assert.Equal(hostRow.HostId, shell.Scope.HostId);
+
+        // Click the Healthy header via the ListBox (collapses it → host row hidden).
+        var headerIndex = shell.RailEntries.ToList().IndexOf(healthy);
+        window.HostList.SelectedIndex = headerIndex;
+        Layout(window);
+
+        // Scope persists as data even though the row is now hidden and unselected.
+        Assert.Equal(hostRow.HostId, shell.Scope.HostId);
+        Assert.False(shell.Scope.IsAllHosts);
         window.Close();
     }
 }
