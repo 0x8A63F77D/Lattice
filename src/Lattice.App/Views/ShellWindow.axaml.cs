@@ -92,9 +92,9 @@ public partial class ShellWindow : Window
     }
 
     private async void OnEditHostRequested(object? sender, Guid id) =>
-        await OpenEditHostDialog(id, focusPassword: false, authError: false);
+        await OpenEditHostDialog(id, authError: false);
 
-    private async Task OpenEditHostDialog(Guid id, bool focusPassword, bool authError)
+    private async Task OpenEditHostDialog(Guid id, bool authError)
     {
         if (_editHostInFlight || _shell is not { } shell || shell.FindHostConfig(id) is not { } cfg)
             return;
@@ -272,6 +272,12 @@ public partial class ShellWindow : Window
         // auth-failed host opens the Edit dialog with the password field in error.
         // The All-hosts sentinel never navigates.
         if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
-            _ = OpenEditHostDialog(item.HostId, focusPassword: true, authError: true);
+            OpenAuthFailedEditDialog(item.HostId);
     }
+
+    // async void (not fire-and-forget `_ = ...`) so exceptions surface to the
+    // dispatcher's unhandled-exception path the same way the other event handlers
+    // in this file do, instead of being silently swallowed by a discarded Task.
+    private async void OpenAuthFailedEditDialog(Guid id) =>
+        await OpenEditHostDialog(id, authError: true);
 }
