@@ -22,7 +22,6 @@ public partial class ShellWindow : Window
     // write row.TestResultText. Different rows testing concurrently is fine, so this
     // is per-host rather than the single bool Edit/Remove use.
     private readonly HashSet<Guid> _testHostsInFlight = [];
-    private bool _revertingRailSelection;
     private IDisposable? _navBoundsSubscription;
     private IDisposable? _navPaneSubscription;
 
@@ -249,54 +248,47 @@ public partial class ShellWindow : Window
         return found;
     }
 
-    private void OnHostSelectionChanged(object? sender, SelectionChangedEventArgs e)
-    {
-        if (_shell is null || _revertingRailSelection)
-            return;
-
-        if (HostList.SelectedItem is GroupHeaderRailItemViewModel header)
-        {
-            // Toggling expands/collapses the group, which rebuilds RailEntries (Clear + re-add).
-            // Mutating the ItemsSource synchronously inside SelectionChanged corrupts the ListBox
-            // selection model — when a collapse removes the previously-selected host row, the
-            // selection processing indexes a now-stale ItemsSourceView (ArgumentOutOfRange in
-            // ItemsSourceView.GetAt). Defer the toggle + selection revert out of this event's
-            // callstack so the rebuild happens against a settled selection.
-            var previous = e.RemovedItems.Count > 0 ? e.RemovedItems[0] : null;
-            Dispatcher.UIThread.Post(() =>
-            {
-                if (_shell is null)
-                    return;
-                header.ToggleCommand.Execute(null);   // expand/collapse; RebuildRail refreshes rows
-                // A header is not a scope; restore the prior selection without recursing.
-                _revertingRailSelection = true;
-                try { HostList.SelectedItem = previous; }
-                finally { _revertingRailSelection = false; }
-            });
-            return;
-        }
-
-        // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding, so this
-        // handler now owns only the group-header toggle above. The auth-failed → Edit deep
-        // link moved to OnHostRailTapped (the click gesture) because selection-change alone
-        // misses the single-host case: RebuildRail pre-selects the sole host row, so
-        // re-clicking it raises NO SelectionChanged and the dialog would never open.
-    }
-
-    // A CLICK (tap) on an auth-failed host row opens the Edit dialog with the password
-    // field in error — regardless of whether the click changed the selection. This is the
-    // trigger (not OnHostSelectionChanged) precisely so the single-host case works: the sole
-    // host row is pre-selected by RebuildRail, so re-clicking it raises no SelectionChanged.
-    // Tapped is Avalonia's click gesture (press+release on the same element); DataContext
-    // inherits down the row template, so the tapped child carries the row's view model.
-    // Sentinel (AllHosts), group headers, and empty-area taps all fail the type/state pattern
-    // and no-op. Single trigger ⇒ no double-open; _editHostInFlight backstops re-entrancy.
+    // The click/tap gesture is the SINGLE source of truth for rail scope selection and group-header
+    // toggling — NOT SelectionChanged, which misses clicks that do not change the selection (the sole
+    // preselected host, or re-clicking the already-scoped host) and forced a manual selection-revert
+    // that clobbered the derived highlight (Codex round-4 P2). Tapped is Avalonia's click gesture
+    // (press+release on the same element); DataContext inherits down the row template, so the tapped
+    // child carries its row's view model. An empty-area tap hits a control whose DataContext is the
+    // ShellViewModel — none of the cases — and no-ops. Highlight is owned by ScopeMachine.highlightOf
+    // via RebuildRail / ReassertRailHighlight, never restored by hand here.
     private void OnHostRailTapped(object? sender, Avalonia.Input.TappedEventArgs e)
     {
         if (_shell is null)
             return;
-        if ((e.Source as Control)?.DataContext is HostRailItemViewModel { State: RailState.AuthFailed } item)
-            OpenAuthFailedEditDialog(item.HostId);
+        switch ((e.Source as Control)?.DataContext)
+        {
+            case HostRailItemViewModel host:
+                // The sole explicit host-scope gesture (decisions §7): persists ScopeHostId even when
+                // the selection did not change. An auth-failed host additionally opens the Edit dialog
+                // with the password error (round-1). One gesture ⇒ no double scope event, no double
+                // dialog-open (_editHostInFlight backstops re-entrancy).
+                _shell.SelectHostScope(host.HostId);
+                if (host.State == RailState.AuthFailed)
+                    OpenAuthFailedEditDialog(host.HostId);
+                break;
+            case AllHostsRailItemViewModel:
+                _shell.SelectAllHostsScope();
+                break;
+            case GroupHeaderRailItemViewModel header:
+                // A header is not a scope. Toggle its group (collapsible Healthy only), then re-assert
+                // the derived highlight so the header — transiently selected by this click, and NOT
+                // rebuilt by the no-op Attention toggle — is never left highlighted. Deferred so the
+                // toggle's ItemsSource rebuild does not run inside the ListBox's click/selection
+                // processing (a synchronous Clear there indexes a stale ItemsSourceView → crash).
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (_shell is null)
+                        return;
+                    header.ToggleCommand.Execute(null);
+                    _shell.ReassertRailHighlight();
+                });
+                break;
+        }
     }
 
     // async void (not fire-and-forget `_ = ...`) so exceptions surface to the

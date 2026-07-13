@@ -67,8 +67,10 @@ public class ProjectsScopeJourney
         DataGridRow parentRow = VisualTree.FindRow(view.Grid, 0);
         Assert.Contains("2", TextsIn(parentRow)); // the Hosts cell renders the count
 
-        // Scope to host-a in the rail (index 0 is the All-hosts sentinel).
-        harness.Window.HostList.SelectedIndex = 1;
+        // Scope to host-a with a real click on its row — the scope trigger is the click
+        // gesture (OnHostRailTapped), not SelectionChanged.
+        var hostARow = harness.Shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == hostA.Id);
+        RailInput.ClickRow(harness.Window, hostARow);
         harness.Layout();
         Assert.Equal(hostA.Id, harness.Shell.Scope.HostId);
 
@@ -93,8 +95,9 @@ public class ProjectsScopeJourney
         harness.Layout();
         Assert.Single(harness.Shell.Projects.Rows);
 
-        // Back to All hosts, then expand: the two child rows become visible.
-        harness.Window.HostList.SelectedIndex = 0;
+        // Back to All hosts with a real click on the sentinel, then expand: the two child rows become visible.
+        var sentinel = harness.Shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
+        RailInput.ClickRow(harness.Window, sentinel);
         harness.Layout();
         await harness.SettleAsync(() => harness.Shell.Projects.Rows.Count == 1,
             "returning to All hosts collapses back to the single parent");

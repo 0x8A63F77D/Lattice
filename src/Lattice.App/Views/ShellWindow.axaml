@@ -143,7 +143,6 @@
                    Background="Transparent"
                    ItemsSource="{Binding RailEntries}"
                    SelectedItem="{Binding SelectedRailEntry, Mode=TwoWay}"
-                   SelectionChanged="OnHostSelectionChanged"
                    Tapped="OnHostRailTapped">
             <ListBox.DataTemplates>
               <DataTemplate x:DataType="vm:AllHostsRailItemViewModel">

@@ -42,7 +42,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     // compute force-expands the Healthy tier (see BuildRailInput) — the persisted RailHealthyExpanded
     // is deliberately untouched, so re-opening the pane restores the saved collapse state.
     private bool _paneCompact;
-    private bool _rebuilding;   // set during RebuildRail so its highlight assignment is not read as a user selection
 
     [ObservableProperty] private bool _showRailToggle;
 
@@ -123,11 +122,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     private object? _selectedRailEntry;
 
-    /// <summary>The highlighted rail row. Deliberately notifies on EVERY assignment — even a
-    /// same-reference re-selection — because explicitly clicking the already-highlighted sole
-    /// host row is a genuine user selection that must reach <see cref="OnSelectedRailEntryChanged"/>.
-    /// The rebuild-time highlight write is made inert instead by the <see cref="_rebuilding"/>
-    /// guard in the handler, not by an equality short-circuit here.</summary>
+    /// <summary>The highlighted rail row, OWNED by <see cref="ResolveHighlight"/>
+    /// (<see cref="ScopeMachine.highlightOf"/>) — never a scope trigger. Explicit scope selection
+    /// rides the click/tap gesture instead (<c>ShellWindow.OnHostRailTapped</c> →
+    /// <see cref="SelectHostScope"/> / <see cref="SelectAllHostsScope"/>), so a rebuild that
+    /// re-derives the same highlight fabricates no scope event (R5), AND a click that does not
+    /// change the ListBox selection (a sole preselected host, a re-clicked scoped host) still
+    /// scopes. Notifies on EVERY assignment so the ListBox re-selects the derived highlight even
+    /// when a rebuild's Clear transiently reset the binding to the same reference.</summary>
     public object? SelectedRailEntry
     {
         get => _selectedRailEntry;
@@ -135,7 +137,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         {
             _selectedRailEntry = value;
             OnPropertyChanged(nameof(SelectedRailEntry));
-            OnSelectedRailEntryChanged(value);
         }
     }
 
@@ -161,18 +162,27 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasEventLogUnread => EventLogUnread > 0;
 
-    private void OnSelectedRailEntryChanged(object? value)
-    {
-        if (_rebuilding) return;   // RebuildRail sets the highlight only — not a user selection
-        ScopeCarrier? carrier = value switch
-        {
-            HostRailItemViewModel h => ScopeCarrier.NewHostCarrier(h.HostId),
-            AllHostsRailItemViewModel => ScopeCarrier.AllHostsCarrier,
-            _ => null,   // group header or transient null: NOT a scope carrier → construct no event (R5)
-        };
-        if (carrier is null) return;
-        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewExplicitSelect(carrier)));
-    }
+    /// <summary>A user click on a host row — the SOLE explicit host-scope gesture (decisions §7).
+    /// Persists ScopeHostId via <c>ScopeMachine.ExplicitSelect</c> even when the click did NOT change
+    /// the ListBox selection (a sole preselected host, or re-clicking the already-scoped host) —
+    /// exactly the case the former SelectionChanged trigger missed. Idempotent: re-clicking the
+    /// scoped host re-writes the same id.</summary>
+    public void SelectHostScope(Guid hostId) =>
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope),
+            ScopeEvent.NewExplicitSelect(ScopeCarrier.NewHostCarrier(hostId))));
+
+    /// <summary>A user click on the All-hosts sentinel: scope to All hosts and clear the persisted
+    /// id (<c>ScopeMachine.ExplicitSelect AllHostsCarrier</c>).</summary>
+    public void SelectAllHostsScope() =>
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope),
+            ScopeEvent.NewExplicitSelect(ScopeCarrier.AllHostsCarrier)));
+
+    /// <summary>Re-assert the derived highlight (<see cref="ScopeMachine.highlightOf"/>) onto the
+    /// current rows WITHOUT rebuilding them. A header tap transiently selects the header row through
+    /// the ListBox binding, and the non-collapsible Attention header's toggle is a no-op (no rebuild),
+    /// so the shell re-derives the highlight here to guarantee a group header is never left highlighted
+    /// (a header is not a scope).</summary>
+    public void ReassertRailHighlight() => SelectedRailEntry = ResolveHighlight();
 
     // Design rule: selecting a host scopes every view. Each graduated (non-
     // Placeholder) page gets the same partial-method push; Placeholders don't
@@ -378,32 +388,34 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         ShowRailToggle = layout.ShowToggle;
         HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
 
-        // RebuildRail constructs NO ScopeEvent, so it cannot mutate or persist Scope. It
-        // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf. The
-        // _rebuilding guard makes the SelectedRailEntry assignment inert w.r.t. OnSelectedRailEntryChanged.
-        _rebuilding = true;
-        try
-        {
-            foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
-                g.ToggleRequested -= OnGroupToggleRequested;
-            RailEntries.Clear();
-            foreach (RailRow row in layout.Rows)
-                RailEntries.Add(MaterializeRow(row));
+        // RebuildRail constructs NO ScopeEvent, so it cannot mutate or persist Scope (R5). It
+        // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf.
+        // SelectedRailEntry is a pure highlight with no scope side effect (explicit scope rides the
+        // click gesture → SelectHostScope / SelectAllHostsScope), so no _rebuilding guard is needed.
+        foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
+            g.ToggleRequested -= OnGroupToggleRequested;
+        RailEntries.Clear();
+        foreach (RailRow row in layout.Rows)
+            RailEntries.Add(MaterializeRow(row));
 
-            SelectedRailEntry = ResolveHighlight(layout);
-        }
-        finally { _rebuilding = false; }
+        SelectedRailEntry = ResolveHighlight();
     }
 
     /// <summary>Highlight = the pure ScopeMachine.highlightOf(scope, soleHost, visibleHostIds) —
     /// never a scope mutation. SingleHost highlights the sole host row even though Scope stays
     /// All hosts; a scoped host hidden in a collapsed group yields no highlight (Scope still holds
     /// it); otherwise the All-hosts sentinel.</summary>
-    private object? ResolveHighlight(RailLayout layout)
+    private object? ResolveHighlight()
     {
-        var visibleHostIds = RailEntries.OfType<HostRailItemViewModel>().Select(h => h.HostId).ToArray();
-        Guid? soleHost = layout.Mode.IsSingleHost
-            ? RailEntries.OfType<HostRailItemViewModel>().First().HostId
+        var hostRows = RailEntries.OfType<HostRailItemViewModel>().ToArray();
+        var visibleHostIds = hostRows.Select(h => h.HostId).ToArray();
+        // SingleHost presentation ⇔ a lone host row with no All-hosts sentinel: RailLayoutPolicy
+        // emits [HostRow] for exactly one host and AllHostsRow-led rows for ≥2, so this reads the
+        // mode straight off the materialized rows (avoids threading the RailLayout in for callers
+        // like ReassertRailHighlight that have no fresh layout). The sole row is highlighted
+        // regardless of scope (Scope stays AllHosts — data-identical for one host).
+        Guid? soleHost = hostRows.Length == 1 && !RailEntries.OfType<AllHostsRailItemViewModel>().Any()
+            ? hostRows[0].HostId
             : (Guid?)null;
         RailHighlight highlight = ScopeMachine.highlightOf(ToScope(Scope), soleHost, visibleHostIds);
         if (highlight is RailHighlight.HighlightHostRow hr)

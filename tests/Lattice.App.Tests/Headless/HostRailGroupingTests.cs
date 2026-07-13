@@ -57,8 +57,8 @@ public class HostRailGroupingTests
         Layout(window);
         Assert.True(shell.Scope.IsAllHosts);
 
-        var headerIndex = shell.RailEntries.ToList().FindIndex(e => e is GroupHeaderRailItemViewModel);
-        window.HostList.SelectedIndex = headerIndex;
+        var header = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>().First();
+        RailInput.ClickRow(window, header);
         Layout(window);
 
         // Header click toggles its group / is rejected — scope stays All hosts and the
@@ -84,18 +84,16 @@ public class HostRailGroupingTests
             .ToggleCommand.Execute(null);            // RebuildRail replaces the header instances
         Layout(window);
         var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().First();
-        window.HostList.SelectedItem = hostRow;      // scope a host via the real binding
+        RailInput.ClickRow(window, hostRow);         // scope a host via a real click
         Layout(window);
         Assert.Equal(hostRow.HostId, shell.Scope.HostId);
 
         // Re-query the header — the expand's RebuildRail cleared RailEntries and made new
-        // GroupHeaderRailItemViewModel instances, so the old reference's IndexOf would be -1
-        // (and SelectedIndex = -1 would deselect, never clicking the header).
+        // GroupHeaderRailItemViewModel instances, so click the current instance (the old
+        // reference has no realized container).
         var healthy = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
             .Single(g => g.Tier.Equals(RailTier.Healthy));
-        var headerIndex = shell.RailEntries.ToList().IndexOf(healthy);
-        Assert.True(headerIndex >= 0, "Healthy header must be present to click");
-        window.HostList.SelectedIndex = headerIndex; // collapses Healthy → host row hidden
+        RailInput.ClickRow(window, healthy);         // collapses Healthy → host row hidden
         Layout(window);
 
         // Scope persists as data even though the row is now hidden and unselected.

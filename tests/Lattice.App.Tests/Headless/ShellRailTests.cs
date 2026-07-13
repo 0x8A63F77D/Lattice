@@ -66,8 +66,10 @@ public class ShellRailTests
         shell.SetRailViewportHeight(1000.0);   // Flat rail (see First_rail_row_ note)
         Layout(window);
 
-        // Index 0 is the All-hosts sentinel; host "a" lives at index 1.
-        window.HostList.SelectedIndex = 1;
+        // Scope to host "a" with a real click — the scope trigger is the click gesture
+        // (OnHostRailTapped), so a bare SelectedIndex assignment no longer scopes.
+        var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == host.Id);
+        RailInput.ClickRow(window, hostRow);
         Layout(window);
         Assert.Equal(host.Id, shell.Scope.HostId);
 

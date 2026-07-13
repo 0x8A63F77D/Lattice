@@ -19,7 +19,11 @@ namespace Lattice.App.Tests.Headless;
 /// </summary>
 internal static class RailInput
 {
-    public static void ClickRow(ShellWindow window, HostRailItemViewModel row)
+    // Accepts any rail entry (host row, All-hosts sentinel, or group header) so the scope-selection
+    // and header-toggle gestures can all be driven through real pointer input, not a bare
+    // SelectedIndex/SelectedItem assignment (which only fires SelectionChanged, the path the click
+    // gesture deliberately replaced).
+    public static void ClickRow(ShellWindow window, object row)
     {
         var container = window.HostList.ContainerFromItem(row)
             ?? throw new InvalidOperationException(

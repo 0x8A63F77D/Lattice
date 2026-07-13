@@ -58,9 +58,9 @@ public class AllHostsRailTests : IAsyncLifetime
         _registry.AddHost(TestData.MakeHostConfig(name: "b"));
         var shell = MakeShell();
         shell.SetRailViewportHeight(1000.0);   // Flat: [0]=sentinel, [1]=host "a"
-        shell.SelectedRailEntry = shell.RailEntries[1];
+        shell.SelectHostScope(host.Id);        // the click gesture's VM entry point
         Assert.Equal(host.Id, shell.Scope.HostId);
-        shell.SelectedRailEntry = shell.RailEntries[0];
+        shell.SelectAllHostsScope();
         Assert.True(shell.Scope.IsAllHosts);
     }
 
@@ -86,7 +86,7 @@ public class AllHostsRailTests : IAsyncLifetime
         _registry.AddHost(TestData.MakeHostConfig(name: "c"));
         var shell = MakeShell();
         shell.SetRailViewportHeight(1000.0);   // Flat: [0]=sentinel, [1]=host "a"
-        shell.SelectedRailEntry = shell.RailEntries[1];
+        shell.SelectHostScope(host.Id);
         Assert.Equal(host.Id, shell.Scope.HostId);
 
         _registry.RemoveHost(host.Id);

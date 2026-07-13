@@ -384,7 +384,7 @@ public class ShellViewModelTests : IAsyncLifetime
         AddHosts(3);
         _shell.SetRailViewportHeight(1000.0);
         var hostVm = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
-        _shell.SelectedRailEntry = hostVm;
+        _shell.SelectHostScope(hostVm.HostId);             // the click gesture's VM entry point
         Assert.Equal(hostVm.HostId, _shell.Scope.HostId);
 
         _shell.SetRailViewportHeight(1001.0);              // triggers a rebuild
@@ -411,8 +411,8 @@ public class ShellViewModelTests : IAsyncLifetime
         AddHosts(3);                              // all Healthy tier (Disconnected → Connecting → Healthy)
         _shell.SetRailViewportHeight(1000.0);     // fits → Flat, every host row present
         var row = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
-        _shell.SelectedRailEntry = row;
         var scopedId = row.HostId;
+        _shell.SelectHostScope(scopedId);
         Assert.Equal(scopedId, _shell.Scope.HostId);
 
         // Force Grouped; Healthy defaults collapsed, so the scoped host's row is NOT emitted.
@@ -433,21 +433,22 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Selecting_a_group_header_is_not_a_scope_change()
+    public void A_header_assigned_to_SelectedRailEntry_is_not_a_scope_change()
     {
-        // Reproduces the REAL header-click path the ToggleCommand test misses: the ListBox
-        // two-way binding assigns SelectedRailEntry = header. That must NOT reset scope to
-        // All hosts (round-5 P2 — the structural invariant behind the collapsed-group loss).
+        // The ListBox two-way binding assigns SelectedRailEntry = header on a header click.
+        // SelectedRailEntry is now a PURE highlight (scope rides the click gesture, not this
+        // property), so such an assignment must be inert w.r.t. scope — no reset to All hosts
+        // (round-5 P2 — the structural invariant behind the collapsed-group loss).
         AddHosts(3);
         _shell.SetRailViewportHeight(1000.0);
         var host = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
-        _shell.SelectedRailEntry = host;
         var scopedId = host.HostId;
+        _shell.SelectHostScope(scopedId);
         _shell.ToggleRailGroupingCommand.Execute(null);         // ForceGrouped => a header exists
 
         var header = _shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
             .Single(g => g.Tier.Equals(RailTier.Healthy));
-        _shell.SelectedRailEntry = header;                       // the binding's assignment
+        _shell.SelectedRailEntry = header;                       // the binding's assignment (inert)
 
         Assert.Equal(scopedId, _shell.Scope.HostId);
         Assert.False(_shell.Scope.IsAllHosts);
@@ -496,11 +497,10 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(h2);
         _shell.SetRailViewportHeight(1000.0);
 
-        _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
-            .Single(h => h.HostId == h2.Id);
+        _shell.SelectHostScope(h2.Id);
         Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
 
-        _shell.SelectedRailEntry = _shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
+        _shell.SelectAllHostsScope();
         Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);   // All hosts clears the id
     }
 
@@ -512,7 +512,7 @@ public class ShellViewModelTests : IAsyncLifetime
         _shell.SetRailViewportHeight(1000.0);
 
         // An explicit click on the sole host row IS a real selection (ExplicitSelect) — scope + persist.
-        _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+        _shell.SelectHostScope(_shell.RailEntries.OfType<HostRailItemViewModel>().Single().HostId);
         Assert.Equal(solo.Id, _shell.Scope.HostId);
         Assert.Equal(solo.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
 
@@ -543,8 +543,7 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(h2);
         _shell.SetRailViewportHeight(1000.0);
 
-        _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
-            .Single(h => h.HostId == h2.Id);
+        _shell.SelectHostScope(h2.Id);
         Assert.Equal(h2.Id, _shell.Scope.HostId);
         Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
 
