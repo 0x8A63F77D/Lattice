@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using FluentAvalonia.Core;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.ViewModels;
@@ -10,6 +11,8 @@ public partial class AddHostDialog : FAContentDialog
     {
         InitializeComponent();
         PrimaryButtonClick += OnPrimaryClick;
+        SecondaryButtonClick += OnSecondaryClick;
+        Opened += OnOpened;
     }
 
     // Subclassing changes the default StyleKey to AddHostDialog, so the
@@ -34,5 +37,22 @@ public partial class AddHostDialog : FAContentDialog
         {
             deferral.Complete();
         }
+    }
+
+    // Auth-failed deep link (design 3b): the edit dialog opens with the password
+    // field already flagged. Focus lands there so the user can retype immediately.
+    private void OnOpened(FAContentDialog sender, EventArgs args)
+    {
+        if (DataContext is AddHostViewModel { HasPasswordError: true } && this.FindControl<TextBox>("PasswordBox") is { } pwd)
+            pwd.Focus();
+    }
+
+    // Test connection: never closes the dialog; runs the test and shows the result inline.
+    private async void OnSecondaryClick(FAContentDialog sender, FAContentDialogButtonClickEventArgs args)
+    {
+        if (DataContext is not AddHostViewModel vm) return;
+        FADeferral deferral = args.GetDeferral();
+        try { await vm.TestConnectionCommand.ExecuteAsync(null); args.Cancel = true; }
+        finally { deferral.Complete(); }
     }
 }

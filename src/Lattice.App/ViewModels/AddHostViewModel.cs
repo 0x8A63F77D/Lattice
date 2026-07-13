@@ -59,6 +59,7 @@ public sealed partial class AddHostViewModel : ObservableObject
     public string DialogTitle => Mode == HostDialogMode.Edit ? Strings.EditHostDialogTitle : Strings.AddHostDialogTitle;
     public string PrimaryButtonText => Mode == HostDialogMode.Edit ? Strings.EditHostPrimaryButton : Strings.AddHostPrimaryButton;
     public bool ShowTestButton => Mode == HostDialogMode.Edit;
+    public string? TestButtonText => ShowTestButton ? Strings.SettingsTestConnectionButton : null;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddCommand))]
