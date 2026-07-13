@@ -9,6 +9,7 @@
     <Compile Include="ReconcileTests.fs" />
     <Compile Include="ViewSliceTests.fs" />
     <Compile Include="RailLayoutTests.fs" />
+    <Compile Include="ScopeMachineTests.fs" />
     <Compile Include="ProjectRowsTests.fs" />
     <Compile Include="MessageLogTests.fs" />
   </ItemGroup>
