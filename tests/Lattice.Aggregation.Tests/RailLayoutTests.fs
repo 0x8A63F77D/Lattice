@@ -32,6 +32,14 @@ let ``flat when the list fits: All-hosts leads, hosts in registry order`` () =
     Assert.Equal<RailRow list>([ AllHostsRow; HostRow a.Id; HostRow b.Id ], layout.Rows)
 
 [<Fact>]
+let ``fits at the exact boundary: height == (hosts + 1) * rowHeight stays flat`` () =
+    let a, b = host Healthy, host Attention
+    // exact boundary: (2 hosts + All-hosts) * 40 = 120 == 120 => fits (<=)
+    let layout = RailLayoutPolicy.compute (input [| a; b |] 120.0)
+    Assert.Equal(Flat, layout.Mode)
+    Assert.False layout.ShowToggle
+
+[<Fact>]
 let ``auto + overflow flips to grouped and shows the toggle`` () =
     let a, b = host Healthy, host Attention
     // (2 + 1) * 40 = 120 > 100 => does not fit
