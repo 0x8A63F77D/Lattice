@@ -1,0 +1,3056 @@
+# M2 Shell Rework (rev. B hosts rail 3a + host management 3b) — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Rework the NavigationView shell to the rev. B design — hosts rail bottom-docked in `PaneFooter` above Settings, height-adaptive flat↔status-group layout driven by a pure F# core, host management moved out of Settings into a right-click rail menu, and a new Theme setting.
+
+**Architecture:** TWO born-pure F# decision cores in `Lattice.App.Aggregation`, each FsCheck-tested and consumed by a shell that only translates: (1) `RailLayout.fs` decides `SingleHost | Flat | Grouped` layout from measured footer height + host tiers + persisted override/expand state; (2) `ScopeMachine.fs` owns the global host-scope state machine — `step : Scope -> ScopeEvent -> ScopeDecision` (which host every view filters to, plus the persistence side effect) and the pure `highlightOf` derivation. `ShellViewModel` measures/persists the layout inputs and reconciles `RailEntries` (All-hosts sentinel · host rows · group-header rows); every scope mutation goes UI-occurrence → `ScopeEvent` → `step` → apply. Host add/edit/remove/test move to a mode-aware `AddHostDialog` launched from a rail `MenuFlyout`; Settings keeps global groups (Polling + new Theme) only. Compact (48 px) rail is the orthogonal pane-collapse axis and is unchanged by either core.
+
+**Tech Stack:** .NET 10, Avalonia 12.1, FluentAvalonia 3.0.1 (`FANavigationView` / `FAContentDialog` / `MenuFlyout`), CommunityToolkit.Mvvm, F# + FsCheck (`Lattice.App.Aggregation`), xUnit + `Avalonia.Headless.XUnit`.
+
+**Authoritative inputs (read before starting):**
+- Design cards `docs/design/m2/` — `3a` (rail), `3b` (host mgmt), `1c` (shell), `2d` (settings/add-host), `1f` (dark), `1g` (tokens), `1i` (responsive). Greyed annotations are normative.
+- Resolved-decisions spec: `docs/superpowers/specs/2026-07-12-m2-shell-rework-26-decisions.md` — tier taxonomy, fit-math split, `ShowToggle` rule, compact-scope deferral, the pure-core signature, persistence keys. **When card text and this plan disagree, the card wins — flag it.**
+- **Do NOT touch** `src/Lattice.Core/HostMonitor.cs` / `HostMachine` (verification-sync rule). All work is App-layer + the pure `Lattice.App.Aggregation` project.
+
+---
+
+## File Structure
+
+**Create:**
+- `src/Lattice.App.Aggregation/RailLayout.fs` — pure grouping/fit core (types + `RailLayoutPolicy.compute`).
+- `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs` — FsCheck + transition-table tests for the core.
+- `src/Lattice.App.Aggregation/ScopeMachine.fs` — pure scope/selection/persistence state machine (types + `ScopeMachine.step` / `highlightOf` / `restoreEvent`).
+- `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs` — transition-table + FsCheck property tests for the scope core.
+- `src/Lattice.App/ViewModels/RailTierProjection.cs` — `RailState → RailTier` (C#, total, no wildcard).
+- `src/Lattice.App/ViewModels/GroupHeaderRailItemViewModel.cs` — a status-group header rail row.
+- `src/Lattice.App/Infrastructure/ThemePreference.cs` — persisted `AppTheme`, applies to `Application` (two consumers: startup + Settings, so a shared class like `DensityPreference`). Rail override/expand state has a single consumer (`ShellViewModel`) and is persisted inline there via `UiStateStore.Update`, no separate class.
+- `tests/Lattice.App.Tests/RailTierProjectionTests.cs`, `GroupHeaderRailItemViewModelTests.cs`, `ThemePreferenceTests.cs`.
+- `tests/Lattice.App.Tests/Headless/HostRailMenuTests.cs`, `HostRailGroupingTests.cs`, `EditHostDialogTests.cs`, `ThemeSettingTests.cs`.
+
+**Modify:**
+- `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` — add `RailLayout.fs` and `ScopeMachine.fs` to compile order.
+- `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` — add `RailLayoutTests.fs` and `ScopeMachineTests.fs`.
+- `src/Lattice.App/Views/ShellWindow.axaml` — hosts block `PaneCustomContent` → `PaneFooter`; group-header template; header list/group toggle; host-row `MenuFlyout`.
+- `src/Lattice.App/Views/ShellWindow.axaml.cs` — viewport-height wiring; MenuFlyout/dialog handlers; auth-failed → Edit dialog; remove-confirm machinery (moved from SettingsView).
+- `src/Lattice.App/ViewModels/ShellViewModel.cs` — rail orchestration (viewport, override, expand, reconcile via core); host-command events; drop `Settings.ExpandHost`.
+- `src/Lattice.App/ViewModels/AddHostViewModel.cs` — mode-aware (Add/Edit), Save path, Test-connection command, password-error state.
+- `src/Lattice.App/Views/AddHostDialog.axaml` / `.axaml.cs` — Edit title/buttons, password danger border + focus, secondary Test button.
+- `src/Lattice.App/ViewModels/SettingsViewModel.cs` — drop Hosts group; add `SelectedTheme`.
+- `src/Lattice.App/Views/SettingsView.axaml` / `.axaml.cs` — remove Hosts ItemsControl + remove-confirm handler; add Theme group + pointer caption.
+- `src/Lattice.App/Infrastructure/UiStateStore.cs` — `UiState` gains `RailGrouping`, `RailHealthyExpanded`, `Theme`, `ScopeHostId`; `JsonStringEnumConverter`.
+- `src/Lattice.App/App.axaml.cs` — construct + apply `ThemePreference` at startup; pass into `ShellViewModel`.
+- `src/Lattice.App/Localization/Strings.resx` — add new keys; retire Settings host-group keys.
+
+**Delete:**
+- `src/Lattice.App/ViewModels/HostSettingsItemViewModel.cs` and `tests/Lattice.App.Tests/` references to it.
+
+---
+
+## Phase A — Rail placement (de-risks the FA slot first)
+
+### Task 1: Move the hosts block from `PaneCustomContent` to `PaneFooter`
+
+**Files:**
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml` (hosts block currently lines ~103–173; Settings footer ~175–181)
+- Test: `tests/Lattice.App.Tests/Headless/ShellRailTests.cs` (add geometry pins)
+
+Verified up front (decisions spec §1): FA 3.0.1 `FANavigationView` has `PaneFooter`, and its template renders `PaneFooter` **above** `FooterMenuItems`. The move is a pure slot change; the `MinWidth=0` compact fix and every `#Nav.IsPaneOpen` binding stay as-is.
+
+- [ ] **Step 1: Write the failing SLOT-IDENTITY test**
+
+Add to `ShellRailTests` (uses the existing `MakeShell` helper + `Layout`). A vertical-order-only
+check would be a false red: today's `PaneCustomContent` also renders above `FooterMenuItems`, so an
+order assertion passes on the rejected layout. Pin the actual slot instead — the hosts block must be the
+`FANavigationView.PaneFooter` content and `PaneCustomContent` must be empty:
+
+```csharp
+[AvaloniaFact]
+public void Hosts_block_is_hosted_in_the_pane_footer_slot()
+{
+    var (window, shell, registry) = MakeShell();
+    window.Show();
+    registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+    Layout(window);
+
+    // Design 3a: the hosts block lives in the PaneFooter slot, NOT the rejected
+    // on-top PaneCustomContent slot. This discriminates the two layouts (order alone
+    // does not — PaneCustomContent also sits above the footer menu).
+    Assert.Null(window.Nav.PaneCustomContent);
+    var footer = Assert.IsAssignableFrom<Control>(window.Nav.PaneFooter);
+    Assert.Contains(window.HostList.GetVisualAncestors(), a => ReferenceEquals(a, footer));
+
+    // Secondary sanity: still renders above Settings (FooterMenuItems).
+    var hostsTop = window.HostList.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+    var settingsTop = window.NavSettings.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+    Assert.True(hostsTop < settingsTop,
+        $"hosts (y={hostsTop}) must render above Settings (y={settingsTop})");
+    window.Close();
+}
+```
+(Requires `using Avalonia.VisualTree;` for `GetVisualAncestors` — already imported in this file.)
+
+- [ ] **Step 2: Run it — expect FAIL for the right reason**
+
+Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_is_hosted_in_the_pane_footer_slot"`
+Expected: FAIL on `Assert.Null(window.Nav.PaneCustomContent)` (today the block IS the `PaneCustomContent`) and on `Nav.PaneFooter` being null — i.e. red specifically because the block is still in the wrong slot, not because of a geometry accident. Leaving the block in `PaneCustomContent` cannot make this green.
+
+- [ ] **Step 3: Move the block in XAML**
+
+In `ShellWindow.axaml`, cut the entire `<ui:FANavigationView.PaneCustomContent> … </ui:FANavigationView.PaneCustomContent>` element (the `StackPanel` with the Hosts header + `HostList`) and re-add it verbatim as `<ui:FANavigationView.PaneFooter> … </ui:FANavigationView.PaneFooter>`, placed immediately **before** `<ui:FANavigationView.FooterMenuItems>`. Change only the two wrapper tag names; keep the inner `StackPanel Margin="4,8,4,0"`, the `DockPanel` header, and the `ListBox x:Name="HostList"` (with `Classes="hostRail"`, `ItemsSource`, `SelectedItem`, `SelectionChanged`) exactly as they are.
+
+- [ ] **Step 4: Run the test — expect PASS**
+
+Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~Hosts_block_is_hosted_in_the_pane_footer_slot"`
+Expected: PASS — `Nav.PaneFooter` now hosts `HostList` and `Nav.PaneCustomContent` is null.
+
+- [ ] **Step 5: Run the existing compact + sentinel rail pins**
+
+Run: `dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellRailTests"`
+Expected: PASS — `Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`, `First_rail_row_renders_the_all_hosts_label`, etc. still green (proves compact 48 px icons-only survives the slot move).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/Lattice.App/Views/ShellWindow.axaml tests/Lattice.App.Tests/Headless/ShellRailTests.cs
+git commit -m "feat(shell): dock hosts rail in PaneFooter above Settings (design 3a)"
+```
+
+---
+
+## Phase B — Born-pure cores (rail layout + scope machine) + wiring
+
+### Task 2: Pure F# core — types + `Flat` / `SingleHost` modes
+
+**Files:**
+- Create: `src/Lattice.App.Aggregation/RailLayout.fs`
+- Modify: `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` (add `<Compile Include="RailLayout.fs" />` — after `ViewSlice.fs`, order-independent of the others)
+- Create: `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs`
+- Modify: `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` (add `<Compile Include="RailLayoutTests.fs" />`)
+
+The full type set + contract is the decisions spec §6. This task lands the types and everything except grouped-row emission (Task 3 adds `Grouped`).
+
+- [ ] **Step 1: Write failing tests for the non-grouped modes**
+
+Create `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs`:
+
+```fsharp
+module Lattice.Aggregation.Tests.RailLayoutTests
+
+open System
+open Xunit
+open Lattice.App.Aggregation
+
+let private id () = Guid.NewGuid()
+let private host tier = { Id = id (); Tier = tier }
+
+let private input hosts height =
+    { Hosts = hosts
+      AvailableHeight = height
+      RowHeight = 40.0
+      Override = Auto
+      HealthyExpanded = false }
+
+[<Fact>]
+let ``single host is degenerate: no All-hosts row, no toggle`` () =
+    let h = host Healthy
+    let layout = RailLayoutPolicy.compute (input [| h |] 1000.0)
+    Assert.Equal(SingleHost, layout.Mode)
+    Assert.False layout.ShowToggle
+    Assert.Equal<RailRow list>([ HostRow h.Id ], layout.Rows)
+
+[<Fact>]
+let ``flat when the list fits: All-hosts leads, hosts in registry order`` () =
+    let a, b = host Healthy, host Attention
+    // (2 hosts + All-hosts) * 40 = 120 <= 200 => fits
+    let layout = RailLayoutPolicy.compute (input [| a; b |] 200.0)
+    Assert.Equal(Flat, layout.Mode)
+    Assert.False layout.ShowToggle           // fits under Auto => no toggle
+    Assert.Equal<RailRow list>([ AllHostsRow; HostRow a.Id; HostRow b.Id ], layout.Rows)
+
+[<Fact>]
+let ``auto + overflow flips to grouped and shows the toggle`` () =
+    let a, b = host Healthy, host Attention
+    // (2 + 1) * 40 = 120 > 100 => does not fit
+    let layout = RailLayoutPolicy.compute (input [| a; b |] 100.0)
+    Assert.Equal(Grouped, layout.Mode)
+    Assert.True layout.ShowToggle
+
+[<Fact>]
+let ``force-flat keeps flat even when it overflows, and keeps the toggle`` () =
+    let a, b = host Healthy, host Attention
+    let layout = RailLayoutPolicy.compute { input [| a; b |] 100.0 with Override = ForceFlat }
+    Assert.Equal(Flat, layout.Mode)
+    Assert.True layout.ShowToggle            // manual override => toggle stays to undo
+
+[<Fact>]
+let ``force-grouped groups even when it fits, and keeps the toggle`` () =
+    let a, b = host Healthy, host Attention
+    let layout = RailLayoutPolicy.compute { input [| a; b |] 1000.0 with Override = ForceGrouped }
+    Assert.Equal(Grouped, layout.Mode)
+    Assert.True layout.ShowToggle
+```
+
+- [ ] **Step 2: Run — expect FAIL (module not defined)**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests --filter "FullyQualifiedName~RailLayoutTests"`
+Expected: FAIL to build — `RailLayout` not found.
+
+- [ ] **Step 3: Implement `RailLayout.fs` (types + fit + mode resolve; grouped rows come in Task 3)**
+
+Create `src/Lattice.App.Aggregation/RailLayout.fs`:
+
+```fsharp
+namespace Lattice.App.Aggregation
+
+open System
+
+/// Status-group tier for the many-hosts rail. Two tiers only (owner decision,
+/// decisions spec §2); M3 reopens this when a terminal paused/disabled state exists.
+type RailTier =
+    | Attention
+    | Healthy
+
+/// User's persisted list/group override; Auto lets the height fit test decide.
+type RailOverride =
+    | Auto
+    | ForceFlat
+    | ForceGrouped
+
+/// Effective mode after fit test + override resolve.
+type RailMode =
+    | SingleHost   // exactly one host: no "All hosts", scope pinned to it
+    | Flat         // "All hosts" + individual host rows
+    | Grouped      // status groups
+
+/// One host projected by the shell from HostStore (registry order preserved).
+type RailHost = { Id: Guid; Tier: RailTier }
+
+/// An ordered rail row the shell reconciles into a view-model.
+type RailRow =
+    | AllHostsRow
+    | HostRow of Guid
+    | GroupHeaderRow of tier: RailTier * count: int * expanded: bool
+
+/// What the shell measures / persists and hands to the pure core.
+type RailLayoutInput =
+    { Hosts: RailHost[]
+      AvailableHeight: float
+      RowHeight: float
+      Override: RailOverride
+      HealthyExpanded: bool }
+
+/// The layout the shell renders.
+type RailLayout =
+    { Mode: RailMode
+      ShowToggle: bool
+      Rows: RailRow list }
+
+module RailLayoutPolicy =
+
+    /// Flat list fits iff (host count + the All-hosts row) rows clear the budget.
+    let private fits (input: RailLayoutInput) =
+        float (input.Hosts.Length + 1) * input.RowHeight <= input.AvailableHeight
+
+    /// Registry-order host rows for the flat list.
+    let private flatRows (hosts: RailHost[]) =
+        AllHostsRow :: [ for h in hosts -> HostRow h.Id ]
+
+    let compute (input: RailLayoutInput) : RailLayout =
+        match input.Hosts.Length with
+        | 0 ->
+            { Mode = Flat; ShowToggle = false; Rows = [ AllHostsRow ] }
+        | 1 ->
+            { Mode = SingleHost; ShowToggle = false; Rows = [ HostRow input.Hosts.[0].Id ] }
+        | _ ->
+            let doesFit = fits input
+            let mode =
+                match input.Override with
+                | ForceFlat -> Flat
+                | ForceGrouped -> Grouped
+                | Auto -> if doesFit then Flat else Grouped
+            let showToggle = not doesFit || input.Override <> Auto
+            let rows =
+                match mode with
+                | Flat | SingleHost -> flatRows input.Hosts
+                | Grouped -> flatRows input.Hosts   // TODO(Task 3): replace with grouped rows
+            { Mode = mode; ShowToggle = showToggle; Rows = rows }
+```
+
+> Note: the `Grouped -> flatRows` line is a **deliberate placeholder for Task 3 only** — Task 3's failing test replaces it. It is never committed as the final state: Task 3 is in the same phase and its red test (Step 1 below) fails against this stand-in.
+
+- [ ] **Step 4: Wire the project files**
+
+In `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj`, add inside the existing `<ItemGroup>` (after `ViewSlice.fs`):
+```xml
+    <Compile Include="RailLayout.fs" />
+```
+In `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj`, add (after `ViewSliceTests.fs`):
+```xml
+    <Compile Include="RailLayoutTests.fs" />
+```
+
+- [ ] **Step 5: Run — expect PASS**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests --filter "FullyQualifiedName~RailLayoutTests"`
+Expected: PASS (all five).
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/Lattice.App.Aggregation/RailLayout.fs src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj \
+        tests/Lattice.Aggregation.Tests/RailLayoutTests.fs tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj
+git commit -m "feat(rail): pure RailLayout core — flat/single-host fit + override (design 3a)"
+```
+
+---
+
+### Task 3: Pure F# core — `Grouped` rows (tiers, expand, order) + property tests
+
+**Files:**
+- Modify: `src/Lattice.App.Aggregation/RailLayout.fs`
+- Modify: `tests/Lattice.Aggregation.Tests/RailLayoutTests.fs`
+
+Contract (decisions spec §6): `Grouped` ⇒ `AllHostsRow` then, in fixed order Attention → Healthy, for each **non-empty** tier a `GroupHeaderRow(tier, count, expanded)` followed by that tier's `HostRow`s **iff expanded**. Attention is always expanded; Healthy honors the persisted flag. Within a tier, registry order is preserved.
+
+- [ ] **Step 1: Write failing grouped-emission tests + a property**
+
+Append to `RailLayoutTests.fs`:
+
+```fsharp
+open FsCheck
+open FsCheck.Xunit
+
+let private grouped hosts healthyExp =
+    RailLayoutPolicy.compute
+        { input hosts 0.0 with   // height 0 => never fits => Grouped under Auto
+            Override = Auto
+            HealthyExpanded = healthyExp }
+
+[<Fact>]
+let ``grouped: attention always expands; healthy collapsed hides its hosts`` () =
+    let att = host Attention
+    let heal = host Healthy
+    let layout = grouped [| att; heal |] false
+    Assert.Equal<RailRow list>(
+        [ AllHostsRow
+          GroupHeaderRow(Attention, 1, true); HostRow att.Id
+          GroupHeaderRow(Healthy, 1, false) ],
+        layout.Rows)
+
+[<Fact>]
+let ``grouped: expanding healthy reveals its hosts in registry order`` () =
+    let h1, h2 = host Healthy, host Healthy
+    let layout = grouped [| h1; h2 |] true
+    Assert.Equal<RailRow list>(
+        [ AllHostsRow
+          GroupHeaderRow(Healthy, 2, true); HostRow h1.Id; HostRow h2.Id ],
+        layout.Rows)
+
+[<Fact>]
+let ``grouped: an empty tier is skipped`` () =
+    let a, b = host Attention, host Attention
+    let layout = grouped [| a; b |] false
+    Assert.Equal<RailRow list>(
+        [ AllHostsRow; GroupHeaderRow(Attention, 2, true); HostRow a.Id; HostRow b.Id ],
+        layout.Rows)
+
+// --- toggleOverride transition table (Auto-return path, decisions §4) ---
+// 2 hosts => flat needs (2+1)*40 = 120px.
+[<Fact>]
+let ``toggle from Auto forces the opposite, then toggling back re-enters Auto (overflow)`` () =
+    let overflow = input [| host Healthy; host Attention |] 100.0   // 120 > 100 => Auto groups
+    let o1 = RailLayoutPolicy.toggleOverride Auto overflow
+    Assert.Equal(ForceFlat, o1)                                     // opposite of Grouped
+    let o2 = RailLayoutPolicy.toggleOverride o1 overflow
+    Assert.Equal(Auto, o2)                                          // target (Grouped) == Auto's output => Auto
+
+[<Fact>]
+let ``toggle from Auto forces the opposite, then toggling back re-enters Auto (fits)`` () =
+    let fitsIn = input [| host Healthy; host Attention |] 1000.0    // 120 <= 1000 => Auto flat
+    let f1 = RailLayoutPolicy.toggleOverride Auto fitsIn
+    Assert.Equal(ForceGrouped, f1)                                  // opposite of Flat
+    let f2 = RailLayoutPolicy.toggleOverride f1 fitsIn
+    Assert.Equal(Auto, f2)                                          // target (Flat) == Auto's output => Auto
+
+[<Fact>]
+let ``toggle keeps forcing (visible flip) when the target differs from Auto's output`` () =
+    // ForceFlat while it fits: Auto would show Flat, so toggling to Grouped is a REAL
+    // visible change => ForceGrouped (NOT Auto — Auto+fits would leave it Flat, a no-op).
+    let fitsIn = input [| host Healthy; host Attention |] 1000.0
+    Assert.Equal(ForceGrouped, RailLayoutPolicy.toggleOverride ForceFlat fitsIn)
+    // ForceGrouped while it overflows: Auto would group, so toggling to Flat is real => ForceFlat.
+    let overflow = input [| host Healthy; host Attention |] 100.0
+    Assert.Equal(ForceFlat, RailLayoutPolicy.toggleOverride ForceGrouped overflow)
+
+// --- generators for the property pass ---
+let private tierGen = Gen.elements [ Attention; Healthy ]
+let private railInputGen =
+    gen {
+        let! n = Gen.choose (0, 8)
+        let! tiers = Gen.listOfLength n tierGen
+        let hosts = [| for t in tiers -> { Id = Guid.NewGuid(); Tier = t } |]
+        let! height = Gen.choose (0, 600) |> Gen.map float
+        let! ov = Gen.elements [ Auto; ForceFlat; ForceGrouped ]
+        let! he = Arb.generate<bool>
+        return { Hosts = hosts; AvailableHeight = height; RowHeight = 40.0
+                 Override = ov; HealthyExpanded = he }
+    }
+type RailArbs =
+    static member Input() = Arb.fromGen railInputGen
+
+let private hostIdsIn rows =
+    rows |> List.choose (function HostRow id -> Some id | _ -> None)
+
+[<Property(Arbitrary = [| typeof<RailArbs> |])>]
+let ``every emitted HostRow id is a real input host`` (inp: RailLayoutInput) =
+    let known = inp.Hosts |> Array.map (fun h -> h.Id) |> Set.ofArray
+    (RailLayoutPolicy.compute inp).Rows |> hostIdsIn |> List.forall known.Contains
+
+[<Property(Arbitrary = [| typeof<RailArbs> |])>]
+let ``flat and expanded-grouped conserve hosts exactly once`` (inp: RailLayoutInput) =
+    let layout = RailLayoutPolicy.compute inp
+    // Force Healthy expanded so grouped emits every host, then compare as a set.
+    let expanded = RailLayoutPolicy.compute { inp with HealthyExpanded = true }
+    match layout.Mode with
+    | SingleHost -> true   // degenerate single-host handled by its own unit test
+    | Flat ->
+        (hostIdsIn layout.Rows |> Set.ofList) = (inp.Hosts |> Array.map (fun h -> h.Id) |> Set.ofArray)
+    | Grouped ->
+        (hostIdsIn expanded.Rows |> Set.ofList) = (inp.Hosts |> Array.map (fun h -> h.Id) |> Set.ofArray)
+
+[<Property(Arbitrary = [| typeof<RailArbs> |])>]
+let ``grouped attention rows always follow their header (always expanded)`` (inp: RailLayoutInput) =
+    let layout = RailLayoutPolicy.compute { inp with Override = ForceGrouped }
+    let attentionCount = inp.Hosts |> Array.filter (fun h -> h.Tier = Attention) |> Array.length
+    if attentionCount = 0 then
+        layout.Rows |> List.forall (function GroupHeaderRow(Attention, _, _) -> false | _ -> true)
+    else
+        layout.Rows |> List.exists (function GroupHeaderRow(Attention, c, ex) -> c = attentionCount && ex | _ -> false)
+```
+
+- [ ] **Step 2: Run — expect FAIL**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests --filter "FullyQualifiedName~RailLayoutTests"`
+Expected: FAIL — the placeholder `Grouped -> flatRows` emits flat rows, so the grouped-emission asserts fail.
+
+- [ ] **Step 3: Implement grouped emission**
+
+In `RailLayout.fs`, replace the placeholder line and add the helpers. Add above `compute`:
+
+```fsharp
+    /// Fixed render order of the status groups.
+    let private tierOrder = [ Attention; Healthy ]
+
+    /// Attention is always expanded; Healthy honors the persisted flag.
+    let private tierExpanded (input: RailLayoutInput) tier =
+        match tier with
+        | Attention -> true
+        | Healthy -> input.HealthyExpanded
+
+    /// Rows for one non-empty tier: header, then its hosts iff expanded.
+    let private groupRows (input: RailLayoutInput) tier (members: RailHost[]) =
+        let expanded = tierExpanded input tier
+        let header = GroupHeaderRow(tier, members.Length, expanded)
+        if expanded then header :: [ for h in members -> HostRow h.Id ] else [ header ]
+
+    let private groupedRows (input: RailLayoutInput) =
+        AllHostsRow
+        :: [ for tier in tierOrder do
+                let members = input.Hosts |> Array.filter (fun h -> h.Tier = tier)
+                if members.Length > 0 then yield! groupRows input tier members ]
+```
+
+Then change the `Grouped` arm in `compute` from `flatRows input.Hosts` to `groupedRows input`:
+
+```fsharp
+                | Grouped -> groupedRows input
+```
+
+Add the pure toggle-decision so the VM never re-derives fit/override logic (decisions §4 —
+the toggle must be able to re-enter `Auto` so it can later hide). Place it at the end of the module
+(reuses the private `fits`):
+
+```fsharp
+    /// Next override when the user clicks the list/group toggle. Targets the opposite of
+    /// the CURRENT effective layout; if that target is exactly what Auto would produce
+    /// right now, returns Auto (re-enter adaptive) so ShowToggle can hide once it fits.
+    /// Total, no wildcard.
+    let toggleOverride (current: RailOverride) (input: RailLayoutInput) : RailOverride =
+        let autoGroups = not (fits input)
+        let currentlyGrouped =
+            match current with
+            | ForceGrouped -> true
+            | ForceFlat -> false
+            | Auto -> autoGroups
+        let wantGrouped = not currentlyGrouped
+        if wantGrouped = autoGroups then Auto
+        elif wantGrouped then ForceGrouped
+        else ForceFlat
+```
+
+> Note on the target semantics: the toggle always produces a **visible** flip except when the flip
+> target coincides with what Auto already shows (then it collapses to `Auto`). This is why
+> `ForceFlat` + *fits* → `ForceGrouped` (a real change) rather than `Auto` (which, being Flat while it
+> fits, would be a no-op click). The Auto-return still happens on the *next* click, and via the
+> `ForceGrouped`/`ForceFlat` == Auto-output cases above — so §4's "can always undo, even after a resize
+> made it fit again" holds (reaching `Auto && fits` hides the toggle).
+
+- [ ] **Step 4: Run — expect PASS**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests --filter "FullyQualifiedName~RailLayoutTests"`
+Expected: PASS (unit + all three properties).
+
+- [ ] **Step 5: Falsification pass (mutation)**
+
+Temporarily change `tierExpanded`'s `Attention -> true` to `Attention -> false`; re-run — the always-expanded property must go red. Revert. Then break `toggleOverride`'s Auto-return by changing `if wantGrouped = autoGroups then Auto` to `... then ForceGrouped`; re-run — the two "toggling back re-enters Auto" facts must go red. Revert.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/Lattice.App.Aggregation/RailLayout.fs tests/Lattice.Aggregation.Tests/RailLayoutTests.fs
+git commit -m "feat(rail): grouped rows + toggleOverride (Auto-return) in RailLayout core (design 3a)"
+```
+
+---
+
+### Task 4: `RailTierProjection` — `RailState → RailTier` (total, no wildcard)
+
+**Files:**
+- Create: `src/Lattice.App/ViewModels/RailTierProjection.cs`
+- Create: `tests/Lattice.App.Tests/RailTierProjectionTests.cs`
+
+Taxonomy (decisions spec §2, owner-simplified to two tiers): Attention ← Unreachable/AuthFailed/Retrying; Healthy ← Connected/Connecting. No Offline tier in M2.
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+using Lattice.App.Aggregation;
+using Lattice.App.ViewModels;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+public class RailTierProjectionTests
+{
+    [Theory]
+    [InlineData(RailState.Unreachable)]
+    [InlineData(RailState.AuthFailed)]
+    [InlineData(RailState.Retrying)]
+    public void Problem_states_are_attention(RailState state) =>
+        Assert.Equal(RailTier.Attention, RailTierProjection.From(state));
+
+    [Theory]
+    [InlineData(RailState.Connected)]
+    [InlineData(RailState.Connecting)]
+    public void Live_states_are_healthy(RailState state) =>
+        Assert.Equal(RailTier.Healthy, RailTierProjection.From(state));
+}
+```
+
+- [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~RailTierProjectionTests"`).
+
+- [ ] **Step 3: Implement**
+
+```csharp
+using Lattice.App.Aggregation;
+
+namespace Lattice.App.ViewModels;
+
+/// <summary>
+/// Buckets the five rail visuals into the two many-hosts status groups (design 3a;
+/// decisions spec §2 — owner-simplified to Attention + Healthy). Total, no wildcard:
+/// adding a RailState case must force a choice here.
+/// </summary>
+public static class RailTierProjection
+{
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailState left
+    // unhandled) must stay a build error so the taxonomy is revisited. CS8524 is the residual
+    // "unnamed enum value" case — an out-of-range cast like (RailState)999, unreachable for a
+    // well-formed RailState — and is suppressed here; a `_` arm would silence CS8509 too and
+    // defeat the guard. (No repo precedent for this pragma — RailTierProjection is the first
+    // no-`_` enum switch; only CS1591 doc pragmas exist today.)
+    public static RailTier From(RailState state) => state switch
+    {
+        RailState.Unreachable or RailState.AuthFailed or RailState.Retrying => RailTier.Attention,
+        RailState.Connected or RailState.Connecting => RailTier.Healthy,
+    };
+#pragma warning restore CS8524
+}
+```
+
+> Diagnostic mechanism (verified): a switch expression over an `enum` that covers every **named**
+> value but has no `_` arm still emits **CS8524** ("the switch expression does not handle some values of
+> its input type (it is not exhaustive), for example the value '(RailState)N'"), which is **distinct from
+> CS8509**. Under CI's `dotnet build Lattice.sln -c Release -warnaserror` (`.github/workflows/ci.yml:26`)
+> CS8524 would fail the build *immediately* — before any new case ever exists — so it must be suppressed
+> at the switch. The design guard (a new **named** `RailState` must force a choice here) is **CS8509**, a
+> separate diagnostic that stays active and, under the same `-warnaserror`, becomes the error we want.
+> `Lattice.App.csproj` sets no `TreatWarningsAsErrors`, so a local un-flagged `dotnet build` only warns;
+> CI is the gate. Do **not** add a `_` arm (defeats CS8509) and do **not** add `<WarningsAsErrors>` to the
+> csproj (CI already covers all projects).
+
+- [ ] **Step 4: Run — expect PASS.** Then `dotnet build src/Lattice.App -warnaserror` to confirm it compiles clean under CI's flag: CS8524 is suppressed at the switch, and with all named cases handled there is no CS8509 today. (Sanity-check the guard once, locally: temporarily add a 6th `RailState` case — the build must fail with **CS8509**, not pass; revert.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/RailTierProjection.cs tests/Lattice.App.Tests/RailTierProjectionTests.cs
+git commit -m "feat(rail): RailState -> RailTier projection (design 3a taxonomy)"
+```
+
+---
+
+### Task 5: Persist rail override + group expand + theme + host scope in `UiState`
+
+**Files:**
+- Modify: `src/Lattice.App/Infrastructure/UiStateStore.cs`
+- Modify: `tests/Lattice.App.Tests/UiStateStoreTests.cs`
+
+Add C# enums + four new `UiState` fields — `RailGrouping`, `RailHealthyExpanded`, `Theme`, `ScopeHostId` (decisions spec §7). Enums persist as strings; `ScopeHostId` is a nullable `Guid` (native STJ).
+
+- [ ] **Step 1: Write the failing round-trip test**
+
+Append to `UiStateStoreTests.cs`:
+
+```csharp
+[Fact]
+public void Rail_and_theme_preferences_round_trip()
+{
+    var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+    var store = new UiStateStore(path);
+    var scoped = Guid.NewGuid();
+    store.Save(UiState.Default with
+    {
+        RailGrouping = RailGroupingMode.Grouped,
+        RailHealthyExpanded = true,
+        Theme = AppTheme.Dark,
+        ScopeHostId = scoped,
+    });
+
+    var loaded = new UiStateStore(path).Load();
+    Assert.Equal(RailGroupingMode.Grouped, loaded.RailGrouping);
+    Assert.True(loaded.RailHealthyExpanded);
+    Assert.Equal(AppTheme.Dark, loaded.Theme);
+    Assert.Equal(scoped, loaded.ScopeHostId);
+    File.Delete(path);
+}
+
+[Fact]
+public void Legacy_state_file_without_new_fields_loads_defaults()
+{
+    var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+    // A pre-rework file: only the original three members present.
+    File.WriteAllText(path, """{"compactDensity":true,"columnVisibility":{},"columnWidths":{}}""");
+    var loaded = new UiStateStore(path).Load();
+    Assert.True(loaded.CompactDensity);
+    Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
+    Assert.Equal(AppTheme.System, loaded.Theme);
+    Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
+    File.Delete(path);
+}
+```
+
+- [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~UiStateStoreTests"`).
+
+- [ ] **Step 3: Implement**
+
+In `UiStateStore.cs`, add the string-enum converter to `JsonOptions`:
+```csharp
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+    };
+```
+
+Add the enums (top of file, under the namespace):
+```csharp
+/// <summary>Persisted rail list/group override (maps to F# RailOverride in the shell).</summary>
+public enum RailGroupingMode { Auto, Flat, Grouped }
+
+/// <summary>Persisted app theme (design 2d/1f). System follows the OS.</summary>
+public enum AppTheme { Light, Dark, System }
+```
+
+Extend the record — **append new positional params with defaults** so legacy JSON deserializes (STJ uses the default for a missing member):
+```csharp
+public sealed record UiState(
+    bool CompactDensity,
+    Dictionary<string, bool> ColumnVisibility,
+    Dictionary<string, double> ColumnWidths,
+    RailGroupingMode RailGrouping = RailGroupingMode.Auto,
+    bool RailHealthyExpanded = false,
+    AppTheme Theme = AppTheme.System,
+    Guid? ScopeHostId = null)
+{
+    public static UiState Default => new(false, [], []);
+}
+```
+
+> `Default` still passes only the first three args; the new params fall to their defaults. The `Load` normalizer (`ColumnVisibility ?? new()`) is unchanged.
+
+- [ ] **Step 4: Run — expect PASS** (both new tests + existing `UiStateStoreTests`).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/Infrastructure/UiStateStore.cs tests/Lattice.App.Tests/UiStateStoreTests.cs
+git commit -m "feat(state): persist rail grouping/expand + theme in UiState"
+```
+
+---
+
+### Task 6: `GroupHeaderRailItemViewModel` — a status-group header row
+
+**Files:**
+- Create: `src/Lattice.App/ViewModels/GroupHeaderRailItemViewModel.cs`
+- Create: `tests/Lattice.App.Tests/GroupHeaderRailItemViewModelTests.cs`
+
+A header row shows "Attention · 3" / "Healthy · 35" (localized), carries its `RailTier`, whether it is collapsible (Attention is not), and an expand toggle command that raises an event the shell handles (the shell owns persistence + recompute). Header rows are **not** selectable scope — the ListBox must skip selection on them (handled in Task 8's `OnHostSelectionChanged`).
+
+- [ ] **Step 1: Write the failing test**
+
+```csharp
+using Lattice.App.Aggregation;
+using Lattice.App.Localization;
+using Lattice.App.ViewModels;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+public class GroupHeaderRailItemViewModelTests
+{
+    [Fact]
+    public void Attention_header_formats_count_and_is_not_collapsible()
+    {
+        var vm = new GroupHeaderRailItemViewModel(RailTier.Attention, count: 3, expanded: true);
+        Assert.Equal(string.Format(Strings.RailGroupAttentionFmt, 3), vm.Text);
+        Assert.False(vm.IsCollapsible);   // Attention is always expanded
+    }
+
+    [Fact]
+    public void Healthy_header_is_collapsible_and_raises_toggle_with_its_tier()
+    {
+        var vm = new GroupHeaderRailItemViewModel(RailTier.Healthy, count: 35, expanded: false);
+        Assert.Equal(string.Format(Strings.RailGroupHealthyFmt, 35), vm.Text);
+        Assert.True(vm.IsCollapsible);
+        Assert.False(vm.Expanded);
+
+        RailTier? toggled = null;
+        vm.ToggleRequested += (_, tier) => toggled = tier;
+        vm.ToggleCommand.Execute(null);
+        Assert.Equal(RailTier.Healthy, toggled);
+    }
+}
+```
+
+- [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~GroupHeaderRailItemViewModelTests"`; also fails to compile until the `RailGroup*Fmt` strings exist — add them now in this task's Step 3, and the final ResX pass Task 15 consolidates).
+
+- [ ] **Step 3: Add strings + implement**
+
+Add to `src/Lattice.App/Localization/Strings.resx` (T1 convention — meaning-based names, `{0}` count):
+```xml
+  <data name="RailGroupAttentionFmt" xml:space="preserve"><value>Attention · {0}</value></data>
+  <data name="RailGroupHealthyFmt" xml:space="preserve"><value>Healthy · {0}</value></data>
+```
+
+Create `GroupHeaderRailItemViewModel.cs`:
+```csharp
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Lattice.App.Aggregation;
+using Lattice.App.Localization;
+
+namespace Lattice.App.ViewModels;
+
+/// <summary>A status-group header row in the hosts rail (design 3a). Attention is
+/// always expanded (not collapsible); Healthy toggles, the shell persists.</summary>
+public sealed partial class GroupHeaderRailItemViewModel : ObservableObject
+{
+    public GroupHeaderRailItemViewModel(RailTier tier, int count, bool expanded)
+    {
+        Tier = tier;
+        _expanded = expanded;
+        // Exhaustive over the RailTier DU (decisions §2). The `_ => throw` is a SANCTIONED
+        // guard, NOT a silent catch-all: it mirrors RailStateProjection.From so that adding
+        // an M3 tier (e.g. Offline) fails loudly here instead of mislabelling it "Healthy · N".
+        // Do not "simplify" it back to a two-way ternary. (RailTier is an F# DU, so this uses
+        // its generated Is<Case> predicates as property patterns, not enum constants.)
+        Text = tier switch
+        {
+            { IsAttention: true } => string.Format(Strings.RailGroupAttentionFmt, count),
+            { IsHealthy: true } => string.Format(Strings.RailGroupHealthyFmt, count),
+            _ => throw new ArgumentOutOfRangeException(nameof(tier), tier,
+                "RailTier grew — add its group-header label (decisions §2)."),
+        };
+    }
+
+    public RailTier Tier { get; }
+    public string Text { get; }
+
+    /// <summary>Attention is pinned open (decisions spec §2); only the others show a chevron.</summary>
+    public bool IsCollapsible => !Tier.Equals(RailTier.Attention);
+
+    [ObservableProperty] private bool _expanded;
+
+    /// <summary>Raised by <see cref="ToggleCommand"/>; the shell flips + persists + recomputes.</summary>
+    public event EventHandler<RailTier>? ToggleRequested;
+
+    [RelayCommand]
+    private void Toggle()
+    {
+        if (IsCollapsible)
+            ToggleRequested?.Invoke(this, Tier);
+    }
+}
+```
+
+> `RailTier` is an F# DU; C# equality uses `.Equals` / `==` against the static case properties. The `switch` uses `when` guards (not patterns) because F# DU cases are not C# constant patterns.
+
+- [ ] **Step 4: Run — expect PASS.**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/GroupHeaderRailItemViewModel.cs \
+        tests/Lattice.App.Tests/GroupHeaderRailItemViewModelTests.cs src/Lattice.App/Localization/Strings.resx
+git commit -m "feat(rail): group-header rail row view-model (design 3a)"
+```
+
+---
+
+### Task 6B: Pure F# core — `ScopeMachine` (scope / selection / persistence state machine)
+
+**Files:**
+- Create: `src/Lattice.App.Aggregation/ScopeMachine.fs`
+- Modify: `src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj` (add `<Compile Include="ScopeMachine.fs" />` after `RailLayout.fs`; the module is independent of `RailLayout`, so its position is not load-order-critical — put it last for tidiness)
+- Create: `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs`
+- Modify: `tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj` (add `<Compile Include="ScopeMachineTests.fs" />` after `RailLayoutTests.fs`)
+
+**Why this core exists (root cause of the R5 / R9 / R10 / R11 scope-finding class — owner decision):**
+eleven review rounds hand-enumerated a scope/selection/persistence transition table one row at a time — R5
+the header-click row, R9 / R10 the single-host rows, R11 the host-removed row — because that logic lived as
+C# prose scattered across `OnSelectedRailEntryChanged` / `ReconcileHosts` / the ctor restore. `RailLayoutPolicy`
+(the layout core, Tasks 2–3) took **zero** findings across the same eleven rounds. The structural fix is the
+same move `RailLayoutPolicy` already embodies: extract the scope state machine into a born-pure,
+exhaustively-tested F# core. The shell then shrinks to a translator — **UI occurrence → `ScopeEvent` → `step`
+→ apply the `ScopeDecision`** — and a new scope-boundary case becomes a missing `match` arm the compiler
+flags, not a review round.
+
+The closed `ScopeEvent` DU **is** the former "rail scope invariants" prose, now compiler-checked. Three
+occurrences are deliberately **not** events — **rail rebuild, host-added, and mode-change** — and the module
+documents this: a rebuild re-selecting a row is not a user choice (that was the R5 header-click bug). Those
+are handled by `highlightOf` (pure highlight derivation, never mutates scope) and by "no event at all"
+(host-added never pins; the single-host presentation lives entirely in `RailLayout`).
+
+- [ ] **Step 1: Write the failing transition-table + property tests**
+
+Create `tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs`:
+```fsharp
+module Lattice.App.Aggregation.ScopeMachineTests
+
+open System
+open Xunit
+open FsCheck.Xunit
+open Lattice.App.Aggregation
+open Lattice.App.Aggregation.ScopeMachine
+
+let private h = Guid.NewGuid()
+let private other = Guid.NewGuid()
+
+// --- exhaustive transition table: every ScopeEvent × state class (was the I1–I6 prose) ---
+
+[<Fact>]
+let ``ExplicitSelect All hosts -> AllHosts, persist null`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = PersistExplicit None }, step (Host h) (ExplicitSelect AllHostsCarrier))
+    Assert.Equal({ Scope = AllHosts; Persist = PersistExplicit None }, step AllHosts (ExplicitSelect AllHostsCarrier))
+
+[<Fact>]
+let ``ExplicitSelect a host -> that host, persist its id`` () =
+    Assert.Equal({ Scope = Host h; Persist = PersistExplicit (Some h) }, step AllHosts (ExplicitSelect (HostCarrier h)))
+    Assert.Equal({ Scope = Host h; Persist = PersistExplicit (Some h) }, step (Host other) (ExplicitSelect (HostCarrier h)))
+
+[<Fact>]   // R11: the currently-scoped host is removed
+let ``HostRemoved of the scoped host -> AllHosts + ClearPersisted`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = ClearPersisted }, step (Host h) (HostRemoved h))
+
+[<Fact>]
+let ``HostRemoved of a different host -> scope unchanged, no persist`` () =
+    Assert.Equal({ Scope = Host h; Persist = NoPersistChange }, step (Host h) (HostRemoved other))
+    Assert.Equal({ Scope = AllHosts; Persist = NoPersistChange }, step AllHosts (HostRemoved other))
+
+[<Fact>]
+let ``RestoreAtStartup None -> AllHosts, no persist`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = NoPersistChange }, step AllHosts (RestoreAtStartup(None, [| h |])))
+
+[<Fact>]
+let ``RestoreAtStartup a known id -> that host, no persist`` () =
+    Assert.Equal({ Scope = Host h; Persist = NoPersistChange }, step AllHosts (RestoreAtStartup(Some h, [| h; other |])))
+
+[<Fact>]   // R10: the saved id no longer exists
+let ``RestoreAtStartup an unknown id -> AllHosts + ClearPersisted`` () =
+    Assert.Equal({ Scope = AllHosts; Persist = ClearPersisted }, step AllHosts (RestoreAtStartup(Some h, [| other |])))
+
+[<Fact>]
+let ``restoreEvent bridges the C# nullable saved id`` () =
+    Assert.Equal(RestoreAtStartup(None, [| h |]), restoreEvent (Nullable()) [| h |])
+    Assert.Equal(RestoreAtStartup(Some h, [| h |]), restoreEvent (Nullable h) [| h |])
+
+// --- highlightOf: pure derivation (never stored, never an event) ---
+
+[<Fact>]
+let ``highlightOf: SingleHost highlights the sole row regardless of scope`` () =
+    Assert.Equal(HighlightHostRow h, highlightOf AllHosts (Nullable h) [||])
+
+[<Fact>]
+let ``highlightOf: scoped+visible -> that host; hidden -> none; AllHosts -> sentinel`` () =
+    Assert.Equal(HighlightHostRow h, highlightOf (Host h) (Nullable()) [| h; other |])
+    Assert.Equal(NoHighlight, highlightOf (Host h) (Nullable()) [| other |])
+    Assert.Equal(HighlightAllHostsRow, highlightOf AllHosts (Nullable()) [| h |])
+
+// --- FsCheck properties ---
+// FsCheck supplies only primitive arbitraries (Guid list / int / bool); we derive a
+// well-formed scenario from them, so there are no hand-written generators to drift.
+// Encoded precondition: an ExplicitSelect(HostCarrier) always carries a KNOWN host id
+// (you can only click a rendered row); the other events may reference any id.
+
+let private nonneg (i: int) = i &&& Int32.MaxValue
+let private pickFrom (arr: Guid[]) (i: int) = arr.[nonneg i % arr.Length]
+
+let private scenario (knownRaw: Guid list) (stateKnown: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let known = knownRaw |> List.distinct |> List.toArray
+    let state = if stateKnown && known.Length > 0 then Host (pickFrom known idSel) else AllHosts
+    let anyId = if idKnown && known.Length > 0 then pickFrom known idSel else Guid.NewGuid()
+    let ev =
+        match (nonneg evSel) % (if known.Length = 0 then 4 else 5) with
+        | 0 -> ExplicitSelect AllHostsCarrier
+        | 1 -> HostRemoved anyId
+        | 2 -> RestoreAtStartup(Some anyId, known)
+        | 3 -> RestoreAtStartup(None, known)
+        | _ -> ExplicitSelect (HostCarrier (pickFrom known idSel))   // known-only carrier
+    known, state, ev
+
+[<Property>]   // P1: result scope is always valid (AllHosts, or a host that still exists)
+let ``P1 valid scope`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let known, state, ev = scenario knownRaw sk evSel idKnown idSel
+    let postKnown = match ev with | HostRemoved id -> known |> Array.filter ((<>) id) | _ -> known
+    match (step state ev).Scope with
+    | AllHosts -> true
+    | Host id -> Array.contains id postKnown
+
+[<Property>]   // P2: persistence changes only on ExplicitSelect or an invalidation path
+let ``P2 persistence discipline`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let _, state, ev = scenario knownRaw sk evSel idKnown idSel
+    match (step state ev).Persist with
+    | NoPersistChange -> true
+    | PersistExplicit _ | ClearPersisted ->
+        match ev with
+        | ExplicitSelect _ -> true
+        | HostRemoved id -> state = Host id
+        | RestoreAtStartup(Some id, known) -> not (Array.contains id known)
+        | RestoreAtStartup(None, _) -> false
+
+[<Property>]   // P3: a Host scope arises ONLY from an explicit choice or a valid restore (never a spontaneous pin)
+let ``P3 no spontaneous pin`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
+    let _, state, ev = scenario knownRaw sk evSel idKnown idSel
+    match (step state ev).Scope with
+    | AllHosts -> true
+    | Host resid ->
+        match ev with
+        | ExplicitSelect (HostCarrier id) -> id = resid
+        | ExplicitSelect AllHostsCarrier -> false
+        | RestoreAtStartup(Some id, known) -> id = resid && Array.contains id known
+        | RestoreAtStartup(None, _) -> false
+        | HostRemoved _ -> state = Host resid        // unchanged, not newly pinned
+```
+Add `<Compile Include="ScopeMachineTests.fs" />` to `Lattice.Aggregation.Tests.fsproj` (after `RailLayoutTests.fs`).
+
+- [ ] **Step 2: Run — expect FAIL** (the module does not exist yet).
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests`
+Expected: compile failure (`ScopeMachine` / its types are undefined).
+
+- [ ] **Step 3: Implement `ScopeMachine.fs` (born pure)**
+
+Create `src/Lattice.App.Aggregation/ScopeMachine.fs`:
+```fsharp
+namespace Lattice.App.Aggregation
+
+open System
+
+/// The global host scope: which host every data view filters to. Mirrors the C#
+/// `ScopeSelection` (AllHosts | one host) but lives in the pure core so the shell
+/// owns none of the transition logic.
+type Scope =
+    | AllHosts
+    | Host of Guid
+
+/// A rail row the user can click to CHOOSE a scope. Group headers and the transient
+/// `null` selection are deliberately NOT carriers (see `step`'s doc comment).
+type ScopeCarrier =
+    | AllHostsCarrier
+    | HostCarrier of Guid
+
+/// The only occurrences that move scope. Closed by construction — this DU IS the
+/// former "rail scope invariants" prose, now compiler-checked.
+/// NOT events (the shell must never fabricate one for them):
+///   * rail REBUILD  — re-selecting a row during a rebuild is not a user choice (R5);
+///                     the new highlight is derived by `highlightOf`, not `step`.
+///   * host ADDED    — never pins a lone host; single-host is presentation only,
+///                     owned by `RailLayout` (Scope stays AllHosts — data-identical).
+///   * MODE change   — flat↔grouped is a `RailLayout` concern; it moves no scope.
+type ScopeEvent =
+    | ExplicitSelect of ScopeCarrier
+    | HostRemoved of Guid
+    | RestoreAtStartup of savedHostId: Guid option * knownHostIds: Guid[]
+
+/// The persistence side effect the shell applies after a transition.
+/// `PersistExplicit`/`ClearPersisted` both write `ScopeHostId` (an id / null);
+/// `NoPersistChange` leaves it untouched. Kept distinct so the transition table
+/// reads intent (a user choice vs. discarding a stale id), not just the byte written.
+type PersistAction =
+    | PersistExplicit of Guid option
+    | ClearPersisted
+    | NoPersistChange
+
+/// `step`'s output: the next scope plus the persistence action.
+type ScopeDecision =
+    { Scope: Scope
+      Persist: PersistAction }
+
+/// Which rail row the shell should highlight. Derived from scope + rail contents by
+/// `highlightOf`; never stored, never produced by an event.
+type RailHighlight =
+    | HighlightAllHostsRow
+    | HighlightHostRow of Guid
+    | NoHighlight
+
+module ScopeMachine =
+
+    /// The whole scope/selection/persistence state machine: state in, decision out.
+    /// Total over the event DU; no wildcard on domain cases (CLAUDE.md F# canon).
+    let step (state: Scope) (event: ScopeEvent) : ScopeDecision =
+        match event with
+        | ExplicitSelect AllHostsCarrier ->
+            { Scope = AllHosts; Persist = PersistExplicit None }
+        | ExplicitSelect (HostCarrier id) ->
+            { Scope = Host id; Persist = PersistExplicit (Some id) }
+        | HostRemoved id ->
+            match state with
+            | Host scoped when scoped = id ->
+                // R11: the scoped host is gone — fall back to All hosts, wipe the stale id.
+                { Scope = AllHosts; Persist = ClearPersisted }
+            | AllHosts
+            | Host _ ->
+                { Scope = state; Persist = NoPersistChange }
+        | RestoreAtStartup (savedHostId, knownHostIds) ->
+            match savedHostId with
+            | Some id when Array.contains id knownHostIds ->
+                { Scope = Host id; Persist = NoPersistChange }
+            | Some _ ->
+                // R10: the saved host no longer exists — fall back, wipe the stale id.
+                { Scope = AllHosts; Persist = ClearPersisted }
+            | None ->
+                { Scope = AllHosts; Persist = NoPersistChange }
+
+    /// Which row RebuildRail should select — a pure function of scope + what the rail
+    /// currently shows. CONSUMER-SHAPED (Nullable / array) for the C# shell (F# canon
+    /// pt.: C#-consumed signatures may stay consumer-shaped):
+    ///   * soleHost      = the lone host id in SingleHost presentation, else null. The
+    ///                     sole row is highlighted regardless of scope (scope stays
+    ///                     AllHosts — data-identical for one host).
+    ///   * visibleHostIds = host ids that actually have a rendered row (a scoped host
+    ///                     hidden inside a collapsed group has none ⇒ NoHighlight).
+    let highlightOf (scope: Scope) (soleHost: Nullable<Guid>) (visibleHostIds: Guid[]) : RailHighlight =
+        if soleHost.HasValue then HighlightHostRow soleHost.Value
+        else
+            match scope with
+            | Host id when Array.contains id visibleHostIds -> HighlightHostRow id
+            | Host _ -> NoHighlight
+            | AllHosts -> HighlightAllHostsRow
+
+    /// C#-friendly constructor for the startup restore event: converts the nullable
+    /// persisted id at the boundary so the shell never touches `FSharpOption` (F# canon:
+    /// convert exception/nullable-style .NET shapes to Option at the boundary).
+    let restoreEvent (savedHostId: Nullable<Guid>) (knownHostIds: Guid[]) : ScopeEvent =
+        RestoreAtStartup((if savedHostId.HasValue then Some savedHostId.Value else None), knownHostIds)
+```
+Add `<Compile Include="ScopeMachine.fs" />` to `Lattice.App.Aggregation.fsproj`.
+
+- [ ] **Step 4: Run — expect PASS**
+
+Run: `dotnet test tests/Lattice.Aggregation.Tests`
+Expected: PASS — the 10 table `[<Fact>]`s and the 3 `[<Property>]`s are green. The project's own
+`TreatWarningsAsErrors` (`.fsproj`) additionally proves the two `match`es are exhaustive with no wildcard.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App.Aggregation/ScopeMachine.fs src/Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj \
+        tests/Lattice.Aggregation.Tests/ScopeMachineTests.fs tests/Lattice.Aggregation.Tests/Lattice.Aggregation.Tests.fsproj
+git commit -m "feat(scope): born-pure ScopeMachine core (scope state machine, closes R5/R9/R10/R11 class)"
+```
+
+---
+
+### Scope semantics live in `ScopeMachine` (Task 6B) — the shell only translates
+
+Every task below that touches scope/selection/persistence obeys `ScopeMachine`, not restated prose. The
+contract, in one place:
+
+- **The shell never decides scope.** It maps a UI occurrence to a `ScopeEvent`, calls `ScopeMachine.step`,
+  and applies the returned `ScopeDecision` (set `Scope`, then run its `PersistAction`). The only occurrences
+  that are events: an explicit rail selection (`ExplicitSelect`), a host removal (`HostRemoved`), and startup
+  restore (`RestoreAtStartup`).
+- **A rail rebuild is NOT an event.** `RebuildRail` rematerializes rows and sets the highlight from
+  `ScopeMachine.highlightOf(scope, soleHost, visibleHostIds)`; it never calls `step`, so it can never mutate
+  or persist `Scope` (the R5 structural guarantee, now enforced by the type — there is no event to construct).
+- **A group-header or `null` selection is NOT a scope carrier.** `OnSelectedRailEntryChanged` builds a
+  `ScopeCarrier` only for `HostRailItemViewModel` / `AllHostsRailItemViewModel`; anything else constructs no
+  event (R5 header-click).
+- **SingleHost is presentation only** (owned by `RailLayout`, Task 2). One host ⇒ no sentinel row, the sole
+  host row highlighted, but `Scope` stays `AllHosts` — data-identical for one host. Consequence for the data
+  views: aggregate presentation must key on **genuine multi-host** (`Scope.IsAllHosts && hostCount > 1`), not
+  on `Scope.IsAllHosts` alone (Task 7B). There is **no** single-host auto-pin, no `_wasSingleHost`, no
+  `_pendingScopeRestore`.
+
+### Task 7: `ShellViewModel` rail orchestration — measure, reconcile, translate scope to the cores
+
+**Files:**
+- Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs`
+- Modify: `tests/Lattice.App.Tests/ShellViewModelTests.cs`
+
+Replaces the layout-agnostic `ReconcileHosts` host-VM churn with: a persistent host-VM map keyed by id (owns clock subscriptions), plus a `RebuildRail()` that materializes `RailLayoutPolicy.compute(...)` output into `RailEntries` and sets the **highlight only** (via `ScopeMachine.highlightOf` — no scope mutation). New inputs: viewport height (fed by the view), override + expand state (loaded/persisted via `UiStateStore`). Every scope move is a `ScopeMachine` transition: the shell translates a UI occurrence (ctor restore / explicit rail selection / host removal) into a `ScopeEvent`, calls `ScopeMachine.step`, and applies the `ScopeDecision` — it never re-derives scope or persistence rules (Task 6B). `RebuildRail` derives `SelectedRailEntry` from `highlightOf` and constructs no event.
+
+Constants: `RailRowHeight = 40.0` (= `LatticeHostItemHeight`), `ReservedRailChrome = 150.0` (Hosts header + Settings item + paddings; the exact value is pinned by the headless geometry test in Task 8 — tune it there, keep it here).
+
+- [ ] **Step 1: Write failing VM-level tests**
+
+Append to `ShellViewModelTests.cs`:
+
+```csharp
+private void AddHosts(int n)
+{
+    for (var i = 0; i < n; i++)
+        _registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+}
+
+[Fact]
+public void Small_viewport_with_many_hosts_groups_the_rail()
+{
+    AddHosts(4);
+    // Budget below (4 + 1) * 40 = 200 forces grouped under Auto.
+    _shell.SetRailViewportHeight(300.0 - 150.0 + 30.0); // available ~180 < 200
+    Assert.Contains(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+    Assert.True(_shell.ShowRailToggle);
+}
+
+[Fact]
+public void Tall_viewport_keeps_the_rail_flat_and_hides_the_toggle()
+{
+    AddHosts(4);
+    _shell.SetRailViewportHeight(1000.0);
+    Assert.DoesNotContain(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+    Assert.False(_shell.ShowRailToggle);
+}
+
+[Fact]
+public void Toggling_grouping_forces_the_opposite_layout_and_persists()
+{
+    AddHosts(4);
+    _shell.SetRailViewportHeight(1000.0);              // fits => Flat
+    _shell.ToggleRailGroupingCommand.Execute(null);    // force grouped
+    Assert.Contains(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+    // Persisted: a fresh shell on the same ui-state file restores grouped.
+    var shell2 = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+        () => new RoutingGuiRpcClient(_fakes));
+    shell2.SetRailViewportHeight(1000.0);
+    Assert.Contains(shell2.RailEntries, e => e is GroupHeaderRailItemViewModel);
+    shell2.Dispose();
+}
+
+[Fact]
+public void Toggling_back_returns_to_adaptive_so_the_toggle_hides_once_it_fits()
+{
+    AddHosts(4);
+    _shell.SetRailViewportHeight(180.0);               // available ~30 < 200 => Auto => Grouped
+    Assert.True(_shell.ShowRailToggle);
+    _shell.ToggleRailGroupingCommand.Execute(null);    // Auto -> ForceFlat
+    _shell.ToggleRailGroupingCommand.Execute(null);    // ForceFlat(overflow) -> Auto (re-adaptive)
+    // Proof we returned to Auto (not stuck on a Force): growing to fit hides the toggle.
+    _shell.SetRailViewportHeight(1000.0);
+    Assert.False(_shell.ShowRailToggle);
+    Assert.DoesNotContain(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+}
+
+[Fact]
+public void Selecting_a_host_survives_a_rail_rebuild()
+{
+    AddHosts(3);
+    _shell.SetRailViewportHeight(1000.0);
+    var hostVm = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
+    _shell.SelectedRailEntry = hostVm;
+    Assert.Equal(hostVm.HostId, _shell.Scope.HostId);
+
+    _shell.SetRailViewportHeight(1001.0);              // triggers a rebuild
+    Assert.Equal(hostVm.HostId, _shell.Scope.HostId);  // scope preserved
+}
+
+[Fact]
+public void Single_host_is_presentation_only_scope_stays_all_hosts_host_highlighted()
+{
+    AddHosts(1);
+    _shell.SetRailViewportHeight(1000.0);
+    // SingleHost is presentation only (owned by RailLayout): it renders + highlights the sole
+    // host row but does NOT mutate Scope (host-added is not a ScopeEvent). Scope stays All hosts
+    // (data-identical for one host). No sentinel row.
+    var row = Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>());
+    Assert.Same(row, _shell.SelectedRailEntry);          // host row highlighted
+    Assert.True(_shell.Scope.IsAllHosts);                // ...but scope is All hosts
+    Assert.DoesNotContain(_shell.RailEntries, e => e is AllHostsRailItemViewModel);
+}
+
+[Fact]
+public void Scope_persists_when_the_scoped_hosts_group_collapses()
+{
+    AddHosts(3);                              // all Healthy tier (Disconnected → Connecting → Healthy)
+    _shell.SetRailViewportHeight(1000.0);     // fits → Flat, every host row present
+    var row = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
+    _shell.SelectedRailEntry = row;
+    var scopedId = row.HostId;
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+
+    // Force Grouped; Healthy defaults collapsed, so the scoped host's row is NOT emitted.
+    _shell.ToggleRailGroupingCommand.Execute(null);
+    Assert.DoesNotContain(_shell.RailEntries.OfType<HostRailItemViewModel>(),
+        h => h.HostId == scopedId);
+
+    // Intended behavior: scope persists as DATA even with no highlighted row — it must
+    // NOT silently fall back to All hosts (regression: SelectedItem-not-in-Items → null).
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+    Assert.False(_shell.Scope.IsAllHosts);
+
+    // Expanding the group again re-highlights the row without changing scope.
+    var healthyHeader = _shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+        .Single(g => g.Tier.Equals(RailTier.Healthy));
+    healthyHeader.ToggleCommand.Execute(null);
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+}
+
+[Fact]
+public void Selecting_a_group_header_is_not_a_scope_change()
+{
+    // Reproduces the REAL header-click path the ToggleCommand test misses: the ListBox
+    // two-way binding assigns SelectedRailEntry = header. That must NOT reset scope to
+    // All hosts (round-5 P2 — the structural invariant behind the collapsed-group loss).
+    AddHosts(3);
+    _shell.SetRailViewportHeight(1000.0);
+    var host = _shell.RailEntries.OfType<HostRailItemViewModel>().First();
+    _shell.SelectedRailEntry = host;
+    var scopedId = host.HostId;
+    _shell.ToggleRailGroupingCommand.Execute(null);         // ForceGrouped => a header exists
+
+    var header = _shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+        .Single(g => g.Tier.Equals(RailTier.Healthy));
+    _shell.SelectedRailEntry = header;                       // the binding's assignment
+
+    Assert.Equal(scopedId, _shell.Scope.HostId);
+    Assert.False(_shell.Scope.IsAllHosts);
+}
+
+// --- persisted global host scope (design README:80/108) ---
+
+[Fact]
+public void Persisted_scope_restores_the_host_on_construction()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    new UiStateStore(_uiPath).Save(UiState.Default with { ScopeHostId = h2.Id });
+
+    // Fresh shell over the same registry + ui-state restores the persisted scope. Two hosts
+    // (not the degenerate single-host pin) so the default would otherwise be All hosts.
+    var shell2 = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+        () => new RoutingGuiRpcClient(_fakes));
+    shell2.SetRailViewportHeight(1000.0);
+    Assert.Equal(h2.Id, shell2.Scope.HostId);
+    shell2.Dispose();
+}
+
+[Fact]
+public void Unknown_persisted_scope_falls_back_to_all_hosts()
+{
+    _registry.AddHost(TestData.MakeHostConfig(name: "a"));
+    _registry.AddHost(TestData.MakeHostConfig(name: "b"));
+    new UiStateStore(_uiPath).Save(UiState.Default with { ScopeHostId = Guid.NewGuid() }); // no such host
+
+    var shell2 = new ShellViewModel(_registry, _store, _clock, new UiStateStore(_uiPath),
+        () => new RoutingGuiRpcClient(_fakes));
+    shell2.SetRailViewportHeight(1000.0);
+    Assert.True(shell2.Scope.IsAllHosts);   // missing id → fallback, no throw
+    shell2.Dispose();
+}
+
+[Fact]
+public void Selecting_a_host_persists_the_scope_id()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    _shell.SetRailViewportHeight(1000.0);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
+        .Single(h => h.HostId == h2.Id);
+    Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
+    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);   // All hosts clears the id
+}
+
+[Fact]
+public void Explicit_click_on_the_sole_host_scopes_and_persists_and_survives_a_second_host()
+{
+    var solo = TestData.MakeHostConfig(name: "solo");
+    _registry.AddHost(solo);
+    _shell.SetRailViewportHeight(1000.0);
+
+    // An explicit click on the sole host row IS a real selection (ExplicitSelect) — scope + persist.
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+    Assert.Equal(solo.Id, _shell.Scope.HostId);
+    Assert.Equal(solo.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    // A deliberate choice survives adding a 2nd host (unlike a mere presentation pin).
+    _registry.AddHost(TestData.MakeHostConfig(name: "second"));
+    Assert.Equal(solo.Id, _shell.Scope.HostId);
+}
+
+[Fact]
+public void Adding_a_second_host_without_an_explicit_selection_stays_all_hosts()
+{
+    _registry.AddHost(TestData.MakeHostConfig(name: "solo"));
+    _shell.SetRailViewportHeight(1000.0);
+    Assert.True(_shell.Scope.IsAllHosts);            // no auto-pin (host-added is not a ScopeEvent)
+
+    _registry.AddHost(TestData.MakeHostConfig(name: "second"));
+    // Still All hosts, and the (now-present) sentinel is highlighted.
+    Assert.True(_shell.Scope.IsAllHosts);
+    Assert.IsType<AllHostsRailItemViewModel>(_shell.SelectedRailEntry);
+}
+
+[Fact]   // R11 at the shell boundary: removing the scoped host fires HostRemoved → step clears scope
+public void Removing_the_scoped_host_falls_back_to_all_hosts_and_clears_persistence()
+{
+    var h1 = TestData.MakeHostConfig(name: "a");
+    var h2 = TestData.MakeHostConfig(name: "b");
+    _registry.AddHost(h1);
+    _registry.AddHost(h2);
+    _shell.SetRailViewportHeight(1000.0);
+
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>()
+        .Single(h => h.HostId == h2.Id);
+    Assert.Equal(h2.Id, _shell.Scope.HostId);
+    Assert.Equal(h2.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    _registry.RemoveHost(h2.Id);   // ReconcileHosts → ScopeMachine.HostRemoved(h2) → AllHosts + ClearPersisted
+
+    Assert.True(_shell.Scope.IsAllHosts);                              // no longer pointing at a dead host
+    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);        // stale id wiped
+    // Removing a NON-scoped host leaves the surviving scope alone (covered by ScopeMachine table row 4).
+}
+```
+
+> Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
+> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. That write-back lands
+> in `OnSelectedRailEntryChanged` with `value == null`, which is **not** a scope carrier, so it constructs no
+> `ScopeEvent` and `Scope` is untouched — the host stays scoped regardless of the highlight. This test locks
+> the scope-as-data contract either way.
+
+- [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellViewModelTests"`).
+
+- [ ] **Step 3: Rework `ShellViewModel`**
+
+Add usings: `using Lattice.App.Aggregation;` and an alias for the F# scope type (its name `Scope`
+collides with the shell's `Scope` property): `using ScopeState = Lattice.App.Aggregation.Scope;`. Add fields
+near the top of the class:
+```csharp
+    private const double RailRowHeight = 40.0;         // LatticeHostItemHeight — flat/single host + All-hosts rows AND the fit-math row unit
+    private const double GroupedHostRowHeight = 36.0;   // LatticeRowHeight — denser host rows inside status groups (design 3a)
+    private const double ReservedRailChrome = 150.0; // header + Settings + paddings (pinned by Task 8)
+    private readonly UiStateStore _uiState;
+    private readonly Dictionary<Guid, HostRailItemViewModel> _hostRowVms = [];
+    private double _railViewportHeight;
+    private RailGroupingMode _grouping;
+    private bool _healthyExpanded;
+    private bool _rebuilding;   // set during RebuildRail so its highlight assignment is not read as a user selection
+
+    [ObservableProperty] private bool _showRailToggle;
+
+    /// <summary>Height every host row binds to: 40 px flat/single, 36 px inside a status group
+    /// (design 3a). Group-header rows are a fixed 28 px in XAML; the "All hosts" row stays 40 px.
+    /// This is RENDERING only — the RailLayoutPolicy fit test still counts 40 px flat rows.</summary>
+    [ObservableProperty] private double _hostRowHeight = RailRowHeight;
+```
+
+In the constructor, capture `uiState` and load persisted rail state (before `ReconcileHosts`):
+```csharp
+        _uiState = uiState;
+        var ui = uiState.Load();
+        _grouping = ui.RailGrouping;
+        _healthyExpanded = ui.RailHealthyExpanded;
+```
+Keep `RailEntries.Add(_allHosts);`. Do **not** set `SelectedRailEntry = _allHosts` in the ctor any more —
+`RebuildRail` derives the highlight, and an explicit ctor selection would fire `OnSelectedRailEntryChanged`.
+Instead **restore the persisted scope through the pure core**: translate the nullable saved id + the current
+host set into a `RestoreAtStartup` event, let `ScopeMachine.step` decide (known id → that host; unknown/removed
+id → All hosts **and** clear the stale persisted id, R10), and apply the decision. `ApplyScopeDecision` sets
+`Scope` (firing `OnScopeChanged` → the view-models sync) and runs the decision's persistence action:
+```csharp
+        // Restore the persisted host scope via ScopeMachine (README:80/108). The core owns the
+        // known/unknown-id decision — no inline `store.Hosts.Any(...)` fallback here.
+        var knownHostIds = store.Hosts.Select(h => h.Config.Id).ToArray();
+        ApplyScopeDecision(ScopeMachine.step(ScopeState.AllHosts,
+            ScopeMachine.restoreEvent(ui.ScopeHostId, knownHostIds)));
+
+        store.Changed += OnStoreChanged;
+        ReconcileHosts();
+```
+
+Replace the body of `ReconcileHosts` (host-VM management stays; row layout moves to `RebuildRail`):
+```csharp
+    private void ReconcileHosts()
+    {
+        // Keep the host-VM map in sync with the registry (append-only order).
+        var seen = new HashSet<Guid>();
+        for (var i = 0; i < _store.Hosts.Count; i++)
+        {
+            HostEntry entry = _store.Hosts[i];
+            seen.Add(entry.Config.Id);
+            if (!_hostRowVms.TryGetValue(entry.Config.Id, out HostRailItemViewModel? vm))
+                _hostRowVms[entry.Config.Id] = new HostRailItemViewModel(entry, _clock);
+            else
+                vm.Refresh();
+        }
+        foreach (Guid gone in _hostRowVms.Keys.Where(k => !seen.Contains(k)).ToArray())
+        {
+            _hostRowVms[gone].Dispose();
+            _hostRowVms.Remove(gone);
+            // Host removal is a ScopeEvent. If the removed host was the scoped one, ScopeMachine
+            // falls back to All hosts + clears the persisted id (R11); otherwise it is a pure no-op
+            // (same scope, no persist). RebuildRail below then re-derives the highlight.
+            ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewHostRemoved(gone)));
+        }
+        var connected = _store.Hosts.Count(h => RailStateProjection.From(h.Status) == RailState.Connected);
+        _allHosts.Update(connected, _store.Hosts.Count);
+        HasHosts = _store.Hosts.Count > 0;
+        RebuildRail();
+    }
+```
+
+Add the orchestration members:
+```csharp
+    /// <summary>The view feeds the measured footer height; the core re-evaluates the
+    /// flat↔grouped fit boundary (design 3a: "window resize re-evaluates").</summary>
+    public void SetRailViewportHeight(double availableHeight)
+    {
+        if (Math.Abs(availableHeight - _railViewportHeight) < 0.5) return;
+        _railViewportHeight = availableHeight;
+        RebuildRail();
+    }
+
+    [RelayCommand]
+    private void ToggleRailGrouping()
+    {
+        // The next override is pure decision logic (opposite layout, with the Auto-return
+        // rule so the toggle can hide once it fits again) — the core owns it; the VM must
+        // NOT re-derive fit/override logic here (this is where the toggle-Auto gap lived).
+        RailOverride next = RailLayoutPolicy.toggleOverride(MapOverride(_grouping), BuildRailInput());
+        _grouping =
+            next.IsForceFlat ? RailGroupingMode.Flat
+            : next.IsForceGrouped ? RailGroupingMode.Grouped
+            : RailGroupingMode.Auto;
+        _uiState.Update(s => s with { RailGrouping = _grouping });
+        RebuildRail();
+    }
+
+    /// <summary>The shell's measured/persisted inputs as the core's record — the single
+    /// construction point shared by <see cref="RebuildRail"/> and the toggle.</summary>
+    private RailLayoutInput BuildRailInput()
+    {
+        var hosts = _store.Hosts
+            .Select(e => new RailHost(e.Config.Id,
+                RailTierProjection.From(RailStateProjection.From(e.Status))))
+            .ToArray();
+        var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
+        return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), _healthyExpanded);
+    }
+
+    private void OnGroupToggleRequested(object? sender, RailTier tier)
+    {
+        // Healthy is the only collapsible tier (Attention is pinned open).
+        if (tier.Equals(RailTier.Healthy))
+        {
+            _healthyExpanded = !_healthyExpanded;
+            _uiState.Update(s => s with { RailHealthyExpanded = _healthyExpanded });
+        }
+        RebuildRail();
+    }
+
+    private static RailOverride MapOverride(RailGroupingMode mode) =>
+        mode switch
+        {
+            RailGroupingMode.Flat => RailOverride.ForceFlat,
+            RailGroupingMode.Grouped => RailOverride.ForceGrouped,
+            _ => RailOverride.Auto,
+        };
+
+    // --- scope translation boundary: the shell's ScopeSelection <-> the core's Scope, and the
+    //     single place a ScopeDecision is applied. This is the ENTIRE scope logic in the shell. ---
+    private static ScopeState ToScope(ScopeSelection s) =>
+        s.IsAllHosts ? ScopeState.AllHosts : ScopeState.NewHost(s.HostId!.Value);
+
+    private static ScopeSelection ToSelection(ScopeState s) =>
+        s is ScopeState.Host h ? new ScopeSelection(h.Item) : ScopeSelection.AllHosts;
+
+    /// <summary>Apply a ScopeMachine decision: set the scope (fires OnScopeChanged → view-push)
+    /// and run its persistence action. The ONLY place the shell writes Scope or ScopeHostId.</summary>
+    private void ApplyScopeDecision(ScopeDecision decision)
+    {
+        Scope = ToSelection(decision.Scope);
+        if (decision.Persist is PersistAction.PersistExplicit pe)
+            _uiState.Update(s => s with { ScopeHostId = pe.Item is null ? (Guid?)null : pe.Item.Value });
+        else if (decision.Persist.IsClearPersisted)
+            _uiState.Update(s => s with { ScopeHostId = null });
+        // PersistAction.NoPersistChange → leave persistence untouched.
+    }
+
+    private void RebuildRail()
+    {
+        RailLayoutInput input = BuildRailInput();
+        RailLayout layout = RailLayoutPolicy.compute(input);
+        ShowRailToggle = layout.ShowToggle;
+        HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
+
+        // RebuildRail constructs NO ScopeEvent, so it cannot mutate or persist Scope. It
+        // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf. The
+        // _rebuilding guard makes the SelectedRailEntry assignment inert w.r.t. OnSelectedRailEntryChanged.
+        _rebuilding = true;
+        try
+        {
+            foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
+                g.ToggleRequested -= OnGroupToggleRequested;
+            RailEntries.Clear();
+            foreach (RailRow row in layout.Rows)
+                RailEntries.Add(MaterializeRow(row));
+
+            SelectedRailEntry = ResolveHighlight(layout);
+        }
+        finally { _rebuilding = false; }
+    }
+
+    /// <summary>Highlight = the pure ScopeMachine.highlightOf(scope, soleHost, visibleHostIds) —
+    /// never a scope mutation. SingleHost highlights the sole host row even though Scope stays
+    /// All hosts; a scoped host hidden in a collapsed group yields no highlight (Scope still holds
+    /// it); otherwise the All-hosts sentinel.</summary>
+    private object? ResolveHighlight(RailLayout layout)
+    {
+        var visibleHostIds = RailEntries.OfType<HostRailItemViewModel>().Select(h => h.HostId).ToArray();
+        Guid? soleHost = layout.Mode.IsSingleHost
+            ? RailEntries.OfType<HostRailItemViewModel>().First().HostId
+            : (Guid?)null;
+        RailHighlight highlight = ScopeMachine.highlightOf(ToScope(Scope), soleHost, visibleHostIds);
+        if (highlight is RailHighlight.HighlightHostRow hr)
+            return _hostRowVms.TryGetValue(hr.Item, out var vm) ? vm : null;
+        return highlight.IsHighlightAllHostsRow ? _allHosts : null;   // else NoHighlight (hidden scoped host)
+    }
+
+    private object MaterializeRow(RailRow row)
+    {
+        if (row.IsAllHostsRow) return _allHosts;
+        if (row is RailRow.HostRow hr) return _hostRowVms[hr.Item];
+        var gh = (RailRow.GroupHeaderRow)row;
+        var vm = new GroupHeaderRailItemViewModel(gh.tier, gh.count, gh.expanded);
+        vm.ToggleRequested += OnGroupToggleRequested;
+        return vm;
+    }
+```
+
+Rewrite `OnSelectedRailEntryChanged` as a **translator**: a rail selection becomes a `ScopeCarrier` only for
+the two real carriers; a `GroupHeaderRailItemViewModel` or a transient `null` is **not** a carrier, so it
+constructs **no event** and leaves scope untouched. That is the structural close of the whole group-header
+scope-loss class (both the collapsed-group case and the header-**click** case, R5): without it the ListBox's
+two-way `SelectedItem` binding would route a header click to `AllHosts`. The persistence side effect is not
+decided here — it rides on the `ScopeDecision` that `ApplyScopeDecision` runs:
+```csharp
+    partial void OnSelectedRailEntryChanged(object? value)
+    {
+        if (_rebuilding) return;   // RebuildRail sets the highlight only — not a user selection
+        ScopeCarrier? carrier = value switch
+        {
+            HostRailItemViewModel h => ScopeCarrier.NewHostCarrier(h.HostId),
+            AllHostsRailItemViewModel => ScopeCarrier.AllHostsCarrier,
+            _ => null,   // group header or transient null: NOT a scope carrier → construct no event (R5)
+        };
+        if (carrier is null) return;
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewExplicitSelect(carrier)));
+    }
+```
+
+Leave the existing `OnScopeChanged` as a pure view-push — it never persists and never re-enters
+`ScopeMachine` (persistence is the `ScopeDecision` the shell already applied). It fires for the ctor restore,
+explicit selections, and host removal; `RebuildRail` never triggers it (it sets the highlight, not `Scope`):
+```csharp
+    partial void OnScopeChanged(ScopeSelection value)
+    {
+        Tasks.Scope = value;
+        Projects.Scope = value;
+        Transfers.Scope = value;
+        EventLog.Scope = value;
+    }
+```
+
+Update `Dispose` to dispose host VMs from the map (they no longer all live in `RailEntries`) and unsubscribe headers:
+```csharp
+        foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
+            g.ToggleRequested -= OnGroupToggleRequested;
+        foreach (HostRailItemViewModel item in _hostRowVms.Values)
+            item.Dispose();
+```
+(Remove the old `RailEntries.OfType<HostRailItemViewModel>()` disposal loop.) **Keep** the `Settings.Reconcile();` call at the end of `ReconcileHosts` for now — the Settings Hosts group still exists through Tasks 8–12, and its expanders (and the existing Settings tests) rely on this shell call to track host add/remove. Task 13 deletes both the group and this call in the same step, so removing it here would leave the expanders stale (production + tests) in the interim.
+
+> F#↔C# interop notes for reviewers: `RailHost`/`RailLayoutInput` are F# records → positional constructors in declared field order. `RailOverride`/`RailTier`/`RailMode` DU cases are static properties (compare with `.Equals`) and each has an `Is<Case>` predicate (`RailMode.IsSingleHost`, `RailOverride.IsForceFlat`/`.IsForceGrouped`/`.IsAuto`). `RailRow` DU cases expose `IsAllHostsRow`, nested types `RailRow.HostRow` (`.Item`) and `RailRow.GroupHeaderRow` (`.tier`/`.count`/`.expanded`).
+> `ScopeMachine` interop: DU **case constructors** from C# are `New<Case>(...)` — `ScopeEvent.NewExplicitSelect`/`NewHostRemoved`, `ScopeCarrier.NewHostCarrier`, `ScopeState.NewHost` — nullary cases are static properties (`ScopeCarrier.AllHostsCarrier`, `ScopeState.AllHosts`). Data cases match via type-pattern with `.Item` (`decision.Persist is PersistAction.PersistExplicit pe` → `pe.Item` is `FSharpOption<Guid>`, whose `None` is a `null` reference; `highlight is RailHighlight.HighlightHostRow hr` → `hr.Item`); nullary cases via `Is<Case>` (`decision.Persist.IsClearPersisted`, `highlight.IsHighlightAllHostsRow`, `s is ScopeState.Host h` → `h.Item`). `restoreEvent(Guid?, Guid[])` and `highlightOf(Scope, Guid?, Guid[])` take C# `Guid?`/arrays directly (consumer-shaped, no `FSharpOption` at those calls).
+
+- [ ] **Step 4: Migrate every sentinel-assuming test for `SingleHost` mode (repo-wide sweep)**
+
+This task makes a **one-host** rail render as `SingleHost` — no All-hosts sentinel, the host at index 0
+(design 3a: "1 host → no 'All hosts' entry, scope pinned"). Every existing test that builds a **one-host**
+shell and assumes the sentinel leads the rail (`RailEntries[0]` is `AllHostsRailItemViewModel`, or
+`SelectedIndex = 1` selects "the host") now breaks. This is a class, not two spots — **sweep it**:
+```bash
+grep -rnE 'RailEntries\[0\]|SelectedIndex = 1|SelectedRailEntry = shell.RailEntries\[0\]' \
+     tests --include='*.cs'
+```
+For each hit, if the test builds exactly one host, convert it to **two hosts** so the rail is `Flat`
+(sentinel at 0, hosts at 1..N) — a shown/laid-out window fits two hosts into `Flat` via the Task-8 viewport
+wiring; VM-level tests with no viewport get `Grouped` at height 0 but still keep the sentinel at
+`RailEntries[0]`. Confirmed breakers to fix:
+- `tests/Lattice.App.Tests/Headless/ShellRailTests.cs` — `First_rail_row_renders_the_all_hosts_label`,
+  `Selecting_a_host_then_switching_views_leaves_scope_unchanged`, `Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`
+  (each adds one host + asserts the sentinel / `SelectedIndex = 1`): add a second host.
+- `tests/Lattice.App.Tests/AllHostsRailTests.cs` — the **one-host** cases that assert
+  `RailEntries[0]` is `AllHostsRailItemViewModel` (or select `RailEntries[0]` as the sentinel): add a second
+  host so the sentinel exists (the existing two-host case is unaffected).
+
+Confirmed **safe** (leave as-is): one-host tests that never assume the sentinel/index —
+`Navigating_to_tasks_renders_a_TasksView`, `Selecting_tasks_swaps_its_icon…`, `Every_nav_icon_key_resolves…`
+(no rail index), and `PersistenceJourney` (filters `RailEntries.OfType<HostRailItemViewModel>()`, sentinel-
+agnostic); the ≥2-host journeys (`ProjectsScopeJourney`, `PartialResultsJourney`, `TasksScopeJourney`,
+`EventLogJourney`) already keep the sentinel. The new `SingleHost` behavior itself is covered by
+`Single_host_is_presentation_only_scope_stays_all_hosts_host_highlighted` (Step 1). The `AuthFailedLinkageTests` /
+`AuthFailJourney` one-host→two-host conversions are handled in Task 12.
+
+Gate: a full `dotnet build tests/Lattice.App.Tests` (not a filtered `dotnet test`) — a non-migrated
+sentinel test that no longer compiles/realizes surfaces as a build/red failure here, not silently.
+
+- [ ] **Step 5: Run — expect PASS** (new tests + the converted `ShellRailTests` + `AllHostsRailTests` + the existing `ShellViewModelTests` — `First_run_flag_follows_host_count`, scope pins, etc.). `Settings.Reconcile()` stays wired here, so the existing Settings host tests keep passing until Task 13 removes the group.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/ShellViewModel.cs tests/Lattice.App.Tests/ShellViewModelTests.cs \
+        tests/Lattice.App.Tests/Headless/ShellRailTests.cs tests/Lattice.App.Tests/AllHostsRailTests.cs
+git commit -m "feat(rail): rail orchestration via RailLayoutPolicy + scope via ScopeMachine (design 3a)"
+```
+
+---
+
+### Task 7B: Re-key view-layer "aggregate presentation" from `IsAllHosts` to genuine multi-host
+
+**Files:**
+- Modify: `src/Lattice.App/ViewModels/TasksViewModel.cs`, `ProjectsViewModel.cs`, `TransfersViewModel.cs`, `EventLogViewModel.cs`
+- Modify: `tests/Lattice.App.Tests/` — the single-host presentation tests for those VMs
+
+**Why (downstream-consumer check, verified against current main):** before this rework a one-host user had
+`Scope = host` (the old auto-pin), so `IsAllHostsScope = Scope.IsAllHosts` was `false` and every view showed
+single-host presentation (no Host column, Projects hides child rows / shows host-specific status instead of
+"Active on all hosts", no partial bar). Under `ScopeMachine` a one-host user now has `Scope = AllHosts` (no
+auto-pin; `SingleHost` is presentation only), so `Scope.IsAllHosts` is `true` — the views would wrongly switch
+to **aggregate** presentation for a single host.
+Re-key the aggregate flag to **genuine multi-host** so behavior is preserved. Confirmed consumers (grep
+`IsAllHostsScope` / `Scope.IsAllHosts` under `src/Lattice.App*`):
+- `TasksViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` + `ShowPartialBar = _partialBar.Advance(…, Scope.IsAllHosts)` (Host column + "Elapsed/…" arms in `TasksView.axaml` bind `IsAllHostsScope` / `!IsAllHostsScope`).
+- `ProjectsViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (gates child-row expansion + `ProjectRowViewModel.Parent(g, IsAllHostsScope)` = the "Active on all hosts" / host-specific status text) + partial bar.
+- `TransfersViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (Host column in `TransfersView.axaml`) + partial bar.
+- `EventLogViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (Host column in `EventLogView.axaml`).
+- **Data filtering stays keyed on `Scope`** (`ViewSliceProjection`'s `scope.IsAllHosts || h.Config.Id == scope.HostId`, and each VM's `Scope.IsAllHosts ? all : scoped` host pick) — that is correct (All hosts over one host = that host). Only the **presentation** flag changes.
+
+- [ ] **Step 1: Write the failing test (one per VM is enough; Tasks shown)**
+
+```csharp
+[Fact]
+public void Single_host_registry_is_not_aggregate_presentation()
+{
+    // One host, scope = All hosts (ScopeMachine: no auto-pin). Aggregate UI (Host column etc.) must stay OFF.
+    var host = TestData.MakeHostConfig();
+    _registry.AddHost(host);
+    // ...drive a poll so rows exist (mirror the existing TasksViewModel test setup)...
+    Assert.True(_vm.Scope.IsAllHosts);
+    Assert.False(_vm.IsAllHostsScope);   // genuine multi-host is false with one host
+}
+```
+Add the analogous one-host assertion to the Projects/Transfers/EventLog VM test classes (each already has
+single-host presentation tests that scope to a host in a MULTI-host registry — those keep passing, since a
+scoped host is still `IsAllHostsScope == false`).
+
+- [ ] **Step 2: Run — expect FAIL** (`IsAllHostsScope` is currently `true` for the one-host case).
+
+- [ ] **Step 3: Re-key each VM**
+
+In each of the four VMs, change the assignment to require more than one registered host, and feed the same
+flag to the partial bar:
+```csharp
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
+        // ...
+        ShowPartialBar = _partialBar.Advance(unreachableIds, coveredIds, IsAllHostsScope);
+```
+(`EventLogViewModel` has no partial bar — just the `IsAllHostsScope` line.) Leave the data-filter lines
+(`Scope.IsAllHosts ? … : …`, `ViewSliceProjection`) untouched.
+
+- [ ] **Step 4: Run — expect PASS.** The existing multi-host + scoped-host presentation tests stay green
+(scoped host → `IsAllHostsScope == false` as before); the new one-host tests now pass; genuine multi-host
+(≥2 hosts, All hosts) is unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/TasksViewModel.cs src/Lattice.App/ViewModels/ProjectsViewModel.cs \
+        src/Lattice.App/ViewModels/TransfersViewModel.cs src/Lattice.App/ViewModels/EventLogViewModel.cs \
+        tests/Lattice.App.Tests/
+git commit -m "fix(views): key aggregate presentation on genuine multi-host, not IsAllHosts (ScopeMachine)"
+```
+
+---
+
+### Task 8: `ShellWindow` view — group-header template, toggle, viewport wiring
+
+**Files:**
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml`
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml.cs`
+- Create: `tests/Lattice.App.Tests/Headless/HostRailGroupingTests.cs`
+
+Adds the third rail `DataTemplate` (group header), the list/group toggle in the Hosts header (visible only while `ShowRailToggle`), the `Nav.Bounds.Height → SetRailViewportHeight` feed, and makes header rows non-selectable (clicking a header toggles its group, never changes scope).
+
+- [ ] **Step 1: Write failing headless tests**
+
+Create `HostRailGroupingTests.cs` (mirror `ShellRailTests.MakeShell`; add 6 hosts into a short window so the flat list overflows):
+
+```csharp
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
+using Lattice.App.Infrastructure;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.App.Views;
+using Lattice.Core;
+using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
+using Xunit;
+using static Lattice.Tests.HeadlessLayout;
+
+namespace Lattice.App.Tests.Headless;
+
+public class HostRailGroupingTests
+{
+    private static (ShellWindow Window, ShellViewModel Shell, HostRegistry Registry) MakeShell(double height)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell, Height = height, Width = 1280 };
+        return (window, shell, registry);
+    }
+
+    [AvaloniaFact]
+    public void Overflowing_rail_shows_group_headers_and_the_toggle()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+
+        // 12 hosts + All-hosts * 40 = 520 > footer budget on a 700-high window => grouped.
+        Assert.Contains(shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+        var toggle = window.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "RailGroupToggle");
+        Assert.True(toggle.IsVisible);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Selecting_a_group_header_does_not_change_scope()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+        Assert.True(shell.Scope.IsAllHosts);
+
+        var headerIndex = shell.RailEntries.ToList().FindIndex(e => e is GroupHeaderRailItemViewModel);
+        window.HostList.SelectedIndex = headerIndex;
+        Layout(window);
+
+        // Header click toggles its group / is rejected — scope stays All hosts and the
+        // header is not left selected.
+        Assert.True(shell.Scope.IsAllHosts);
+        Assert.IsNotType<GroupHeaderRailItemViewModel>(window.HostList.SelectedItem);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Clicking_a_group_header_keeps_the_scoped_host_end_to_end()
+    {
+        // Round-5 P2, real path: scope a host, then click a header through the actual
+        // ListBox SelectedItem binding (not a direct ToggleCommand). Scope must survive.
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+
+        // Grouped (overflow). Expand Healthy so a host row is visible + selectable.
+        shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy))
+            .ToggleCommand.Execute(null);            // RebuildRail replaces the header instances
+        Layout(window);
+        var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().First();
+        window.HostList.SelectedItem = hostRow;      // scope a host via the real binding
+        Layout(window);
+        Assert.Equal(hostRow.HostId, shell.Scope.HostId);
+
+        // Re-query the header — the expand's RebuildRail cleared RailEntries and made new
+        // GroupHeaderRailItemViewModel instances, so the old reference's IndexOf would be -1
+        // (and SelectedIndex = -1 would deselect, never clicking the header).
+        var healthy = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy));
+        var headerIndex = shell.RailEntries.ToList().IndexOf(healthy);
+        Assert.True(headerIndex >= 0, "Healthy header must be present to click");
+        window.HostList.SelectedIndex = headerIndex; // collapses Healthy → host row hidden
+        Layout(window);
+
+        // Scope persists as data even though the row is now hidden and unselected.
+        Assert.Equal(hostRow.HostId, shell.Scope.HostId);
+        Assert.False(shell.Scope.IsAllHosts);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Grouped_rows_use_the_spec_heights_28_header_36_host()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);   // grouped (overflow); all hosts are Healthy tier
+
+        // Expand Healthy so host rows are realized alongside the header.
+        shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy)).ToggleCommand.Execute(null);
+        Layout(window);
+
+        var headerRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is GroupHeaderRailItemViewModel);
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is HostRailItemViewModel);
+
+        // Design 3a: 28 px collapsed count/header rows, 36 px grouped host rows — NOT the 40 px flat height.
+        Assert.Equal(28.0, headerRow.Bounds.Height, precision: 0);
+        Assert.Equal(36.0, hostRow.Bounds.Height, precision: 0);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Compact_pane_collapses_group_header_rows_to_no_blank_row()
+    {
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+        Assert.Contains(shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+
+        window.Nav.IsPaneOpen = false;   // 48px compact
+        Layout(window);
+
+        // Decisions §5: compact shows individual host icons; a group-header row has no visible
+        // content in compact, so its container collapses — no blank 28px row.
+        var headerRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is GroupHeaderRailItemViewModel);
+        Assert.True(headerRow.Bounds.Height < 1.0,
+            $"compact group-header row should collapse, was {headerRow.Bounds.Height}px");
+        window.Close();
+    }
+}
+```
+
+> `ScopeSelection.IsAllHosts` is the existing predicate (verify its exact name against `ScopeSelection.cs`; if it is `HostId is null`, assert `shell.Scope.HostId is null` instead).
+
+- [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~HostRailGroupingTests"` — no `RailGroupToggle`, no header template, headers still selectable).
+
+- [ ] **Step 3: Add the group-header template + toggle in `ShellWindow.axaml`**
+
+Add a third `DataTemplate` inside `HostList`'s `ListBox.DataTemplates` (after the `HostRailItemViewModel`
+one). Design 3a heights (decisions §2, card `1g` "rows 36/28"): the group-header/collapsed count row is
+**28 px** (`LatticeRowHeightCompact`), NOT the 40 px flat-row height:
+```xml
+              <DataTemplate x:DataType="vm:GroupHeaderRailItemViewModel">
+                <!-- Hidden in the 48px compact pane (decisions §5: "compact shows individual host
+                     icons"). Otherwise an Attention header — text hidden, chevron hidden because it
+                     is not collapsible — would render a blank 28px row above its host icons. -->
+                <DockPanel Height="{StaticResource LatticeRowHeightCompact}" Background="Transparent"
+                           IsVisible="{Binding #Nav.IsPaneOpen}">
+                  <PathIcon DockPanel.Dock="Left" Width="12" Height="12" Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsCollapsible}"
+                            Data="{StaticResource IconChevronRightRegular}"
+                            Foreground="{DynamicResource LatticeTextSecondaryBrush}">
+                    <PathIcon.RenderTransform>
+                      <RotateTransform Angle="{Binding Expanded, Converter={x:Static v:TaskGridConverters.ChevronAngle}}" />
+                    </PathIcon.RenderTransform>
+                  </PathIcon>
+                  <TextBlock Text="{Binding Text}" FontSize="11" FontWeight="SemiBold"
+                             VerticalAlignment="Center" Margin="6,0,0,0"
+                             IsVisible="{Binding #Nav.IsPaneOpen}"
+                             Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                </DockPanel>
+              </DataTemplate>
+```
+In the Hosts header `DockPanel` (currently the `Button` + `HostsHeader` TextBlock), add the toggle button docked right, left of the "+" button:
+```xml
+            <Button DockPanel.Dock="Right" x:Name="RailGroupToggle" Padding="4" Background="Transparent"
+                    Command="{Binding ToggleRailGroupingCommand}"
+                    IsVisible="{Binding ShowRailToggle}"
+                    ToolTip.Tip="{x:Static loc:Strings.RailGroupToggleTooltip}">
+              <PathIcon Data="{StaticResource IconGroupListRegular}" Width="12" Height="12" />
+            </Button>
+```
+
+> Icons `IconChevronRightRegular` and `IconGroupListRegular` must exist in `Theming/Icons.axaml`. If absent, add them from Fluent System Icons in this step (regular 16 glyph paths) and cover them in `ThemeResourceTests`'s icon-resolution theory. `TaskGridConverters.ChevronAngle` (bool→0/90) may already exist for Projects child rows — reuse it; if not, add a one-line `IValueConverter` there returning `90.0` when true else `0.0`.
+
+Also change the **host-row** `DataTemplate` (the `HostRailItemViewModel` one moved in Task 1) so its
+`DockPanel` height is data-bound to the shell's mode-aware `HostRowHeight` instead of the fixed
+`LatticeHostItemHeight`, so grouped host rows render at 36 px while flat/single stay 40 px (design 3a):
+```xml
+                <DockPanel Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).HostRowHeight}"
+                           ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+```
+Leave the `AllHostsRailItemViewModel` template at `LatticeHostItemHeight` (40 px — the aggregate row is not a
+grouped host row). Do **NOT** touch `RailLayoutPolicy` / `BuildRailInput`: the fit test still counts 40 px
+flat rows (`RailRowHeight`); `HostRowHeight` is rendering-only. (This note is here so the execution chip does
+not "helpfully" change the fit math to 36.)
+
+The `ListBox.hostRail ListBoxItem` style currently pins `MinHeight="{StaticResource LatticeHostItemHeight}"`
+(40 px), which would override the shorter 28/36 px rows. Change that setter to `MinHeight="0"` so each
+container sizes to its template's explicit `DockPanel` height (28 header / 36 grouped host / 40 flat &
+All-hosts). Keep the `MinWidth="0"` compact-rail fix and the `Padding="8,0"` (horizontal only) as-is.
+
+Add the string:
+```xml
+  <data name="RailGroupToggleTooltip" xml:space="preserve"><value>Toggle list / grouped view</value></data>
+```
+
+- [ ] **Step 4: Wire viewport height + non-selectable headers in `ShellWindow.axaml.cs`**
+
+In `AttachShell` (after `_shell` is set), subscribe to Nav bounds and push the height:
+```csharp
+        Nav.GetObservable(Avalonia.Visual.BoundsProperty).Subscribe(b => _shell?.SetRailViewportHeight(b.Height));
+```
+(Store the `IDisposable` and dispose it when detaching, mirroring the existing detach pattern. A one-shot subscription for the window's life is acceptable since the window owns `Nav`.)
+
+Replace `OnHostSelectionChanged` so header rows toggle their group and never hold selection or change scope:
+```csharp
+    private bool _revertingRailSelection;
+
+    private void OnHostSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_shell is null || _revertingRailSelection)
+            return;
+
+        if (HostList.SelectedItem is GroupHeaderRailItemViewModel header)
+        {
+            header.ToggleCommand.Execute(null);   // expand/collapse; RebuildRail refreshes rows
+            // A header is not a scope; restore the prior selection without recursing.
+            _revertingRailSelection = true;
+            try { HostList.SelectedItem = e.RemovedItems.Count > 0 ? e.RemovedItems[0] : null; }
+            finally { _revertingRailSelection = false; }
+            return;
+        }
+
+        // Auth-failed host click opens the Edit dialog (Task 12), not Settings.
+        if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
+            OpenEditHostDialog(item.HostId, focusPassword: true, authError: true);   // added in Task 12
+    }
+```
+
+> Until Task 12 lands `OpenEditHostDialog`, keep the existing `_shell.NavigateToSettings(item.HostId)` line here and swap it in Task 12 (note it inline so the swap is not forgotten).
+
+- [ ] **Step 5: Run — expect PASS** (`HostRailGroupingTests` + existing `ShellRailTests`). Tune `ReservedRailChrome` in `ShellViewModel` if the 12-host/700px case doesn't cross the boundary: add a temporary assert on `shell.RailEntries.Count` and adjust the constant so the geometry matches; keep the final value.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add src/Lattice.App/Views/ShellWindow.axaml src/Lattice.App/Views/ShellWindow.axaml.cs \
+        src/Lattice.App/Theming/Icons.axaml src/Lattice.App/Localization/Strings.resx \
+        tests/Lattice.App.Tests/Headless/HostRailGroupingTests.cs
+git commit -m "feat(shell): group-header rail rows + list/group toggle + viewport wiring (design 3a)"
+```
+
+---
+
+## Phase C — Host management moves to the rail (design 3b)
+
+### Task 9: Make `AddHostViewModel` mode-aware (Add / Edit) with Test + password-error
+
+**Files:**
+- Modify: `src/Lattice.App/ViewModels/AddHostViewModel.cs`
+- Modify: `tests/Lattice.App.Tests/AddHostViewModelTests.cs`
+
+Edit mode (design 3b / card `2d`): prefilled fields, title "Edit host", primary "Save" → `UpdateHost`, a Test-connection button, and an openable password-error state (auth-failed deep link).
+
+- [ ] **Step 1: Write failing tests**
+
+Append to `AddHostViewModelTests.cs`:
+
+```csharp
+[Fact]
+public void Edit_mode_prefills_from_the_host_and_titles_for_editing()
+{
+    var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+    var cfg = TestData.MakeHostConfig(name: "mini-01", address: "192.168.1.40");
+    registry.AddHost(cfg);
+    var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+
+    Assert.Equal(HostDialogMode.Edit, vm.Mode);
+    Assert.Equal("mini-01", vm.Name);
+    Assert.Equal("192.168.1.40", vm.Address);
+    Assert.Equal(Strings.EditHostDialogTitle, vm.DialogTitle);
+    Assert.Equal(Strings.EditHostPrimaryButton, vm.PrimaryButtonText);
+    Assert.True(vm.ShowTestButton);
+}
+
+[Fact]
+public async Task Edit_mode_save_updates_the_host_in_the_registry()
+{
+    var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+    var cfg = TestData.MakeHostConfig(name: "mini-01");
+    registry.AddHost(cfg);
+    var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false)
+    { Name = "mini-01-renamed" };
+
+    await vm.AddCommand.ExecuteAsync(null);   // edit-save persists without a connection test
+
+    Assert.True(vm.Succeeded);
+    Assert.Equal("mini-01-renamed", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+}
+
+[Fact]
+public async Task Edit_mode_saves_local_changes_even_when_the_host_is_unreachable()
+{
+    var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+    var cfg = TestData.MakeHostConfig(name: "mini-01");
+    registry.AddHost(cfg);
+    // Connection FAILS — Save must still persist (unlike Add, which needs a live host).
+    var vm = AddHostViewModel.ForEdit(registry,
+        () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("refused") },
+        cfg, authError: false) { Address = "192.168.1.99" };
+
+    await vm.AddCommand.ExecuteAsync(null);
+
+    Assert.True(vm.Succeeded);
+    Assert.Null(vm.ErrorText);
+    Assert.Equal("192.168.1.99", registry.Hosts.Single(h => h.Id == cfg.Id).Address);
+}
+
+[Fact]
+public void Auth_failed_edit_opens_with_the_password_error_shown()
+{
+    var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+    var cfg = TestData.MakeHostConfig(name: "mini-01");
+    registry.AddHost(cfg);
+    var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: true);
+
+    Assert.True(vm.HasPasswordError);
+    Assert.Equal(string.Format(Strings.EditHostPasswordError, "mini-01"), vm.PasswordErrorText);
+}
+```
+
+Add a `NewPath()` helper in the test class if not present: `private static string NewPath() => Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");`
+
+- [ ] **Step 2: Run — expect FAIL.**
+
+- [ ] **Step 3: Implement mode-awareness**
+
+Add the enum (top of `AddHostViewModel.cs`, under the namespace):
+```csharp
+public enum HostDialogMode { Add, Edit }
+```
+Add fields + a private full constructor + the two factories, and mode-dependent surface. Key additions:
+```csharp
+    private readonly Guid _editId;       // Guid.Empty in Add mode
+
+    public HostDialogMode Mode { get; private init; } = HostDialogMode.Add;
+
+    public string DialogTitle => Mode == HostDialogMode.Edit ? Strings.EditHostDialogTitle : Strings.AddHostDialogTitle;
+    public string PrimaryButtonText => Mode == HostDialogMode.Edit ? Strings.EditHostPrimaryButton : Strings.AddHostPrimaryButton;
+    public bool ShowTestButton => Mode == HostDialogMode.Edit;
+
+    [ObservableProperty] private bool _hasPasswordError;
+    [ObservableProperty] private string? _passwordErrorText;
+    [ObservableProperty] private string? _testResultText;
+
+    /// <summary>Edit an existing host: prefilled, retitled, Save→UpdateHost.</summary>
+    public static AddHostViewModel ForEdit(HostRegistry registry, Func<IGuiRpcClient> clientFactory,
+        HostConfig host, bool authError) =>
+        new(registry, clientFactory)
+        {
+            Mode = HostDialogMode.Edit,
+            _editId = host.Id,      // set via private field init below (see note)
+            Name = host.Name,
+            Address = host.Address,
+            PortText = host.Port.ToString(),
+            Password = host.Password,
+            HasPasswordError = authError,
+            PasswordErrorText = authError ? string.Format(Strings.EditHostPasswordError, host.DisplayName) : null,
+        };
+```
+
+> `_editId` is `readonly`; set it through the constructor rather than an object initializer. Cleanest: add a private ctor `AddHostViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, Guid editId, HostDialogMode mode)` that assigns `_editId`/`Mode`, and have `ForEdit` call it then set the bindable props. Keep the existing public `(registry, clientFactory)` ctor for Add (it sets `_editId = Guid.Empty`, `Mode = Add`).
+
+Rework `AddAsync` to branch on mode. **Edit-save persists WITHOUT the connection test** —
+mirroring the old Settings card, which saved rename/address/password changes to an
+unreachable host without contacting it. The test is the separate advisory secondary
+button (Add mode still tests-before-registering, design 2d):
+```csharp
+    [RelayCommand(CanExecute = nameof(CanAdd))]
+    private async Task AddAsync()
+    {
+        IsBusy = true;
+        try
+        {
+            HostConfig candidate = Candidate();   // CanAdd already gated address/port
+            if (Mode == HostDialogMode.Edit)
+            {
+                // Save is local-only: never blocked by an unreachable host.
+                if (Register(candidate, edit: true) is { } error) ErrorText = error;
+                else { Succeeded = true; ErrorText = null; }
+                return;
+            }
+            using var cts = new CancellationTokenSource(TestTimeout);
+            TestConnectionResult result =
+                await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
+            if (result.Success)
+            {
+                if (Register(candidate, edit: false) is { } error) ErrorText = error;
+                else { Succeeded = true; ErrorText = null; }
+            }
+            else ErrorText = result.Error;
+        }
+        catch (OperationCanceledException) { ErrorText = Strings.AddHostTimeoutError; }
+        finally { IsBusy = false; }
+    }
+
+    /// <summary>Field values as a HostConfig; keeps the edited host's id (new id in Add).</summary>
+    private HostConfig Candidate() =>
+        new(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
+            Name.Trim(), Address.Trim(), int.Parse(PortText), Password);
+
+    private string? Register(HostConfig cfg, bool edit) =>
+        RegistryGuard.TryMutate(() => { if (edit) _registry.UpdateHost(cfg); else _registry.AddHost(cfg); }) is { } err
+            ? string.Format(edit ? Strings.EditHostSaveFailedFmt : Strings.AddHostSaveFailedFmt, err)
+            : null;
+```
+Clear `HasPasswordError`/`PasswordErrorText` on any field edit (`OnPasswordChanged`) so the danger border lifts once the user types.
+
+Add a `TestConnectionCommand` (same body as `HostSettingsItemViewModel.TestConnectionAsync`, writing `TestResultText`):
+```csharp
+    [RelayCommand]
+    private async Task TestConnectionAsync()
+    {
+        var candidate = new HostConfig(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
+            Name.Trim(), Address.Trim(), int.TryParse(PortText, out var p) ? p : 0, Password);
+        TestResultText = Strings.SettingsTestConnectionBusy;
+        try
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            var r = await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
+            TestResultText = r.Success
+                ? string.Format(Strings.SettingsTestConnectionSuccess, r.Version!.Major, r.Version.Minor, r.Version.Release)
+                : r.Error;
+        }
+        catch (OperationCanceledException) { TestResultText = Strings.SettingsTestConnectionTimeout; }
+    }
+```
+
+Add the new strings (final consolidation in Task 15): `EditHostDialogTitle` ("Edit host"), `EditHostPrimaryButton` ("Save"), `EditHostPasswordError` ("The host refused this password. Check gui_rpc_auth.cfg on {0}."), `EditHostSaveFailedFmt` ("Couldn’t save changes: {0}").
+
+- [ ] **Step 4: Run — expect PASS** (new + existing `AddHostViewModelTests`).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/AddHostViewModel.cs tests/Lattice.App.Tests/AddHostViewModelTests.cs \
+        src/Lattice.App/Localization/Strings.resx
+git commit -m "feat(hosts): mode-aware Add/Edit host view-model (design 3b)"
+```
+
+---
+
+### Task 10: Edit-dialog UI — title/buttons, Test button, password danger + focus
+
+**Files:**
+- Modify: `src/Lattice.App/Views/AddHostDialog.axaml`
+- Modify: `src/Lattice.App/Views/AddHostDialog.axaml.cs`
+- Modify: `src/Lattice.App/ViewModels/AddHostViewModel.cs` (add `TestButtonText`)
+- Create: `tests/Lattice.App.Tests/Headless/EditHostDialogTests.cs`
+
+- [ ] **Step 1: Write failing headless test**
+
+```csharp
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.VisualTree;
+using FluentAvalonia.UI.Controls;
+using Lattice.App.Localization;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.App.Views;
+using Lattice.Core;
+using Lattice.Tests;
+using Xunit;
+using static Lattice.Tests.HeadlessLayout;
+
+namespace Lattice.App.Tests.Headless;
+
+public class EditHostDialogTests
+{
+    [AvaloniaFact]
+    public async Task Auth_failed_edit_dialog_shows_error_and_focuses_password()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: true);
+        var dialog = new AddHostDialog { DataContext = vm };
+        var window = new Window { Width = 600, Height = 500 };
+        window.Show();
+        Layout(window);
+        _ = dialog.ShowAsync(window);
+        Layout(window);
+
+        Assert.Equal(Strings.EditHostDialogTitle, dialog.Title);
+        var pwd = window.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "PasswordBox");
+        Assert.Contains("danger", pwd.Classes);
+        Assert.True(pwd.IsFocused);
+        // Secondary "Test connection" button is present in edit mode.
+        Assert.Equal(Strings.SettingsTestConnectionButton, dialog.SecondaryButtonText);
+        dialog.Hide();
+        window.Close();
+    }
+}
+```
+
+- [ ] **Step 2: Run — expect FAIL.**
+
+- [ ] **Step 3: Implement**
+
+Add to `AddHostViewModel`: `public string? TestButtonText => ShowTestButton ? Strings.SettingsTestConnectionButton : null;`
+
+In `AddHostDialog.axaml`, bind the mode-aware surface and mark up the password field:
+```xml
+                    Title="{Binding DialogTitle}"
+                    PrimaryButtonText="{Binding PrimaryButtonText}"
+                    SecondaryButtonText="{Binding TestButtonText}"
+                    CloseButtonText="{x:Static loc:Strings.AddHostCloseButton}"
+```
+Replace the password `TextBox` with a named, danger-classable one plus the error line:
+```xml
+    <TextBox x:Name="PasswordBox" Text="{Binding Password, Mode=TwoWay}" PasswordChar="●"
+             Classes.danger="{Binding HasPasswordError}"
+             PlaceholderText="{x:Static loc:Strings.AddHostFieldPasswordPlaceholder}" />
+    <TextBlock Text="{Binding PasswordErrorText}" FontSize="12"
+               IsVisible="{Binding HasPasswordError}"
+               Foreground="{DynamicResource LatticeDangerFgBrush}" />
+    <TextBlock Text="{Binding TestResultText}" FontSize="12"
+               IsVisible="{Binding TestResultText, Converter={x:Static ObjectConverters.IsNotNull}}"
+               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+```
+Add a danger style in `Window.Resources`/`Styles` of the dialog (or `ControlStyles.axaml`):
+```xml
+    <Style Selector="TextBox.danger">
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeDangerFgBrush}" />
+    </Style>
+```
+
+In `AddHostDialog.axaml.cs`, add the secondary (Test) handler and password focus:
+```csharp
+    public AddHostDialog()
+    {
+        InitializeComponent();
+        PrimaryButtonClick += OnPrimaryClick;
+        SecondaryButtonClick += OnSecondaryClick;
+        Opened += OnOpened;
+    }
+
+    private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
+    {
+        if (DataContext is AddHostViewModel { HasPasswordError: true } && this.FindControl<TextBox>("PasswordBox") is { } pwd)
+            pwd.Focus();
+    }
+
+    // Test connection: never closes the dialog; runs the test and shows the result inline.
+    private async void OnSecondaryClick(FAContentDialog sender, FAContentDialogButtonClickEventArgs args)
+    {
+        if (DataContext is not AddHostViewModel vm) return;
+        FADeferral deferral = args.GetDeferral();
+        try { await vm.TestConnectionCommand.ExecuteAsync(null); args.Cancel = true; }
+        finally { deferral.Complete(); }
+    }
+```
+
+> Verify the exact FA 3.0.1 `Opened` event signature (`ContentDialog`/`FAContentDialog` + `ContentDialogOpenedEventArgs`) via the FA source; adjust the delegate types if they differ. `SecondaryButtonClick` mirrors the proven `PrimaryButtonClick` deferral pattern already in this file.
+
+- [ ] **Step 4: Run — expect PASS.**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/Views/AddHostDialog.axaml src/Lattice.App/Views/AddHostDialog.axaml.cs \
+        src/Lattice.App/ViewModels/AddHostViewModel.cs src/Lattice.App/Theming/ControlStyles.axaml \
+        tests/Lattice.App.Tests/Headless/EditHostDialogTests.cs
+git commit -m "feat(hosts): edit-dialog UI — Test button, password error + focus (design 3b)"
+```
+
+---
+
+### Task 11: Host-row `MenuFlyout` — Edit / Test / Remove (design 3b)
+
+**Files:**
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml` (host-row template only)
+- Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs` (host command events + config/row lookups)
+- Modify: `src/Lattice.App/ViewModels/HostRailItemViewModel.cs` (inline `TestResultText`)
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml.cs` (Edit/Test/Remove handlers + Remove-confirm machinery)
+- Create: `tests/Lattice.App.Tests/Headless/HostRailMenuTests.cs`
+
+The `MenuFlyout` lives on the `HostRailItemViewModel` template only, so the All-hosts sentinel and group headers never get a menu (design 3b). Commands live on `ShellViewModel`; the window does the dialog/test work. Remove reuses the exact single-flight confirm machinery currently in `SettingsView.axaml.cs`, moved here.
+
+- [ ] **Step 1: Write failing headless tests**
+
+```csharp
+using Avalonia.Controls;
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using FluentAvalonia.UI.Controls;
+using Lattice.App.Infrastructure;
+using Lattice.App.Tests.Fakes;
+using Lattice.App.ViewModels;
+using Lattice.App.Views;
+using Lattice.Core;
+using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
+using Xunit;
+using static Lattice.Tests.HeadlessLayout;
+
+namespace Lattice.App.Tests.Headless;
+
+public class HostRailMenuTests
+{
+    private static (ShellWindow Window, ShellViewModel Shell, HostRegistry Registry) MakeShell()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell, Width = 1280, Height = 800 };
+        return (window, shell, registry);
+    }
+
+    [AvaloniaFact]
+    public void Edit_host_command_opens_a_prefilled_edit_dialog()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+
+        shell.EditHostCommand.Execute(cfg.Id);
+        Dispatcher.UIThread.RunJobs();
+
+        var dialog = Assert.Single(window.GetVisualDescendants().OfType<AddHostDialog>());
+        var vm = Assert.IsType<AddHostViewModel>(dialog.DataContext);
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.Equal("mini-01", vm.Name);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Remove_host_command_confirms_then_removes()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+
+        shell.RemoveHostCommand.Execute(cfg.Id);
+        Dispatcher.UIThread.RunJobs();
+        var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
+        dialog.Hide(FAContentDialogResult.Primary);
+        await HeadlessSync.WaitUntilAsync(() => registry.Hosts.Count == 0);
+
+        Assert.Empty(registry.Hosts);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Test_host_command_writes_the_result_into_the_row_subtext()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+        var row = shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+
+        shell.TestHostCommand.Execute(cfg.Id);
+        // FakeGuiRpcClient connects + exchanges versions successfully by default.
+        await HeadlessSync.WaitUntilAsync(() => row.TestResultText is not null
+            && !row.TestResultText.Equals(Strings.SettingsTestConnectionBusy));
+
+        Assert.Contains("8", row.TestResultText!); // "Connected · BOINC 8.x.x"
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Remove_write_failure_surfaces_on_the_row_and_keeps_the_host()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+
+        // Turn the config path into a directory so RemoveHost's save-rename throws
+        // (same failure-injection as SettingsViewModelTests.MakeConfigPathUnwritable).
+        File.Delete(path);
+        Directory.CreateDirectory(path);
+        try
+        {
+            shell.RemoveHostCommand.Execute(cfg.Id);
+            Dispatcher.UIThread.RunJobs();
+            var dialog = Assert.Single(window.GetVisualDescendants().OfType<FAContentDialog>());
+            dialog.Hide(FAContentDialogResult.Primary);
+
+            var row = shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+            await HeadlessSync.WaitUntilAsync(() =>
+                row.TestResultText is not null
+                && row.TestResultText.StartsWith(string.Format(Strings.HostRemoveFailedFmt, "")));
+            Assert.Single(registry.Hosts);   // write failed → host still registered, not silently lost
+        }
+        finally { Directory.Delete(path); window.Close(); }
+    }
+}
+```
+Add `using Lattice.App.Localization;` for `Strings`.
+
+- [ ] **Step 2: Run — expect FAIL** (no `EditHostCommand`/`RemoveHostCommand`/`TestHostCommand`, no `TestResultText`).
+
+- [ ] **Step 3: `HostRailItemViewModel` — inline test result**
+
+Add `[ObservableProperty] private string? _testResultText;`. Change the subtext to prefer it: the template currently binds `StateText`; add the property `public string SubtextDisplay => TestResultText ?? StateText;` and raise it in `OnTestResultTextChanged` + at the end of `Refresh()` (and clear `TestResultText = null;` at the top of `Refresh()` so a fresh poll reverts to live state). Bind the template's second `TextBlock` to `SubtextDisplay`. Fold `TestResultText` into `Tooltip` when set.
+
+- [ ] **Step 4: `ShellViewModel` — command events + lookups**
+
+```csharp
+    public event EventHandler<Guid>? EditHostRequested;
+    public event EventHandler<Guid>? TestHostRequested;
+    public event EventHandler<Guid>? RemoveHostRequested;
+
+    [RelayCommand] private void EditHost(Guid id) => EditHostRequested?.Invoke(this, id);
+    [RelayCommand] private void TestHost(Guid id) => TestHostRequested?.Invoke(this, id);
+    [RelayCommand] private void RemoveHost(Guid id) => RemoveHostRequested?.Invoke(this, id);
+
+    public HostConfig? FindHostConfig(Guid id) =>
+        _store.Hosts.FirstOrDefault(h => h.Config.Id == id)?.Config;
+    public HostRailItemViewModel? FindHostRow(Guid id) =>
+        _hostRowVms.TryGetValue(id, out var vm) ? vm : null;
+    public HostRegistry Registry => Settings.Registry;
+    public Func<IGuiRpcClient> ClientFactory => Settings.ClientFactory;
+```
+(Detach the three events in `Dispose`.)
+
+- [ ] **Step 5: `ShellWindow.axaml` — MenuFlyout on the host row**
+
+Add `ContextFlyout` to the host-row template's root `DockPanel` (the `HostRailItemViewModel` `DataTemplate`):
+```xml
+                <DockPanel.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
+                              Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
+                              CommandParameter="{Binding HostId}" />
+                    <MenuItem Header="{x:Static loc:Strings.HostMenuTest}"
+                              Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
+                              CommandParameter="{Binding HostId}" />
+                    <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
+                              Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
+                              CommandParameter="{Binding HostId}"
+                              Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                  </MenuFlyout>
+                </DockPanel.ContextFlyout>
+```
+Add a `MinHeight="32"` item style if the theme's default differs from the 32 px spec (design 3b): a `Style Selector="MenuFlyout MenuItem"` in `Window.Styles` with `MinHeight=32`.
+
+- [ ] **Step 6: `ShellWindow.axaml.cs` — handlers + Remove-confirm (moved from SettingsView)**
+
+In `AttachShell`, subscribe/unsubscribe the three events alongside `AddHostRequested`. Add:
+```csharp
+    private bool _editHostInFlight;
+    private bool _removeConfirmInFlight;
+
+    private async void OnEditHostRequested(object? sender, Guid id) =>
+        await OpenEditHostDialog(id, focusPassword: false, authError: false);
+
+    private async Task OpenEditHostDialog(Guid id, bool focusPassword, bool authError)
+    {
+        if (_editHostInFlight || _shell is not { } shell || shell.FindHostConfig(id) is not { } cfg) return;
+        _editHostInFlight = true;
+        try
+        {
+            var vm = AddHostViewModel.ForEdit(shell.Registry, shell.ClientFactory, cfg, authError);
+            var dialog = new AddHostDialog { DataContext = vm };
+            if (TopLevel.GetTopLevel(this) is { } top) await dialog.ShowAsync(top);
+        }
+        finally { _editHostInFlight = false; }
+    }
+
+    private async void OnTestHostRequested(object? sender, Guid id)
+    {
+        if (_shell is not { } shell || shell.FindHostConfig(id) is not { } cfg
+            || shell.FindHostRow(id) is not { } row) return;
+        row.TestResultText = Strings.SettingsTestConnectionBusy;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var r = await HostMonitorManager.TestConnectionAsync(cfg, shell.ClientFactory, cts.Token);
+            row.TestResultText = r.Success
+                ? string.Format(Strings.SettingsTestConnectionSuccess, r.Version!.Major, r.Version.Minor, r.Version.Release)
+                : r.Error;
+        }
+        catch (OperationCanceledException) { row.TestResultText = Strings.SettingsTestConnectionTimeout; }
+    }
+
+    private async void OnRemoveHostRequested(object? sender, Guid id)
+    {
+        if (_removeConfirmInFlight || _shell is not { } shell
+            || shell.FindHostConfig(id) is not { } cfg
+            || TopLevel.GetTopLevel(this) is not { } top) return;
+        _removeConfirmInFlight = true;
+        try
+        {
+            var dialog = new FAContentDialog
+            {
+                Title = string.Format(Strings.HostRemoveConfirmTitleFmt, cfg.DisplayName),
+                Content = Strings.HostRemoveConfirmBody,
+                PrimaryButtonText = Strings.HostRemoveConfirmPrimary,
+                CloseButtonText = Strings.HostRemoveConfirmCancel,
+                DefaultButton = FAContentDialogButton.Close,
+            };
+            if (await dialog.ShowAsync(top) == FAContentDialogResult.Primary
+                && shell.FindHostConfig(id) is not null
+                // Persistence can fail (unwritable config.json); the old Settings card
+                // surfaced that error and kept the host rather than closing silently.
+                && RegistryGuard.TryMutate(() => shell.Registry.RemoveHost(id)) is { } error
+                && shell.FindHostRow(id) is { } row)
+                row.TestResultText = string.Format(Strings.HostRemoveFailedFmt, error);
+        }
+        finally { _removeConfirmInFlight = false; }
+    }
+```
+(Add `using Lattice.Core;` / `using Lattice.App.Infrastructure;` / `using Lattice.App.Localization;` as needed.)
+
+Add strings (final pass Task 15): `HostMenuEdit` ("Edit host…"), `HostMenuTest` ("Test connection"), `HostMenuRemove` ("Remove host…"), `HostRemoveConfirmTitleFmt` ("Remove {0}?"), `HostRemoveConfirmBody` ("Lattice stops monitoring this host. The BOINC client on the host is not affected."), `HostRemoveConfirmPrimary` ("Remove"), `HostRemoveConfirmCancel` ("Cancel"), `HostRemoveFailedFmt` ("Couldn’t remove host: {0}").
+
+> The host row's inline subtext surface (`HostRailItemViewModel.TestResultText`, from Task 11 Step 3) doubles as the transient action-result line — it carries the Test-connection result and, on a Remove write-failure, the persistence error. It clears on the next store `Refresh()`. (Its display name reads "test result" but it is the row's one generic action-result channel; keep it single to avoid a second transient subtext path.)
+
+- [ ] **Step 7: Run — expect PASS** (`HostRailMenuTests` + prior suites).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/Lattice.App/Views/ShellWindow.axaml src/Lattice.App/Views/ShellWindow.axaml.cs \
+        src/Lattice.App/ViewModels/ShellViewModel.cs src/Lattice.App/ViewModels/HostRailItemViewModel.cs \
+        src/Lattice.App/Localization/Strings.resx tests/Lattice.App.Tests/Headless/HostRailMenuTests.cs
+git commit -m "feat(hosts): rail row MenuFlyout — edit/test/remove (design 3b)"
+```
+
+---
+
+### Task 12: Auth-failed rail click opens the Edit dialog (design 3b / 3a §4)
+
+**Files:**
+- Modify: `src/Lattice.App/Views/ShellWindow.axaml.cs`
+- Modify: `tests/Lattice.App.Tests/Headless/AuthFailedLinkageTests.cs`
+- Modify: `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs` (end-to-end auth-fail flow — retarget to the Edit dialog; it consumes the removed `Settings.Hosts`)
+
+Clicking an auth-failed host now opens Edit with the password field in error + focused (Task 10/11 built the pieces), replacing the old "navigate to Settings expander".
+
+- [ ] **Step 1: Rewrite the linkage test to the new target**
+
+Replace the body of `Selecting_an_auth_failed_host_lands_in_settings_with_that_host_expanded` (rename it) in `AuthFailedLinkageTests.cs`:
+
+```csharp
+    [AvaloniaFact]
+    public async Task Selecting_an_auth_failed_host_opens_the_edit_dialog_with_the_password_error()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell };
+        window.Show();
+        Layout(window);
+
+        // TWO hosts: with one host the rail is SingleHost (no sentinel, host auto-selected/scoped),
+        // so re-selecting it raises no SelectionChanged and the dialog never opens. Two hosts → Flat
+        // list (sentinel at 0), and the auth-failed host (added first) sits at index 1, unselected.
+        var host = TestData.MakeHostConfig(name: "office-pc");
+        registry.AddHost(host);
+        registry.AddHost(TestData.MakeHostConfig(name: "other"));
+        store.Hosts[0].Status = new ConnectionStatus(
+            host.Id, HostConnectionState.AuthFailed, 1, null, "unauthorized", null);
+        foreach (var row in shell.RailEntries.OfType<HostRailItemViewModel>()) row.Refresh();
+        Layout(window);
+
+        window.HostList.SelectedIndex = 1;   // sentinel at 0; the auth-failed host is at 1
+        await HeadlessSync.WaitUntilAsync(() => window.GetVisualDescendants().OfType<AddHostDialog>().Any());
+
+        var dialog = Assert.Single(window.GetVisualDescendants().OfType<AddHostDialog>());
+        var vm = Assert.IsType<AddHostViewModel>(dialog.DataContext);
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.True(vm.HasPasswordError);
+        Assert.IsNotType<SettingsViewModel>(shell.CurrentPage);   // did NOT navigate to Settings
+        dialog.Hide();
+        window.Close();
+    }
+```
+
+Add `using Avalonia.VisualTree;`, `using FluentAvalonia.UI.Controls;`, `using Lattice.App.Views;` as needed. Drop the old assertions on `shell.Settings.Hosts` / `IsExpanded` (that surface is gone after Task 13).
+
+Also rewrite the end-to-end journey `tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs`, whose middle currently jumps to the Settings expander and consumes the removed `Settings.Hosts`. Two setup changes first, both because one host now renders as `SingleHost` (no sentinel, host auto-selected — a re-select raises no `SelectionChanged`, so the dialog never opens): (1) **add a second, healthy host** right after the existing `harness.AddHost(...)` so the rail is a `Flat` list with the sentinel and the auth-failed host at index 1, unselected; (2) change the `railItem` lookup from `.Single()` to `.Single(h => h.HostId == host.Id)` (there are two host rows now). Then replace everything from the `HostList.SelectedIndex = 1` line through the old `settingsItem.SaveCommand.Execute(null)` block with the Edit-dialog path (correct the password IN the dialog, Save persists via edit-mode `UpdateHost`, the parked AuthFailed loop wakes and reconnects):
+
+```csharp
+        // Auth-failed click now opens the Edit host dialog (Task 12), not Settings.
+        harness.Window.HostList.SelectedIndex = 1;   // sentinel at 0; the auth-failed host is at 1
+        await harness.SettleAsync(
+            () => harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Any(),
+            "auth-failed click should open the Edit host dialog");
+        var dialog = harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Single();
+        var vm = Assert.IsType<AddHostViewModel>(dialog.DataContext);
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.True(vm.HasPasswordError);
+        Assert.Equal(host.Id, harness.Shell.Scope.HostId);
+
+        // Correct the password, let the daemon accept it, then Save. Edit-save persists
+        // without a connection test (Task 9), waking the parked AuthFailed loop → reconnect.
+        vm.Password = "correct-pw";
+        fake.OnAuthorize = _ => Task.FromResult(true);
+        var save = harness.Window.GetVisualDescendants().OfType<Button>()
+            .Single(b => b.Name == "PrimaryButton");
+        save.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+
+        await harness.SettleAsync(
+            () => railItem.State == RailState.Connected,
+            "rail should reach Connected once the corrected password is saved");
+        harness.Layout();
+
+        Assert.Equal(string.Format(Strings.RailConnectedFmt, 0), railItem.StateText);
+        Assert.Equal("correct-pw", harness.Registry.Hosts.Single(h => h.Id == host.Id).Password);
+```
+Update the class-doc summary to describe the Edit-dialog path, and add `using Avalonia.Controls;`, `using Avalonia.Interactivity;`, `using Avalonia.VisualTree;`, `using Lattice.App.Views;`.
+
+- [ ] **Step 2: Run — expect FAIL** (Task 8 left `NavigateToSettings` in place as the interim).
+
+- [ ] **Step 3: Swap the handler line**
+
+In `ShellWindow.axaml.cs` `OnHostSelectionChanged`, replace the interim auth-failed branch with the Edit-dialog open:
+```csharp
+        if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
+            _ = OpenEditHostDialog(item.HostId, focusPassword: true, authError: true);
+```
+
+- [ ] **Step 4: Run — expect PASS.**
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/Views/ShellWindow.axaml.cs tests/Lattice.App.Tests/Headless/AuthFailedLinkageTests.cs \
+        tests/Lattice.App.Tests/Headless/Journeys/AuthFailJourney.cs
+git commit -m "feat(hosts): auth-failed rail click opens the edit dialog (design 3b)"
+```
+
+---
+
+## Phase D — Settings: drop host group, add Theme (design 2d / 1f)
+
+### Task 13: Remove the Settings Hosts group → pointer caption
+
+**Files:**
+- Delete: `src/Lattice.App/ViewModels/HostSettingsItemViewModel.cs`
+- Modify: `src/Lattice.App/ViewModels/SettingsViewModel.cs`
+- Modify: `src/Lattice.App/Views/SettingsView.axaml` / `.axaml.cs`
+- Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs` (`NavigateToSettings` loses the host focus; drop the `Settings.Reconcile()` call)
+- Modify: `tests/Lattice.App.Tests/SettingsViewModelTests.cs`, `tests/Lattice.App.Tests/Headless/SettingsViewTests.cs`, `tests/Lattice.App.Tests/ShellViewModelTests.cs` (delete the removed-member consumer — see Step 1)
+
+- [ ] **Step 1: Update the tests to the new shape (red)**
+
+In `SettingsViewTests.cs`: delete the host-expander/remove tests (`Renders_one_expander_per_host_plus_polling_selector`, `Confirming_remove_*`, `Cancelling_remove_*`, `Double_clicking_remove_*`, `Navigating_away_unsubscribes_*`). Add:
+```csharp
+    [AvaloniaFact]
+    public void Renders_pointer_caption_and_no_host_expanders()
+    {
+        var (window, _, _) = MakeView();
+        window.Show();
+        Layout(window);
+
+        // Exclude BOTH global-group expanders (Polling now, Theme after Task 14) so
+        // this stays green across the sequence; the assertion is "no host-bound
+        // expander remains" — every remaining expander is a named global one.
+        Assert.Empty(window.GetVisualDescendants().OfType<FASettingsExpander>()
+            .Where(e => e.Name is not ("PollingExpander" or "ThemeExpander")));
+        var caption = window.GetVisualDescendants().OfType<TextBlock>()
+            .SingleOrDefault(t => t.Text == Strings.SettingsHostsPointer);
+        Assert.NotNull(caption);
+        window.Close();
+    }
+```
+Simplify `MakeView` (no `store.Changed += Reconcile`; keep adding two hosts to prove they do NOT appear).
+
+In `SettingsViewModelTests.cs`: this file is almost entirely `HostSettingsItemViewModel`-based, so **delete the `AddHost` helper and every test that uses it or a host item** — `Save_*`, `Save_rejects_*`, `Save_surfaces_persistence_failure_*`, `Remove_*`, `Auth_failed_host_exposes_*`, `TestConnection*`, `MakeConfigPathUnwritable`/`RestoreConfigPath` if now unused by remaining tests. **Keep only the global-group tests**: `Polling_interval_*` (including `Polling_interval_persistence_failure_*`, which uses its own path-unwritable seam) and `AllowedPollingIntervals`. Theme tests arrive in Task 14.
+
+In `ShellViewModelTests.cs`: **delete `NavigateToSettings_shows_settings_page_and_expands_target_host`** (lines ~111–121) — its premise (navigate to Settings + `Settings.Hosts.Single(...).IsExpanded`) is gone (`NavigateToSettings` is now parameterless; the auth-failed path opens the Edit dialog per Task 12). Keep `NavigateToSettings_deactivates_the_event_log` (~line 210) — it calls the parameterless `NavigateToSettings()`.
+
+- [ ] **Step 2: Run — expect FAIL / non-compiling** (references to removed members).
+
+- [ ] **Step 3: Prune `SettingsViewModel`**
+
+Delete: `Hosts`, `Reconcile`, `ExpandHost`, `Remove`, `RemoveRequested`, `HasRemoveSubscribersForTests`. Keep: `Registry`, `ClientFactory`, `PollingIntervalSeconds`, `PollingError`, `AllowedPollingIntervals`. The ctor drops its `Reconcile()` call. (Theme members arrive in Task 14.)
+
+- [ ] **Step 4: Delete `HostSettingsItemViewModel.cs`**
+
+```bash
+git rm src/Lattice.App/ViewModels/HostSettingsItemViewModel.cs
+```
+
+- [ ] **Step 5: Rewrite `SettingsView.axaml` host region**
+
+Remove the `SettingsHostsSection` `TextBlock` and the entire `<ItemsControl ItemsSource="{Binding Hosts}"> … </ItemsControl>`. Replace with the pointer caption above the Polling group:
+```xml
+      <TextBlock Text="{x:Static loc:Strings.SettingsHostsPointer}" FontSize="12" Margin="0,4,0,8"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+```
+Empty `SettingsView.axaml.cs` back to just `InitializeComponent()` — delete `_subscribed`, `OnDataContextChanged`, `OnRemoveRequested`, `SubscribedVmForTests`, `_removeConfirmInFlight` (the confirm machinery now lives in `ShellWindow.axaml.cs`, Task 11).
+
+- [ ] **Step 6: Fix `ShellViewModel`**
+
+Change `NavigateToSettings` to drop the host-focus param and body:
+```csharp
+    public void NavigateToSettings()
+    {
+        SelectedView = null;
+        CurrentPage = Settings;
+    }
+```
+Update the caller in `ShellWindow.axaml.cs` `OnNavSelectionChanged` (`_shell.NavigateToSettings()` — already parameterless there). Now remove the `Settings.Reconcile();` line from `ReconcileHosts` (Task 7 deliberately kept it) — in the SAME task that deletes `SettingsViewModel.Reconcile` and the Hosts group, so the expanders never go stale in between.
+
+- [ ] **Step 7: Removed-member sweep (close the class, not one file per review round)**
+
+Before declaring green, grep the WHOLE repo (src + tests) for every member this task removes and update or delete every straggler **in this task** — a filtered `dotnet test` will not surface a *non-compiling* consumer, which is how these slipped past twice (the Task 13/14 Theme expander and this `ShellViewModelTests` consumer):
+
+```bash
+grep -rnE 'Settings\.Hosts|Settings\.Reconcile|\.ExpandHost|Settings\.Remove\b|RemoveRequested|HasRemoveSubscribersForTests|HostSettingsItemViewModel|NavigateToSettings\([^)]' \
+     src tests --include='*.cs' --include='*.axaml'
+```
+Expected residue after this task's edits: **none in `src/`**, and in `tests/` only the parameterless `NavigateToSettings()` calls (which stay). Known consumers to have handled by now: `AuthFailedLinkageTests` (rewritten in Task 12), `AuthFailJourney.cs` (rewritten in Task 12), `ShellViewModelTests` (test deleted in Step 1), `SettingsViewTests`/`SettingsViewModelTests` (pruned in Step 1). If the grep prints anything else, fix it here and note it in the commit body.
+
+Add string `SettingsHostsPointer` ("Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.").
+
+- [ ] **Step 8: Run — expect PASS (full build is the gate, not a filtered test run)**
+
+Run: `dotnet build src/Lattice.App -warnaserror && dotnet build tests/Lattice.App.Tests && dotnet test tests/Lattice.App.Tests`
+Expected: all PASS. The two `dotnet build`s are the gate that catches a non-compiling straggler the sweep might have missed — a filtered `dotnet test` alone would report the removed-member consumer as an unrelated build error, not a red test.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add -A
+git commit -m "feat(settings): remove host group; hosts managed from the sidebar (design 3b)"
+```
+
+---
+
+### Task 14: Theme setting — Light / Dark / System (design 2d / 1f)
+
+**Files:**
+- Create: `src/Lattice.App/Infrastructure/ThemePreference.cs`
+- Create: `tests/Lattice.App.Tests/ThemePreferenceTests.cs`
+- Modify: `src/Lattice.App/ViewModels/SettingsViewModel.cs`
+- Modify: `src/Lattice.App/Views/SettingsView.axaml` (+ a `ThemeLabelConverter`)
+- Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs` (create + own the `ThemePreference` from its `uiState`)
+- Create: `tests/Lattice.App.Tests/Headless/ThemeSettingTests.cs`
+
+`ThemePreference` mirrors `DensityPreference`: holds the live `AppTheme`, persists via `UiStateStore.Update`, and applies to `Application.Current.RequestedThemeVariant` (`Light`/`Dark`/`Default`; FluentAvaloniaTheme follows the OS on `Default`). `ShellViewModel` constructs it from the `uiState` it already receives (no ctor-signature change; startup theme is applied when the shell is built) and passes it to `SettingsViewModel`.
+
+- [ ] **Step 1: Write failing preference tests**
+
+```csharp
+using Avalonia;
+using Avalonia.Headless.XUnit;
+using Avalonia.Styling;
+using Lattice.App.Infrastructure;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+public class ThemePreferenceTests
+{
+    private static string NewPath() => Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+
+    [AvaloniaFact]
+    public void Setting_dark_applies_and_persists()
+    {
+        var path = NewPath();
+        var pref = new ThemePreference(new UiStateStore(path));
+        pref.Set(AppTheme.Dark);
+
+        Assert.Equal(ThemeVariant.Dark, Application.Current!.RequestedThemeVariant);
+        Assert.Equal(AppTheme.Dark, new ThemePreference(new UiStateStore(path)).Value);
+        File.Delete(path);
+    }
+
+    [AvaloniaFact]
+    public void System_maps_to_the_default_variant()
+    {
+        var pref = new ThemePreference(new UiStateStore(NewPath()));
+        pref.Set(AppTheme.System);
+        Assert.Equal(ThemeVariant.Default, Application.Current!.RequestedThemeVariant);
+    }
+}
+```
+
+- [ ] **Step 2: Run — expect FAIL.**
+
+- [ ] **Step 3: Implement `ThemePreference`**
+
+```csharp
+using Avalonia;
+using Avalonia.Styling;
+
+namespace Lattice.App.Infrastructure;
+
+/// <summary>Single owner of the app theme (UiState.Theme): live value + persistence,
+/// and applies it to the running Application. System => ThemeVariant.Default, which
+/// FluentAvaloniaTheme resolves by following the OS (design 2d/1f).</summary>
+public sealed class ThemePreference
+{
+    private readonly UiStateStore _store;
+
+    public ThemePreference(UiStateStore store)
+    {
+        _store = store;
+        Value = store.Load().Theme;
+        Apply();
+    }
+
+    public AppTheme Value { get; private set; }
+
+    public void Set(AppTheme value)
+    {
+        if (Value == value) return;
+        Value = value;
+        _store.Update(s => s with { Theme = value });
+        Apply();
+    }
+
+    private void Apply()
+    {
+        if (Application.Current is not { } app) return;
+        app.RequestedThemeVariant = Value switch
+        {
+            AppTheme.Light => ThemeVariant.Light,
+            AppTheme.Dark => ThemeVariant.Dark,
+            _ => ThemeVariant.Default,
+        };
+    }
+}
+```
+
+- [ ] **Step 4: Wire `SettingsViewModel` + `ShellViewModel`**
+
+`ShellViewModel` ctor: after loading `uiState`, add `Settings = new SettingsViewModel(registry, store, clientFactory, new ThemePreference(uiState));`.
+
+`SettingsViewModel`: add `ThemePreference` param + theme surface:
+```csharp
+    private readonly ThemePreference _theme;
+    // ctor: _theme = theme;
+    public static IReadOnlyList<AppTheme> AllThemes { get; } = [AppTheme.Light, AppTheme.Dark, AppTheme.System];
+    public AppTheme SelectedTheme
+    {
+        get => _theme.Value;
+        set { _theme.Set(value); OnPropertyChanged(); }
+    }
+```
+Update the direct `SettingsViewModel` construction in `SettingsViewTests.MakeView` and any `SettingsViewModelTests` to pass `new ThemePreference(new UiStateStore(<uiPath>))`.
+
+- [ ] **Step 5: Settings UI — Theme group**
+
+Add a `ThemeLabelConverter` (in `TaskGridConverters.cs` or a new `ThemeLabelConverter.cs`) mapping `AppTheme`→`Strings.ThemeLight/ThemeDark/ThemeSystem`. In `SettingsView.axaml`, after the Polling group:
+```xml
+      <TextBlock Text="{x:Static loc:Strings.SettingsThemeSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="ThemeExpander"
+                             Header="{x:Static loc:Strings.SettingsThemeHeader}"
+                             Description="{x:Static loc:Strings.SettingsThemeDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllThemes}"
+                    SelectedItem="{Binding SelectedTheme, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="infra:AppTheme">
+                <TextBlock Text="{Binding Converter={x:Static v:ThemeLabelConverter.Instance}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+```
+Add xmlns `infra` (`using:Lattice.App.Infrastructure`) and `v` (already present) to `SettingsView.axaml`.
+
+- [ ] **Step 6: Add the headless setting test**
+
+`ThemeSettingTests`: build the Settings view over a `SettingsViewModel`, set `SelectedTheme = AppTheme.Dark`, assert `Application.Current!.RequestedThemeVariant == ThemeVariant.Dark` and the ComboBox `SelectedItem` reflects it. Add strings `ThemeLight`/`ThemeDark`/`ThemeSystem`, `SettingsThemeSection`/`SettingsThemeHeader` ("Theme"), `SettingsThemeDescription` ("How Lattice follows light or dark mode").
+
+- [ ] **Step 7: Run — expect PASS** (`dotnet test tests/Lattice.App.Tests`).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add src/Lattice.App/Infrastructure/ThemePreference.cs src/Lattice.App/ViewModels/SettingsViewModel.cs \
+        src/Lattice.App/ViewModels/ShellViewModel.cs src/Lattice.App/Views/SettingsView.axaml \
+        src/Lattice.App/Views/TaskGridConverters.cs src/Lattice.App/Localization/Strings.resx \
+        tests/Lattice.App.Tests/ThemePreferenceTests.cs tests/Lattice.App.Tests/Headless/ThemeSettingTests.cs
+git commit -m "feat(settings): Light/Dark/System theme setting (design 2d/1f)"
+```
+
+---
+
+## Phase E — Consolidation & verification
+
+### Task 15: ResX consolidation — add new keys, retire host-group keys
+
+**Files:**
+- Modify: `src/Lattice.App/Localization/Strings.resx`
+- Modify: `tests/Lattice.App.Tests/LocalizationTests.cs` (if it enumerates keys)
+
+Earlier tasks added strings incrementally; this task audits the set: every new key is present and unique, and keys orphaned by the Settings-host removal are retired (T1 convention: meaning-based names, no orphans).
+
+- [ ] **Step 1: Confirm the new keys exist (added across Tasks 6–14)**
+
+`RailGroupAttentionFmt`, `RailGroupHealthyFmt`, `RailGroupToggleTooltip`, `EditHostDialogTitle`, `EditHostPrimaryButton`, `EditHostPasswordError`, `EditHostSaveFailedFmt`, `HostMenuEdit`, `HostMenuTest`, `HostMenuRemove`, `HostRemoveConfirmTitleFmt`, `HostRemoveConfirmBody`, `HostRemoveConfirmPrimary`, `HostRemoveConfirmCancel`, `HostRemoveFailedFmt`, `SettingsHostsPointer`, `SettingsThemeSection`, `SettingsThemeHeader`, `SettingsThemeDescription`, `ThemeLight`, `ThemeDark`, `ThemeSystem`.
+
+- [ ] **Step 2: Retire keys orphaned by the Settings-host removal**
+
+For each candidate, confirm zero references remain before deleting:
+```bash
+for k in SettingsHostsSection SettingsFieldName SettingsFieldNamePlaceholder SettingsFieldAddress \
+         SettingsFieldPort SettingsFieldPassword SettingsFieldPasswordPlaceholder SettingsFieldAddressRequired \
+         SettingsFieldPortInvalid SettingsSaveButton SettingsRemoveButton SettingsSaveFailedFmt \
+         SettingsRemoveFailedFmt SettingsAuthErrorGuidance RailConnectedWord RailRetryingWord; do
+  echo -n "$k: "; grep -rIl "Strings.$k" src tests --include=*.cs --include=*.axaml | wc -l
+done
+```
+Delete from `Strings.resx` only those printing `0`. (`SettingsTestConnectionButton`/`Busy`/`Success`/`Timeout` stay — reused by the Edit dialog + rail Test. `RailAuthFailed`/`RailConnecting`/`RailUnreachable`/`RailRetrying`/`RailConnectedFmt` stay — used by the rail rows.)
+
+- [ ] **Step 3: Run localization + build**
+
+Run: `dotnet build src/Lattice.App && dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~LocalizationTests"`
+Expected: PASS — no missing/orphan keys; the generated `Strings` designer compiles.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add src/Lattice.App/Localization/Strings.resx tests/Lattice.App.Tests/LocalizationTests.cs
+git commit -m "chore(i18n): consolidate rail/host/theme strings; retire settings host keys"
+```
+
+---
+
+### Task 16: Full-suite verification + self-review
+
+**Files:** none (verification only)
+
+- [ ] **Step 1: Full build + test**
+
+Run: `dotnet build && dotnet test`
+Expected: PASS across `Lattice.Tests`, `Lattice.App.Tests`, `Lattice.Aggregation.Tests`, `Lattice.Verification` (untouched), `Lattice.Core.Machine` (untouched — verification-sync rule respected).
+
+- [ ] **Step 2: Rail geometry probe (headless visual)**
+
+Confirm the design-3a layout holds end-to-end: a `ShellWindow` at 1280×768 with 12 hosts renders group headers; resizing to 1280×1600 flattens them; the compact 48 px rail still shows icons-only for both host rows and (text-hidden) group headers. This is covered by `HostRailGroupingTests` + `ShellRailTests`; if any assertion is height-brittle, re-pin `ReservedRailChrome` and record the final constant.
+
+- [ ] **Step 3: Manual smoke (optional, real daemon)**
+
+Per the dev-environment note (BOINC 8.2.11 live), launch the app, add a host, right-click → Edit/Test/Remove, toggle Theme, and shrink the window to force grouping. Confirms nothing the headless tests can't see (Mica excluded — #11).
+
+- [ ] **Step 4: Verification-sync check**
+
+This change touches no `HostMonitor.cs` / `HostMachine` semantics, so no Promela/F#-spec update is owed. State this explicitly in the PR body (per CLAUDE.md's verification-sync contract).
+
+- [ ] **Step 5: Final commit if any tuning changed**
+
+```bash
+git add -A && git commit -m "test(shell): pin rail geometry + final ReservedRailChrome"
+```
+
+---
+
+## Deferred (noted, not built here)
+
+- **Compact grouped rendering** (design 3a): stacked single-icon per collapsed Healthy group + 8 px badge dot. M2 renders individual host icons in the compact rail; the stacked-icon visual needs bespoke rendering → **#32 polish wave** (decisions spec §5).
+- **`Offline · N` group NOT implemented** (owner decision, decisions spec §2): the card `3a` mock's third group folds into `Attention` in M2 — persistently-unreachable hosts are attention-worthy. Re-add when an M3 terminal paused/disabled/snoozed `RailState` exists (F#/C# exhaustiveness will flag the `RailTier` matches to update). **Record this deliberate deviation on the #57 design-fidelity tracker.**
+- **Filled/selected rail icons + InfoBadge refinements** beyond current behavior → #32.
+- **#11 Mica**: opaque `LatticeCanvasBrush` paints over Mica — separate on-hardware pass, out of scope.
+
+## Self-review checklist (run before opening the code PR)
+
+1. **Spec coverage** — Area 1 (PaneFooter) = Task 1; Area 2 (grouping core) = Tasks 2–3, 6, 7–8; scope core (`ScopeMachine`) = Task 6B, wired in Task 7; Area 3 (host mgmt) = Tasks 9–13; Area 4 (auth-failed) = Task 12; Area 5 (Theme) = Task 14; Area 6 (ResX) = Tasks 6–15. ✔
+2. **DU totality** — `RailTierProjection` and every F# `match` (both `RailLayoutPolicy` and `ScopeMachine`, the latter enforced by the project's `TreatWarningsAsErrors`) are wildcard-free over domain DUs; adding a `RailState`/`RailTier`/`ScopeEvent`/`ScopeCarrier` case is a compile error. **Scope is a pure state machine, not shell prose** — the shell only translates UI occurrences into `ScopeEvent`s (no scope/persist decision lives in `ShellViewModel`).
+3. **Determinism** — every UI test settles on expected text / fake calls / registry state via `HeadlessSync.WaitUntilAsync` or synchronous `Layout`; no wall-clock waits; `ManualUiClock`/`FakeTimeProvider` throughout. No `WaitUntilAsync` on a transient that can flip true early — asserts target end-state text/collection contents.
+4. **Type consistency** — F# module `RailLayoutPolicy` vs result record `RailLayout`; C# consumes `RailLayoutPolicy.compute`, `RailRow.HostRow.Item`, `RailRow.GroupHeaderRow.{tier,count,expanded}`, `RailHost(Guid, RailTier)`, `RailLayoutInput(Hosts, AvailableHeight, RowHeight, Override, HealthyExpanded)`. `ScopeMachine`: module `ScopeMachine` (`step`/`highlightOf`/`restoreEvent`) with types `Scope` (aliased `ScopeState` in the shell), `ScopeCarrier`, `ScopeEvent`, `PersistAction`, `ScopeDecision`, `RailHighlight`; C# uses `New<Case>` constructors, `Is<Case>` predicates, and `.Item` accessors. Persisted enums `RailGroupingMode`/`AppTheme` map to F# `RailOverride`/tiers; `ScopeHostId` (`Guid?`) round-trips through `restoreEvent` + `ApplyScopeDecision`.
+5. **No `HostMonitor`/`HostMachine` edits** — App-layer + pure `Lattice.App.Aggregation` only. ✔
+
