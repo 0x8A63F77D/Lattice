@@ -347,7 +347,7 @@ public class ShellViewModelTests : IAsyncLifetime
     {
         AddHosts(4);
         // Budget below (4 + 1) * 40 = 200 forces grouped under Auto.
-        _shell.SetRailViewportHeight(300.0 - 150.0 + 30.0); // available ~180 < 200
+        _shell.SetRailViewportHeight(180.0); // well below ReservedRailChrome(290) => available 0 < 200
         Assert.Contains(_shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
         Assert.True(_shell.ShowRailToggle);
     }
@@ -380,7 +380,7 @@ public class ShellViewModelTests : IAsyncLifetime
     public void Toggling_back_returns_to_adaptive_so_the_toggle_hides_once_it_fits()
     {
         AddHosts(4);
-        _shell.SetRailViewportHeight(180.0);               // available ~30 < 200 => Auto => Grouped
+        _shell.SetRailViewportHeight(180.0);               // well below ReservedRailChrome(290) => available 0 < 200 => Auto => Grouped
         Assert.True(_shell.ShowRailToggle);
         _shell.ToggleRailGroupingCommand.Execute(null);    // Auto -> ForceFlat
         _shell.ToggleRailGroupingCommand.Execute(null);    // ForceFlat(overflow) -> Auto (re-adaptive)

@@ -28,7 +28,7 @@ public sealed class FractionToWidthConverter : IValueConverter
 /// (e.g. TaskStateKind.Running vs "Running"). Backs the Tasks DataGrid's State
 /// cell: four stacked PathIcons, exactly one visible per state kind. (The host
 /// rail shares only the visual stacked-icon shape — it binds five exclusive
-/// bools and does not use this converter.)
+/// bools and does not use EnumMatchConverter. It does use ChevronAngle below.)
 /// </summary>
 public sealed class EnumMatchConverter : IValueConverter
 {
@@ -43,6 +43,9 @@ public sealed class EnumMatchConverter : IValueConverter
 
 /// <summary>
 /// Named funcs consumed via <c>{x:Static v:TaskGridConverters.Member}</c> in XAML.
+/// Despite the file/class name (historically Tasks-DataGrid-only), <see cref="ChevronAngle"/>
+/// is shared with the host rail's group-header chevron in ShellWindow.axaml — it is not
+/// Tasks-scoped like <see cref="FractionToWidthConverter"/> and <see cref="EnumMatchConverter"/> above.
 /// </summary>
 public static class TaskGridConverters
 {
