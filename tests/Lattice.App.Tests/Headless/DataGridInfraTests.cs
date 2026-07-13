@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -95,6 +97,148 @@ public class DataGridInfraTests
         };
         window.Show();
         return window;
+    }
+
+    private static Window ShowInWindow(Control content, double width, double height)
+    {
+        var window = new Window { Width = width, Height = height, Content = content };
+        window.Show();
+        return window;
+    }
+
+    // Finding A fixture: a lattice grid whose columns all carry a MinWidth (fixed = spec width,
+    // star = a readable floor), mirroring the real views after the Option 1 fix. A star column
+    // makes the DataGrid fit-to-width — without mins it shrinks the star then CRUSHES the fixed
+    // columns to ~20px slivers instead of overflowing; with mins the columns hold and the grid
+    // overflows into a working horizontal scrollbar.
+    private static DataGrid MakeMinWidthGrid(double star = 80)
+    {
+        var grid = new DataGrid
+        {
+            ItemsSource = new[] { new Row(), new Row() },
+            Columns =
+            {
+                new DataGridTextColumn { Header = "A", Binding = new Avalonia.Data.Binding("Name"),  Width = new DataGridLength(120), MinWidth = 120 },
+                new DataGridTextColumn { Header = "B", Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(120), MinWidth = 120 },
+                new DataGridTextColumn { Header = "C", Binding = new Avalonia.Data.Binding("Name"),  Width = new DataGridLength(120), MinWidth = 120 },
+                new DataGridTextColumn { Header = "Star", Binding = new Avalonia.Data.Binding("Value"),
+                                         Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = star },
+            },
+        };
+        grid.Classes.Add("lattice");
+        return grid;
+    }
+
+    private static ScrollBar? HorizontalScrollBar(DataGrid grid) =>
+        grid.GetVisualDescendants().OfType<ScrollBar>()
+            .FirstOrDefault(b => b.Name == "PART_HorizontalScrollbar");
+
+    // (i) The fix's core invariant: when the window is narrower than the sum of column mins, the
+    // fixed columns hold their spec widths (they do NOT crush) and the star drops only to its own
+    // MinWidth — the grid overflows instead. Before Option 1 (no mins), the star grid fit-to-width
+    // and squeezed the fixed columns toward ~20px. Regressing any MinWidth turns this red.
+    [AvaloniaFact]
+    public void Fixed_columns_hold_their_min_width_when_the_window_is_too_narrow()
+    {
+        var grid = MakeMinWidthGrid(star: 140);
+        // Total mins = 120*3 + 140 = 500, wider than this window: the grid must overflow.
+        var window = ShowInWindow(grid, 360, 300);
+        Layout(window);
+
+        Assert.Equal(120d, grid.Columns[0].ActualWidth);
+        Assert.Equal(120d, grid.Columns[1].ActualWidth);
+        Assert.Equal(120d, grid.Columns[2].ActualWidth);
+        Assert.Equal(140d, grid.Columns[3].ActualWidth); // star pinned at its MinWidth, not crushed
+
+        var hbar = HorizontalScrollBar(grid);
+        Assert.NotNull(hbar);
+        Assert.True(hbar!.IsVisible, "overflowing columns must surface the horizontal scrollbar");
+        window.Close();
+    }
+
+    // (ii) The scrollbar that (i) surfaces is a WORKING one: a wheel with a horizontal delta moves
+    // the offset. This is the half the owner reported broken ("左右的滚动是不可用的") — before
+    // Option 1 the star grid crushed columns instead of overflowing, so no scrollbar ever appeared
+    // to scroll. DataGrid.UpdateScroll computes offset -= delta.X, so a negative X scrolls right.
+    [AvaloniaFact]
+    public void The_overflow_horizontal_scrollbar_moves_under_a_wheel_delta()
+    {
+        var grid = MakeMinWidthGrid(star: 140); // total mins 500 > 360px viewport -> overflow
+        var window = ShowInWindow(grid, 360, 300);
+        Layout(window);
+
+        var hbar = HorizontalScrollBar(grid);
+        Assert.NotNull(hbar);
+        Assert.True(hbar!.IsVisible, "the tight grid must show a horizontal scrollbar");
+        Assert.True(hbar.Maximum > 0, "the scrollbar must have a real scroll range");
+
+        var mid = grid.TranslatePoint(new Point(grid.Bounds.Width / 2, grid.Bounds.Height / 2), window)!.Value;
+        var startValue = hbar.Value;
+        window.MouseWheel(mid, new Vector(-4, 0), RawInputModifiers.None);
+        Layout(window);
+        Assert.True(hbar.Value > startValue,
+            $"a horizontal wheel delta should move the offset: start={startValue}, now={hbar.Value}");
+        window.Close();
+    }
+
+    // (iii) The owner's actual bug was that dragging a column wider CRUSHED its neighbours to ~20px
+    // slivers (no MinWidth floor). With Option 1 the mins are a hard floor: dragging column A past
+    // the star's slack now CLAMPS (A grows only into the reclaimable slack, the star bottoms out at
+    // its own MinWidth) and the other fixed columns keep their spec widths — never crushed.
+    [AvaloniaFact]
+    public void Dragging_a_column_wider_clamps_at_the_slack_and_never_crushes_neighbours()
+    {
+        var grid = MakeMinWidthGrid(star: 80); // mins 120*3+80 = 440; star holds the slack at 700px
+        var window = ShowInWindow(grid, 700, 300);
+        Layout(window);
+
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == "A");
+        var edge = header.TranslatePoint(new Point(header.Bounds.Width - 2, header.Bounds.Height / 2), window)!.Value;
+        var target = edge.WithX(edge.X + 500); // ask for far more than the slack
+        window.MouseMove(edge, RawInputModifiers.None);
+        window.MouseDown(edge, MouseButton.Left, RawInputModifiers.None);
+        window.MouseMove(target, RawInputModifiers.None);
+        window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
+        Layout(window);
+
+        Assert.True(grid.Columns[0].ActualWidth > 120, "column A should have widened");
+        Assert.Equal(120d, grid.Columns[1].ActualWidth); // B not crushed
+        Assert.Equal(120d, grid.Columns[2].ActualWidth); // C not crushed
+        Assert.Equal(80d, grid.Columns[3].ActualWidth);  // star bottomed out at its MinWidth, not 0
+        window.Close();
+    }
+
+    // Finding C: the Fluent DataGridColumnHeader template reserves a fixed 32px sort-icon slot
+    // (ColumnDefinition Width="Auto" MinWidth="{DynamicResource DataGridSortIconMinWidth}") on EVERY
+    // header, even while the icon is hidden. In a narrow column (Tasks' Elapsed 68 / Remaining 74)
+    // that slot plus the 8,0 cell padding leaves the label ~20px, so it truncates with the blank
+    // reserved slot to its right (owner Finding C). The shared style zeroes DataGridSortIconMinWidth
+    // so the label uses the real column width; the icon still appears (Auto-sized) when sorted.
+    // Probe: the header's PART_ContentPresenter fills its `*` grid slot, so its width == column width
+    // minus padding minus the sort reservation. At 68px it must clear the label, not sit at ~20px.
+    [AvaloniaFact]
+    public void Narrow_sortable_header_gives_its_label_the_full_column_width()
+    {
+        var grid = new DataGrid
+        {
+            CanUserSortColumns = true,
+            ItemsSource = new[] { new Row(), new Row() },
+            Columns = { new DataGridTextColumn { Header = "Elapsed",
+                        Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(68) } },
+        };
+        grid.Classes.Add("lattice");
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == "Elapsed");
+        var cp = VisualTree.FindInVisualTree<ContentPresenter>(header, c => c.Name == "PART_ContentPresenter");
+        Assert.NotNull(cp);
+        // 68 - 16 padding - 0 sort reservation = 52. With the theme's default 32px slot it would be ~20.
+        Assert.True(cp!.Bounds.Width >= 45,
+            $"Elapsed header content should get the column width, not the sort-icon slot: width={cp.Bounds.Width}");
+        window.Close();
     }
 
     // GridLinesVisibility=All draws the horizontal rule ADDITIVELY below a RowHeight-sized row,
@@ -397,6 +541,34 @@ public class DataGridInfraTests
             "LatticeRowHoverBrush", window.ActualThemeVariant, out var hover));
         var bg = Assert.IsAssignableFrom<ISolidColorBrush>(row.Background);
         Assert.Equal(((ISolidColorBrush)hover!).Color, bg.Color);
+        window.Close();
+    }
+
+    // Finding B (suspect 2 — RULED OUT on the pinned theme, kept as an upgrade guard): the owner's
+    // dark-hover "flash then settle" was suspect 1 (the 100ms BrushTransition overshoot + a too-bright
+    // #383838), fixed in 79bf516 by dropping the transition and toning the brush. Suspect 2 was that
+    // the Fluent DataGridRow theme paints its own bright :pointerover overlay onto the BackgroundRect
+    // (newer Avalonia.Controls.DataGrid main does exactly that via DataGridRowHoveredBackgroundColor).
+    // Verified it is ABSENT in the pinned 12.1 theme: hovered, the BackgroundRectangle stays fully
+    // transparent, so our row Background is the ONLY hover color — nothing overlays it. If a future
+    // DataGrid bump reintroduces the overlay, this reddens and we neutralize the resource then.
+    [AvaloniaFact]
+    public void Row_hover_has_no_theme_overlay_on_the_background_rectangle()
+    {
+        var grid = MakeLatticeGrid();
+        var window = ShowInWindow(grid);
+        Layout(window);
+
+        var row = BodyRow(grid, 0);
+        var mid = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(mid, RawInputModifiers.None);
+        Layout(window);
+
+        Assert.Contains(":pointerover", row.Classes);
+        var rect = VisualTree.FindInVisualTree<Rectangle>(row, r => r.Name == "BackgroundRectangle");
+        Assert.NotNull(rect);
+        var fill = Assert.IsAssignableFrom<ISolidColorBrush>(rect!.Fill);
+        Assert.Equal(0, fill.Color.A); // transparent: no bright wash layered over our hover
         window.Close();
     }
 

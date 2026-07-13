@@ -96,11 +96,11 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
-                               Binding="{Binding Data.Project}" Width="140" />
+                               Binding="{Binding Data.Project}" Width="140" MinWidth="140" />
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}"
-                               Binding="{Binding Data.DirectionText}" Width="80" />
+                               Binding="{Binding Data.DirectionText}" Width="80" MinWidth="80" />
           <!-- Progress 190: 56px bar + "34.2 / 51.7 MB" text, same shape as the Tasks Progress cell. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190" MinWidth="190">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -114,11 +114,11 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
-                               Binding="{Binding Data.SpeedText}" Width="90"
+                               Binding="{Binding Data.SpeedText}" Width="90" MinWidth="90"
                                CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210" MinWidth="210">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
@@ -140,7 +140,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
-                               Binding="{Binding Data.Host}" Width="80"
+                               Binding="{Binding Data.Host}" Width="80" MinWidth="80"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>
       </DataGrid>

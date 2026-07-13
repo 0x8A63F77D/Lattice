@@ -383,4 +383,29 @@ public class EventLogViewTests
 
     private static Message[] ManyMessages(int count) =>
         Enumerable.Range(1, count).Select(i => Msg(i, i, $"line {i}")).ToArray();
+
+    // REPRODUCTION (Finding D): entering the log with Following active and rows already
+    // present (nav-item / badge / startup all share this fresh-mount path) must land at the
+    // NEWEST row. Exercises the REAL Grid.ScrollIntoView (no override seam) and reads the
+    // actual vertical offset — the badge test above proves only that the HOOK fires.
+    [AvaloniaFact]
+    public void Entering_the_log_while_following_lands_at_the_bottom()
+    {
+        var (window, _, vm, registry, manager, fakes) = MakeView();
+        var host = AddHost(registry, fakes, "host-a");
+
+        // Rows accrue while the page is hidden (arrived before the view is realized).
+        Raise(manager, host.Id, ManyMessages(80));
+        Assert.True(vm.IsFollowing);
+
+        window.Show();
+        Layout(window);
+
+        var bar = VerticalScrollBar(window);
+        Assert.NotNull(bar);
+        Assert.True(bar!.Maximum > 1, "80 rows must overflow the viewport");
+        Assert.True(bar.Value >= bar.Maximum - 0.5,
+            $"entering while Following should sit at the newest row: value={bar.Value}, max={bar.Maximum}");
+        window.Close();
+    }
 }

@@ -34,6 +34,14 @@
       <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
       <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
       <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+      <!-- The Fluent DataGridColumnHeader template reserves a fixed sort-icon slot on every header
+           via ColumnDefinition MinWidth="{DynamicResource DataGridSortIconMinWidth}" (theme default
+           32px), UNCONDITIONALLY — even while the sort glyph is hidden. On the narrow Tasks columns
+           (Elapsed 68 / Remaining 74) that 32px plus the 8,0 cell padding truncates the label and
+           leaves a blank reserved slot to its right (owner Finding C). Zero the reservation so the
+           label uses the real column width; the slot is Width="Auto", so the glyph still sizes in
+           when a column is actually sorted (it then squeezes only that one active header slightly). -->
+      <x:Double x:Key="DataGridSortIconMinWidth">0</x:Double>
     </ResourceDictionary>
   </Styles.Resources>
 

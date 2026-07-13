@@ -1,5 +1,7 @@
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -169,6 +171,74 @@ public class ShellWindowTests
         Layout(window);
         Assert.True(hostText.IsVisible);
         Assert.True(header.IsVisible);
+        window.Close();
+    }
+
+    // ---- Finding A: horizontal-scroll fidelity (Option 1 — MinWidth on every column) --------
+
+    private static DataGrid PageGrid(ShellWindow window, ShellViewModel shell, string tag)
+    {
+        shell.SelectViewCommand.Execute(tag);
+        Layout(window);
+        return window.GetVisualDescendants().OfType<DataGrid>().First();
+    }
+
+    // Option 1's rule, per column: a FIXED column pins MinWidth == its spec Width (so it can never
+    // shrink below spec — no crush); a STAR column carries a readable floor above the DataGrid's
+    // 20px default MinColumnWidth. Without these, a star grid fits-to-width and crushes the fixed
+    // columns to ~20px slivers when tight (owner Finding A: "左右的滚动是不可用的"). Mutation-
+    // sensitive: dropping any column's MinWidth reverts it to the 20px default and reddens this —
+    // a fixed column no longer equals its Width, a star column no longer clears 20.
+    [AvaloniaTheory]
+    [InlineData("0")] // Tasks
+    [InlineData("1")] // Projects
+    [InlineData("2")] // Transfers
+    [InlineData("3")] // EventLog
+    public void Every_data_grid_column_pins_its_min_width_to_spec(string tag)
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        var grid = PageGrid(window, shell, tag);
+        Assert.All(grid.Columns, c =>
+        {
+            if (c.Width.IsStar)
+                Assert.True(c.MinWidth > 20,
+                    $"star column '{c.Header}' needs a readable MinWidth floor above the 20px default (Finding A)");
+            else
+                Assert.True(c.MinWidth == c.Width.Value,
+                    $"fixed column '{c.Header}' must pin MinWidth ({c.MinWidth}) to its spec Width ({c.Width.Value}) (Finding A)");
+        });
+        window.Close();
+    }
+
+    // At the design-default 1280×800 window there is comfortable slack, so no page overflows into a
+    // horizontal scrollbar — the star column absorbs the remainder. This guards the width budget:
+    // if a future MinWidth bump pushes a view's total past the ~1008px content area, it reddens.
+    // (The min-window 1000×700 case is an owner visual gate: headless does not reproduce the
+    // FANavigationView pane collapse, so its content width there is not faithful.)
+    [AvaloniaTheory]
+    [InlineData("0")] // Tasks
+    [InlineData("1")] // Projects
+    [InlineData("2")] // Transfers
+    [InlineData("3")] // EventLog
+    public void No_page_overflows_horizontally_at_the_design_default_window(string tag)
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Width = 1280;
+        window.Height = 800;
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        var grid = PageGrid(window, shell, tag);
+        var hbar = grid.GetVisualDescendants().OfType<ScrollBar>()
+            .FirstOrDefault(b => b.Name == "PART_HorizontalScrollbar");
+        Assert.NotNull(hbar);
+        Assert.False(hbar!.IsVisible,
+            $"page {tag} should not overflow at 1280px (viewport={grid.Bounds.Width:F0})");
         window.Close();
     }
 }

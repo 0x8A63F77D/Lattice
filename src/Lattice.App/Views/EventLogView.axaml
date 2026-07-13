@@ -165,7 +165,7 @@
                20px 1fr (Time · Host · Project · priority icon · Message). Time is
                128px for the widest mono timestamp stack alone (design README:159:
                "size the timestamp column (128px) for the widest stack"). -->
-          <DataGridTemplateColumn Width="128" Header="{x:Static loc:Strings.EventLogColTime}">
+          <DataGridTemplateColumn Width="128" MinWidth="128" Header="{x:Static loc:Strings.EventLogColTime}">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <TextBlock Text="{Binding Data.TimestampText}" VerticalAlignment="Center"
@@ -173,11 +173,11 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Binding="{Binding Data.Host}" Width="84"
+          <DataGridTextColumn Binding="{Binding Data.Host}" Width="84" MinWidth="84"
                               Header="{x:Static loc:Strings.ColHost}"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                               IsVisible="{Binding IsAllHostsScope}" />
-          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140"
+          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140" MinWidth="140"
                               Header="{x:Static loc:Strings.ColProject}"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
           <!-- Priority icon: its own 20px column on EVERY row (mockup §2c) —
@@ -185,7 +185,7 @@
                colored ones. No header text; "noDivider" collapses its body cell
                divider (Task 6's shared rule), and the header separator is killed
                declaratively above (nth-last-child(2)). -->
-          <DataGridTemplateColumn Width="20" CellStyleClasses="priorityIcon noDivider">
+          <DataGridTemplateColumn Width="20" MinWidth="20" CellStyleClasses="priorityIcon noDivider">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <Panel Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -202,7 +202,7 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Width="*" Header="{x:Static loc:Strings.EventLogColMessage}">
+          <DataGridTemplateColumn Width="*" MinWidth="200" Header="{x:Static loc:Strings.EventLogColMessage}">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <!-- Single line with ellipsis: the mockup's message span is
