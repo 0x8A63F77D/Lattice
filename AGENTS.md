@@ -59,6 +59,15 @@ change is needed.
 - Visual bugs: geometry/pixel probing (headless Skia) is the verification bar; a fix without
   end-state visual verification is not done.
 
+## Mutation gates (Stryker.NET pilot, issue #77)
+
+- Tier 0 (`dotnet test` per-PR) is unchanged. Tier 1 runs incremental Stryker on PRs touching the
+  mutation scope — report-only during calibration. Tier 2 is a nightly full run posting the score
+  to issue #77. Scope is pinned in `tests/Lattice.Tests/stryker-config.json`; never widen it
+  repo-wide.
+- Never add assertions solely to kill a surviving mutant or raise the mutation score — equivalent
+  mutants exist, and survivor adjudication belongs to the controller session, not the implementer.
+
 ## Protocol layer (`Lattice.Boinc.GuiRpc`)
 
 - Protocol code changes must come with fixture-based tests in the same commit (canned XML
