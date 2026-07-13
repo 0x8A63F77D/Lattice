@@ -28,10 +28,16 @@ public class ProjectsViewTests
 {
     private const string Url = "http://p/";
 
-    private static (Window Window, ProjectsView View, ProjectsViewModel Vm) MakeView()
+    // hostCount seeds the registry with that many hosts before the store/VM are
+    // built, so tests that need genuine multi-host presentation (the Hosts
+    // column, gated on IsAllHostsScope = AllHosts && >1 registered host) can opt
+    // in. Zero keeps the hand-built-rows fixtures host-free as before.
+    private static (Window Window, ProjectsView View, ProjectsViewModel Vm) MakeView(int hostCount = 0)
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        for (var i = 0; i < hostCount; i++)
+            registry.AddHost(TestData.MakeHostConfig(name: $"host-{i}", address: $"host-{i}"));
         var manager = new HostMonitorManager(
             registry, () => new RoutingGuiRpcClient(new Dictionary<string, FakeGuiRpcClient>()), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
@@ -290,7 +296,11 @@ public class ProjectsViewTests
     [AvaloniaFact]
     public void Hosts_column_hides_when_scope_is_a_single_host()
     {
-        var (window, _, vm) = MakeView();
+        // Two registered hosts so the aggregate baseline genuinely shows the
+        // Hosts column (multi-host presentation); scoping to a single host must
+        // then hide it. Post-ScopeMachine the column keys on >1 host, not on the
+        // AllHosts scope alone, so a one-host baseline would never show it.
+        var (window, _, vm) = MakeView(hostCount: 2);
         window.Show();
         Layout(window);
         Assert.Contains(Strings.ProjectsColHosts, VisibleHeaders(window));

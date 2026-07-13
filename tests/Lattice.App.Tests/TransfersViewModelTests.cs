@@ -61,6 +61,27 @@ public class TransfersViewModelTests : IAsyncLifetime
     private TransfersViewModel MakeVm() => new(_store, _clock, _density);
 
     [Fact]
+    public async Task Single_host_registry_is_not_aggregate_presentation()
+    {
+        // ScopeMachine: a one-host registry has no auto-pin, so Scope stays
+        // AllHosts — but the aggregate PRESENTATION (Host column, partial bar)
+        // must key on genuine multi-host, not on Scope.IsAllHosts, or a
+        // single-host user wrongly sees multi-host chrome.
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>(
+                [TestData.MakeTransfer(name: "file_a")]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        Assert.True(vm.Scope.IsAllHosts);
+        Assert.False(vm.IsAllHostsScope);
+    }
+
+    [Fact]
     public async Task Scoping_to_a_host_hides_the_other_hosts_rows()
     {
         var fakeA = new FakeGuiRpcClient

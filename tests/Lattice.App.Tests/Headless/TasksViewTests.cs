@@ -58,7 +58,13 @@ public class TasksViewTests
     [AvaloniaFact]
     public void Themed_render_shows_the_nine_column_headers()
     {
-        var (window, _, _, _, _, _) = MakeView();
+        // The ninth column is Host, shown only under genuine multi-host
+        // presentation (IsAllHostsScope). Post-ScopeMachine that keys on >1
+        // registered host, not on the AllHosts scope alone, so this aggregate
+        // render must register two hosts to earn the Host column.
+        var (window, _, _, registry, _, fakes) = MakeView();
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-b", new FakeGuiRpcClient());
         window.Show();
         Layout(window);
 
@@ -237,10 +243,16 @@ public class TasksViewTests
     }
 
     [AvaloniaFact]
-    public async Task Empty_overlay_shows_for_a_connected_host_with_zero_tasks()
+    public async Task Empty_overlay_shows_the_all_hosts_message_for_connected_hosts_with_zero_tasks()
     {
+        // Subject: the aggregate (all-hosts) empty overlay renders when every
+        // connected host reports zero tasks. That message is gated on genuine
+        // multi-host presentation (IsAllHostsScope), so two connected hosts are
+        // required post-ScopeMachine — the single-host empty message is a
+        // different string on the same panel.
         var (window, _, vm, registry, manager, fakes) = MakeView();
         AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-b", new FakeGuiRpcClient());
         window.Show();
         manager.Start();
 
@@ -326,7 +338,12 @@ public class TasksViewTests
         var uiState = new UiStateStore(uiPath);
         uiState.Save(UiState.Default with { ColumnVisibility = new() { ["Project"] = false } });
 
-        var (window, _, _, _, _, _) = MakeView(uiState);
+        // Two hosts so the Host column is present (multi-host presentation);
+        // the subject here is that the persisted Project hide beats the
+        // breakpoint default, leaving eight of the nine columns.
+        var (window, _, _, registry, _, fakes) = MakeView(uiState);
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-b", new FakeGuiRpcClient());
         window.Show();
         Layout(window);
 
@@ -357,7 +374,12 @@ public class TasksViewTests
         // beside the view, leaving the view itself ~1020px. Design §Responsive
         // (2f) defines breakpoints on WINDOW width — at 1280 ALL columns show;
         // pre-fix the policy read the view's own width and auto-hid Elapsed.
-        var (window, view, _, _, _, _) = MakeView();
+        // Two hosts so the Host column (multi-host presentation) is present and
+        // the full nine-column count holds — the breakpoint check is about the
+        // responsive columns (Elapsed/Application), not Host.
+        var (window, view, _, registry, _, fakes) = MakeView();
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-b", new FakeGuiRpcClient());
         window.Content = null;
         var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("260,*") };
         var pane = new Border();

@@ -153,7 +153,7 @@ public sealed partial class EventLogViewModel : ObservableObject, IDisposable
 
     private void Rebuild()
     {
-        IsAllHostsScope = Scope.IsAllHosts;
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
 
         var target = MessageLog.merged(_log)
             .Where(e => Scope.IsAllHosts || e.Key.HostId == Scope.HostId)
