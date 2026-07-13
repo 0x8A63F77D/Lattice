@@ -199,6 +199,38 @@ public class AddHostViewModelTests
     }
 
     [Fact]
+    public async Task Test_connection_command_cannot_reenter_while_one_is_in_flight()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        // OnConnect blocks on a gate we control, so the command is deterministically
+        // "in flight" for as long as the test needs — no wall-clock waits.
+        var connectGate = new TaskCompletionSource();
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => connectGate.Task },
+            cfg, authError: false);
+
+        Assert.True(vm.TestConnectionCommand.CanExecute(null));
+
+        Task first = vm.TestConnectionCommand.ExecuteAsync(null);
+
+        // Still blocked inside ConnectAsync: CanExecute must report false while the
+        // first execution is in flight. This is the actual guard a real Button
+        // relies on — Avalonia's Button.OnClick re-checks CanExecute on every click
+        // before invoking Execute, so a second physical click cannot start a second
+        // overlapping run while this holds.
+        Assert.False(vm.TestConnectionCommand.CanExecute(null));
+        Assert.True(vm.TestConnectionCommand.IsRunning);
+
+        connectGate.SetResult();
+        await first;
+
+        Assert.False(vm.TestConnectionCommand.IsRunning);
+        Assert.True(vm.TestConnectionCommand.CanExecute(null));
+    }
+
+    [Fact]
     public async Task Test_connection_failure_shows_result_inline_without_closing_the_dialog()
     {
         var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());

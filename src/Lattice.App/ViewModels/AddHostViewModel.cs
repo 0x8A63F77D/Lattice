@@ -133,7 +133,13 @@ public sealed partial class AddHostViewModel : ObservableObject
         finally { IsBusy = false; }
     }
 
-    [RelayCommand]
+    // AllowConcurrentExecutions = false: while a test is in flight, CanExecute
+    // reports false, so a Button bound to this command (Avalonia's Button.OnClick
+    // re-checks CanExecute on every click) will not invoke a second overlapping
+    // run that could race the first and overwrite TestResultText with a stale
+    // result. Explicit here so the guarantee survives regardless of what
+    // CommunityToolkit.Mvvm's unmarked-attribute default happens to be.
+    [RelayCommand(AllowConcurrentExecutions = false)]
     private async Task TestConnectionAsync()
     {
         var candidate = new HostConfig(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
