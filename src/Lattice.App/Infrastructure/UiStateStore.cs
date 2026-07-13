@@ -20,7 +20,13 @@ public sealed class UiStateStore
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = true,
-        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
+        // allowIntegerValues: false — a numeric enum token (e.g. corrupt/hand-edited
+        // "railGrouping":999) must fail deserialization rather than materialize an
+        // out-of-range enum value. Load's catch below then falls back to defaults.
+        // Out-of-range values would otherwise reach the exhaustive switches in
+        // ShellViewModel.MapOverride / ThemePreference.Apply / ThemeLabelConverter
+        // and throw SwitchExpressionException at startup (Codex P2).
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false) },
     };
 
     public string Path { get; }
