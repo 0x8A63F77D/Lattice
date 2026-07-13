@@ -37,6 +37,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private double _railViewportHeight;
     private RailGroupingMode _grouping;
     private bool _healthyExpanded;
+    // Compact (48px) pane state, fed by the view from FANavigationView.IsPaneOpen. When the pane
+    // is compact the rail must render EVERY host as an individual state-icon (decisions §5), so the
+    // compute force-expands the Healthy tier (see BuildRailInput) — the persisted RailHealthyExpanded
+    // is deliberately untouched, so re-opening the pane restores the saved collapse state.
+    private bool _paneCompact;
     private bool _rebuilding;   // set during RebuildRail so its highlight assignment is not read as a user selection
 
     [ObservableProperty] private bool _showRailToggle;
@@ -279,6 +284,18 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         RebuildRail();
     }
 
+    /// <summary>The view reports the NavigationView pane-collapse state (compact = pane closed).
+    /// Compact renders every host as an individual state-icon (decisions §5): the Healthy tier is
+    /// force-expanded for the compute only (BuildRailInput), never persisted. Re-opening the pane
+    /// re-derives from the saved RailHealthyExpanded, so a compact session cannot flip the saved
+    /// preference. The rail rebuilds because compact must ADD the otherwise-collapsed host rows.</summary>
+    public void SetRailPaneCompact(bool compact)
+    {
+        if (_paneCompact == compact) return;
+        _paneCompact = compact;
+        RebuildRail();
+    }
+
     [RelayCommand]
     private void ToggleRailGrouping()
     {
@@ -303,7 +320,10 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
                 RailTierProjection.From(RailStateProjection.From(e.Status))))
             .ToArray();
         var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
-        return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), _healthyExpanded);
+        // Compact force-expands Healthy for the compute so every host renders as an icon (§5); the
+        // persisted _healthyExpanded is left untouched (SetRailPaneCompact) so re-open restores it.
+        var healthyExpanded = _healthyExpanded || _paneCompact;
+        return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), healthyExpanded);
     }
 
     private void OnGroupToggleRequested(object? sender, RailTier tier)

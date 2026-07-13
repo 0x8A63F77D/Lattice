@@ -24,6 +24,7 @@ public partial class ShellWindow : Window
     private readonly HashSet<Guid> _testHostsInFlight = [];
     private bool _revertingRailSelection;
     private IDisposable? _navBoundsSubscription;
+    private IDisposable? _navPaneSubscription;
 
     // Regular/Filled StreamGeometry resources are Application-level singletons
     // (Icons.axaml), so a single TryFindResource per key is enough to cache the
@@ -47,6 +48,8 @@ public partial class ShellWindow : Window
             _shell.RemoveHostRequested -= OnRemoveHostRequested;
             _navBoundsSubscription?.Dispose();
             _navBoundsSubscription = null;
+            _navPaneSubscription?.Dispose();
+            _navPaneSubscription = null;
         }
         _shell = DataContext as ShellViewModel;
         if (_shell is not null)
@@ -63,6 +66,12 @@ public partial class ShellWindow : Window
             // overload lives in System.Reactive, which this app does not reference).
             _navBoundsSubscription = Nav.GetObservable(Avalonia.Visual.BoundsProperty)
                 .Subscribe(new AnonymousObserver<Rect>(b => _shell?.SetRailViewportHeight(b.Height)));
+            // Compact (48px) pane hides all row text; a Healthy group collapsed by default would then
+            // show NO healthy host icons and no tappable header (decisions §5). Feed the pane-collapse
+            // state so the VM force-expands Healthy for the compute (icons only) while the pane is
+            // compact. GetObservable pushes the current value on subscribe, seeding the initial state.
+            _navPaneSubscription = Nav.GetObservable(FANavigationView.IsPaneOpenProperty)
+                .Subscribe(new AnonymousObserver<bool>(open => _shell?.SetRailPaneCompact(!open)));
             SyncNavSelection();
             // First render must not depend on the SelectionChanged side channel:
             // whether the Nav.SelectedItem assignment above raises it synchronously

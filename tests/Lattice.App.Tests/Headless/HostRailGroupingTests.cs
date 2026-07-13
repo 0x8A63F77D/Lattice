@@ -18,12 +18,16 @@ namespace Lattice.App.Tests.Headless;
 public class HostRailGroupingTests
 {
     private static (ShellWindow Window, ShellViewModel Shell, HostRegistry Registry) MakeShell(double height)
+        => MakeShell(new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json")), height);
+
+    // Overload taking an explicit UiStateStore so a test can inspect what a compact session did (or
+    // did NOT) persist by re-loading the same file after the interaction.
+    private static (ShellWindow Window, ShellViewModel Shell, HostRegistry Registry) MakeShell(UiStateStore uiState, double height)
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
         var shell = new ShellViewModel(registry, store, new ManualUiClock(), uiState, () => new FakeGuiRpcClient());
         var window = new ShellWindow { DataContext = shell, Height = height, Width = 1280 };
         return (window, shell, registry);
@@ -142,6 +146,62 @@ public class HostRailGroupingTests
             .First(li => li.DataContext is GroupHeaderRailItemViewModel);
         Assert.True(headerRow.Bounds.Height < 1.0,
             $"compact group-header row should collapse, was {headerRow.Bounds.Height}px");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Compact_pane_renders_every_host_icon_even_when_healthy_is_default_collapsed()
+    {
+        // Decisions §5: when the pane is compact, the rail renders EVERY host's individual state-icon.
+        // Without the force-expand, the default-collapsed Healthy tier would emit only its (text-hidden,
+        // untappable) header in compact — leaving healthy hosts with no visible, reachable icon.
+        var (window, shell, registry) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+
+        // Expanded pane, Grouped (overflow), Healthy default-collapsed: only the header, no host rows.
+        Assert.Contains(shell.RailEntries, e => e is GroupHeaderRailItemViewModel);
+        Assert.DoesNotContain(shell.RailEntries, e => e is HostRailItemViewModel);
+
+        window.Nav.IsPaneOpen = false;   // 48px compact
+        Layout(window);
+
+        // Every host now has a rail row (the force-expand emits all Healthy hosts)...
+        Assert.Equal(12, shell.RailEntries.OfType<HostRailItemViewModel>().Count());
+        // ...and a realized host container renders as a visible icon row, not collapsed to 0px.
+        var hostContainer = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is HostRailItemViewModel);
+        Assert.True(hostContainer.Bounds.Height > 1.0,
+            $"compact host row should render an icon, was {hostContainer.Bounds.Height}px");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Compact_force_expand_is_transient_and_never_flips_the_persisted_collapse()
+    {
+        // Guards the two halves of the §5 fix: (a) with the pane OPEN + grouped-default, Healthy IS
+        // collapsed (host rows hidden) — so the fix didn't just always-expand; (b) a compact session
+        // leaves the persisted RailHealthyExpanded untouched, and re-opening restores the saved state.
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var (window, shell, registry) = MakeShell(uiState, height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);
+
+        // (a) Pane open, grouped-default: Healthy collapsed, preference false.
+        Assert.False(uiState.Load().RailHealthyExpanded);
+        Assert.DoesNotContain(shell.RailEntries, e => e is HostRailItemViewModel);
+
+        window.Nav.IsPaneOpen = false;   // compact force-expands host icons for the compute only
+        Layout(window);
+        Assert.Contains(shell.RailEntries, e => e is HostRailItemViewModel);
+        Assert.False(uiState.Load().RailHealthyExpanded);   // (b) transient override, never persisted
+
+        window.Nav.IsPaneOpen = true;    // re-open restores the saved collapsed state
+        Layout(window);
+        Assert.DoesNotContain(shell.RailEntries, e => e is HostRailItemViewModel);
+        Assert.False(uiState.Load().RailHealthyExpanded);
         window.Close();
     }
 }

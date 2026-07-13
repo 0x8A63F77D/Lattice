@@ -80,6 +80,12 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     {
         Name = _entry.Config.DisplayName;
         State = RailStateProjection.From(_entry.Status);
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailState left unhandled)
+        // must stay a build error so this label mapping is revisited. CS8524 is the residual "unnamed
+        // enum value" case — an out-of-range cast, unreachable for a well-formed RailState — and is
+        // suppressed here; a `_` arm would silence CS8509 too and defeat the guard. Same pattern as
+        // RailTierProjection. (The guarded Retrying arm is backed by an unguarded one, so all five
+        // named values are covered.)
         StateText = State switch
         {
             RailState.Connected => string.Format(Strings.RailConnectedFmt, _entry.Snapshot?.Tasks.Count ?? 0),
@@ -89,8 +95,8 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             RailState.Retrying => Strings.RailRetrying,
             RailState.Unreachable => Strings.RailUnreachable,
             RailState.AuthFailed => Strings.RailAuthFailed,
-            _ => "",
         };
+#pragma warning restore CS8524
         // Tooltip priority mirrors SubtextDisplay (kept in sync by OnTestResultTextChanged):
         // a transient action result wins over live state, so only rebuild the live tooltip
         // when no transient result is currently showing.

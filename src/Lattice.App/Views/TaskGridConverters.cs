@@ -51,14 +51,23 @@ public sealed class ThemeLabelConverter : IValueConverter
 {
     public static readonly ThemeLabelConverter Instance = new();
 
+    // A non-AppTheme binding value (null / UnsetValue during template init) degrades to an empty
+    // label OUTSIDE the switch, so the AppTheme switch itself stays exhaustive with no `_` arm.
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
-        value switch
-        {
-            AppTheme.Light => Strings.ThemeLight,
-            AppTheme.Dark => Strings.ThemeDark,
-            AppTheme.System => Strings.ThemeSystem,
-            _ => string.Empty,
-        };
+        value is AppTheme theme ? Label(theme) : string.Empty;
+
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED AppTheme left unhandled)
+    // must stay a build error so this label mapping is revisited. CS8524 is the residual "unnamed enum
+    // value" case — an out-of-range cast like (AppTheme)999, unreachable for a well-formed value — and
+    // is suppressed here; a `_` arm would silence CS8509 too and defeat the guard. Same pattern as
+    // RailTierProjection.
+    private static string Label(AppTheme theme) => theme switch
+    {
+        AppTheme.Light => Strings.ThemeLight,
+        AppTheme.Dark => Strings.ThemeDark,
+        AppTheme.System => Strings.ThemeSystem,
+    };
+#pragma warning restore CS8524
 
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();

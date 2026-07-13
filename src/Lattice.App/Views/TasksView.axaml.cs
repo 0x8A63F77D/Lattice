@@ -93,15 +93,23 @@ public partial class TasksView : UserControl
     {
         if (DataContext is not TasksViewModel vm)
             return;
-        StateFilterBox.SelectedIndex = vm.StateFilter switch
-        {
-            TaskStateKind.Running => 1,
-            TaskStateKind.Waiting => 2,
-            TaskStateKind.Suspended => 3,
-            TaskStateKind.Uploading => 4,
-            _ => 0,
-        };
+        // null (no filter) → the "All" index OUTSIDE the switch, so the switch over the non-nullable
+        // TaskStateKind stays exhaustive with no `_` arm. (Inverse mapping in OnStateFilterChanged is
+        // over an int index, not this enum, so it correctly keeps its `_`.)
+        StateFilterBox.SelectedIndex = vm.StateFilter is { } kind ? StateFilterIndex(kind) : 0;
     }
+
+#pragma warning disable CS8524 // No `_` arm on purpose: the old `_ => 0` folded any new NAMED
+    // TaskStateKind into "All". CS8509 must stay live so a new kind forces a combo index; CS8524
+    // (residual unnamed value, unreachable for a well-formed kind) is suppressed. RailTierProjection pattern.
+    private static int StateFilterIndex(TaskStateKind kind) => kind switch
+    {
+        TaskStateKind.Running => 1,
+        TaskStateKind.Waiting => 2,
+        TaskStateKind.Suspended => 3,
+        TaskStateKind.Uploading => 4,
+    };
+#pragma warning restore CS8524
 
     /// <summary>Window width when hosted (the design's breakpoint dimension);
     /// the view's own width only before attach, where it is a 0-width no-op.</summary>
