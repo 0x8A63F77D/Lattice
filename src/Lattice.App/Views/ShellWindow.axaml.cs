@@ -269,10 +269,9 @@ public partial class ShellWindow : Window
 
         // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding;
         // this handler only owns the one remaining cross-view linkage: clicking an
-        // auth-failed host jumps to Settings with that host's expander open. The
-        // All-hosts sentinel never navigates.
-        // NOTE (Task 12): swap this for OpenEditHostDialog(item.HostId, focusPassword: true, authError: true).
+        // auth-failed host opens the Edit dialog with the password field in error.
+        // The All-hosts sentinel never navigates.
         if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
-            _shell.NavigateToSettings(item.HostId);
+            _ = OpenEditHostDialog(item.HostId, focusPassword: true, authError: true);
     }
 }
