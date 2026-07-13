@@ -488,3 +488,6 @@ $RECYCLE.BIN/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Stryker.NET mutation reports
+StrykerOutput/

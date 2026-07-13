@@ -1,0 +1,10 @@
+{
+  "stryker-config": {
+    "project": "Lattice.Core.csproj",
+    "mutate": [
+      "**/SnapshotBuilder.cs"
+    ],
+    "reporters": ["ClearText", "Markdown", "Json"],
+    "mutation-level": "Standard"
+  }
+}
