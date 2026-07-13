@@ -253,6 +253,31 @@
   <data name="NavTransfers" xml:space="preserve">
     <value>Transfers</value>
   </data>
+  <!-- ===== HostMenu (rail host-row context menu + remove-confirm) ===== -->
+  <data name="HostMenuEdit" xml:space="preserve">
+    <value>Edit host…</value>
+  </data>
+  <data name="HostMenuTest" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="HostMenuRemove" xml:space="preserve">
+    <value>Remove host…</value>
+  </data>
+  <data name="HostRemoveConfirmTitleFmt" xml:space="preserve">
+    <value>Remove {0}?</value>
+  </data>
+  <data name="HostRemoveConfirmBody" xml:space="preserve">
+    <value>Lattice stops monitoring this host. The BOINC client on the host is not affected.</value>
+  </data>
+  <data name="HostRemoveConfirmPrimary" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="HostRemoveConfirmCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="HostRemoveFailedFmt" xml:space="preserve">
+    <value>Couldn’t remove host: {0}</value>
+  </data>
   <!-- ===== Rail ===== -->
   <data name="RailAuthFailed" xml:space="preserve">
     <value>Wrong password</value>

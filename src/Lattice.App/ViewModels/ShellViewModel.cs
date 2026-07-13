@@ -218,6 +218,22 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void RequestAddHost() => AddHostRequested?.Invoke(this, EventArgs.Empty);
 
+    /// <summary>Raised by the rail-row menu; the window owns the dialog/test/confirm work.</summary>
+    public event EventHandler<Guid>? EditHostRequested;
+    public event EventHandler<Guid>? TestHostRequested;
+    public event EventHandler<Guid>? RemoveHostRequested;
+
+    [RelayCommand] private void EditHost(Guid id) => EditHostRequested?.Invoke(this, id);
+    [RelayCommand] private void TestHost(Guid id) => TestHostRequested?.Invoke(this, id);
+    [RelayCommand] private void RemoveHost(Guid id) => RemoveHostRequested?.Invoke(this, id);
+
+    public HostConfig? FindHostConfig(Guid id) =>
+        _store.Hosts.FirstOrDefault(h => h.Config.Id == id)?.Config;
+    public HostRailItemViewModel? FindHostRow(Guid id) =>
+        _hostRowVms.TryGetValue(id, out var vm) ? vm : null;
+    public HostRegistry Registry => Settings.Registry;
+    public Func<IGuiRpcClient> ClientFactory => Settings.ClientFactory;
+
     /// <summary>Auth-failed rail linkage and the Settings footer both land here.</summary>
     public void NavigateToSettings(Guid? focusHostId = null)
     {
@@ -386,6 +402,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        EditHostRequested = null;
+        TestHostRequested = null;
+        RemoveHostRequested = null;
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
         Transfers.Rows.CollectionChanged -= OnTransfersRowsChanged;

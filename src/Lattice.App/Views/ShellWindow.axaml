@@ -58,6 +58,10 @@
     <Style Selector="ListBox.hostRail ListBoxItem:selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource LatticeSelectedTintBrush}" />
     </Style>
+    <!-- Host-row context menu items: 32px rows (design 3b). -->
+    <Style Selector="MenuFlyoutPresenter MenuItem">
+      <Setter Property="MinHeight" Value="32" />
+    </Style>
   </Window.Styles>
 
   <Panel>
@@ -164,6 +168,23 @@
                      counts 40 px flat rows. -->
                 <DockPanel Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).HostRowHeight}"
                            ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+                  <!-- The menu lives on THIS template only, so the All-hosts sentinel and
+                       group headers never get one (design 3b). Commands live on ShellViewModel;
+                       the window does the dialog/test/confirm work. -->
+                  <DockPanel.ContextFlyout>
+                    <MenuFlyout>
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
+                                CommandParameter="{Binding HostId}" />
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuTest}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
+                                CommandParameter="{Binding HostId}" />
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
+                                CommandParameter="{Binding HostId}"
+                                Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                    </MenuFlyout>
+                  </DockPanel.ContextFlyout>
                   <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">
                     <PathIcon Width="16" Height="16" IsVisible="{Binding IsConnected}"
                               Data="{StaticResource IconCheckmarkCircleRegular}"
@@ -185,7 +206,7 @@
                               IsVisible="{Binding #Nav.IsPaneOpen}">
                     <TextBlock Text="{Binding Name}" FontSize="13"
                                Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
-                    <TextBlock Text="{Binding StateText}" FontSize="11"
+                    <TextBlock Text="{Binding SubtextDisplay}" FontSize="11"
                                Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                   </StackPanel>
                 </DockPanel>

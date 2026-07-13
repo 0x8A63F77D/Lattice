@@ -5,7 +5,10 @@ using Avalonia.Media;
 using Avalonia.Reactive;
 using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
+using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.ViewModels;
+using Lattice.Core;
 
 namespace Lattice.App.Views;
 
@@ -13,6 +16,8 @@ public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
     private bool _addHostInFlight;
+    private bool _editHostInFlight;
+    private bool _removeConfirmInFlight;
     private bool _revertingRailSelection;
     private IDisposable? _navBoundsSubscription;
 
@@ -33,6 +38,9 @@ public partial class ShellWindow : Window
         {
             _shell.PropertyChanged -= OnShellPropertyChanged;
             _shell.AddHostRequested -= OnAddHostRequested;
+            _shell.EditHostRequested -= OnEditHostRequested;
+            _shell.TestHostRequested -= OnTestHostRequested;
+            _shell.RemoveHostRequested -= OnRemoveHostRequested;
             _navBoundsSubscription?.Dispose();
             _navBoundsSubscription = null;
         }
@@ -41,6 +49,9 @@ public partial class ShellWindow : Window
         {
             _shell.PropertyChanged += OnShellPropertyChanged;
             _shell.AddHostRequested += OnAddHostRequested;
+            _shell.EditHostRequested += OnEditHostRequested;
+            _shell.TestHostRequested += OnTestHostRequested;
+            _shell.RemoveHostRequested += OnRemoveHostRequested;
             // Feed the measured pane height so the core re-evaluates the flat↔grouped fit
             // boundary on every layout/resize (design 3a; decisions §3). The shell derives
             // AvailableHeight = paneContentHeight − ReservedRailChrome from this.
@@ -74,6 +85,69 @@ public partial class ShellWindow : Window
         {
             _addHostInFlight = false;
         }
+    }
+
+    private async void OnEditHostRequested(object? sender, Guid id) =>
+        await OpenEditHostDialog(id, focusPassword: false, authError: false);
+
+    private async Task OpenEditHostDialog(Guid id, bool focusPassword, bool authError)
+    {
+        if (_editHostInFlight || _shell is not { } shell || shell.FindHostConfig(id) is not { } cfg)
+            return;
+        _editHostInFlight = true;
+        try
+        {
+            var vm = AddHostViewModel.ForEdit(shell.Registry, shell.ClientFactory, cfg, authError);
+            var dialog = new AddHostDialog { DataContext = vm };
+            if (TopLevel.GetTopLevel(this) is { } top)
+                await dialog.ShowAsync(top);
+        }
+        finally { _editHostInFlight = false; }
+    }
+
+    private async void OnTestHostRequested(object? sender, Guid id)
+    {
+        if (_shell is not { } shell || shell.FindHostConfig(id) is not { } cfg
+            || shell.FindHostRow(id) is not { } row)
+            return;
+        row.TestResultText = Strings.SettingsTestConnectionBusy;
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            var r = await HostMonitorManager.TestConnectionAsync(cfg, shell.ClientFactory, cts.Token);
+            row.TestResultText = r.Success
+                ? string.Format(Strings.SettingsTestConnectionSuccess, r.Version!.Major, r.Version.Minor, r.Version.Release)
+                : r.Error;
+        }
+        catch (OperationCanceledException) { row.TestResultText = Strings.SettingsTestConnectionTimeout; }
+    }
+
+    private async void OnRemoveHostRequested(object? sender, Guid id)
+    {
+        if (_removeConfirmInFlight || _shell is not { } shell
+            || shell.FindHostConfig(id) is not { } cfg
+            || TopLevel.GetTopLevel(this) is not { } top)
+            return;
+        _removeConfirmInFlight = true;
+        try
+        {
+            var dialog = new FAContentDialog
+            {
+                Title = string.Format(Strings.HostRemoveConfirmTitleFmt, cfg.DisplayName),
+                Content = Strings.HostRemoveConfirmBody,
+                PrimaryButtonText = Strings.HostRemoveConfirmPrimary,
+                CloseButtonText = Strings.HostRemoveConfirmCancel,
+                DefaultButton = FAContentDialogButton.Close,
+            };
+            if (await dialog.ShowAsync(top) == FAContentDialogResult.Primary
+                && shell.FindHostConfig(id) is not null
+                // Persistence can fail (unwritable config.json); the old Settings card
+                // surfaced that error and kept the host rather than closing silently.
+                && RegistryGuard.TryMutate(() => shell.Registry.RemoveHost(id)) is { } error
+                && shell.FindHostRow(id) is { } row)
+                row.TestResultText = string.Format(Strings.HostRemoveFailedFmt, error);
+        }
+        finally { _removeConfirmInFlight = false; }
     }
 
     private void OnShellPropertyChanged(object? sender, PropertyChangedEventArgs e)
