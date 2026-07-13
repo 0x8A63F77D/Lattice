@@ -255,6 +255,54 @@ public class RailScopeSelectionTests
         window.Close();
     }
 
+    // Behavior 8 (R5 P2, tap↔poll race): the header tap DEFERS its group toggle. If a routine background
+    // poll/status refresh RebuildRail's the rail in the gap BEFORE the deferred toggle runs, the header VM
+    // the tap captured is detached + replaced. The toggle must still apply, because the tap routes through
+    // the shell BY TIER (a value), never by executing the now-stale captured VM.
+    //
+    // Deterministic interleaving, no wall-clock: real pointer input auto-pumps the UI dispatcher, which
+    // would collapse the tap→toggle gap. So we substitute the project's deferred-queue dispatcher
+    // (QueueUiDispatcher) for the tap's deferral and DRAIN it explicitly, injecting the rebuild between the
+    // enqueue and the drain. Falsification: revert OnHostRailTapped to the old
+    // `header.ToggleCommand.Execute(null)` — the drained call raises to the rebuild-detached subscriber,
+    // the Healthy group never expands, and RailHealthyExpanded stays false → both final asserts go RED.
+    [AvaloniaFact]
+    public void Header_tap_toggle_survives_a_rail_rebuild_racing_the_deferral()
+    {
+        var (window, shell, registry, _, uiState) = MakeShell(height: 700);
+        var deferral = new QueueUiDispatcher();
+        window.RailDeferralDispatcher = deferral;   // hold the tap's toggle until we Drain explicitly
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);   // grouped (overflow), all Healthy, collapsed by default — realizes containers
+
+        Assert.False(uiState.Load().RailHealthyExpanded);
+        Assert.DoesNotContain(shell.RailEntries, e => e is HostRailItemViewModel);
+
+        // (1) Tap the collapsible Healthy header → the toggle is enqueued on `deferral`, NOT run (a
+        // QueueUiDispatcher only runs on Drain). RailInput's RunJobs pump does not touch that queue.
+        RailInput.ClickRow(window, HealthyHeader(shell));
+        Assert.Equal(1, deferral.Pending);   // toggle captured, still pending
+
+        // (2) A background update rematerializes the rail BEFORE the deferred toggle runs (AddHost →
+        // ReconcileHosts → RebuildRail, synchronous under ImmediateUiDispatcher). RebuildRail detaches the
+        // captured header VM's ToggleRequested and makes fresh header instances — the exact staleness that
+        // dropped the click under the old stale-VM behavior. Still grouped + Healthy collapsed (the pending
+        // toggle has not flipped _healthyExpanded yet), so a Healthy header persists.
+        registry.AddHost(TestData.MakeHostConfig(name: "poll"));
+        Assert.DoesNotContain(shell.RailEntries, e => e is HostRailItemViewModel);   // rebuilt, still collapsed
+        Assert.Equal(1, deferral.Pending);                                           // toggle still pending
+
+        // (3) Drain → the deferred toggle runs, routed through the shell by tier.
+        deferral.Drain();
+
+        // The user's expand click was NOT dropped: Healthy is now expanded (host rows present) and the
+        // preference persisted.
+        Assert.Contains(shell.RailEntries, e => e is HostRailItemViewModel);
+        Assert.True(uiState.Load().RailHealthyExpanded);
+        window.Close();
+    }
+
     private static GroupHeaderRailItemViewModel HealthyHeader(ShellViewModel shell) =>
         shell.RailEntries.OfType<GroupHeaderRailItemViewModel>().Single(g => g.Tier.Equals(RailTier.Healthy));
 }

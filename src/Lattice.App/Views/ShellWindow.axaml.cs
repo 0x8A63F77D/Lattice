@@ -3,8 +3,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Reactive;
-using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.ViewModels;
@@ -24,6 +24,13 @@ public partial class ShellWindow : Window
     private readonly HashSet<Guid> _testHostsInFlight = [];
     private IDisposable? _navBoundsSubscription;
     private IDisposable? _navPaneSubscription;
+
+    // Test seam (InternalsVisibleTo): the header-tap group toggle is deferred (see OnHostRailTapped).
+    // Behind IUiDispatcher so a test can swap in a QueueUiDispatcher and drain the deferral EXPLICITLY,
+    // deterministically interleaving a rail rebuild between the tap and the toggle (the tap↔poll race,
+    // R5 P2) — real pointer input auto-pumps the UI dispatcher, collapsing that window. Production posts
+    // onto the real UI thread (identical to the former inline Dispatcher.UIThread.Post).
+    internal IUiDispatcher RailDeferralDispatcher { get; set; } = AvaloniaUiDispatcher.Instance;
 
     // Regular/Filled StreamGeometry resources are Application-level singletons
     // (Icons.axaml), so a single TryFindResource per key is enough to cache the
@@ -279,12 +286,22 @@ public partial class ShellWindow : Window
                 // the derived highlight so the header — transiently selected by this click, and NOT
                 // rebuilt by the no-op Attention toggle — is never left highlighted. Deferred so the
                 // toggle's ItemsSource rebuild does not run inside the ListBox's click/selection
-                // processing (a synchronous Clear there indexes a stale ItemsSourceView → crash).
-                Dispatcher.UIThread.Post(() =>
+                // processing (a synchronous Clear there indexes a stale ItemsSourceView → crash, Task 8).
+                //
+                // Capture the tier VALUE and its collapsibility NOW, and route the deferred toggle
+                // through the shell by tier — NEVER execute the captured (transient) header VM after the
+                // deferral. A routine background poll/status refresh can RebuildRail in the gap, which
+                // detaches the old header VMs' ToggleRequested and clears the rows; executing the stale
+                // VM's ToggleCommand would then raise to no subscriber and silently DROP the user's
+                // expand/collapse click (Codex R5 P2). ToggleGroup resolves against the CURRENT rows.
+                RailTier tier = header.Tier;
+                bool collapsible = header.IsCollapsible;   // Attention is not collapsible → no-op
+                RailDeferralDispatcher.Post(() =>
                 {
                     if (_shell is null)
                         return;
-                    header.ToggleCommand.Execute(null);
+                    if (collapsible)
+                        _shell.ToggleGroup(tier);
                     _shell.ReassertRailHighlight();
                 });
                 break;

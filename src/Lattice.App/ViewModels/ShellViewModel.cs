@@ -336,16 +336,28 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), healthyExpanded);
     }
 
-    private void OnGroupToggleRequested(object? sender, RailTier tier)
+    /// <summary>Toggle a rail status group's collapse state, keyed on the tier VALUE — the resilient
+    /// entry point the header tap routes through (<c>ShellWindow.OnHostRailTapped</c>). A background
+    /// poll/status refresh can <see cref="RebuildRail"/> between a header tap and its deferred callback,
+    /// detaching the tapped header VM's <see cref="GroupHeaderRailItemViewModel.ToggleRequested"/> and
+    /// clearing the rows; routing the toggle through the shell by tier (never the transient VM instance)
+    /// survives that race, whereas executing the stale VM's command would raise to no subscriber and
+    /// silently DROP the user's toggle (Codex R5 P2). Healthy is the only collapsible tier (Attention is
+    /// pinned open, so a non-Healthy tier is a no-op — no flip, no rebuild).</summary>
+    public void ToggleGroup(RailTier tier)
     {
-        // Healthy is the only collapsible tier (Attention is pinned open).
-        if (tier.Equals(RailTier.Healthy))
-        {
-            _healthyExpanded = !_healthyExpanded;
-            _uiState.Update(s => s with { RailHealthyExpanded = _healthyExpanded });
-        }
+        if (!tier.Equals(RailTier.Healthy))
+            return;
+        _healthyExpanded = !_healthyExpanded;
+        _uiState.Update(s => s with { RailHealthyExpanded = _healthyExpanded });
         RebuildRail();
     }
+
+    // The GroupHeaderRailItemViewModel.ToggleCommand affordance (raised via ToggleRequested; used by
+    // view-model tests to expand/collapse a group programmatically) funnels into the same tier-keyed
+    // shell logic. The production tap path calls ToggleGroup directly (by captured tier value), so it
+    // does not depend on this subscription surviving an intervening rebuild.
+    private void OnGroupToggleRequested(object? sender, RailTier tier) => ToggleGroup(tier);
 
 #pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailGroupingMode
     // left unhandled) must stay a build error so this mapping is revisited. CS8524 is the residual

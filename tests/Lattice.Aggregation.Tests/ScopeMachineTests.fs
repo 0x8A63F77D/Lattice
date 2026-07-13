@@ -84,7 +84,13 @@ let private scenario (knownRaw: Guid list) (stateKnown: bool) (evSel: int) (idKn
 [<Property>]   // P1: result scope is always valid (AllHosts, or a host that still exists)
 let ``P1 valid scope`` (knownRaw: Guid list) (sk: bool) (evSel: int) (idKnown: bool) (idSel: int) =
     let known, state, ev = scenario knownRaw sk evSel idKnown idSel
-    let postKnown = match ev with | HostRemoved id -> known |> Array.filter ((<>) id) | _ -> known
+    // Named arms over the ScopeEvent DU (no wildcard, F# canon): only HostRemoved shrinks the
+    // surviving-host set; a new event would force a decision here rather than silently reuse `known`.
+    let postKnown =
+        match ev with
+        | HostRemoved id -> known |> Array.filter ((<>) id)
+        | ExplicitSelect _ -> known
+        | RestoreAtStartup _ -> known
     match (step state ev).Scope with
     | AllHosts -> true
     | Host id -> Array.contains id postKnown
