@@ -1,0 +1,44 @@
+name: Mutation Tier 1
+
+# Test-admission gate (issue #77): incremental Stryker over the pinned mutation
+# scope, triggered only when the scoped production code or its test project
+# changes. REPORT-ONLY during calibration — no break threshold is set, so the
+# job fails only on infrastructure errors, never on mutation score.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Lattice.Core/SnapshotBuilder.cs'
+      - 'tests/Lattice.Tests/**'
+      - '.config/dotnet-tools.json'
+      - '.github/workflows/mutation-tier1.yml'
+
+concurrency:
+  group: mutation-tier1-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  stryker-incremental:
+    name: stryker-incremental (report-only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - name: Stryker (incremental, report-only)
+        working-directory: tests/Lattice.Tests
+        run: dotnet dotnet-stryker --since:origin/main
+      - name: Publish report to job summary
+        if: always()
+        run: |
+          report=$(find tests/Lattice.Tests/StrykerOutput -name mutation-report.md 2>/dev/null | sort | tail -1)
+          if [ -n "$report" ]; then
+            cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No mutation report produced (no mutants in the diff, or run failed before reporting)." >> "$GITHUB_STEP_SUMMARY"
+          fi
