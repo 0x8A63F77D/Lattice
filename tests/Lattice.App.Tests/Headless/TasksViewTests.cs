@@ -271,6 +271,37 @@ public class TasksViewTests
     }
 
     [AvaloniaFact]
+    public async Task Empty_overlay_shows_the_single_host_message_for_one_connected_host_with_zero_tasks()
+    {
+        // Subject: a genuine single-host registry (one connected host, zero
+        // tasks) must render the singular TasksEmpty message, not the
+        // all-hosts aggregate message — post-Task-7B, IsAllHostsScope keys on
+        // Scope.IsAllHosts && _store.Hosts.Count > 1, so a lone registered
+        // host never earns the all-hosts presentation even while scoped to
+        // AllHosts.
+        var (window, _, vm, registry, manager, fakes) = MakeView();
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        window.Show();
+        manager.Start();
+
+        await HeadlessSync.WaitUntilAsync(() => !vm.IsLoading);
+        Layout(window);
+
+        Assert.True(vm.IsEmpty);
+        Assert.Empty(vm.Rows);
+        // The Single() call is the assertion: it throws unless exactly one visible
+        // TextBlock carries the singular empty-overlay string.
+        _ = window.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.IsVisible && t.Text == Strings.TasksEmpty);
+        Assert.DoesNotContain(
+            window.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsVisible),
+            t => t.Text == Strings.TasksEmptyAll);
+
+        await manager.DisposeAsync();
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void Loading_overlay_text_names_the_host_being_fetched()
     {
         var (window, _, vm, registry, _, fakes) = MakeView();
