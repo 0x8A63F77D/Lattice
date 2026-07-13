@@ -288,9 +288,6 @@
   <data name="RailConnectedFmt" xml:space="preserve">
     <value>Connected · {0} tasks</value>
   </data>
-  <data name="RailConnectedWord" xml:space="preserve">
-    <value>Connected</value>
-  </data>
   <data name="RailConnecting" xml:space="preserve">
     <value>Connecting…</value>
   </data>
@@ -306,40 +303,10 @@
   <data name="RailRetryingFmt" xml:space="preserve">
     <value>Retrying in {0}s (attempt {1})</value>
   </data>
-  <data name="RailRetryingWord" xml:space="preserve">
-    <value>Retrying</value>
-  </data>
   <data name="RailUnreachable" xml:space="preserve">
     <value>Unreachable</value>
   </data>
   <!-- ===== Settings ===== -->
-  <data name="SettingsAuthErrorGuidance" xml:space="preserve">
-    <value>The host refused this password. Check the gui_rpc_auth.cfg on {0}.</value>
-  </data>
-  <data name="SettingsFieldAddress" xml:space="preserve">
-    <value>Address</value>
-  </data>
-  <data name="SettingsFieldAddressRequired" xml:space="preserve">
-    <value>Address is required.</value>
-  </data>
-  <data name="SettingsFieldName" xml:space="preserve">
-    <value>Name</value>
-  </data>
-  <data name="SettingsFieldNamePlaceholder" xml:space="preserve">
-    <value>Defaults to the address</value>
-  </data>
-  <data name="SettingsFieldPassword" xml:space="preserve">
-    <value>Password</value>
-  </data>
-  <data name="SettingsFieldPasswordPlaceholder" xml:space="preserve">
-    <value>From gui_rpc_auth.cfg</value>
-  </data>
-  <data name="SettingsFieldPort" xml:space="preserve">
-    <value>Port</value>
-  </data>
-  <data name="SettingsFieldPortInvalid" xml:space="preserve">
-    <value>Port must be a number between 1 and 65535.</value>
-  </data>
   <data name="SettingsHostsPointer" xml:space="preserve">
     <value>Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.</value>
   </data>
@@ -354,18 +321,6 @@
   </data>
   <data name="SettingsPollingSection" xml:space="preserve">
     <value>Polling</value>
-  </data>
-  <data name="SettingsRemoveButton" xml:space="preserve">
-    <value>Remove host</value>
-  </data>
-  <data name="SettingsRemoveFailedFmt" xml:space="preserve">
-    <value>Removing failed: {0}</value>
-  </data>
-  <data name="SettingsSaveButton" xml:space="preserve">
-    <value>Save</value>
-  </data>
-  <data name="SettingsSaveFailedFmt" xml:space="preserve">
-    <value>Saving failed: {0}</value>
   </data>
   <data name="SettingsTestConnectionBusy" xml:space="preserve">
     <value>Testing…</value>
