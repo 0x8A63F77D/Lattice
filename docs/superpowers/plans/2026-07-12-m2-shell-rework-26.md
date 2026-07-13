@@ -1265,18 +1265,23 @@ public class HostRailGroupingTests
         Layout(window);
 
         // Grouped (overflow). Expand Healthy so a host row is visible + selectable.
-        var healthy = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
-            .Single(g => g.Tier.Equals(RailTier.Healthy));
-        healthy.ToggleCommand.Execute(null);
+        shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy))
+            .ToggleCommand.Execute(null);            // RebuildRail replaces the header instances
         Layout(window);
         var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().First();
         window.HostList.SelectedItem = hostRow;      // scope a host via the real binding
         Layout(window);
         Assert.Equal(hostRow.HostId, shell.Scope.HostId);
 
-        // Click the Healthy header via the ListBox (collapses it → host row hidden).
+        // Re-query the header — the expand's RebuildRail cleared RailEntries and made new
+        // GroupHeaderRailItemViewModel instances, so the old reference's IndexOf would be -1
+        // (and SelectedIndex = -1 would deselect, never clicking the header).
+        var healthy = shell.RailEntries.OfType<GroupHeaderRailItemViewModel>()
+            .Single(g => g.Tier.Equals(RailTier.Healthy));
         var headerIndex = shell.RailEntries.ToList().IndexOf(healthy);
-        window.HostList.SelectedIndex = headerIndex;
+        Assert.True(headerIndex >= 0, "Healthy header must be present to click");
+        window.HostList.SelectedIndex = headerIndex; // collapses Healthy → host row hidden
         Layout(window);
 
         // Scope persists as data even though the row is now hidden and unselected.
