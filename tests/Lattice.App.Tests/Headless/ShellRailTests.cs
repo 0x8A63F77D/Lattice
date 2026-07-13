@@ -39,7 +39,12 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
-        registry.AddHost(TestData.MakeHostConfig());
+        // Two hosts + a tall viewport → Flat, so the "All hosts" sentinel leads the rail
+        // (a lone host now renders as SingleHost with no sentinel). The shell's own viewport
+        // feed (Task 8 wires it from Nav.Bounds) is stood in here by a direct call.
+        registry.AddHost(TestData.MakeHostConfig(name: "a"));
+        registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        shell.SetRailViewportHeight(1000.0);
         Layout(window);
 
         var sentinelRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
@@ -55,11 +60,13 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
-        var host = TestData.MakeHostConfig();
+        var host = TestData.MakeHostConfig(name: "a");
         registry.AddHost(host);
+        registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        shell.SetRailViewportHeight(1000.0);   // Flat rail (see First_rail_row_ note)
         Layout(window);
 
-        // Index 0 is the All-hosts sentinel; the sole host lives at index 1.
+        // Index 0 is the All-hosts sentinel; host "a" lives at index 1.
         window.HostList.SelectedIndex = 1;
         Layout(window);
         Assert.Equal(host.Id, shell.Scope.HostId);
@@ -77,7 +84,10 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
+        // Two hosts + tall viewport → Flat, so the sentinel is present (see First_rail_row_ note).
         registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        registry.AddHost(TestData.MakeHostConfig(name: "home-pc"));
+        shell.SetRailViewportHeight(1000.0);
         Layout(window);
 
         var sentinelText = window.GetVisualDescendants().OfType<StackPanel>()
