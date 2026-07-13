@@ -46,8 +46,10 @@ public class AuthFailJourney
         var railItem = harness.Shell.RailEntries.OfType<HostRailItemViewModel>().Single(h => h.HostId == host.Id);
         Assert.Equal(Strings.RailAuthFailed, railItem.StateText);
 
-        // Auth-failed click now opens the Edit host dialog (Task 12), not Settings.
-        harness.Window.HostList.SelectedIndex = 1;   // sentinel at 0; the auth-failed host is at 1
+        // Auth-failed click now opens the Edit host dialog (Task 12), not Settings. The deep
+        // link rides the Tapped gesture (OnHostRailTapped), so drive a real click on the row
+        // rather than a bare SelectedIndex assignment (which only fires SelectionChanged).
+        RailInput.ClickRow(harness.Window, railItem);
         await harness.SettleAsync(
             () => harness.Window.GetVisualDescendants().OfType<AddHostDialog>().Any(),
             "auth-failed click should open the Edit host dialog");

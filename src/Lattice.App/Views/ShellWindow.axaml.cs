@@ -267,11 +267,26 @@ public partial class ShellWindow : Window
             return;
         }
 
-        // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding;
-        // this handler only owns the one remaining cross-view linkage: clicking an
-        // auth-failed host opens the Edit dialog with the password field in error.
-        // The All-hosts sentinel never navigates.
-        if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
+        // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding, so this
+        // handler now owns only the group-header toggle above. The auth-failed → Edit deep
+        // link moved to OnHostRailTapped (the click gesture) because selection-change alone
+        // misses the single-host case: RebuildRail pre-selects the sole host row, so
+        // re-clicking it raises NO SelectionChanged and the dialog would never open.
+    }
+
+    // A CLICK (tap) on an auth-failed host row opens the Edit dialog with the password
+    // field in error — regardless of whether the click changed the selection. This is the
+    // trigger (not OnHostSelectionChanged) precisely so the single-host case works: the sole
+    // host row is pre-selected by RebuildRail, so re-clicking it raises no SelectionChanged.
+    // Tapped is Avalonia's click gesture (press+release on the same element); DataContext
+    // inherits down the row template, so the tapped child carries the row's view model.
+    // Sentinel (AllHosts), group headers, and empty-area taps all fail the type/state pattern
+    // and no-op. Single trigger ⇒ no double-open; _editHostInFlight backstops re-entrancy.
+    private void OnHostRailTapped(object? sender, Avalonia.Input.TappedEventArgs e)
+    {
+        if (_shell is null)
+            return;
+        if ((e.Source as Control)?.DataContext is HostRailItemViewModel { State: RailState.AuthFailed } item)
             OpenAuthFailedEditDialog(item.HostId);
     }
 

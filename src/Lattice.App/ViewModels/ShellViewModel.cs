@@ -317,13 +317,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         RebuildRail();
     }
 
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailGroupingMode
+    // left unhandled) must stay a build error so this mapping is revisited. CS8524 is the residual
+    // "unnamed enum value" case — an out-of-range cast like (RailGroupingMode)999, unreachable for
+    // a well-formed value — and is suppressed here; a `_` arm would silence CS8509 too and defeat
+    // the guard. Same pattern as RailTierProjection.
     private static RailOverride MapOverride(RailGroupingMode mode) =>
         mode switch
         {
+            RailGroupingMode.Auto => RailOverride.Auto,
             RailGroupingMode.Flat => RailOverride.ForceFlat,
             RailGroupingMode.Grouped => RailOverride.ForceGrouped,
-            _ => RailOverride.Auto,
         };
+#pragma warning restore CS8524
 
     // --- scope translation boundary: the shell's ScopeSelection <-> the core's Scope, and the
     //     single place a ScopeDecision is applied. This is the ENTIRE scope logic in the shell. ---

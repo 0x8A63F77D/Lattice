@@ -39,11 +39,18 @@ public sealed class ThemePreference
         // "calling thread cannot access this object". Real app construction always happens
         // on the UI thread, so this guard never no-ops in production.
         if (Application.Current is not { } app || !Dispatcher.UIThread.CheckAccess()) return;
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED AppTheme left
+        // unhandled) must stay a build error so the theme mapping is revisited. CS8524 is the
+        // residual "unnamed enum value" case — an out-of-range cast like (AppTheme)999, unreachable
+        // for a well-formed value — and is suppressed here; a `_` arm would silence CS8509 too and
+        // defeat the guard. System => ThemeVariant.Default (FluentAvaloniaTheme follows the OS).
+        // Same pattern as RailTierProjection.
         app.RequestedThemeVariant = Value switch
         {
             AppTheme.Light => ThemeVariant.Light,
             AppTheme.Dark => ThemeVariant.Dark,
-            _ => ThemeVariant.Default,
+            AppTheme.System => ThemeVariant.Default,
         };
+#pragma warning restore CS8524
     }
 }
