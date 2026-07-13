@@ -244,6 +244,9 @@
   <data name="RailAuthFailed" xml:space="preserve">
     <value>Wrong password</value>
   </data>
+  <data name="RailGroupToggleTooltip" xml:space="preserve">
+    <value>Toggle list / grouped view</value>
+  </data>
   <data name="RailConnectedFmt" xml:space="preserve">
     <value>Connected · {0} tasks</value>
   </data>

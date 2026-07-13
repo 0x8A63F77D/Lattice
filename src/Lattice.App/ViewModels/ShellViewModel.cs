@@ -20,7 +20,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 {
     private const double RailRowHeight = 40.0;         // LatticeHostItemHeight — flat/single host + All-hosts rows AND the fit-math row unit
     private const double GroupedHostRowHeight = 36.0;   // LatticeRowHeight — denser host rows inside status groups (design 3a)
-    private const double ReservedRailChrome = 150.0; // header + Settings + paddings (pinned by Task 8)
+    // The view feeds the FULL Nav height (Nav.Bounds.Height) into SetRailViewportHeight, so this
+    // constant absorbs ALL non-list vertical chrome: the 4 nav menu items (~160), the Hosts header
+    // (~28), the Settings footer item (~40) and paddings/separators. Card 3a's authoritative "~290
+    // fixed rail chrome" anchor (design/m2), pinned here by Task 8's headless geometry tests
+    // (12 hosts @ 700px window ⇒ Grouped; 2 hosts @ 800px ⇒ Flat). NB: decisions §3 wrote "≈150"
+    // assuming the fed height already excluded the menu-items region — the cards win (§ preamble),
+    // and feeding the full Nav height makes ~290 the correct value.
+    private const double ReservedRailChrome = 290.0;
 
     private readonly HostStore _store;
     private readonly IUiClock _clock;

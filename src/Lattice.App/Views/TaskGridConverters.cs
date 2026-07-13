@@ -40,3 +40,14 @@ public sealed class EnumMatchConverter : IValueConverter
     public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 }
+
+/// <summary>
+/// Named funcs consumed via <c>{x:Static v:TaskGridConverters.Member}</c> in XAML.
+/// </summary>
+public static class TaskGridConverters
+{
+    /// <summary>Expanded flag → chevron rotation: 90° (pointing down) when expanded, 0°
+    /// (pointing right) when collapsed. Backs the rail group-header disclosure chevron.</summary>
+    public static readonly IValueConverter ChevronAngle =
+        new FuncValueConverter<bool, double>(expanded => expanded ? 90.0 : 0.0);
+}

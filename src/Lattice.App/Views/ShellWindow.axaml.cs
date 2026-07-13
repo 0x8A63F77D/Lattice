@@ -1,6 +1,9 @@
 using System.ComponentModel;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
+using Avalonia.Reactive;
+using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.ViewModels;
 
@@ -10,6 +13,8 @@ public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
     private bool _addHostInFlight;
+    private bool _revertingRailSelection;
+    private IDisposable? _navBoundsSubscription;
 
     // Regular/Filled StreamGeometry resources are Application-level singletons
     // (Icons.axaml), so a single TryFindResource per key is enough to cache the
@@ -28,12 +33,21 @@ public partial class ShellWindow : Window
         {
             _shell.PropertyChanged -= OnShellPropertyChanged;
             _shell.AddHostRequested -= OnAddHostRequested;
+            _navBoundsSubscription?.Dispose();
+            _navBoundsSubscription = null;
         }
         _shell = DataContext as ShellViewModel;
         if (_shell is not null)
         {
             _shell.PropertyChanged += OnShellPropertyChanged;
             _shell.AddHostRequested += OnAddHostRequested;
+            // Feed the measured pane height so the core re-evaluates the flat↔grouped fit
+            // boundary on every layout/resize (design 3a; decisions §3). The shell derives
+            // AvailableHeight = paneContentHeight − ReservedRailChrome from this.
+            // AnonymousObserver is Avalonia's Rx-free observer wrapper (the lambda .Subscribe
+            // overload lives in System.Reactive, which this app does not reference).
+            _navBoundsSubscription = Nav.GetObservable(Avalonia.Visual.BoundsProperty)
+                .Subscribe(new AnonymousObserver<Rect>(b => _shell?.SetRailViewportHeight(b.Height)));
             SyncNavSelection();
             // First render must not depend on the SelectionChanged side channel:
             // whether the Nav.SelectedItem assignment above raises it synchronously
@@ -148,12 +162,36 @@ public partial class ShellWindow : Window
 
     private void OnHostSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
-        if (_shell is null)
+        if (_shell is null || _revertingRailSelection)
             return;
+
+        if (HostList.SelectedItem is GroupHeaderRailItemViewModel header)
+        {
+            // Toggling expands/collapses the group, which rebuilds RailEntries (Clear + re-add).
+            // Mutating the ItemsSource synchronously inside SelectionChanged corrupts the ListBox
+            // selection model — when a collapse removes the previously-selected host row, the
+            // selection processing indexes a now-stale ItemsSourceView (ArgumentOutOfRange in
+            // ItemsSourceView.GetAt). Defer the toggle + selection revert out of this event's
+            // callstack so the rebuild happens against a settled selection.
+            var previous = e.RemovedItems.Count > 0 ? e.RemovedItems[0] : null;
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (_shell is null)
+                    return;
+                header.ToggleCommand.Execute(null);   // expand/collapse; RebuildRail refreshes rows
+                // A header is not a scope; restore the prior selection without recursing.
+                _revertingRailSelection = true;
+                try { HostList.SelectedItem = previous; }
+                finally { _revertingRailSelection = false; }
+            });
+            return;
+        }
+
         // Scope itself tracks SelectedRailEntry through the XAML TwoWay binding;
         // this handler only owns the one remaining cross-view linkage: clicking an
         // auth-failed host jumps to Settings with that host's expander open. The
         // All-hosts sentinel never navigates.
+        // NOTE (Task 12): swap this for OpenEditHostDialog(item.HostId, focusPassword: true, authError: true).
         if (HostList.SelectedItem is HostRailItemViewModel { State: RailState.AuthFailed } item)
             _shell.NavigateToSettings(item.HostId);
     }
