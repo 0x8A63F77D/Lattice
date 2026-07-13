@@ -73,10 +73,6 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Transfers.Rows.CollectionChanged += OnTransfersRowsChanged;
         _transfersCount = Transfers.Rows.Count;
         EventLog.PropertyChanged += OnEventLogPropertyChanged;
-        // The All-hosts sentinel seeds the rail; RebuildRail (via ReconcileHosts) then
-        // materializes the real rows and derives the highlight — it is not set here.
-        RailEntries.Add(_allHosts);
-
         // Restore the persisted host scope via ScopeMachine (README:80/108). The core owns the
         // known/unknown-id decision — no inline `store.Hosts.Any(...)` fallback here.
         var knownHostIds = store.Hosts.Select(h => h.Config.Id).ToArray();
