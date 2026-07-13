@@ -386,11 +386,8 @@ public class DataGridInfraTests
         Layout(window);
 
         var row = BodyRow(grid, 0);
-        // Clear the row's Background fade (a local value overriding the style's Transitions
-        // setter) so hover snaps to the settled brush and the synchronous read below is
-        // deterministic — no animation-clock or wall-clock dependency. The fade ships in
-        // production; see the DataGridStyles.axaml comment on the DataGridRow style.
-        row.Transitions = null;
+        // Hover applies instantly (no Background transition — see DataGridStyles.axaml), so the
+        // synchronous read below is already the settled brush.
         var mid = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;
         window.MouseMove(mid, RawInputModifiers.None);
         Layout(window);
@@ -411,9 +408,7 @@ public class DataGridInfraTests
         Layout(window);
 
         var row = BodyRow(grid, 0);
-        // See sibling test: clear the fade so the hovered Background snaps to its settled
-        // brush and the read below is deterministic without touching any animation clock.
-        row.Transitions = null;
+        // Hover applies instantly (no Background transition), so the read below is settled.
         row.Classes.Add("atRisk");
         Layout(window);
         var mid = row.TranslatePoint(new Point(row.Bounds.Width / 2, row.Bounds.Height / 2), window)!.Value;

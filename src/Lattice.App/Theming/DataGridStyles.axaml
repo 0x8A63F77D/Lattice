@@ -129,26 +129,17 @@
     <Setter Property="FontFeatures" Value="+tnum" />
   </Style>
 
-  <!-- Row hover: whole row -> #F5F5F5 / #383838 with a 100ms fade. Sits UNDER the state
-       tints — the .tint:pointerover rules below re-assert each tint so a hovered at-risk /
-       retrying / warning / error row keeps its color. Selection paints on the row's
-       BackgroundRectangle overlay (already above Background), so selected rows are unaffected.
+  <!-- Row hover: whole row -> #F5F5F5 (light) / #2D2D2D (dark), applied INSTANTLY (no fade).
+       Sits UNDER the state tints — the .tint:pointerover rules below re-assert each tint so a
+       hovered at-risk / retrying / warning / error row keeps its color. Selection paints on the
+       row's BackgroundRectangle overlay (already above Background), so selected rows are unaffected.
 
-       The BrushTransition fade IS present in production (design spec; owner visually verifies
-       motion at the merge gate). Headless color tests reconcile with determinism WITHOUT
-       depending on the animation clock: they set `row.Transitions = null` as a local value on
-       the probed row (overriding this style setter), so Background snaps to the settled target
-       on hover and a synchronous read returns the final color. That keeps the tests off the
-       internal HeadlessRenderTimer Stopwatch (no public force-complete API; ForceTick()/
-       IGlobalClock/Clock are all `internal`, confirmed via ilspycmd) and off any wall-clock
-       settle — the fade stays in the shipped styles, only the test opts out per-row. -->
-  <Style Selector="DataGrid.lattice DataGridRow">
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.1" />
-      </Transitions>
-    </Setter>
-  </Style>
+       No BrushTransition: the earlier 100ms fade produced a sweeping shimmer of trailing
+       highlights as the pointer crossed rows, which the owner found eye-straining in dark mode
+       (visual verdict). Instant hover is the norm for a dense monitoring grid (Task Manager) and
+       removes the strobe in both themes; the dark hover brush was also toned down (Tokens.axaml).
+       (Headless color probes read Background synchronously; with no transition the read is already
+       the settled value.) -->
   <Style Selector="DataGrid.lattice DataGridRow:pointerover">
     <Setter Property="Background" Value="{DynamicResource LatticeRowHoverBrush}" />
   </Style>

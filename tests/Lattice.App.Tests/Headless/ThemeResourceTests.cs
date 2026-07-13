@@ -39,7 +39,8 @@ public class ThemeResourceTests
 
     [AvaloniaTheory]
     [InlineData("LatticeGridDividerBrush", "#FFEDEBE9", "#FF333333")]
-    [InlineData("LatticeRowHoverBrush",    "#FFF5F5F5", "#FF383838")]
+    // Dark hover deliberately subtle (owner visual feedback: #383838 was dazzling / eye-straining).
+    [InlineData("LatticeRowHoverBrush",    "#FFF5F5F5", "#FF2D2D2D")]
     public void New_grid_tokens_resolve_to_spec_colors(string key, string lightHex, string darkHex)
     {
         AssertBrush(key, ThemeVariant.Light, lightHex);

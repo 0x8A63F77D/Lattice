@@ -47,7 +47,10 @@
       <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#ADADAD" />
       <SolidColorBrush x:Key="LatticeDisabledBrush" Color="#5C5C5C" />
       <SolidColorBrush x:Key="LatticeGridDividerBrush" Color="#333333" />
-      <SolidColorBrush x:Key="LatticeRowHoverBrush" Color="#383838" />
+      <!-- Deliberately gentle: a brighter dark hover (#383838) read as dazzling/eye-straining
+           in the running app (owner visual verdict). #2D2D2D is a subtle step over the dark
+           surface (#292929). Light hover (#F5F5F5) was not flagged; left as-is. -->
+      <SolidColorBrush x:Key="LatticeRowHoverBrush" Color="#2D2D2D" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 
