@@ -16,6 +16,16 @@ public class GroupHeaderRailItemViewModelTests
     }
 
     [Fact]
+    public void Attention_toggle_is_a_no_op()
+    {
+        var vm = new GroupHeaderRailItemViewModel(RailTier.Attention, count: 3, expanded: true);
+        var raised = false;
+        vm.ToggleRequested += (_, _) => raised = true;
+        vm.ToggleCommand.Execute(null);
+        Assert.False(raised);   // Attention is pinned open (decisions §2) — Toggle must not raise
+    }
+
+    [Fact]
     public void Healthy_header_is_collapsible_and_raises_toggle_with_its_tier()
     {
         var vm = new GroupHeaderRailItemViewModel(RailTier.Healthy, count: 35, expanded: false);
