@@ -819,13 +819,38 @@ git commit -m "feat(rail): group-header rail row view-model (design 3a)"
 
 ---
 
-### Task 7: `ShellViewModel` rail orchestration — measure, persist, reconcile via the core
+### Rail scope invariants (AUTHORITATIVE — every task that touches scope/selection/persistence obeys these)
+
+These five invariants dissolve the SingleHost/scope collision class (owner decision after R5/R9/R10 — three
+same-class findings shared one root: `SingleHost` coupled a *presentation* special case with a *semantic*
+one). Do not restate scope rules per task; reference these.
+
+- **I1 — `SingleHost` is PRESENTATION ONLY.** With exactly one host: no All-hosts sentinel row; the sole
+  host row is rendered and visually highlighted. It **never** mutates `Scope`.
+- **I2 — `Scope` mutates ONLY via explicit user selection of a real scope carrier**
+  (`HostRailItemViewModel` → that host, `AllHostsRailItemViewModel` → All hosts). Header selections, `null`
+  selections, and every rebuild-driven `SelectedRailEntry` change **never** mutate `Scope` (the R5 invariant,
+  now mode-independent).
+- **I3 — `RebuildRail` never mutates `Scope`.** It only derives the highlight (`SelectedRailEntry`) from the
+  current `Scope` + the current rail contents.
+- **I4 — Persistence records ONLY explicit selections** (the `ScopeHostId` write lives in
+  `OnSelectedRailEntryChanged`, guarded by `_rebuilding`). Restore on construction; unknown/missing host-id →
+  All hosts.
+- **I5 — With one host, `Scope = AllHosts` and `Scope = host` are data-identical in every view**; the rail
+  shows the host row highlighted either way. Therefore view-layer "aggregate presentation" (Host column,
+  Projects child rows, partial bar, "Active on all hosts" text) must key on **genuine multi-host**
+  (`Scope.IsAllHosts && hostCount > 1`), NOT on `Scope.IsAllHosts` alone (Task 7B).
+
+Consequence: there is **no** single-host auto-pin, no `_wasSingleHost` reset, no `_pendingScopeRestore`
+staging. Restore sets `Scope` once in the ctor; `RebuildRail` is highlight-only.
+
+### Task 7: `ShellViewModel` rail orchestration — measure, reconcile, highlight via the core
 
 **Files:**
 - Modify: `src/Lattice.App/ViewModels/ShellViewModel.cs`
 - Modify: `tests/Lattice.App.Tests/ShellViewModelTests.cs`
 
-Replaces the layout-agnostic `ReconcileHosts` host-VM churn with: a persistent host-VM map keyed by id (owns clock subscriptions), plus a `RebuildRail()` that materializes `RailLayoutPolicy.compute(...)` output into `RailEntries`. New inputs: viewport height (fed by the view), override + expand state (loaded/persisted via `UiStateStore`). `Scope` is preserved across rebuilds by capturing the scoped host id and suppressing scope side effects while the collection is rebuilt.
+Replaces the layout-agnostic `ReconcileHosts` host-VM churn with: a persistent host-VM map keyed by id (owns clock subscriptions), plus a `RebuildRail()` that materializes `RailLayoutPolicy.compute(...)` output into `RailEntries` and sets the **highlight only** (invariant I3). New inputs: viewport height (fed by the view), override + expand state (loaded/persisted via `UiStateStore`). `Scope` is set only in the ctor (restore) and on explicit user selection (I2/I4); `RebuildRail` derives `SelectedRailEntry` from it.
 
 Constants: `RailRowHeight = 40.0` (= `LatticeHostItemHeight`), `ReservedRailChrome = 150.0` (Hosts header + Settings item + paddings; the exact value is pinned by the headless geometry test in Task 8 — tune it there, keep it here).
 
@@ -902,16 +927,15 @@ public void Selecting_a_host_survives_a_rail_rebuild()
 }
 
 [Fact]
-public void Single_host_pins_scope_to_that_host_not_all_hosts()
+public void Single_host_is_presentation_only_scope_stays_all_hosts_host_highlighted()
 {
     AddHosts(1);
     _shell.SetRailViewportHeight(1000.0);
-    // Degenerate case (design 3a): the sole host row is selected and scope is pinned
-    // to it — NOT left on the All-hosts sentinel (which isn't rendered here).
+    // I1/I5: SingleHost renders + highlights the sole host row but does NOT mutate Scope;
+    // Scope stays All hosts (data-identical for one host). No sentinel row.
     var row = Assert.Single(_shell.RailEntries.OfType<HostRailItemViewModel>());
-    Assert.Same(row, _shell.SelectedRailEntry);
-    Assert.Equal(row.HostId, _shell.Scope.HostId);
-    Assert.False(_shell.Scope.IsAllHosts);
+    Assert.Same(row, _shell.SelectedRailEntry);          // host row highlighted
+    Assert.True(_shell.Scope.IsAllHosts);                // ...but scope is All hosts
     Assert.DoesNotContain(_shell.RailEntries, e => e is AllHostsRailItemViewModel);
 }
 
@@ -1015,26 +1039,41 @@ public void Selecting_a_host_persists_the_scope_id()
 }
 
 [Fact]
-public void Single_host_pin_is_not_persisted_and_clears_when_a_second_host_is_added()
+public void Explicit_click_on_the_sole_host_scopes_and_persists_and_survives_a_second_host()
+{
+    var solo = TestData.MakeHostConfig(name: "solo");
+    _registry.AddHost(solo);
+    _shell.SetRailViewportHeight(1000.0);
+
+    // I2: an explicit click on the sole host row IS a real selection — scope + persist.
+    _shell.SelectedRailEntry = _shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+    Assert.Equal(solo.Id, _shell.Scope.HostId);
+    Assert.Equal(solo.Id, new UiStateStore(_uiPath).Load().ScopeHostId);
+
+    // A deliberate choice survives adding a 2nd host (unlike a mere presentation pin).
+    _registry.AddHost(TestData.MakeHostConfig(name: "second"));
+    Assert.Equal(solo.Id, _shell.Scope.HostId);
+}
+
+[Fact]
+public void Adding_a_second_host_without_an_explicit_selection_stays_all_hosts()
 {
     _registry.AddHost(TestData.MakeHostConfig(name: "solo"));
     _shell.SetRailViewportHeight(1000.0);
-    // The sole host is auto-pinned in memory (design 3a / round-1) but that is NOT an explicit
-    // choice, so it must not be persisted...
-    Assert.False(_shell.Scope.IsAllHosts);
-    Assert.Null(new UiStateStore(_uiPath).Load().ScopeHostId);
+    Assert.True(_shell.Scope.IsAllHosts);            // I1: no auto-pin
 
     _registry.AddHost(TestData.MakeHostConfig(name: "second"));
-    // ...and leaving single-host mode reverts to All hosts, not the old sole host (round-10).
+    // Still All hosts, and the (now-present) sentinel is highlighted.
     Assert.True(_shell.Scope.IsAllHosts);
+    Assert.IsType<AllHostsRailItemViewModel>(_shell.SelectedRailEntry);
 }
 ```
 
 > Confirm the real Avalonia `SelectingItemsControl` behavior when implementing: assigning a
-> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. The code above
-> sidesteps it by setting `SelectedRailEntry = null` deliberately for the hidden-row case and deriving
-> `Scope` from `nextScope` (not from the selection). If Avalonia happens to preserve the assignment, this
-> test still locks the intended scope-as-data contract.
+> `SelectedItem` that isn't in `Items` writes `null` back through the two-way binding. `ResolveHighlight`
+> already returns `null` for the hidden-row case, and because `RebuildRail` never mutates `Scope` (I3),
+> that write-back is harmless — `Scope` holds the host regardless of the highlight. This test locks the
+> scope-as-data contract either way.
 
 - [ ] **Step 2: Run — expect FAIL** (`dotnet test tests/Lattice.App.Tests --filter "FullyQualifiedName~ShellViewModelTests"`).
 
@@ -1050,9 +1089,7 @@ Add usings: `using Lattice.App.Aggregation;`. Add fields near the top of the cla
     private double _railViewportHeight;
     private RailGroupingMode _grouping;
     private bool _healthyExpanded;
-    private bool _rebuilding;
-    private Guid? _pendingScopeRestore;   // persisted scope staged for the first RebuildRail (consumed once)
-    private bool _wasSingleHost;          // was the previous layout SingleHost? (drives the leave-single-host scope reset)
+    private bool _rebuilding;   // guards OnSelectedRailEntryChanged so RebuildRail's highlight never mutates/persists Scope (I2/I3)
 
     [ObservableProperty] private bool _showRailToggle;
 
@@ -1069,25 +1106,21 @@ In the constructor, capture `uiState` and load persisted rail state (before `Rec
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
 ```
-Keep `RailEntries.Add(_allHosts); SelectedRailEntry = _allHosts;` (which leaves `Scope` at All hosts). Then
-**stage the persisted global host scope** (design README:80/108 — the Hosts selection is a persistent global
-filter) for the first `RebuildRail` to apply. Unknown/removed host id → All hosts:
+Keep `RailEntries.Add(_allHosts);`. Do **not** set `SelectedRailEntry = _allHosts` in the ctor any more —
+`RebuildRail` derives the highlight (I3), and an explicit ctor selection would fire `OnSelectedRailEntryChanged`
+and clobber the persisted `ScopeHostId` (I4). Instead **restore the persisted scope by setting the `Scope`
+property once** (design README:80/108 / invariant I4), which fires `OnScopeChanged` → the view-models sync;
+it does not persist (persistence is on the explicit-selection path only). Unknown/removed host id → All hosts:
 ```csharp
-        // Restore the persisted host scope (README:80/108): stage it for the FIRST RebuildRail,
-        // which resolves the row AND (because Scope is still All hosts here) raises the single
-        // scope notification so the view-models sync. An id whose host no longer exists falls
-        // back to All hosts.
-        _pendingScopeRestore = ui.ScopeHostId is { } persistedScope
-            && _store.Hosts.Any(h => h.Config.Id == persistedScope) ? persistedScope : null;
+        // Restore the persisted host scope (README:80/108, I4). Setting the property (not the backing
+        // field) fires OnScopeChanged so the views sync; it does NOT persist (OnScopeChanged is
+        // view-push only). ReconcileHosts → RebuildRail then derives the matching highlight.
+        Scope = ui.ScopeHostId is { } persistedScope && store.Hosts.Any(h => h.Config.Id == persistedScope)
+            ? new ScopeSelection(persistedScope) : ScopeSelection.AllHosts;
 
         store.Changed += OnStoreChanged;
         ReconcileHosts();
 ```
-(Do **not** seed the `_scope` backing field directly: if `Scope` already equalled the restored host,
-`RebuildRail`'s trailing `Scope = nextScope` would be an equality no-op and `OnScopeChanged` would never
-fire, leaving `Tasks`/`Projects`/… scoped to All hosts while the rail shows the host. Staging via
-`_pendingScopeRestore` keeps `Scope` at All hosts until `RebuildRail` sets it, so the notification fires
-exactly once.)
 
 Replace the body of `ReconcileHosts` (host-VM management stays; row layout moves to `RebuildRail`):
 ```csharp
@@ -1180,19 +1213,9 @@ Add the orchestration members:
         ShowRailToggle = layout.ShowToggle;
         HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
 
-        // Scope (data) is the source of truth for what is scoped — NOT SelectedRailEntry,
-        // which may be null when the scoped host's row is hidden in a collapsed group.
-        // Two mode-boundary rules:
-        //  - a persisted scope is staged for the first build (_pendingScopeRestore, consumed once);
-        //  - LEAVING single-host mode discards the sole-host auto-pin (it was never an explicit
-        //    choice), so adding a 2nd host reverts to All hosts instead of silently keeping host1
-        //    (round-10 fix).
-        bool leavingSingleHost = _wasSingleHost && !layout.Mode.IsSingleHost;
-        Guid? scopedHostId = leavingSingleHost ? null : (_pendingScopeRestore ?? Scope.HostId);
-        _pendingScopeRestore = null;
-        _wasSingleHost = layout.Mode.IsSingleHost;
-
-        ScopeSelection nextScope;
+        // I3: RebuildRail NEVER mutates Scope. It rematerializes the rows and derives the
+        // highlight from the current Scope. The _rebuilding guard makes the SelectedRailEntry
+        // assignment inert w.r.t. OnSelectedRailEntryChanged (no scope mutation, no persist).
         _rebuilding = true;
         try
         {
@@ -1202,34 +1225,21 @@ Add the orchestration members:
             foreach (RailRow row in layout.Rows)
                 RailEntries.Add(MaterializeRow(row));
 
-            // Decide highlight (SelectedRailEntry) and scope (data) independently:
-            if (layout.Mode.IsSingleHost)
-            {
-                // Degenerate single-host (design 3a): only the host row is emitted (no
-                // All-hosts entry) — pin scope to the sole host, never _allHosts.
-                var only = RailEntries.OfType<HostRailItemViewModel>().First();
-                SelectedRailEntry = only;
-                nextScope = new ScopeSelection(only.HostId);
-            }
-            else if (scopedHostId is { } id && _hostRowVms.TryGetValue(id, out var vm))
-            {
-                // Scoped host still exists. If its row is visible, highlight it; if it is
-                // hidden (its group collapsed), keep scope as DATA with no highlight —
-                // do NOT let the ListBox reset SelectedItem-not-in-Items to All hosts.
-                SelectedRailEntry = RailEntries.Contains(vm) ? vm : null;
-                nextScope = new ScopeSelection(id);
-            }
-            else
-            {
-                // No host scoped (or the scoped host was removed): All hosts.
-                SelectedRailEntry = _allHosts;
-                nextScope = ScopeSelection.AllHosts;
-            }
+            SelectedRailEntry = ResolveHighlight(layout);
         }
         finally { _rebuilding = false; }
+    }
 
-        // Apply the decided scope once (side effects were suppressed during the rebuild).
-        Scope = nextScope;
+    /// <summary>Highlight derived from Scope + current rows (I3). SingleHost highlights the
+    /// sole host row even though Scope stays All hosts (I1/I5); a scoped host hidden in a
+    /// collapsed group yields no highlight (Scope still holds it); otherwise the All-hosts row.</summary>
+    private object? ResolveHighlight(RailLayout layout)
+    {
+        if (layout.Mode.IsSingleHost)
+            return RailEntries.OfType<HostRailItemViewModel>().First();
+        if (Scope.HostId is { } id && _hostRowVms.TryGetValue(id, out var vm))
+            return RailEntries.Contains(vm) ? vm : null;
+        return _allHosts;
     }
 
     private object MaterializeRow(RailRow row)
@@ -1250,13 +1260,13 @@ group-header scope-loss class (both the collapsed-group case and the header-**cl
 `Scope` untouched. Without this, the ListBox's two-way `SelectedItem` binding routes a header click through
 here to `AllHosts` *before* the view's `ToggleCommand`/`RebuildRail` runs, so `RebuildRail` captures a null
 `scopedHostId` and collapsing the group drops the host scope:
-This is also the ONLY place scope is **persisted** — it is the explicit-user-selection path (guarded by
-`_rebuilding`, so `RebuildRail`'s auto-pins/restores never reach it). Persisting here, not in
-`OnScopeChanged`, is what keeps the single-host auto-pin out of `ui-state.json`:
+This is also the ONLY place scope is **mutated by selection** and the ONLY place it is **persisted** — the
+explicit-user-selection path (I2/I4), guarded by `_rebuilding` so `RebuildRail`'s highlight assignments never
+reach it:
 ```csharp
     partial void OnSelectedRailEntryChanged(object? value)
     {
-        if (_rebuilding) return;   // RebuildRail applies Scope itself; its auto-pins are NOT persisted
+        if (_rebuilding) return;   // RebuildRail sets the highlight only; it never mutates/persists Scope (I3)
         switch (value)
         {
             case HostRailItemViewModel h:
@@ -1274,11 +1284,10 @@ This is also the ONLY place scope is **persisted** — it is the explicit-user-s
     }
 ```
 
-Leave the existing `OnScopeChanged` as a pure view-push — it does **not** persist. Persistence lives on the
-explicit-selection path (`OnSelectedRailEntryChanged`, above) so that the single-host **auto-pin** — which
-`RebuildRail` sets via `Scope = nextScope`, never through `OnSelectedRailEntryChanged` — is not written to
-disk (round-10 fix: a sole-host user is not "explicitly scoped to host1"; persisting that would re-scope
-them to host1 after they add a second host):
+Leave the existing `OnScopeChanged` as a pure view-push — it does **not** persist (persistence is on the
+explicit-selection path above, I4). It fires for the ctor restore and for explicit selections; `RebuildRail`
+never calls it (I3), so a single-host view — `Scope = AllHosts`, host row merely highlighted (I1) — is never
+recorded as a host scope:
 ```csharp
     partial void OnScopeChanged(ScopeSelection value)
     {
@@ -1326,7 +1335,7 @@ Confirmed **safe** (leave as-is): one-host tests that never assume the sentinel/
 (no rail index), and `PersistenceJourney` (filters `RailEntries.OfType<HostRailItemViewModel>()`, sentinel-
 agnostic); the ≥2-host journeys (`ProjectsScopeJourney`, `PartialResultsJourney`, `TasksScopeJourney`,
 `EventLogJourney`) already keep the sentinel. The new `SingleHost` behavior itself is covered by
-`Single_host_pins_scope_to_that_host_not_all_hosts` (Step 1). The `AuthFailedLinkageTests` /
+`Single_host_is_presentation_only_scope_stays_all_hosts_host_highlighted` (Step 1). The `AuthFailedLinkageTests` /
 `AuthFailJourney` one-host→two-host conversions are handled in Task 12.
 
 Gate: a full `dotnet build tests/Lattice.App.Tests` (not a filtered `dotnet test`) — a non-migrated
@@ -1340,6 +1349,72 @@ sentinel test that no longer compiles/realizes surfaces as a build/red failure h
 git add src/Lattice.App/ViewModels/ShellViewModel.cs tests/Lattice.App.Tests/ShellViewModelTests.cs \
         tests/Lattice.App.Tests/Headless/ShellRailTests.cs tests/Lattice.App.Tests/AllHostsRailTests.cs
 git commit -m "feat(rail): height-adaptive rail orchestration via RailLayoutPolicy (design 3a)"
+```
+
+---
+
+### Task 7B: Re-key view-layer "aggregate presentation" from `IsAllHosts` to genuine multi-host (invariant I5)
+
+**Files:**
+- Modify: `src/Lattice.App/ViewModels/TasksViewModel.cs`, `ProjectsViewModel.cs`, `TransfersViewModel.cs`, `EventLogViewModel.cs`
+- Modify: `tests/Lattice.App.Tests/` — the single-host presentation tests for those VMs
+
+**Why (downstream-consumer check, verified against current main):** before this rework a one-host user had
+`Scope = host` (the old auto-pin), so `IsAllHostsScope = Scope.IsAllHosts` was `false` and every view showed
+single-host presentation (no Host column, Projects hides child rows / shows host-specific status instead of
+"Active on all hosts", no partial bar). Under I1/I5 a one-host user now has `Scope = AllHosts`, so
+`Scope.IsAllHosts` is `true` — the views would wrongly switch to **aggregate** presentation for a single host.
+Re-key the aggregate flag to **genuine multi-host** so behavior is preserved. Confirmed consumers (grep
+`IsAllHostsScope` / `Scope.IsAllHosts` under `src/Lattice.App*`):
+- `TasksViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` + `ShowPartialBar = _partialBar.Advance(…, Scope.IsAllHosts)` (Host column + "Elapsed/…" arms in `TasksView.axaml` bind `IsAllHostsScope` / `!IsAllHostsScope`).
+- `ProjectsViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (gates child-row expansion + `ProjectRowViewModel.Parent(g, IsAllHostsScope)` = the "Active on all hosts" / host-specific status text) + partial bar.
+- `TransfersViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (Host column in `TransfersView.axaml`) + partial bar.
+- `EventLogViewModel.cs` — `IsAllHostsScope = Scope.IsAllHosts;` (Host column in `EventLogView.axaml`).
+- **Data filtering stays keyed on `Scope`** (`ViewSliceProjection`'s `scope.IsAllHosts || h.Config.Id == scope.HostId`, and each VM's `Scope.IsAllHosts ? all : scoped` host pick) — that is correct (All hosts over one host = that host). Only the **presentation** flag changes.
+
+- [ ] **Step 1: Write the failing test (one per VM is enough; Tasks shown)**
+
+```csharp
+[Fact]
+public void Single_host_registry_is_not_aggregate_presentation()
+{
+    // One host, scope = All hosts (I5). Aggregate UI (Host column etc.) must stay OFF.
+    var host = TestData.MakeHostConfig();
+    _registry.AddHost(host);
+    // ...drive a poll so rows exist (mirror the existing TasksViewModel test setup)...
+    Assert.True(_vm.Scope.IsAllHosts);
+    Assert.False(_vm.IsAllHostsScope);   // genuine multi-host is false with one host
+}
+```
+Add the analogous one-host assertion to the Projects/Transfers/EventLog VM test classes (each already has
+single-host presentation tests that scope to a host in a MULTI-host registry — those keep passing, since a
+scoped host is still `IsAllHostsScope == false`).
+
+- [ ] **Step 2: Run — expect FAIL** (`IsAllHostsScope` is currently `true` for the one-host case).
+
+- [ ] **Step 3: Re-key each VM**
+
+In each of the four VMs, change the assignment to require more than one registered host, and feed the same
+flag to the partial bar:
+```csharp
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
+        // ...
+        ShowPartialBar = _partialBar.Advance(unreachableIds, coveredIds, IsAllHostsScope);
+```
+(`EventLogViewModel` has no partial bar — just the `IsAllHostsScope` line.) Leave the data-filter lines
+(`Scope.IsAllHosts ? … : …`, `ViewSliceProjection`) untouched.
+
+- [ ] **Step 4: Run — expect PASS.** The existing multi-host + scoped-host presentation tests stay green
+(scoped host → `IsAllHostsScope == false` as before); the new one-host tests now pass; genuine multi-host
+(≥2 hosts, All hosts) is unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/Lattice.App/ViewModels/TasksViewModel.cs src/Lattice.App/ViewModels/ProjectsViewModel.cs \
+        src/Lattice.App/ViewModels/TransfersViewModel.cs src/Lattice.App/ViewModels/EventLogViewModel.cs \
+        tests/Lattice.App.Tests/
+git commit -m "fix(views): key aggregate presentation on genuine multi-host, not IsAllHosts (invariant I5)"
 ```
 
 ---
