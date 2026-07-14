@@ -184,6 +184,37 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// (a header is not a scope).</summary>
     public void ReassertRailHighlight() => SelectedRailEntry = ResolveHighlight();
 
+    /// <summary>Funnel a ListBox selection change into the scope model. The click/tap gesture
+    /// (<c>ShellWindow.OnHostRailTapped</c>) covers pointer input including no-op re-clicks; this is
+    /// its PEER edge for selection changes that are NOT pointer taps — keyboard arrow navigation and
+    /// UI-automation/screen-reader assignments to <see cref="SelectedRailEntry"/> via the two-way
+    /// binding. Without it, a non-pointer selection move repaints the highlight but leaves scope on the
+    /// old host, so Tasks/Projects/Transfers/EventLog stay filtered to a row the rail no longer shows
+    /// as selected (Codex P2).
+    ///
+    /// Echo guard (load-bearing — do not drop): <see cref="RebuildRail"/> and
+    /// <see cref="ReassertRailHighlight"/> write <see cref="SelectedRailEntry"/> from the scope-derived
+    /// highlight, which round-trips back through the two-way binding as a selection change. Such an echo
+    /// equals the current <see cref="ResolveHighlight"/> by reference (rows are stable singletons), so it
+    /// drives NO scope — only a selection that DIFFERS from the derived highlight is a genuine user move.
+    /// The teeth are the SingleHost case: there the highlight is the sole host row while Scope stays
+    /// AllHosts (decisions §7 — no auto-pin), so without this guard a routine rebuild's echo would call
+    /// <see cref="SelectHostScope"/> and silently pin+persist the lone host. It also keeps R5 structural.
+    /// A header/null is never a scope; it re-asserts the derived highlight, snapping the selection off
+    /// the header. The auth-failed → Edit deep link stays a pointer affordance (OnHostRailTapped), not a
+    /// side effect of mere keyboard navigation.</summary>
+    public void ReconcileRailSelection(object? selected)
+    {
+        if (ReferenceEquals(selected, ResolveHighlight()))
+            return;                                  // echo of our own highlight derivation — no scope side effect
+        switch (selected)
+        {
+            case HostRailItemViewModel host: SelectHostScope(host.HostId); break;
+            case AllHostsRailItemViewModel: SelectAllHostsScope(); break;
+            default: ReassertRailHighlight(); break; // header or null: never a scope; snap the highlight back
+        }
+    }
+
     // Design rule: selecting a host scopes every view. Each graduated (non-
     // Placeholder) page gets the same partial-method push; Placeholders don't
     // scope until they graduate.

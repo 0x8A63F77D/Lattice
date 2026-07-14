@@ -303,6 +303,91 @@ public class RailScopeSelectionTests
         window.Close();
     }
 
+    // Behavior 9 (keyboard / UI-automation): a selection change that is NOT a pointer tap (arrow-key
+    // navigation, or a screen-reader/automation setting SelectedItem) must still drive scope, so the
+    // rail highlight can never diverge from the scoped host. The click gesture covers pointer input
+    // (incl. no-op re-clicks); this is its peer edge. A bare SelectedItem assignment is exactly what
+    // keyboard nav / UI automation does (see RailInput's remarks). Falsification: remove the
+    // SelectionChanged wiring (or ReconcileRailSelection's body) and Scope stays AllHosts while the
+    // highlight moved to rowB → the Scope/persist asserts go RED.
+    [AvaloniaFact]
+    public void Keyboard_or_automation_selection_change_drives_scope_and_persists()
+    {
+        var (window, shell, registry, _, uiState) = MakeShell();
+        window.Show();
+        var a = TestData.MakeHostConfig(name: "a");
+        var b = TestData.MakeHostConfig(name: "b");
+        registry.AddHost(a);
+        registry.AddHost(b);
+        shell.SetRailViewportHeight(1000.0);   // Flat: sentinel + host rows
+        Layout(window);
+        Assert.True(shell.Scope.IsAllHosts);
+
+        var rowB = shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == b.Id);
+        // No pointer: assign SelectedItem directly — exactly what keyboard nav / UI automation raises.
+        window.HostList.SelectedItem = rowB;
+        Layout(window);
+
+        Assert.Equal(b.Id, shell.Scope.HostId);
+        Assert.Equal(b.Id, uiState.Load().ScopeHostId);
+        Assert.Same(rowB, shell.SelectedRailEntry);
+        window.Close();
+    }
+
+    // Behavior 10 (keyboard / UI-automation): selecting the All-hosts sentinel without a pointer scopes
+    // All hosts and clears the persisted id, same as the click path. Falsification: without the
+    // SelectionChanged edge the previously-persisted host id survives → the Null assert goes RED.
+    [AvaloniaFact]
+    public void Keyboard_or_automation_selecting_all_hosts_clears_scope()
+    {
+        var (window, shell, registry, _, uiState) = MakeShell();
+        window.Show();
+        var a = TestData.MakeHostConfig(name: "a");
+        registry.AddHost(a);
+        registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        shell.SetRailViewportHeight(1000.0);   // Flat
+        Layout(window);
+
+        RailInput.ClickRow(window, shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == a.Id));
+        Layout(window);
+        Assert.Equal(a.Id, uiState.Load().ScopeHostId);
+
+        var sentinel = shell.RailEntries.OfType<AllHostsRailItemViewModel>().Single();
+        window.HostList.SelectedItem = sentinel;   // keyboard/automation, no pointer
+        Layout(window);
+
+        Assert.True(shell.Scope.IsAllHosts);
+        Assert.Null(uiState.Load().ScopeHostId);
+        Assert.Same(sentinel, shell.SelectedRailEntry);
+        window.Close();
+    }
+
+    // Behavior 11 (keyboard / UI-automation on a group header): a header is never a scope and its group
+    // is toggled only by the pointer gesture — arrowing/automation onto a collapsible Healthy header must
+    // NOT change scope, must NOT toggle the group, and must snap the highlight off the header. Falsification:
+    // route the SelectionChanged edge to scope unconditionally and the header would drive a scope/persist
+    // (or a header would be left highlighted) → asserts go RED.
+    [AvaloniaFact]
+    public void Keyboard_or_automation_selecting_a_header_changes_no_scope_and_does_not_toggle()
+    {
+        var (window, shell, registry, _, uiState) = MakeShell(height: 700);
+        window.Show();
+        for (var i = 0; i < 12; i++) registry.AddHost(TestData.MakeHostConfig(name: $"h{i}"));
+        Layout(window);   // grouped (overflow), all Healthy, collapsed by default
+
+        Assert.False(uiState.Load().RailHealthyExpanded);
+        Assert.True(shell.Scope.IsAllHosts);
+
+        window.HostList.SelectedItem = HealthyHeader(shell);   // keyboard/automation, no pointer
+        Layout(window);
+
+        Assert.True(shell.Scope.IsAllHosts);                       // header is not a scope
+        Assert.Null(uiState.Load().ScopeHostId);
+        Assert.False(uiState.Load().RailHealthyExpanded);          // NOT toggled (only the pointer toggles)
+        Assert.IsNotType<GroupHeaderRailItemViewModel>(shell.SelectedRailEntry);   // snapped off the header
+        window.Close();
+    }
+
     private static GroupHeaderRailItemViewModel HealthyHeader(ShellViewModel shell) =>
         shell.RailEntries.OfType<GroupHeaderRailItemViewModel>().Single(g => g.Tier.Equals(RailTier.Healthy));
 }

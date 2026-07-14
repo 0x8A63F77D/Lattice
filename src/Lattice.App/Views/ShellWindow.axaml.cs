@@ -308,6 +308,19 @@ public partial class ShellWindow : Window
         }
     }
 
+    // Peer of OnHostRailTapped for NON-pointer selection changes (keyboard arrow nav, UI
+    // automation / screen readers assigning SelectedItem). The tap gesture cannot see these,
+    // so without this edge the highlight would move while scope stayed put (Codex P2). The VM's
+    // ReconcileRailSelection ignores echoes of its own scope-derived highlight (R5 stays structural)
+    // and only commits scope for a genuine user move — pointer taps still also route through
+    // OnHostRailTapped, harmlessly idempotent.
+    private void OnHostRailSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (_shell is null || sender is not ListBox list)
+            return;
+        _shell.ReconcileRailSelection(list.SelectedItem);
+    }
+
     // async void (not fire-and-forget `_ = ...`) so exceptions surface to the
     // dispatcher's unhandled-exception path the same way the other event handlers
     // in this file do, instead of being silently swallowed by a discarded Task.
