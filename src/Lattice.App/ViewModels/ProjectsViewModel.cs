@@ -101,7 +101,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         var scoped = Scope.IsAllHosts
             ? _store.Hosts
             : _store.Hosts.Where(h => h.Config.Id == Scope.HostId).ToList();
-        IsAllHostsScope = Scope.IsAllHosts;
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
 
         // Facts projection (incl. the inScope && isRowSource gate) lives once
         // in ViewSliceProjection (w2a2) — this callback only shapes rows.
@@ -147,7 +147,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         // Partial-results bar: UnreachableIds spans ALL hosts (episode
         // semantics), CoveredIds counts exactly the hosts feeding the grid —
         // both decided in ViewSlice, not recomputed here (Codex P2).
-        ShowPartialBar = _partialBar.Advance(slice.UnreachableIds, slice.CoveredIds, Scope.IsAllHosts);
+        ShowPartialBar = _partialBar.Advance(slice.UnreachableIds, slice.CoveredIds, IsAllHostsScope);
         if (ShowPartialBar)
         {
             // Projects-specific copy ("projects below cover ..."): the shared

@@ -35,7 +35,10 @@
     <!-- Selected host rail entry: brand tint + accent pill (design 1c) -->
     <Style Selector="ListBox.hostRail ListBoxItem">
       <Setter Property="Padding" Value="8,0" />
-      <Setter Property="MinHeight" Value="{StaticResource LatticeHostItemHeight}" />
+      <!-- Each rail container sizes to its template's explicit DockPanel height (28 header /
+           36 grouped host / 40 flat & All-hosts). A 40px MinHeight would floor the shorter
+           28/36px design-3a rows; the compact group-header collapse also needs 0 here. -->
+      <Setter Property="MinHeight" Value="0" />
       <!-- The theme's ListBoxItem MinWidth (88) overflows the 48px compact rail:
            layout centers the oversized item at a negative offset and the state
            icon renders half-clipped at the pane edge. Rail entries stretch to
@@ -43,8 +46,21 @@
       <Setter Property="MinWidth" Value="0" />
       <Setter Property="CornerRadius" Value="{StaticResource LatticeControlRadius}" />
     </Style>
+    <!-- FluentAvalonia's ListBoxItem template insets its ContentPresenter by 2px on every
+         side. That 4px of vertical chrome would make every rail row 4px taller than its
+         template's explicit DockPanel height (design 3a rows are 28 header / 36 grouped host /
+         40 flat — the RENDERED row height, card 1g), and would leave a 4px ghost row where a
+         compact group-header collapses to zero content. Zero the inset so the container height
+         equals the DockPanel height; the selection tint then fills the full row. -->
+    <Style Selector="ListBox.hostRail ListBoxItem /template/ ContentPresenter">
+      <Setter Property="Margin" Value="0" />
+    </Style>
     <Style Selector="ListBox.hostRail ListBoxItem:selected /template/ ContentPresenter">
       <Setter Property="Background" Value="{DynamicResource LatticeSelectedTintBrush}" />
+    </Style>
+    <!-- Host-row context menu items: 32px rows (design 3b). -->
+    <Style Selector="MenuFlyoutPresenter MenuItem">
+      <Setter Property="MinHeight" Value="32" />
     </Style>
   </Window.Styles>
 
@@ -100,13 +116,21 @@
         </ui:FANavigationViewItem>
       </ui:FANavigationView.MenuItems>
 
-      <ui:FANavigationView.PaneCustomContent>
+      <ui:FANavigationView.PaneFooter>
         <StackPanel Margin="4,8,4,0">
           <DockPanel Margin="12,0,8,4">
             <Button DockPanel.Dock="Right" Padding="4" Background="Transparent"
                     Command="{Binding RequestAddHostCommand}"
                     ToolTip.Tip="{x:Static loc:Strings.HostsAddTooltip}">
               <PathIcon Data="{StaticResource IconAddRegular}" Width="12" Height="12" />
+            </Button>
+            <!-- List/group toggle: visible only while auto-grouping is in effect or a manual
+                 override is active (decisions §4). Docked right, left of the "+" button. -->
+            <Button DockPanel.Dock="Right" x:Name="RailGroupToggle" Padding="4" Background="Transparent"
+                    Command="{Binding ToggleRailGroupingCommand}"
+                    IsVisible="{Binding ShowRailToggle}"
+                    ToolTip.Tip="{x:Static loc:Strings.RailGroupToggleTooltip}">
+              <PathIcon Data="{StaticResource IconGroupListRegular}" Width="12" Height="12" />
             </Button>
             <!-- Design §Responsive: the 48px compact rail shows host state icons only;
                  names/subtext live in tooltips. Text elements follow the pane state. -->
@@ -119,7 +143,8 @@
                    Background="Transparent"
                    ItemsSource="{Binding RailEntries}"
                    SelectedItem="{Binding SelectedRailEntry, Mode=TwoWay}"
-                   SelectionChanged="OnHostSelectionChanged">
+                   Tapped="OnHostRailTapped"
+                   SelectionChanged="OnHostRailSelectionChanged">
             <ListBox.DataTemplates>
               <DataTemplate x:DataType="vm:AllHostsRailItemViewModel">
                 <DockPanel Height="{StaticResource LatticeHostItemHeight}"
@@ -139,8 +164,28 @@
                 </DockPanel>
               </DataTemplate>
               <DataTemplate x:DataType="vm:HostRailItemViewModel">
-                <DockPanel Height="{StaticResource LatticeHostItemHeight}"
+                <!-- Height is the shell's mode-aware HostRowHeight (36 px inside a status group,
+                     40 px flat/single) — rendering only; the RailLayoutPolicy fit math still
+                     counts 40 px flat rows. -->
+                <DockPanel Height="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).HostRowHeight}"
                            ToolTip.Tip="{Binding Tooltip}" Background="Transparent">
+                  <!-- The menu lives on THIS template only, so the All-hosts sentinel and
+                       group headers never get one (design 3b). Commands live on ShellViewModel;
+                       the window does the dialog/test/confirm work. -->
+                  <DockPanel.ContextFlyout>
+                    <MenuFlyout>
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
+                                CommandParameter="{Binding HostId}" />
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuTest}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
+                                CommandParameter="{Binding HostId}" />
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
+                                Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
+                                CommandParameter="{Binding HostId}"
+                                Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                    </MenuFlyout>
+                  </DockPanel.ContextFlyout>
                   <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">
                     <PathIcon Width="16" Height="16" IsVisible="{Binding IsConnected}"
                               Data="{StaticResource IconCheckmarkCircleRegular}"
@@ -162,15 +207,35 @@
                               IsVisible="{Binding #Nav.IsPaneOpen}">
                     <TextBlock Text="{Binding Name}" FontSize="13"
                                Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
-                    <TextBlock Text="{Binding StateText}" FontSize="11"
+                    <TextBlock Text="{Binding SubtextDisplay}" FontSize="11"
                                Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                   </StackPanel>
+                </DockPanel>
+              </DataTemplate>
+              <DataTemplate x:DataType="vm:GroupHeaderRailItemViewModel">
+                <!-- Hidden in the 48px compact pane (decisions §5: "compact shows individual host
+                     icons"). Otherwise an Attention header — text hidden, chevron hidden because it
+                     is not collapsible — would render a blank 28px row above its host icons. -->
+                <DockPanel Height="{StaticResource LatticeRowHeightCompact}" Background="Transparent"
+                           IsVisible="{Binding #Nav.IsPaneOpen}">
+                  <PathIcon DockPanel.Dock="Left" Width="12" Height="12" Margin="6,0,0,0"
+                            VerticalAlignment="Center"
+                            IsVisible="{Binding IsCollapsible}"
+                            Data="{StaticResource IconChevronRightRegular}"
+                            Foreground="{DynamicResource LatticeTextSecondaryBrush}">
+                    <PathIcon.RenderTransform>
+                      <RotateTransform Angle="{Binding Expanded, Converter={x:Static v:TaskGridConverters.ChevronAngle}}" />
+                    </PathIcon.RenderTransform>
+                  </PathIcon>
+                  <TextBlock Text="{Binding Text}" FontSize="11" FontWeight="SemiBold"
+                             VerticalAlignment="Center" Margin="6,0,0,0"
+                             Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                 </DockPanel>
               </DataTemplate>
             </ListBox.DataTemplates>
           </ListBox>
         </StackPanel>
-      </ui:FANavigationView.PaneCustomContent>
+      </ui:FANavigationView.PaneFooter>
 
       <ui:FANavigationView.FooterMenuItems>
         <ui:FANavigationViewItem x:Name="NavSettings" Content="{x:Static loc:Strings.NavSettings}" Tag="settings">

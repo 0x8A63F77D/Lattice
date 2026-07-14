@@ -155,7 +155,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         var scoped = Scope.IsAllHosts
             ? _store.Hosts
             : _store.Hosts.Where(h => h.Config.Id == Scope.HostId).ToList();
-        IsAllHostsScope = Scope.IsAllHosts;
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
 
         // Per-host facts feed the shared F# aggregation core (ViewSlice.compute)
         // through the single-copy projection: host classification, row merge,
@@ -212,7 +212,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         var unreachableIds = slice.UnreachableIds;
         var coveredIds = slice.CoveredIds;
 
-        ShowPartialBar = _partialBar.Advance(unreachableIds, coveredIds, Scope.IsAllHosts);
+        ShowPartialBar = _partialBar.Advance(unreachableIds, coveredIds, IsAllHostsScope);
 
         if (ShowPartialBar)
         {

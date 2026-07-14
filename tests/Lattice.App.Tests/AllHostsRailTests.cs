@@ -39,22 +39,28 @@ public class AllHostsRailTests : IAsyncLifetime
     [Fact]
     public void Rail_entries_lead_with_the_all_hosts_sentinel()
     {
-        _registry.AddHost(TestData.MakeHostConfig());
+        // A lone host now renders as SingleHost (no sentinel); two hosts + a tall viewport
+        // give a Flat rail: sentinel at 0, host rows following.
+        _registry.AddHost(TestData.MakeHostConfig(name: "a"));
+        _registry.AddHost(TestData.MakeHostConfig(name: "b"));
         var shell = MakeShell();
+        shell.SetRailViewportHeight(1000.0);
         Assert.IsType<AllHostsRailItemViewModel>(shell.RailEntries[0]);
         Assert.IsType<HostRailItemViewModel>(shell.RailEntries[1]);
-        Assert.Equal(2, shell.RailEntries.Count);
+        Assert.Equal(3, shell.RailEntries.Count);
     }
 
     [Fact]
     public void Selecting_a_host_scopes_and_selecting_all_hosts_unscopes()
     {
-        var host = TestData.MakeHostConfig();
+        var host = TestData.MakeHostConfig(name: "a");
         _registry.AddHost(host);
+        _registry.AddHost(TestData.MakeHostConfig(name: "b"));
         var shell = MakeShell();
-        shell.SelectedRailEntry = shell.RailEntries[1];
+        shell.SetRailViewportHeight(1000.0);   // Flat: [0]=sentinel, [1]=host "a"
+        shell.SelectHostScope(host.Id);        // the click gesture's VM entry point
         Assert.Equal(host.Id, shell.Scope.HostId);
-        shell.SelectedRailEntry = shell.RailEntries[0];
+        shell.SelectAllHostsScope();
         Assert.True(shell.Scope.IsAllHosts);
     }
 
@@ -72,10 +78,15 @@ public class AllHostsRailTests : IAsyncLifetime
     [Fact]
     public void Removing_the_scoped_host_resets_scope_to_all_hosts()
     {
-        var host = TestData.MakeHostConfig();
+        // Three hosts so that after removing the scoped one, two remain → still Flat with the
+        // sentinel leading (removing down to one host would flip to SingleHost, no sentinel).
+        var host = TestData.MakeHostConfig(name: "a");
         _registry.AddHost(host);
+        _registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        _registry.AddHost(TestData.MakeHostConfig(name: "c"));
         var shell = MakeShell();
-        shell.SelectedRailEntry = shell.RailEntries[1];
+        shell.SetRailViewportHeight(1000.0);   // Flat: [0]=sentinel, [1]=host "a"
+        shell.SelectHostScope(host.Id);
         Assert.Equal(host.Id, shell.Scope.HostId);
 
         _registry.RemoveHost(host.Id);

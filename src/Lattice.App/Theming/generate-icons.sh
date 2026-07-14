@@ -43,6 +43,7 @@ ICONS=(
   "more_horizontal|More Horizontal|regular"
   "text_line_spacing|Text Line Spacing|regular"
   "apps_list|Apps List|regular"
+  "group_list|Group List|regular"
 )
 
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }

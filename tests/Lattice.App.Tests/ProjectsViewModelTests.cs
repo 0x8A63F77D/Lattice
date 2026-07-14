@@ -88,6 +88,22 @@ public class ProjectsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Single_host_registry_is_not_aggregate_presentation()
+    {
+        // ScopeMachine: a one-host registry has no auto-pin, so Scope stays
+        // AllHosts — but the aggregate PRESENTATION (child-row expansion) must
+        // key on genuine multi-host, not on Scope.IsAllHosts, or a single-host
+        // user wrongly sees multi-host chrome.
+        AddHost("host-a", FakeWithProject("http://p/", "P"));
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        Assert.True(vm.Scope.IsAllHosts);
+        Assert.False(vm.IsAllHostsScope);
+    }
+
+    [Fact]
     public async Task Single_host_scope_has_no_chevron_and_no_children()
     {
         var hostA = AddHost("host-a", FakeWithProject("http://p/", "P"));

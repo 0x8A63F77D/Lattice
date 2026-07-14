@@ -71,6 +71,7 @@ public class ThemeResourceTests
     [InlineData("IconMoreHorizontalRegular")]
     [InlineData("IconTextLineSpacingRegular")]
     [InlineData("IconAppsListRegular")]
+    [InlineData("IconGroupListRegular")]
     public void Icon_geometry_resolves(string key)
     {
         Assert.True(Application.Current!.TryGetResource(key, null, out var value), key);

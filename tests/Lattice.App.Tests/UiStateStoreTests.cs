@@ -224,4 +224,86 @@ public class UiStateStoreTests
         );
         Assert.Equal(expected, store.Path);
     }
+
+    [Fact]
+    public void Rail_and_theme_preferences_round_trip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        var store = new UiStateStore(path);
+        var scoped = Guid.NewGuid();
+        store.Save(UiState.Default with
+        {
+            RailGrouping = RailGroupingMode.Grouped,
+            RailHealthyExpanded = true,
+            Theme = AppTheme.Dark,
+            ScopeHostId = scoped,
+        });
+
+        var loaded = new UiStateStore(path).Load();
+        Assert.Equal(RailGroupingMode.Grouped, loaded.RailGrouping);
+        Assert.True(loaded.RailHealthyExpanded);
+        Assert.Equal(AppTheme.Dark, loaded.Theme);
+        Assert.Equal(scoped, loaded.ScopeHostId);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void Numeric_rail_grouping_token_loads_defaults()
+    {
+        // Codex P2 (round 3): a corrupt/hand-edited file with a numeric enum
+        // token (e.g. an old/foreign build's raw enum value) must never
+        // materialize as an out-of-range RailGroupingMode — the exhaustive
+        // switches in ShellViewModel.MapOverride have no fallback arm and
+        // would throw SwitchExpressionException at startup. The converter
+        // must reject integer tokens so Load's catch falls back to defaults.
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        File.WriteAllText(path, """{"compactDensity":false,"columnVisibility":{},"columnWidths":{},"railGrouping":999}""");
+        try
+        {
+            var store = new UiStateStore(path);
+            var state = store.Load();
+
+            Assert.Equal(RailGroupingMode.Auto, state.RailGrouping);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Numeric_theme_token_loads_defaults()
+    {
+        // Same corruption class as above, for AppTheme (ThemePreference.Apply /
+        // ThemeLabelConverter are the exhaustive switches at risk).
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        File.WriteAllText(path, """{"compactDensity":false,"columnVisibility":{},"columnWidths":{},"theme":999}""");
+        try
+        {
+            var store = new UiStateStore(path);
+            var state = store.Load();
+
+            Assert.Equal(AppTheme.System, state.Theme);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Legacy_state_file_without_new_fields_loads_defaults()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        // A pre-rework file: only the original three members present.
+        File.WriteAllText(path, """{"compactDensity":true,"columnVisibility":{},"columnWidths":{}}""");
+        var loaded = new UiStateStore(path).Load();
+        Assert.True(loaded.CompactDensity);
+        Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
+        Assert.Equal(AppTheme.System, loaded.Theme);
+        Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
+        File.Delete(path);
+    }
 }

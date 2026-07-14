@@ -117,4 +117,135 @@ public class AddHostViewModelTests
         Assert.Equal("Connection timed out.", vm.ErrorText);
         Assert.Empty(registry.Hosts);
     }
+
+    private static string NewPath() => Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+
+    [Fact]
+    public void Edit_mode_prefills_from_the_host_and_titles_for_editing()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01", address: "192.168.1.40");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+
+        Assert.Equal(HostDialogMode.Edit, vm.Mode);
+        Assert.Equal("mini-01", vm.Name);
+        Assert.Equal("192.168.1.40", vm.Address);
+        Assert.Equal(Strings.EditHostDialogTitle, vm.DialogTitle);
+        Assert.Equal(Strings.EditHostPrimaryButton, vm.PrimaryButtonText);
+        Assert.True(vm.ShowTestButton);
+    }
+
+    [Fact]
+    public async Task Edit_mode_save_updates_the_host_in_the_registry()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+        vm.Name = "mini-01-renamed";
+
+        await vm.AddCommand.ExecuteAsync(null);   // edit-save persists without a connection test
+
+        Assert.True(vm.Succeeded);
+        Assert.Equal("mini-01-renamed", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
+
+    [Fact]
+    public async Task Edit_mode_saves_local_changes_even_when_the_host_is_unreachable()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        // Connection FAILS — Save must still persist (unlike Add, which needs a live host).
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("refused") },
+            cfg, authError: false);
+        vm.Address = "192.168.1.99";
+
+        await vm.AddCommand.ExecuteAsync(null);
+
+        Assert.True(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("192.168.1.99", registry.Hosts.Single(h => h.Id == cfg.Id).Address);
+    }
+
+    [Fact]
+    public void Auth_failed_edit_opens_with_the_password_error_shown()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: true);
+
+        Assert.True(vm.HasPasswordError);
+        Assert.Equal(string.Format(Strings.EditHostPasswordError, "mini-01"), vm.PasswordErrorText);
+    }
+
+    [Fact]
+    public async Task Test_connection_success_shows_result_inline_without_closing_the_dialog()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry, () => new FakeGuiRpcClient(), cfg, authError: false);
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Format(Strings.SettingsTestConnectionSuccess, 8, 2, 0), vm.TestResultText);
+        Assert.False(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("mini-01", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
+
+    [Fact]
+    public async Task Test_connection_command_cannot_reenter_while_one_is_in_flight()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        // OnConnect blocks on a gate we control, so the command is deterministically
+        // "in flight" for as long as the test needs — no wall-clock waits.
+        var connectGate = new TaskCompletionSource();
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => connectGate.Task },
+            cfg, authError: false);
+
+        Assert.True(vm.TestConnectionCommand.CanExecute(null));
+
+        Task first = vm.TestConnectionCommand.ExecuteAsync(null);
+
+        // Still blocked inside ConnectAsync: CanExecute must report false while the
+        // first execution is in flight. This is the actual guard a real Button
+        // relies on — Avalonia's Button.OnClick re-checks CanExecute on every click
+        // before invoking Execute, so a second physical click cannot start a second
+        // overlapping run while this holds.
+        Assert.False(vm.TestConnectionCommand.CanExecute(null));
+        Assert.True(vm.TestConnectionCommand.IsRunning);
+
+        connectGate.SetResult();
+        await first;
+
+        Assert.False(vm.TestConnectionCommand.IsRunning);
+        Assert.True(vm.TestConnectionCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Test_connection_failure_shows_result_inline_without_closing_the_dialog()
+    {
+        var registry = new HostRegistry(new LatticeConfig(5, []), NewPath());
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        var vm = AddHostViewModel.ForEdit(registry,
+            () => new FakeGuiRpcClient { OnConnect = (_, _) => throw new IOException("Connection refused") },
+            cfg, authError: false);
+
+        await vm.TestConnectionCommand.ExecuteAsync(null);
+
+        Assert.NotNull(vm.TestResultText);
+        Assert.Contains("Connection refused", vm.TestResultText);
+        Assert.False(vm.Succeeded);
+        Assert.Null(vm.ErrorText);
+        Assert.Equal("mini-01", registry.Hosts.Single(h => h.Id == cfg.Id).Name);
+    }
 }

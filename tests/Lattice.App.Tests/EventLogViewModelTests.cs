@@ -89,6 +89,23 @@ public class EventLogViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void Single_host_registry_is_not_aggregate_presentation()
+    {
+        // ScopeMachine: a one-host registry has no auto-pin, so Scope stays
+        // AllHosts — but the aggregate PRESENTATION (Host column) must key on
+        // genuine multi-host, not on Scope.IsAllHosts, or a single-host user
+        // wrongly sees multi-host chrome.
+        var a = AddHost("host-a");
+        var vm = MakeVm();
+
+        Raise(a.Id, Msg(1, 1, "hello"));
+        _queue.Drain();
+
+        Assert.True(vm.Scope.IsAllHosts);
+        Assert.False(vm.IsAllHostsScope);
+    }
+
+    [Fact]
     public void All_hosts_merges_by_time_single_host_scopes_to_one()
     {
         var a = AddHost("host-a");

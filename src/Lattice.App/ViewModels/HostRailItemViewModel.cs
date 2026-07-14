@@ -28,6 +28,22 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     [ObservableProperty] private string _stateText = "";
     [ObservableProperty] private string? _tooltip;
 
+    // The row's single generic action-result channel: carries the Test-connection
+    // result AND a Remove write-failure error (see plan Task 11). When set it
+    // overrides the live StateText in the subtext line; the next store Refresh()
+    // clears it so the row reverts to live state.
+    [ObservableProperty] private string? _testResultText;
+
+    /// <summary>Subtext line: the transient action result when present, else live state.</summary>
+    public string SubtextDisplay => TestResultText ?? StateText;
+
+    partial void OnTestResultTextChanged(string? value)
+    {
+        OnPropertyChanged(nameof(SubtextDisplay));
+        // Fold the action result into the tooltip so the compact rail surfaces it too.
+        Tooltip = value is { Length: > 0 } ? $"{Name} — {value}" : BuildTooltip();
+    }
+
     // XAML binds five stacked, statically-typed PathIcons to these bools so the
     // VM stays Avalonia-free and the state brushes stay DynamicResource-live.
     public bool IsConnected => State == RailState.Connected;
@@ -45,10 +61,31 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(IsAuthFailed));
     }
 
+    /// <summary>Store-driven full refresh: re-derives live state AND drops any transient
+    /// action result (Test / Remove-failure) carried on the previous cycle, reverting the
+    /// subtext to live state. Call only from a store-reconcile path, never from the clock
+    /// tick (see <see cref="RefreshLiveState"/>).</summary>
     public void Refresh()
+    {
+        // A fresh store poll reverts the subtext to live state: drop any transient
+        // action result (Test / Remove-failure) carried on the previous cycle.
+        TestResultText = null;
+        RefreshLiveState();
+    }
+
+    /// <summary>Re-derives Name/State/StateText/Tooltip from the live entry without touching
+    /// TestResultText, so a Test-connection result or Remove write-failure showing on a
+    /// Retrying row survives clock ticks; only a store-driven <see cref="Refresh"/> clears it.</summary>
+    private void RefreshLiveState()
     {
         Name = _entry.Config.DisplayName;
         State = RailStateProjection.From(_entry.Status);
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailState left unhandled)
+        // must stay a build error so this label mapping is revisited. CS8524 is the residual "unnamed
+        // enum value" case — an out-of-range cast, unreachable for a well-formed RailState — and is
+        // suppressed here; a `_` arm would silence CS8509 too and defeat the guard. Same pattern as
+        // RailTierProjection. (The guarded Retrying arm is backed by an unguarded one, so all five
+        // named values are covered.)
         StateText = State switch
         {
             RailState.Connected => string.Format(Strings.RailConnectedFmt, _entry.Snapshot?.Tasks.Count ?? 0),
@@ -58,21 +95,29 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             RailState.Retrying => Strings.RailRetrying,
             RailState.Unreachable => Strings.RailUnreachable,
             RailState.AuthFailed => Strings.RailAuthFailed,
-            _ => "",
         };
-        // The compact rail shows the state icon only, so the tooltip must
-        // identify the host in every state (design §Responsive: name/subtext/
-        // countdown live here); error states append the underlying error.
-        Tooltip = (State is RailState.Retrying or RailState.Unreachable)
-                  && _entry.Status.LastError is { Length: > 0 } error
+#pragma warning restore CS8524
+        // Tooltip priority mirrors SubtextDisplay (kept in sync by OnTestResultTextChanged):
+        // a transient action result wins over live state, so only rebuild the live tooltip
+        // when no transient result is currently showing.
+        if (TestResultText is not { Length: > 0 })
+            Tooltip = BuildTooltip();
+        OnPropertyChanged(nameof(SubtextDisplay));
+    }
+
+    // The compact rail shows the state icon only, so the tooltip must identify the
+    // host in every state (design §Responsive: name/subtext/countdown live here);
+    // error states append the underlying error.
+    private string BuildTooltip() =>
+        (State is RailState.Retrying or RailState.Unreachable)
+        && _entry.Status.LastError is { Length: > 0 } error
             ? $"{Name} — {StateText}\n{error}"
             : $"{Name} — {StateText}";
-    }
 
     private void OnTick(object? sender, EventArgs e)
     {
         if (State == RailState.Retrying)
-            Refresh();
+            RefreshLiveState();
     }
 
     public void Dispose() => _clock.Tick -= OnTick;

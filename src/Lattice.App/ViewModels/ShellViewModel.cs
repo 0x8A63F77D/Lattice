@@ -3,10 +3,12 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
+using ScopeState = Lattice.App.Aggregation.Scope;
 
 namespace Lattice.App.ViewModels;
 
@@ -16,9 +18,37 @@ namespace Lattice.App.ViewModels;
 /// </summary>
 public sealed partial class ShellViewModel : ObservableObject, IDisposable
 {
+    private const double RailRowHeight = 40.0;         // LatticeHostItemHeight — flat/single host + All-hosts rows AND the fit-math row unit
+    private const double GroupedHostRowHeight = 36.0;   // LatticeRowHeight — denser host rows inside status groups (design 3a)
+    // The view feeds the FULL Nav height (Nav.Bounds.Height) into SetRailViewportHeight, so this
+    // constant absorbs ALL non-list vertical chrome: the 4 nav menu items (~160), the Hosts header
+    // (~28), the Settings footer item (~40) and paddings/separators. Card 3a's authoritative "~290
+    // fixed rail chrome" anchor (design/m2), pinned here by Task 8's headless geometry tests
+    // (12 hosts @ 700px window ⇒ Grouped; 2 hosts @ 800px ⇒ Flat). NB: decisions §3 wrote "≈150"
+    // assuming the fed height already excluded the menu-items region — the cards win (§ preamble),
+    // and feeding the full Nav height makes ~290 the correct value.
+    private const double ReservedRailChrome = 290.0;
+
     private readonly HostStore _store;
     private readonly IUiClock _clock;
+    private readonly UiStateStore _uiState;
     private readonly AllHostsRailItemViewModel _allHosts = new();
+    private readonly Dictionary<Guid, HostRailItemViewModel> _hostRowVms = [];
+    private double _railViewportHeight;
+    private RailGroupingMode _grouping;
+    private bool _healthyExpanded;
+    // Compact (48px) pane state, fed by the view from FANavigationView.IsPaneOpen. When the pane
+    // is compact the rail must render EVERY host as an individual state-icon (decisions §5), so the
+    // compute force-expands the Healthy tier (see BuildRailInput) — the persisted RailHealthyExpanded
+    // is deliberately untouched, so re-opening the pane restores the saved collapse state.
+    private bool _paneCompact;
+
+    [ObservableProperty] private bool _showRailToggle;
+
+    /// <summary>Height every host row binds to: 40 px flat/single, 36 px inside a status group
+    /// (design 3a). Group-header rows are a fixed 28 px in XAML; the "All hosts" row stays 40 px.
+    /// This is RENDERING only — the RailLayoutPolicy fit test still counts 40 px flat rows.</summary>
+    [ObservableProperty] private double _hostRowHeight = RailRowHeight;
 
     public ShellViewModel(
         HostRegistry registry, HostStore store, IUiClock clock, UiStateStore uiState,
@@ -26,7 +56,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     {
         _store = store;
         _clock = clock;
-        Settings = new SettingsViewModel(registry, store, clientFactory);
+        _uiState = uiState;
+        var ui = uiState.Load();
+        _grouping = ui.RailGrouping;
+        _healthyExpanded = ui.RailHealthyExpanded;
+        Settings = new SettingsViewModel(registry, clientFactory, new ThemePreference(uiState));
         // ONE DensityPreference, shared: the single owner of the global density
         // preference, so a toggle in either view reaches the other in-session
         // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a
@@ -50,10 +84,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Transfers.Rows.CollectionChanged += OnTransfersRowsChanged;
         _transfersCount = Transfers.Rows.Count;
         EventLog.PropertyChanged += OnEventLogPropertyChanged;
-        // The All-hosts sentinel always leads the rail; host entries follow it
-        // (entry i+1 <-> _store.Hosts[i]) via ReconcileHosts.
-        RailEntries.Add(_allHosts);
-        SelectedRailEntry = _allHosts;
+        // Restore the persisted host scope via ScopeMachine (README:80/108). The core owns the
+        // known/unknown-id decision — no inline `store.Hosts.Any(...)` fallback here.
+        var knownHostIds = store.Hosts.Select(h => h.Config.Id).ToArray();
+        ApplyScopeDecision(ScopeMachine.step(ScopeState.AllHosts,
+            ScopeMachine.restoreEvent(ui.ScopeHostId, knownHostIds)));
+
         store.Changed += OnStoreChanged;
         ReconcileHosts();
     }
@@ -83,7 +119,26 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
     [ObservableProperty] private bool _hasHosts;
-    [ObservableProperty] private object? _selectedRailEntry;
+
+    private object? _selectedRailEntry;
+
+    /// <summary>The highlighted rail row, OWNED by <see cref="ResolveHighlight"/>
+    /// (<see cref="ScopeMachine.highlightOf"/>) — never a scope trigger. Explicit scope selection
+    /// rides the click/tap gesture instead (<c>ShellWindow.OnHostRailTapped</c> →
+    /// <see cref="SelectHostScope"/> / <see cref="SelectAllHostsScope"/>), so a rebuild that
+    /// re-derives the same highlight fabricates no scope event (R5), AND a click that does not
+    /// change the ListBox selection (a sole preselected host, a re-clicked scoped host) still
+    /// scopes. Notifies on EVERY assignment so the ListBox re-selects the derived highlight even
+    /// when a rebuild's Clear transiently reset the binding to the same reference.</summary>
+    public object? SelectedRailEntry
+    {
+        get => _selectedRailEntry;
+        set
+        {
+            _selectedRailEntry = value;
+            OnPropertyChanged(nameof(SelectedRailEntry));
+        }
+    }
 
     /// <summary>Mirrors <see cref="TasksViewModel.Rows"/>.Count; drives the Tasks nav item's inline count badge.</summary>
     [ObservableProperty]
@@ -107,8 +162,58 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
 
     public bool HasEventLogUnread => EventLogUnread > 0;
 
-    partial void OnSelectedRailEntryChanged(object? value) =>
-        Scope = value is HostRailItemViewModel h ? new ScopeSelection(h.HostId) : ScopeSelection.AllHosts;
+    /// <summary>A user click on a host row — the SOLE explicit host-scope gesture (decisions §7).
+    /// Persists ScopeHostId via <c>ScopeMachine.ExplicitSelect</c> even when the click did NOT change
+    /// the ListBox selection (a sole preselected host, or re-clicking the already-scoped host) —
+    /// exactly the case the former SelectionChanged trigger missed. Idempotent: re-clicking the
+    /// scoped host re-writes the same id.</summary>
+    public void SelectHostScope(Guid hostId) =>
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope),
+            ScopeEvent.NewExplicitSelect(ScopeCarrier.NewHostCarrier(hostId))));
+
+    /// <summary>A user click on the All-hosts sentinel: scope to All hosts and clear the persisted
+    /// id (<c>ScopeMachine.ExplicitSelect AllHostsCarrier</c>).</summary>
+    public void SelectAllHostsScope() =>
+        ApplyScopeDecision(ScopeMachine.step(ToScope(Scope),
+            ScopeEvent.NewExplicitSelect(ScopeCarrier.AllHostsCarrier)));
+
+    /// <summary>Re-assert the derived highlight (<see cref="ScopeMachine.highlightOf"/>) onto the
+    /// current rows WITHOUT rebuilding them. A header tap transiently selects the header row through
+    /// the ListBox binding, and the non-collapsible Attention header's toggle is a no-op (no rebuild),
+    /// so the shell re-derives the highlight here to guarantee a group header is never left highlighted
+    /// (a header is not a scope).</summary>
+    public void ReassertRailHighlight() => SelectedRailEntry = ResolveHighlight();
+
+    /// <summary>Funnel a ListBox selection change into the scope model. The click/tap gesture
+    /// (<c>ShellWindow.OnHostRailTapped</c>) covers pointer input including no-op re-clicks; this is
+    /// its PEER edge for selection changes that are NOT pointer taps — keyboard arrow navigation and
+    /// UI-automation/screen-reader assignments to <see cref="SelectedRailEntry"/> via the two-way
+    /// binding. Without it, a non-pointer selection move repaints the highlight but leaves scope on the
+    /// old host, so Tasks/Projects/Transfers/EventLog stay filtered to a row the rail no longer shows
+    /// as selected (Codex P2).
+    ///
+    /// Echo guard (load-bearing — do not drop): <see cref="RebuildRail"/> and
+    /// <see cref="ReassertRailHighlight"/> write <see cref="SelectedRailEntry"/> from the scope-derived
+    /// highlight, which round-trips back through the two-way binding as a selection change. Such an echo
+    /// equals the current <see cref="ResolveHighlight"/> by reference (rows are stable singletons), so it
+    /// drives NO scope — only a selection that DIFFERS from the derived highlight is a genuine user move.
+    /// The teeth are the SingleHost case: there the highlight is the sole host row while Scope stays
+    /// AllHosts (decisions §7 — no auto-pin), so without this guard a routine rebuild's echo would call
+    /// <see cref="SelectHostScope"/> and silently pin+persist the lone host. It also keeps R5 structural.
+    /// A header/null is never a scope; it re-asserts the derived highlight, snapping the selection off
+    /// the header. The auth-failed → Edit deep link stays a pointer affordance (OnHostRailTapped), not a
+    /// side effect of mere keyboard navigation.</summary>
+    public void ReconcileRailSelection(object? selected)
+    {
+        if (ReferenceEquals(selected, ResolveHighlight()))
+            return;                                  // echo of our own highlight derivation — no scope side effect
+        switch (selected)
+        {
+            case HostRailItemViewModel host: SelectHostScope(host.HostId); break;
+            case AllHostsRailItemViewModel: SelectAllHostsScope(); break;
+            default: ReassertRailHighlight(); break; // header or null: never a scope; snap the highlight back
+        }
+    }
 
     // Design rule: selecting a host scopes every view. Each graduated (non-
     // Placeholder) page gets the same partial-method push; Placeholders don't
@@ -159,53 +264,223 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void RequestAddHost() => AddHostRequested?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>Auth-failed rail linkage and the Settings footer both land here.</summary>
-    public void NavigateToSettings(Guid? focusHostId = null)
+    /// <summary>Raised by the rail-row menu; the window owns the dialog/test/confirm work.</summary>
+    public event EventHandler<Guid>? EditHostRequested;
+    public event EventHandler<Guid>? TestHostRequested;
+    public event EventHandler<Guid>? RemoveHostRequested;
+
+    [RelayCommand] private void EditHost(Guid id) => EditHostRequested?.Invoke(this, id);
+    [RelayCommand] private void TestHost(Guid id) => TestHostRequested?.Invoke(this, id);
+    [RelayCommand] private void RemoveHost(Guid id) => RemoveHostRequested?.Invoke(this, id);
+
+    public HostConfig? FindHostConfig(Guid id) =>
+        _store.Hosts.FirstOrDefault(h => h.Config.Id == id)?.Config;
+    public HostRailItemViewModel? FindHostRow(Guid id) =>
+        _hostRowVms.TryGetValue(id, out var vm) ? vm : null;
+    public HostRegistry Registry => Settings.Registry;
+    public Func<IGuiRpcClient> ClientFactory => Settings.ClientFactory;
+
+    public void NavigateToSettings()
     {
         SelectedView = null;
         CurrentPage = Settings;
-        if (focusHostId is { } id)
-            Settings.ExpandHost(id);
     }
 
     private void OnStoreChanged(object? sender, EventArgs e) => ReconcileHosts();
 
     private void ReconcileHosts()
     {
-        // Keyed reconcile: keep VMs whose host still exists (their Refresh reads
-        // the live entry), add new, drop removed. Order matches the registry
-        // because hosts are append-only today (no reorder API); revisit the
-        // insert position if reordering ever lands. Index 0 is always the
-        // All-hosts sentinel, so host entry i lives at RailEntries[i + 1].
-        var byId = RailEntries.OfType<HostRailItemViewModel>().ToDictionary(i => i.HostId);
+        // Keep the host-VM map in sync with the registry (append-only order).
         var seen = new HashSet<Guid>();
         for (var i = 0; i < _store.Hosts.Count; i++)
         {
             HostEntry entry = _store.Hosts[i];
             seen.Add(entry.Config.Id);
-            if (!byId.TryGetValue(entry.Config.Id, out HostRailItemViewModel? item))
-                RailEntries.Insert(Math.Min(i + 1, RailEntries.Count), new HostRailItemViewModel(entry, _clock));
+            if (!_hostRowVms.TryGetValue(entry.Config.Id, out HostRailItemViewModel? vm))
+                _hostRowVms[entry.Config.Id] = new HostRailItemViewModel(entry, _clock);
             else
-                item.Refresh();
+                vm.Refresh();
         }
-        for (var i = RailEntries.Count - 1; i >= 1; i--)
-            if (RailEntries[i] is HostRailItemViewModel item && !seen.Contains(item.HostId))
-            {
-                // The scoped host vanished (e.g. removed) — fall back to All hosts
-                // rather than leaving Scope pointed at a dead id.
-                if (ReferenceEquals(SelectedRailEntry, item))
-                    SelectedRailEntry = _allHosts;
-                item.Dispose();
-                RailEntries.RemoveAt(i);
-            }
+        foreach (Guid gone in _hostRowVms.Keys.Where(k => !seen.Contains(k)).ToArray())
+        {
+            _hostRowVms[gone].Dispose();
+            _hostRowVms.Remove(gone);
+            // Host removal is a ScopeEvent. If the removed host was the scoped one, ScopeMachine
+            // falls back to All hosts + clears the persisted id (R11); otherwise it is a pure no-op
+            // (same scope, no persist). RebuildRail below then re-derives the highlight.
+            ApplyScopeDecision(ScopeMachine.step(ToScope(Scope), ScopeEvent.NewHostRemoved(gone)));
+        }
         var connected = _store.Hosts.Count(h => RailStateProjection.From(h.Status) == RailState.Connected);
         _allHosts.Update(connected, _store.Hosts.Count);
         HasHosts = _store.Hosts.Count > 0;
-        Settings.Reconcile();
+        RebuildRail();
+    }
+
+    /// <summary>The view feeds the measured footer height; the core re-evaluates the
+    /// flat↔grouped fit boundary (design 3a: "window resize re-evaluates").</summary>
+    public void SetRailViewportHeight(double availableHeight)
+    {
+        if (Math.Abs(availableHeight - _railViewportHeight) < 0.5) return;
+        _railViewportHeight = availableHeight;
+        RebuildRail();
+    }
+
+    /// <summary>The view reports the NavigationView pane-collapse state (compact = pane closed).
+    /// Compact renders every host as an individual state-icon (decisions §5): the Healthy tier is
+    /// force-expanded for the compute only (BuildRailInput), never persisted. Re-opening the pane
+    /// re-derives from the saved RailHealthyExpanded, so a compact session cannot flip the saved
+    /// preference. The rail rebuilds because compact must ADD the otherwise-collapsed host rows.</summary>
+    public void SetRailPaneCompact(bool compact)
+    {
+        if (_paneCompact == compact) return;
+        _paneCompact = compact;
+        RebuildRail();
+    }
+
+    [RelayCommand]
+    private void ToggleRailGrouping()
+    {
+        // The next override is pure decision logic (opposite layout, with the Auto-return
+        // rule so the toggle can hide once it fits again) — the core owns it; the VM must
+        // NOT re-derive fit/override logic here (this is where the toggle-Auto gap lived).
+        RailOverride next = RailLayoutPolicy.toggleOverride(MapOverride(_grouping), BuildRailInput());
+        _grouping =
+            next.IsForceFlat ? RailGroupingMode.Flat
+            : next.IsForceGrouped ? RailGroupingMode.Grouped
+            : RailGroupingMode.Auto;
+        _uiState.Update(s => s with { RailGrouping = _grouping });
+        RebuildRail();
+    }
+
+    /// <summary>The shell's measured/persisted inputs as the core's record — the single
+    /// construction point shared by <see cref="RebuildRail"/> and the toggle.</summary>
+    private RailLayoutInput BuildRailInput()
+    {
+        var hosts = _store.Hosts
+            .Select(e => new RailHost(e.Config.Id,
+                RailTierProjection.From(RailStateProjection.From(e.Status))))
+            .ToArray();
+        var available = Math.Max(0.0, _railViewportHeight - ReservedRailChrome);
+        // Compact force-expands Healthy for the compute so every host renders as an icon (§5); the
+        // persisted _healthyExpanded is left untouched (SetRailPaneCompact) so re-open restores it.
+        var healthyExpanded = _healthyExpanded || _paneCompact;
+        return new RailLayoutInput(hosts, available, RailRowHeight, MapOverride(_grouping), healthyExpanded);
+    }
+
+    /// <summary>Toggle a rail status group's collapse state, keyed on the tier VALUE — the resilient
+    /// entry point the header tap routes through (<c>ShellWindow.OnHostRailTapped</c>). A background
+    /// poll/status refresh can <see cref="RebuildRail"/> between a header tap and its deferred callback,
+    /// detaching the tapped header VM's <see cref="GroupHeaderRailItemViewModel.ToggleRequested"/> and
+    /// clearing the rows; routing the toggle through the shell by tier (never the transient VM instance)
+    /// survives that race, whereas executing the stale VM's command would raise to no subscriber and
+    /// silently DROP the user's toggle (Codex R5 P2). Healthy is the only collapsible tier (Attention is
+    /// pinned open, so a non-Healthy tier is a no-op — no flip, no rebuild).</summary>
+    public void ToggleGroup(RailTier tier)
+    {
+        if (!tier.Equals(RailTier.Healthy))
+            return;
+        _healthyExpanded = !_healthyExpanded;
+        _uiState.Update(s => s with { RailHealthyExpanded = _healthyExpanded });
+        RebuildRail();
+    }
+
+    // The GroupHeaderRailItemViewModel.ToggleCommand affordance (raised via ToggleRequested; used by
+    // view-model tests to expand/collapse a group programmatically) funnels into the same tier-keyed
+    // shell logic. The production tap path calls ToggleGroup directly (by captured tier value), so it
+    // does not depend on this subscription surviving an intervening rebuild.
+    private void OnGroupToggleRequested(object? sender, RailTier tier) => ToggleGroup(tier);
+
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED RailGroupingMode
+    // left unhandled) must stay a build error so this mapping is revisited. CS8524 is the residual
+    // "unnamed enum value" case — an out-of-range cast like (RailGroupingMode)999, unreachable for
+    // a well-formed value — and is suppressed here; a `_` arm would silence CS8509 too and defeat
+    // the guard. Same pattern as RailTierProjection.
+    private static RailOverride MapOverride(RailGroupingMode mode) =>
+        mode switch
+        {
+            RailGroupingMode.Auto => RailOverride.Auto,
+            RailGroupingMode.Flat => RailOverride.ForceFlat,
+            RailGroupingMode.Grouped => RailOverride.ForceGrouped,
+        };
+#pragma warning restore CS8524
+
+    // --- scope translation boundary: the shell's ScopeSelection <-> the core's Scope, and the
+    //     single place a ScopeDecision is applied. This is the ENTIRE scope logic in the shell. ---
+    private static ScopeState ToScope(ScopeSelection s) =>
+        s.IsAllHosts ? ScopeState.AllHosts : ScopeState.NewHost(s.HostId!.Value);
+
+    private static ScopeSelection ToSelection(ScopeState s) =>
+        s is ScopeState.Host h ? new ScopeSelection(h.Item) : ScopeSelection.AllHosts;
+
+    /// <summary>Apply a ScopeMachine decision: set the scope (fires OnScopeChanged → view-push)
+    /// and run its persistence action. The ONLY place the shell writes Scope or ScopeHostId.</summary>
+    private void ApplyScopeDecision(ScopeDecision decision)
+    {
+        Scope = ToSelection(decision.Scope);
+        if (decision.Persist is PersistAction.PersistExplicit pe)
+            _uiState.Update(s => s with { ScopeHostId = pe.Item is null ? (Guid?)null : pe.Item.Value });
+        else if (decision.Persist.IsClearPersisted)
+            _uiState.Update(s => s with { ScopeHostId = null });
+        // PersistAction.NoPersistChange → leave persistence untouched.
+    }
+
+    private void RebuildRail()
+    {
+        RailLayoutInput input = BuildRailInput();
+        RailLayout layout = RailLayoutPolicy.compute(input);
+        ShowRailToggle = layout.ShowToggle;
+        HostRowHeight = layout.Mode.IsGrouped ? GroupedHostRowHeight : RailRowHeight;
+
+        // RebuildRail constructs NO ScopeEvent, so it cannot mutate or persist Scope (R5). It
+        // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf.
+        // SelectedRailEntry is a pure highlight with no scope side effect (explicit scope rides the
+        // click gesture → SelectHostScope / SelectAllHostsScope), so no _rebuilding guard is needed.
+        foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
+            g.ToggleRequested -= OnGroupToggleRequested;
+        RailEntries.Clear();
+        foreach (RailRow row in layout.Rows)
+            RailEntries.Add(MaterializeRow(row));
+
+        SelectedRailEntry = ResolveHighlight();
+    }
+
+    /// <summary>Highlight = the pure ScopeMachine.highlightOf(scope, soleHost, visibleHostIds) —
+    /// never a scope mutation. SingleHost highlights the sole host row even though Scope stays
+    /// All hosts; a scoped host hidden in a collapsed group yields no highlight (Scope still holds
+    /// it); otherwise the All-hosts sentinel.</summary>
+    private object? ResolveHighlight()
+    {
+        var hostRows = RailEntries.OfType<HostRailItemViewModel>().ToArray();
+        var visibleHostIds = hostRows.Select(h => h.HostId).ToArray();
+        // SingleHost presentation ⇔ a lone host row with no All-hosts sentinel: RailLayoutPolicy
+        // emits [HostRow] for exactly one host and AllHostsRow-led rows for ≥2, so this reads the
+        // mode straight off the materialized rows (avoids threading the RailLayout in for callers
+        // like ReassertRailHighlight that have no fresh layout). The sole row is highlighted
+        // regardless of scope (Scope stays AllHosts — data-identical for one host).
+        Guid? soleHost = hostRows.Length == 1 && !RailEntries.OfType<AllHostsRailItemViewModel>().Any()
+            ? hostRows[0].HostId
+            : (Guid?)null;
+        RailHighlight highlight = ScopeMachine.highlightOf(ToScope(Scope), soleHost, visibleHostIds);
+        if (highlight is RailHighlight.HighlightHostRow hr)
+            return _hostRowVms.TryGetValue(hr.Item, out var vm) ? vm : null;
+        return highlight.IsHighlightAllHostsRow ? _allHosts : null;   // else NoHighlight (hidden scoped host)
+    }
+
+    private object MaterializeRow(RailRow row)
+    {
+        if (row.IsAllHostsRow) return _allHosts;
+        if (row is RailRow.HostRow hr) return _hostRowVms[hr.Item];
+        var gh = (RailRow.GroupHeaderRow)row;
+        var vm = new GroupHeaderRailItemViewModel(gh.tier, gh.count, gh.expanded);
+        vm.ToggleRequested += OnGroupToggleRequested;
+        return vm;
     }
 
     public void Dispose()
     {
+        EditHostRequested = null;
+        TestHostRequested = null;
+        RemoveHostRequested = null;
         _store.Changed -= OnStoreChanged;
         Tasks.Rows.CollectionChanged -= OnTasksRowsChanged;
         Transfers.Rows.CollectionChanged -= OnTransfersRowsChanged;
@@ -214,7 +489,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Projects.Dispose();
         Transfers.Dispose();
         EventLog.Dispose();
-        foreach (HostRailItemViewModel item in RailEntries.OfType<HostRailItemViewModel>())
+        foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
+            g.ToggleRequested -= OnGroupToggleRequested;
+        foreach (HostRailItemViewModel item in _hostRowVms.Values)
             item.Dispose();
     }
 }
