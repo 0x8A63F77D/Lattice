@@ -98,7 +98,7 @@ public class EditHostDialogTests
     // defense-in-depth against), then drives one real click on the actual secondary button
     // into that state.
     [AvaloniaFact]
-    public void Clicking_test_connection_while_already_running_does_not_start_a_second_run()
+    public async Task Clicking_test_connection_while_already_running_does_not_start_a_second_run()
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
@@ -133,20 +133,32 @@ public class EditHostDialogTests
 
         // Real click while TestConnectionCommand is already running: OnSecondaryClick's
         // CanExecute guard must skip ExecuteAsync entirely - no second "connect:" call -
-        // and still complete its deferral so the dialog stays open (no hang).
+        // and still complete its deferral so the dialog stays open (no hang). CanExecute
+        // is false, so the async-void handler never awaits: it runs to completion
+        // synchronously within RaiseEvent, and the no-second-run guarantee is observable
+        // immediately here - no dispatcher pumping needed for this assertion.
         secondary.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:")));
         Assert.True(dialog.IsHitTestVisible);
         Assert.False(showTask.IsCompleted);
 
-        // Let the one real run resolve and confirm everything settles cleanly.
+        // Release the one real run and settle on its TERMINAL state. The
+        // TestConnectionAsync chain hops onto the thread pool (HostMonitorManager and
+        // FakeGuiRpcClient both ConfigureAwait(false)) before the VM posts TestResultText
+        // back to the UI dispatcher, so a single RunJobs() can return before that
+        // cross-thread post lands - the source of the original ~50%-under-load flake.
+        // Poll the observable end-state instead of gambling on one pump.
+        var expectedResult = string.Format(Strings.SettingsTestConnectionSuccess, 8, 2, 0);
         connectGate.SetResult();
-        Dispatcher.UIThread.RunJobs();
+        await HeadlessSync.WaitUntilAsync(() =>
+            !vm.TestConnectionCommand.IsRunning
+            && firstRun.IsCompleted
+            && vm.TestResultText == expectedResult);
 
         Assert.False(vm.TestConnectionCommand.IsRunning);
         Assert.True(firstRun.IsCompletedSuccessfully);
         Assert.Equal(1, fake.Calls.Count(c => c.StartsWith("connect:")));
-        Assert.Equal(string.Format(Strings.SettingsTestConnectionSuccess, 8, 2, 0), vm.TestResultText);
+        Assert.Equal(expectedResult, vm.TestResultText);
         Assert.True(dialog.IsHitTestVisible);
         Assert.False(showTask.IsCompleted);
 
