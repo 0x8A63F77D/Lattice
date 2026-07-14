@@ -292,7 +292,10 @@ public class EventLogViewTests
     public void Event_log_has_a_visible_column_header_row_with_spec_labels()
     {
         var (window, _, _, registry, manager, fakes) = MakeView();
+        // Two hosts to earn the Host column: post-ScopeMachine, IsAllHostsScope keys on >1
+        // registered host, so a single host hides Host (mirrors the Tasks/Transfers header tests).
         var host = AddHost(registry, fakes, "host-a");
+        AddHost(registry, fakes, "host-b");
         window.Show();
         Raise(manager, host.Id, Msg(1, 1, "hello"));
         Layout(window);
@@ -339,7 +342,10 @@ public class EventLogViewTests
     public void Severity_gutter_column_has_no_divider_in_body_or_header()
     {
         var (window, _, _, registry, manager, fakes) = MakeView();
+        // Two hosts so IsAllHostsScope is true and the Host column is present — the header order
+        // asserted below (Time·Host·Project·severity·Message) needs it (post-ScopeMachine >1-host rule).
         var host = AddHost(registry, fakes, "host-a");
+        AddHost(registry, fakes, "host-b");
         window.Show();
         Raise(manager, host.Id, Msg(1, 1, "hello"));
         Layout(window);
