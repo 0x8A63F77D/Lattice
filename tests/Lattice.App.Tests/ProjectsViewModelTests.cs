@@ -1,3 +1,4 @@
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -268,5 +269,43 @@ public class ProjectsViewModelTests : IAsyncLifetime
         Assert.False(vm.IsLoading);
         Assert.True(vm.IsEmpty);
         Assert.Empty(vm.Rows);
+    }
+
+    // Header-click sort reorders the parent aggregates; child (per-host) rows follow their parent
+    // (design: "聚合的时候排序只排序主值…主机名是展开的，不在这个排序里"). Toggling direction moves a
+    // parent AND its expanded children together — the built-in flat sort would instead scatter the
+    // children, which is why the view cancels it and routes here.
+    [Fact]
+    public async Task Header_sort_orders_parents_and_expanded_children_follow_their_parent()
+    {
+        AddHost("host-a", FakeWithProjects(Proj("u-a", "Alpha", rac: 1), Proj("u-b", "Beta", rac: 5)));
+        AddHost("host-b", FakeWithProjects(Proj("u-b", "Beta", rac: 5)));
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2, "two parent groups aggregate");
+        // compute's default is RAC descending: Beta (5+5=10) before Alpha (1).
+        Assert.Equal(new[] { "Beta", "Alpha" }, vm.Rows.Select(r => r.Data.Name));
+
+        // Sort by project name ascending (ToggleSort → Rebuild, synchronous).
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Assert.Equal(new[] { "Alpha", "Beta" }, vm.Rows.Select(r => r.Data.Name));
+
+        // Expand Beta: its two children sit directly under it.
+        vm.ToggleExpandCommand.Execute("u-b");
+        Assert.Equal(4, vm.Rows.Count);
+        Assert.Equal("Alpha", vm.Rows[0].Data.Name);
+        Assert.Equal("Beta", vm.Rows[1].Data.Name);
+        Assert.False(vm.Rows[2].Data.IsParent);
+        Assert.False(vm.Rows[3].Data.IsParent);
+        Assert.Equal("u-b", vm.Rows[2].Data.MasterUrl);
+        Assert.Equal("u-b", vm.Rows[3].Data.MasterUrl);
+
+        // Toggle to descending: Beta moves above Alpha and its expanded children move WITH it.
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Assert.Equal(4, vm.Rows.Count);
+        Assert.Equal("Beta", vm.Rows[0].Data.Name);
+        Assert.False(vm.Rows[1].Data.IsParent);
+        Assert.False(vm.Rows[2].Data.IsParent);
+        Assert.Equal("Alpha", vm.Rows[3].Data.Name);
     }
 }

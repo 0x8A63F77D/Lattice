@@ -47,6 +47,16 @@ type ProjectGroup =
       TotalCredit: float
       TaskCount: int }
 
+/// Which parent-aggregate column the Projects grid is sorted by. Only the parent
+/// AGGREGATE sorts; child (per-host) rows always follow their parent, so this
+/// orders ProjectGroups, never individual attachments (design: aggregate sort).
+type ProjectSortColumn =
+    | ByName
+    | ByHostCount
+    | ByAvgCredit
+    | ByTotalCredit
+    | ByStatus
+
 module ProjectRows =
     let status (a: ProjectAttachment) : AttachmentStatus =
         if a.IsSuspended then Suspended
@@ -108,6 +118,32 @@ module ProjectRows =
               TotalCredit = sorted |> Array.sumBy (fun a -> a.TotalCredit)
               TaskCount = sorted |> Array.sumBy (fun a -> a.TaskCount) })
         |> Array.sortByDescending (fun g -> g.AvgCredit)
+
+    /// Severity rank for status sorting (healthy → degraded); ascending puts the
+    /// all-active groups first. Total over StatusSummary — including the inner
+    /// AttachmentStatus of AllSame — with no DU wildcard, so a new status case is
+    /// a compile error here.
+    let private statusRank (s: StatusSummary) : int =
+        match s with
+        | AllSame Active -> 0
+        | AllSame NoNewTasks -> 1
+        | AllSame Suspended -> 2
+        | OneDeviation _ -> 3
+        | MixedStatus _ -> 4
+
+    /// Reorder the parent groups by a chosen aggregate column (children follow
+    /// their parent, so only groups are ordered here). Stable ascending sort,
+    /// reversed for descending. `compute` keeps its RAC-descending default; this
+    /// is applied only when the user has picked a column via a header click.
+    let sortGroups (column: ProjectSortColumn) (descending: bool) (groups: ProjectGroup[]) : ProjectGroup[] =
+        let ascending =
+            match column with
+            | ByName -> groups |> Array.sortBy (fun g -> g.DisplayName.ToLowerInvariant())
+            | ByHostCount -> groups |> Array.sortBy (fun g -> g.Attachments.Length)
+            | ByAvgCredit -> groups |> Array.sortBy (fun g -> g.AvgCredit)
+            | ByTotalCredit -> groups |> Array.sortBy (fun g -> g.TotalCredit)
+            | ByStatus -> groups |> Array.sortBy (fun g -> statusRank g.Status)
+        if descending then Array.rev ascending else ascending
 
 /// Row identity in the Projects grid: parent per MasterUrl, child per
 /// (MasterUrl, host). DU structural equality is the reconciler key equality.

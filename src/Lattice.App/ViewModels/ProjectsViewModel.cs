@@ -25,6 +25,12 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // dashboard reopens collapsed; revisit only if users ask).
     private readonly HashSet<string> _expanded = [];
 
+    // Header-click sort, session-local. Null = compute's default (RAC desc). Only
+    // the parent AGGREGATE sorts; children always follow their parent (applied in
+    // Rebuild by ordering the groups, never the child attachments — design).
+    private ProjectSortColumn? _sortColumn;
+    private bool _sortDescending;
+
     // Episode semantics live in PartialBarPolicy, the call protocol (current/
     // dismissed fingerprints, scope gate) in PartialBarState; this class only
     // holds the instance.
@@ -89,6 +95,29 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         Rebuild();
     }
 
+    /// <summary>
+    /// Header-click sort, driven from the view's Sorting handler. Re-clicking the
+    /// same column flips direction; a new column selects it ascending. Only the
+    /// parent aggregate sorts — child (per-host) rows stay grouped under their
+    /// parent (the aggregate value orders the groups). Sort state persists across
+    /// polls (it is re-applied every Rebuild).
+    /// </summary>
+    public void ToggleSort(ProjectSortColumn column)
+    {
+        if (_sortColumn is not null && _sortColumn.Equals(column))
+            _sortDescending = !_sortDescending;
+        else
+        {
+            _sortColumn = column;
+            _sortDescending = false;
+        }
+        Rebuild();
+    }
+
+    /// <summary>The active sort (null = default RAC-descending) and its direction,
+    /// so the view can render the header's ascending/descending indicator.</summary>
+    public (ProjectSortColumn? Column, bool Descending) SortState => (_sortColumn, _sortDescending);
+
     private void OnStoreChanged(object? sender, EventArgs e) => Rebuild();
 
     // The clock tick only ever moves freshness text/staleness forward, but
@@ -114,6 +143,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
                 p.Project.SuspendedViaGui, p.Project.DontRequestMoreWork)).ToArray());
 
         var groups = ProjectRows.compute(slice.AllRows);
+
+        // User header sort reorders the parent GROUPS only (children follow their
+        // parent); no sort selected keeps compute's RAC-descending default.
+        if (_sortColumn is not null)
+            groups = ProjectRows.sortGroups(_sortColumn, _sortDescending, groups);
 
         // Hierarchy flattening is a trivial projection (grouping/aggregation —
         // the decision logic — lives in F#); children render only in the

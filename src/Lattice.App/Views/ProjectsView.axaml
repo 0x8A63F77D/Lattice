@@ -145,8 +145,15 @@
 
     <!-- Grid + overlays -->
     <Panel>
+      <!-- CanUserSortColumns enables the clickable headers; OnGridSorting (code-behind) CANCELS
+           the DataGrid's built-in flat sort and routes to the VM, which sorts the parent GROUPS
+           and keeps children under their parent (design: only the aggregate sorts). Sortable
+           columns carry a Tag = the F# ProjectSortColumn case; template columns also need a
+           SortMemberPath so the DataGrid marks them CanUserSort (the path's value is unused — we
+           cancel before it sorts). Chevron + Share stay unsortable (no Tag / SortMemberPath). -->
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
+                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True"
+                Sorting="OnGridSorting">
         <DataGrid.Columns>
           <!-- Chevron 24 -->
           <DataGridTemplateColumn Width="24" MinWidth="24" CellStyleClasses="noDivider">
@@ -169,7 +176,8 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <!-- Project 200 (parent: name; child: host name) -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200" MinWidth="200">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200" MinWidth="200"
+                                   Tag="ByName" SortMemberPath="Data.Name">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
@@ -184,7 +192,7 @@
           <!-- Hidden in single-host scope (design 2a): same treatment as the Tasks
                Host column; the single-host headless test asserts it. -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
-                               Binding="{Binding Data.HostsText}" Width="110" MinWidth="110"
+                               Binding="{Binding Data.HostsText}" Width="110" MinWidth="110" Tag="ByHostCount"
                                IsVisible="{Binding IsAllHostsScope}" CellStyleClasses="numericCell" />
           <!-- Resource share 140: bar (when ShowShareBar) + text -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140" MinWidth="140">
@@ -206,14 +214,17 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}"
-                               Binding="{Binding Data.AvgCreditText}" Width="100" MinWidth="100" CellStyleClasses="numericCell" />
+                               Binding="{Binding Data.AvgCreditText}" Width="100" MinWidth="100" Tag="ByAvgCredit"
+                               CellStyleClasses="numericCell" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
-                               Binding="{Binding Data.TotalCreditText}" Width="110" MinWidth="110" CellStyleClasses="numericCell" />
+                               Binding="{Binding Data.TotalCreditText}" Width="110" MinWidth="110" Tag="ByTotalCredit"
+                               CellStyleClasses="numericCell" />
           <!-- Status: icon + text, no pills (explicit design decision). Fixed width, NOT a star
                column — a star pins the grid total to the viewport, defeating horizontal scroll and
                drag-to-reveal (Finding A round 2). With every column fixed the grid overflows into a
                working h-scrollbar when tight and the DataGridFillerColumn fills any trailing slack. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="300" MinWidth="300">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="300" MinWidth="300"
+                                   Tag="ByStatus" SortMemberPath="Data.StatusKind">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">

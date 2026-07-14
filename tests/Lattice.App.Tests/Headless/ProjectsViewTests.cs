@@ -1,9 +1,11 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
@@ -389,6 +391,33 @@ public class ProjectsViewTests
         Layout(window);
 
         Assert.Equal(0, view.RowSubscriptionCount);
+        window.Close();
+    }
+
+    // Code-behind sort route: a real click on the Project header must reach OnGridSorting, which
+    // unconditionally CANCELS the DataGrid's flat sort and maps the column Tag to a ProjectSortColumn
+    // for the VM. Assert the VM's exposed sort state — reaching it proves the handler ran (the cancel
+    // is the first line of the same handler). The actual reorder + children-follow is covered by
+    // ProjectsViewModelTests; here rows are hand-built only so the header realizes to be clicked.
+    [AvaloniaFact]
+    public void Clicking_the_Project_header_routes_through_the_cancel_and_sets_the_vm_sort()
+    {
+        var (window, view, vm) = MakeView(hostCount: 2);
+        window.Show();
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-a"));
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-b"));
+        Layout(window);
+        Assert.Null(vm.SortState.Column); // default: no user sort yet
+
+        // Project is column index 1 (after the chevron gutter); it must be sortable to raise Sorting.
+        Assert.True(view.Grid.Columns[1].CanUserSort, "the Project column must be sortable");
+        // Column.Sort routes through DataGridColumnHeader.InvokeProcessSort — the SAME path a header
+        // click takes — which raises the Sorting event, so this exercises OnGridSorting for real.
+        view.Grid.Columns[1].Sort(ListSortDirection.Ascending);
+        Dispatcher.UIThread.RunJobs(); // ProcessSort is posted, not synchronous
+
+        Assert.Equal(ProjectSortColumn.ByName, vm.SortState.Column);
+        Assert.False(vm.SortState.Descending); // first sort = ascending
         window.Close();
     }
 }

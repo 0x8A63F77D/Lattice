@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using FluentAvalonia.UI.Controls;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.ViewModels;
 
@@ -40,5 +41,28 @@ public partial class ProjectsView : UserControl
     {
         if (args.Reason == FAInfoBarCloseReason.CloseButton && DataContext is ProjectsViewModel vm)
             vm.DismissPartialCommand.Execute(null);
+    }
+
+    // The DataGrid's built-in sort is FLAT; on this hierarchical grid it would scatter child
+    // (per-host) rows away from their parent. Cancel it unconditionally and route to the VM, which
+    // reorders the parent GROUPS with children following (design: only the aggregate sorts). Each
+    // sortable column's Tag is the F# ProjectSortColumn case; untagged columns (chevron, Share)
+    // are still cancelled but map to nothing, so clicking them is a no-op rather than a flat sort.
+    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)
+    {
+        e.Handled = true;
+        if (DataContext is not ProjectsViewModel vm)
+            return;
+        ProjectSortColumn? column = (e.Column.Tag as string) switch
+        {
+            "ByName" => ProjectSortColumn.ByName,
+            "ByHostCount" => ProjectSortColumn.ByHostCount,
+            "ByAvgCredit" => ProjectSortColumn.ByAvgCredit,
+            "ByTotalCredit" => ProjectSortColumn.ByTotalCredit,
+            "ByStatus" => ProjectSortColumn.ByStatus,
+            _ => null,
+        };
+        if (column is not null)
+            vm.ToggleSort(column);
     }
 }
