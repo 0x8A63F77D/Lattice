@@ -3,7 +3,9 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -394,30 +396,65 @@ public class ProjectsViewTests
         window.Close();
     }
 
-    // Code-behind sort route: a real click on the Project header must reach OnGridSorting, which
-    // unconditionally CANCELS the DataGrid's flat sort and maps the column Tag to a ProjectSortColumn
-    // for the VM. Assert the VM's exposed sort state — reaching it proves the handler ran (the cancel
-    // is the first line of the same handler). The actual reorder + children-follow is covered by
-    // ProjectsViewModelTests; here rows are hand-built only so the header realizes to be clicked.
+    // A REAL header click (not Column.Sort) must reach OnGridSorting, which cancels the DataGrid's
+    // flat sort and maps the column Tag to a ProjectSortColumn for the VM. The overlays are turned
+    // off first: the loading/empty Borders cover the WHOLE grid including the header row, so they
+    // eat header clicks — a real sort-blocker whenever Projects is loading or empty (see
+    // Header_click_is_blocked_while_the_loading_overlay_covers_the_grid). The reorder itself +
+    // children-follow is covered by ProjectsViewModelTests; hand-built rows only realize the header.
     [AvaloniaFact]
-    public void Clicking_the_Project_header_routes_through_the_cancel_and_sets_the_vm_sort()
+    public void A_real_click_on_the_Project_header_sorts_via_the_cancel_route()
     {
         var (window, view, vm) = MakeView(hostCount: 2);
         window.Show();
         vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-a"));
         vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-b"));
+        vm.IsLoading = false;
+        vm.IsEmpty = false;
         Layout(window);
-        Assert.Null(vm.SortState.Column); // default: no user sort yet
+        Assert.Null(vm.SortState.Column);
 
-        // Project is column index 1 (after the chevron gutter); it must be sortable to raise Sorting.
-        Assert.True(view.Grid.Columns[1].CanUserSort, "the Project column must be sortable");
-        // Column.Sort routes through DataGridColumnHeader.InvokeProcessSort — the SAME path a header
-        // click takes — which raises the Sorting event, so this exercises OnGridSorting for real.
-        view.Grid.Columns[1].Sort(ListSortDirection.Ascending);
-        Dispatcher.UIThread.RunJobs(); // ProcessSort is posted, not synchronous
+        var header = view.Grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == Strings.ColProject);
+        var pt = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(pt, RawInputModifiers.None);
+        window.MouseDown(pt, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(pt, MouseButton.Left, RawInputModifiers.None);
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(ProjectSortColumn.ByName, vm.SortState.Column);
-        Assert.False(vm.SortState.Descending); // first sort = ascending
+        Assert.False(vm.SortState.Descending); // first click = ascending
+        window.Close();
+    }
+
+    // Regression pin for the sort-blocker: the loading overlay is an opaque Border layered OVER the
+    // grid, so while it is up a header click never reaches the header (no Sorting raised). This is
+    // why "Projects can't be sorted" while it is still loading. Fixing it means the overlay must not
+    // cover the header row.
+    [AvaloniaFact]
+    public void Header_click_is_blocked_while_the_loading_overlay_covers_the_grid()
+    {
+        var (window, view, vm) = MakeView(hostCount: 2);
+        window.Show();
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-a"));
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, "s", showChevron: true, url: "u-b"));
+        vm.IsEmpty = false;
+        vm.IsLoading = true; // overlay up
+        Layout(window);
+
+        var header = view.Grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Single(h => (h.Content as string) == Strings.ColProject);
+        var pt = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(pt, RawInputModifiers.None);
+        window.MouseDown(pt, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(pt, MouseButton.Left, RawInputModifiers.None);
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+
+        // The click was swallowed by the overlay — no sort. (Documents the bug; see the real-click
+        // test above for the working steady-state path.)
+        Assert.Null(vm.SortState.Column);
         window.Close();
     }
 }
