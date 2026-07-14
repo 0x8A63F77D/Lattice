@@ -169,12 +169,14 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
+          <!-- SortMemberPath overrides the (text) binding for sorting so these sort by the raw
+               duration in seconds, not the formatted string ("10m" would sort before "9m"). -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
                                Binding="{Binding Data.ElapsedText}" Width="68" MinWidth="68"
-                               CellStyleClasses="numericCell" />
+                               CellStyleClasses="numericCell" SortMemberPath="Data.ElapsedSeconds" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
                                Binding="{Binding Data.RemainingText}" Width="74" MinWidth="74"
-                               CellStyleClasses="numericCell" />
+                               CellStyleClasses="numericCell" SortMemberPath="Data.RemainingSeconds" />
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100" MinWidth="100"
                                    SortMemberPath="Data.Deadline">
             <DataGridTemplateColumn.CellTemplate>

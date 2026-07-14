@@ -24,7 +24,13 @@ public sealed record TaskRowViewModel(
     bool IsDeadlineAtRisk,
     bool IsSuspended,
     Guid HostId,
-    string Host)
+    string Host,
+    // Raw durations behind ElapsedText / RemainingText. Kept so the Elapsed / Remaining columns
+    // sort by actual time (SortMemberPath -> these) rather than the formatted string, where
+    // "10m" would otherwise order before "9m". Default 0 for hand-built test rows that don't
+    // exercise duration sorting; From() always sets them from the snapshot.
+    double ElapsedSeconds = 0,
+    double RemainingSeconds = 0)
 {
     public TaskRowKey Key => new(HostId, Name);
 
@@ -44,9 +50,11 @@ public sealed record TaskRowViewModel(
             _ => $"{Math.Round(fraction.Value * 100)}%",
         };
 
-        var elapsedText = TimeText.Duration(snap.ElapsedSeconds);
-        var remainingText = r.EstimatedCpuTimeRemaining > 0
-            ? TimeText.Duration(r.EstimatedCpuTimeRemaining)
+        var elapsedSeconds = snap.ElapsedSeconds;
+        var remainingSeconds = r.EstimatedCpuTimeRemaining;
+        var elapsedText = TimeText.Duration(elapsedSeconds);
+        var remainingText = remainingSeconds > 0
+            ? TimeText.Duration(remainingSeconds)
             : "—";
 
         // Invariant culture: CurrentCulture's CALENDAR (e.g. Hijri under ar-SA)
@@ -69,7 +77,9 @@ public sealed record TaskRowViewModel(
             IsDeadlineAtRisk: snap.IsDeadlineAtRisk,
             IsSuspended: stateKind == TaskStateKind.Suspended,
             HostId: hostId,
-            Host: host);
+            Host: host,
+            ElapsedSeconds: elapsedSeconds,
+            RemainingSeconds: remainingSeconds);
     }
 
     private static double? ComputeFraction(Result r) => r.ActiveTask switch

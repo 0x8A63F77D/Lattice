@@ -620,17 +620,16 @@ public class TasksViewTests
         window.Close();
     }
 
-    private static TaskRow TaskHolder(string name, double fraction, DateTimeOffset deadline, TaskStateKind state) =>
-        new(new TaskRowViewModel(
+    private static TaskRow TaskHolder(
+        string name, double fraction, DateTimeOffset deadline, TaskStateKind state, double elapsedSeconds = 0)
+    {
+        var vm = new TaskRowViewModel(
             Project: "p", Application: "a", Name: name, Fraction: fraction, PercentText: "x",
             ElapsedText: "e", RemainingText: "r", DeadlineText: "d", Deadline: deadline,
             StateKind: state, StateText: state.ToString(), IsDeadlineAtRisk: false,
-            IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a").Key,
-            new TaskRowViewModel(
-                Project: "p", Application: "a", Name: name, Fraction: fraction, PercentText: "x",
-                ElapsedText: "e", RemainingText: "r", DeadlineText: "d", Deadline: deadline,
-                StateKind: state, StateText: state.ToString(), IsDeadlineAtRisk: false,
-                IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a"));
+            IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a", ElapsedSeconds: elapsedSeconds);
+        return new TaskRow(vm.Key, vm);
+    }
 
     // The four template columns (Task, Progress, Deadline, State) had no Binding for the DataGrid
     // to derive a sort key from, so clicking their headers did nothing (owner report). SortMemberPath
@@ -642,31 +641,40 @@ public class TasksViewTests
         var (window, _, vm, _, _, _) = MakeView();
         window.Show();
         var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
-        vm.Rows.Add(TaskHolder("beta",  0.5, t.AddHours(2), TaskStateKind.Waiting));
-        vm.Rows.Add(TaskHolder("alpha", 0.9, t.AddHours(3), TaskStateKind.Running));
-        vm.Rows.Add(TaskHolder("gamma", 0.1, t.AddHours(1), TaskStateKind.Suspended));
+        // Deadline and Elapsed orders differ, so each proves it sorts by its own underlying value.
+        vm.Rows.Add(TaskHolder("beta",  0.5, t.AddHours(2), TaskStateKind.Waiting,   elapsedSeconds: 300));
+        vm.Rows.Add(TaskHolder("alpha", 0.9, t.AddHours(3), TaskStateKind.Running,   elapsedSeconds: 60));
+        vm.Rows.Add(TaskHolder("gamma", 0.1, t.AddHours(1), TaskStateKind.Suspended, elapsedSeconds: 600));
         Layout(window);
 
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
-        // Task(2) Progress(3) Deadline(6) State(7)
-        foreach (var i in new[] { 2, 3, 6, 7 })
+        // Task(2) Progress(3) Elapsed(4) Remaining(5) Deadline(6) State(7) all sort.
+        foreach (var i in new[] { 2, 3, 4, 5, 6, 7 })
             Assert.True(grid.Columns[i].CanUserSort, $"column {i} ({grid.Columns[i].Header}) should be sortable");
 
-        // Sort by Deadline ascending: order by the DateTimeOffset, not the "d" display text —
+        // Sort by Deadline ascending: order by the DateTimeOffset, not the "d" text —
         // gamma(+1h), beta(+2h), alpha(+3h).
         grid.Columns[6].Sort(ListSortDirection.Ascending);
         Layout(window);
-        // Read the sorted VIEW order from the realized rows, robust to headless row recycling
-        // (a recycled container can briefly duplicate a DataContext): group by name and take each
-        // row's minimum Index. Avalonia sorts the collection view, not vm.Rows, so vm.Rows is
-        // deliberately left in insertion order.
-        var order = grid.GetVisualDescendants().OfType<DataGridRow>()
+        Assert.Equal(new[] { "gamma", "beta", "alpha" }, SortedNames(grid));
+
+        // Sort by Elapsed ascending: order by the raw seconds (60/300/600), not the "e" text —
+        // alpha(60), beta(300), gamma(600). A different order than Deadline, so this can't pass by
+        // accident.
+        grid.Columns[4].Sort(ListSortDirection.Ascending);
+        Layout(window);
+        Assert.Equal(new[] { "alpha", "beta", "gamma" }, SortedNames(grid));
+        window.Close();
+    }
+
+    // Sorted VIEW order from the realized rows, robust to headless row recycling (a recycled
+    // container can briefly duplicate a DataContext): group by name, take each name's min Index.
+    // Avalonia sorts the collection view, not vm.Rows, so vm.Rows stays in insertion order.
+    private static string[] SortedNames(DataGrid grid) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>()
             .Where(r => r.DataContext is TaskRow)
             .GroupBy(r => ((TaskRow)r.DataContext!).Data.Name)
             .OrderBy(g => g.Min(r => r.Index))
             .Select(g => g.Key)
             .ToArray();
-        Assert.Equal(new[] { "gamma", "beta", "alpha" }, order);
-        window.Close();
-    }
 }
