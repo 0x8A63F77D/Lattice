@@ -341,7 +341,8 @@ public class ProjectsViewTests
         Assert.Equal(140, W(3)); // Resource share
         Assert.Equal(100, W(4)); // Avg credit
         Assert.Equal(110, W(5)); // Total credit
-        Assert.True(grid.Columns[6].Width.IsStar); // Status
+        Assert.False(grid.Columns[6].Width.IsStar); // Status fixed (not a star — Finding A)
+        Assert.Equal(300, W(6)); // Status
         window.Close();
     }
 

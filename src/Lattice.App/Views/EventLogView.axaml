@@ -202,7 +202,12 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Width="*" MinWidth="200" Header="{x:Static loc:Strings.EventLogColMessage}">
+          <!-- Fixed width, NOT a star column (Finding A round 2): a star pins the grid total to the
+               viewport, so it never overflows — horizontal scroll never engages and a long message
+               can't be revealed by dragging. Fixed columns overflow into a working h-scrollbar; the
+               DataGridFillerColumn fills any trailing slack. Message is the widest column since log
+               bodies are long. -->
+          <DataGridTemplateColumn Width="560" MinWidth="560" Header="{x:Static loc:Strings.EventLogColMessage}">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <!-- Single line with ellipsis: the mockup's message span is

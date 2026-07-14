@@ -533,7 +533,8 @@ public class TasksViewTests
         double W(int i) => grid.Columns[i].Width.Value;
         Assert.Equal(108, W(0)); // Project
         Assert.Equal(118, W(1)); // Application
-        Assert.True(grid.Columns[2].Width.IsStar); // Task
+        Assert.False(grid.Columns[2].Width.IsStar); // Task fixed (not a star — Finding A)
+        Assert.Equal(230, W(2)); // Task
         Assert.Equal(112, W(3)); // Progress
         Assert.Equal(68,  W(4)); // Elapsed
         Assert.Equal(74,  W(5)); // Remaining

@@ -377,7 +377,8 @@ public class EventLogViewTests
         Assert.Equal(84,  W(1)); // Host
         Assert.Equal(140, W(2)); // Project
         Assert.Equal(20,  W(3)); // severity
-        Assert.True(grid.Columns[4].Width.IsStar); // Message
+        Assert.False(grid.Columns[4].Width.IsStar); // Message fixed (not a star — Finding A)
+        Assert.Equal(560, W(4)); // Message
         window.Close();
     }
 

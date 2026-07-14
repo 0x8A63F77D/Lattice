@@ -209,10 +209,11 @@
                                Binding="{Binding Data.AvgCreditText}" Width="100" MinWidth="100" CellStyleClasses="numericCell" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
                                Binding="{Binding Data.TotalCreditText}" Width="110" MinWidth="110" CellStyleClasses="numericCell" />
-          <!-- Status *: icon + text, no pills (explicit design decision). MinWidth 140 keeps the
-               star column readable and, with the fixed columns' own mins, makes the grid overflow
-               into a working h-scrollbar rather than crushing columns when the window is tight. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="*" MinWidth="140">
+          <!-- Status: icon + text, no pills (explicit design decision). Fixed width, NOT a star
+               column — a star pins the grid total to the viewport, defeating horizontal scroll and
+               drag-to-reveal (Finding A round 2). With every column fixed the grid overflows into a
+               working h-scrollbar when tight and the DataGridFillerColumn fills any trailing slack. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="300" MinWidth="300">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">

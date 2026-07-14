@@ -106,12 +106,13 @@ public class DataGridInfraTests
         return window;
     }
 
-    // Finding A fixture: a lattice grid whose columns all carry a MinWidth (fixed = spec width,
-    // star = a readable floor), mirroring the real views after the Option 1 fix. A star column
-    // makes the DataGrid fit-to-width — without mins it shrinks the star then CRUSHES the fixed
-    // columns to ~20px slivers instead of overflowing; with mins the columns hold and the grid
-    // overflows into a working horizontal scrollbar.
-    private static DataGrid MakeMinWidthGrid(double star = 80)
+    // Finding A fixture: a lattice grid of ALL fixed-width columns and NO star, mirroring the real
+    // views after the round-2 fix. A star (*) column makes the DataGrid fit-to-width — it pins the
+    // grid total to the viewport, so it never overflows: horizontal scroll never engages and
+    // dragging a column just reshuffles space between columns ("总宽度限制死了…列在互相共享窗口宽度").
+    // Fixed columns instead let the total exceed the viewport, so the grid overflows into a working
+    // h-scrollbar; when they fit, the DataGridFillerColumn takes the trailing slack (no scrollbar).
+    private static DataGrid MakeFixedGrid()
     {
         var grid = new DataGrid
         {
@@ -121,8 +122,7 @@ public class DataGridInfraTests
                 new DataGridTextColumn { Header = "A", Binding = new Avalonia.Data.Binding("Name"),  Width = new DataGridLength(120), MinWidth = 120 },
                 new DataGridTextColumn { Header = "B", Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(120), MinWidth = 120 },
                 new DataGridTextColumn { Header = "C", Binding = new Avalonia.Data.Binding("Name"),  Width = new DataGridLength(120), MinWidth = 120 },
-                new DataGridTextColumn { Header = "Star", Binding = new Avalonia.Data.Binding("Value"),
-                                         Width = new DataGridLength(1, DataGridLengthUnitType.Star), MinWidth = star },
+                new DataGridTextColumn { Header = "D", Binding = new Avalonia.Data.Binding("Value"), Width = new DataGridLength(120), MinWidth = 120 },
             },
         };
         grid.Classes.Add("lattice");
@@ -133,37 +133,37 @@ public class DataGridInfraTests
         grid.GetVisualDescendants().OfType<ScrollBar>()
             .FirstOrDefault(b => b.Name == "PART_HorizontalScrollbar");
 
-    // (i) The fix's core invariant: when the window is narrower than the sum of column mins, the
-    // fixed columns hold their spec widths (they do NOT crush) and the star drops only to its own
-    // MinWidth — the grid overflows instead. Before Option 1 (no mins), the star grid fit-to-width
-    // and squeezed the fixed columns toward ~20px. Regressing any MinWidth turns this red.
+    // (i) When the window is narrower than the sum of the fixed column widths, the columns hold
+    // their widths (they do NOT shrink to fit) and the grid OVERFLOWS into a horizontal scrollbar.
+    // A star column could never do this — it would absorb the shortfall and pin the total to the
+    // viewport, so no scrollbar ever appeared (owner Finding A).
     [AvaloniaFact]
-    public void Fixed_columns_hold_their_min_width_when_the_window_is_too_narrow()
+    public void Fixed_columns_overflow_a_too_narrow_window_into_a_scrollbar()
     {
-        var grid = MakeMinWidthGrid(star: 140);
-        // Total mins = 120*3 + 140 = 500, wider than this window: the grid must overflow.
+        var grid = MakeFixedGrid();
+        // Total 120*4 = 480, wider than this window: the grid must overflow, not shrink columns.
         var window = ShowInWindow(grid, 360, 300);
         Layout(window);
 
         Assert.Equal(120d, grid.Columns[0].ActualWidth);
         Assert.Equal(120d, grid.Columns[1].ActualWidth);
         Assert.Equal(120d, grid.Columns[2].ActualWidth);
-        Assert.Equal(140d, grid.Columns[3].ActualWidth); // star pinned at its MinWidth, not crushed
+        Assert.Equal(120d, grid.Columns[3].ActualWidth);
 
         var hbar = HorizontalScrollBar(grid);
         Assert.NotNull(hbar);
-        Assert.True(hbar!.IsVisible, "overflowing columns must surface the horizontal scrollbar");
+        Assert.True(hbar!.IsVisible, "overflowing fixed columns must surface the horizontal scrollbar");
+        Assert.True(hbar.Maximum > 0, "the scrollbar must have a real scroll range");
         window.Close();
     }
 
-    // (ii) The scrollbar that (i) surfaces is a WORKING one: a wheel with a horizontal delta moves
-    // the offset. This is the half the owner reported broken ("左右的滚动是不可用的") — before
-    // Option 1 the star grid crushed columns instead of overflowing, so no scrollbar ever appeared
-    // to scroll. DataGrid.UpdateScroll computes offset -= delta.X, so a negative X scrolls right.
+    // (ii) That scrollbar is a WORKING one: a wheel with a horizontal delta moves the offset. This
+    // is the half the owner reported broken ("左右的滚动是不可用的"). DataGrid.UpdateScroll computes
+    // offset -= delta.X, so a negative X scrolls right.
     [AvaloniaFact]
     public void The_overflow_horizontal_scrollbar_moves_under_a_wheel_delta()
     {
-        var grid = MakeMinWidthGrid(star: 140); // total mins 500 > 360px viewport -> overflow
+        var grid = MakeFixedGrid(); // total 480 > 360px viewport -> overflow
         var window = ShowInWindow(grid, 360, 300);
         Layout(window);
 
@@ -181,31 +181,47 @@ public class DataGridInfraTests
         window.Close();
     }
 
-    // (iii) The owner's actual bug was that dragging a column wider CRUSHED its neighbours to ~20px
-    // slivers (no MinWidth floor). With Option 1 the mins are a hard floor: dragging column A past
-    // the star's slack now CLAMPS (A grows only into the reclaimable slack, the star bottoms out at
-    // its own MinWidth) and the other fixed columns keep their spec widths — never crushed.
+    // (iii) The owner's core complaint: a truncated column could not be dragged wider to reveal its
+    // content ("有的标题明明没完全显示出来我拉不动"). With a star column, dragging just reshuffled
+    // space and clamped once the star hit its min. With all-fixed columns, dragging a column wider
+    // pushes the grid total PAST the viewport, so it overflows into a working h-scrollbar — the
+    // content is revealed and scrollable. Starts fitting (no scrollbar), ends overflowing.
     [AvaloniaFact]
-    public void Dragging_a_column_wider_clamps_at_the_slack_and_never_crushes_neighbours()
+    public void Dragging_a_fixed_column_wider_overflows_into_a_working_scrollbar()
     {
-        var grid = MakeMinWidthGrid(star: 80); // mins 120*3+80 = 440; star holds the slack at 700px
+        var grid = MakeFixedGrid(); // total 480, fits the 700px window with slack -> no scrollbar
         var window = ShowInWindow(grid, 700, 300);
         Layout(window);
+
+        var before = HorizontalScrollBar(grid);
+        Assert.NotNull(before);
+        Assert.False(before!.IsVisible, "with slack the fixed columns fit and there is no h-scrollbar");
 
         var header = grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
             .Single(h => (h.Content as string) == "A");
         var edge = header.TranslatePoint(new Point(header.Bounds.Width - 2, header.Bounds.Height / 2), window)!.Value;
-        var target = edge.WithX(edge.X + 500); // ask for far more than the slack
+        var target = edge.WithX(edge.X + 400); // drag A far wider than the slack
         window.MouseMove(edge, RawInputModifiers.None);
         window.MouseDown(edge, MouseButton.Left, RawInputModifiers.None);
         window.MouseMove(target, RawInputModifiers.None);
         window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
         Layout(window);
 
-        Assert.True(grid.Columns[0].ActualWidth > 120, "column A should have widened");
-        Assert.Equal(120d, grid.Columns[1].ActualWidth); // B not crushed
-        Assert.Equal(120d, grid.Columns[2].ActualWidth); // C not crushed
-        Assert.Equal(80d, grid.Columns[3].ActualWidth);  // star bottomed out at its MinWidth, not 0
+        Assert.True(grid.Columns[0].ActualWidth > 300, "column A should have widened well past its start");
+        Assert.Equal(120d, grid.Columns[1].ActualWidth); // neighbours unchanged (not reshuffled)
+        Assert.Equal(120d, grid.Columns[2].ActualWidth);
+        Assert.Equal(120d, grid.Columns[3].ActualWidth);
+
+        var hbar = HorizontalScrollBar(grid);
+        Assert.NotNull(hbar);
+        Assert.True(hbar!.IsVisible, "dragging a column wider than the viewport must surface the scrollbar");
+        Assert.True(hbar.Maximum > 0, "the scrollbar must have a real scroll range");
+
+        var mid = grid.TranslatePoint(new Point(grid.Bounds.Width / 2, grid.Bounds.Height / 2), window)!.Value;
+        var startValue = hbar.Value;
+        window.MouseWheel(mid, new Vector(-4, 0), RawInputModifiers.None);
+        Layout(window);
+        Assert.True(hbar.Value > startValue, "the revealed scrollbar must scroll under a wheel delta");
         window.Close();
     }
 

@@ -239,8 +239,9 @@ public class TransfersViewTests
         Layout(window);
 
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
-        Assert.True(grid.Columns[0].Width.IsStar); // File
+        Assert.False(grid.Columns[0].Width.IsStar); // File fixed (not a star — Finding A)
         double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(200, W(0)); // File
         Assert.Equal(140, W(1)); // Project
         Assert.Equal(80, W(2)); // Direction
         Assert.Equal(190, W(3)); // Progress

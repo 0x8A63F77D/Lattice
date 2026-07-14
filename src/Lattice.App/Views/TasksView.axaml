@@ -134,8 +134,15 @@
                                Binding="{Binding Data.Project}" Width="108" MinWidth="108" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}"
                                Binding="{Binding Data.Application}" Width="118" MinWidth="118" />
+          <!-- Fixed width (NOT a star column): a star (*) column makes the DataGrid fit-to-width,
+               which pins the grid total to the viewport — it can never overflow, so horizontal
+               scroll never engages and dragging a column just reshuffles space between columns
+               (owner Finding A round 2: "总宽度限制死了…列在互相共享窗口宽度"). Every column is
+               fixed instead: when the columns exceed the viewport (narrow window or a column
+               dragged wider) the grid overflows into a working h-scrollbar; when they fit, the
+               DataGridFillerColumn takes the trailing space (native Task-Manager idiom). -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}"
-                                   Width="*" MinWidth="160">
+                                   Width="230" MinWidth="230">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
