@@ -50,8 +50,10 @@ public class TasksScopeJourney
         // breakpoint that isn't this journey's concern.
         Assert.Contains(Strings.ColHost, VisibleColumnHeaders(harness.Window));
 
-        // Index 0 is the All-hosts sentinel; hosts follow in registration order.
-        harness.Window.HostList.SelectedIndex = 2;
+        // Scope to host-b with a real click on its row — the scope trigger is the click
+        // gesture (OnHostRailTapped), so a bare SelectedIndex assignment no longer scopes.
+        var hostBRow = harness.Shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == hostB.Id);
+        RailInput.ClickRow(harness.Window, hostBRow);
         harness.Layout();
 
         Assert.Equal(hostB.Id, harness.Shell.Scope.HostId);

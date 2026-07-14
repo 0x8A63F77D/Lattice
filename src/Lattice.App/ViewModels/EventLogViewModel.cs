@@ -138,13 +138,17 @@ public sealed partial class EventLogViewModel : ObservableObject, IDisposable
 
     private bool Matches(EventLogRowViewModel row)
     {
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED EventLogPriority left
+        // unhandled) must stay a build error so its filter pill is wired here. CS8524 is the residual
+        // "unnamed enum value" case — an out-of-range cast, unreachable for a well-formed value — and
+        // is suppressed; a `_` arm would silence CS8509 too and defeat the guard (RailTierProjection pattern).
         var priorityOn = row.Priority switch
         {
             EventLogPriority.Info => ShowInfo,
             EventLogPriority.Warning => ShowWarning,
             EventLogPriority.Error => ShowError,
-            _ => true,
         };
+#pragma warning restore CS8524
         return priorityOn
             && (FilterText.Length == 0
                 || row.Body.Contains(FilterText, StringComparison.OrdinalIgnoreCase)
@@ -153,7 +157,7 @@ public sealed partial class EventLogViewModel : ObservableObject, IDisposable
 
     private void Rebuild()
     {
-        IsAllHostsScope = Scope.IsAllHosts;
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
 
         var target = MessageLog.merged(_log)
             .Where(e => Scope.IsAllHosts || e.Key.HostId == Scope.HostId)

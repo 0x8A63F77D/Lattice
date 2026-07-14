@@ -165,6 +165,19 @@
   <data name="AppTitle" xml:space="preserve">
     <value>Lattice</value>
   </data>
+  <!-- ===== EditHost ===== -->
+  <data name="EditHostDialogTitle" xml:space="preserve">
+    <value>Edit host</value>
+  </data>
+  <data name="EditHostPasswordError" xml:space="preserve">
+    <value>The host refused this password. Check gui_rpc_auth.cfg on {0}.</value>
+  </data>
+  <data name="EditHostPrimaryButton" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="EditHostSaveFailedFmt" xml:space="preserve">
+    <value>Couldn’t save changes: {0}</value>
+  </data>
   <!-- ===== EventLog ===== -->
   <data name="EventLogColMessage" xml:space="preserve">
     <value>Message</value>
@@ -246,18 +259,49 @@
   <data name="NavTransfers" xml:space="preserve">
     <value>Transfers</value>
   </data>
+  <!-- ===== HostMenu (rail host-row context menu + remove-confirm) ===== -->
+  <data name="HostMenuEdit" xml:space="preserve">
+    <value>Edit host…</value>
+  </data>
+  <data name="HostMenuTest" xml:space="preserve">
+    <value>Test connection</value>
+  </data>
+  <data name="HostMenuRemove" xml:space="preserve">
+    <value>Remove host…</value>
+  </data>
+  <data name="HostRemoveConfirmTitleFmt" xml:space="preserve">
+    <value>Remove {0}?</value>
+  </data>
+  <data name="HostRemoveConfirmBody" xml:space="preserve">
+    <value>Lattice stops monitoring this host. The BOINC client on the host is not affected.</value>
+  </data>
+  <data name="HostRemoveConfirmPrimary" xml:space="preserve">
+    <value>Remove</value>
+  </data>
+  <data name="HostRemoveConfirmCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="HostRemoveFailedFmt" xml:space="preserve">
+    <value>Couldn’t remove host: {0}</value>
+  </data>
   <!-- ===== Rail ===== -->
   <data name="RailAuthFailed" xml:space="preserve">
     <value>Wrong password</value>
   </data>
+  <data name="RailGroupToggleTooltip" xml:space="preserve">
+    <value>Toggle list / grouped view</value>
+  </data>
   <data name="RailConnectedFmt" xml:space="preserve">
     <value>Connected · {0} tasks</value>
   </data>
-  <data name="RailConnectedWord" xml:space="preserve">
-    <value>Connected</value>
-  </data>
   <data name="RailConnecting" xml:space="preserve">
     <value>Connecting…</value>
+  </data>
+  <data name="RailGroupAttentionFmt" xml:space="preserve">
+    <value>Attention · {0}</value>
+  </data>
+  <data name="RailGroupHealthyFmt" xml:space="preserve">
+    <value>Healthy · {0}</value>
   </data>
   <data name="RailRetrying" xml:space="preserve">
     <value>Retrying…</value>
@@ -265,42 +309,12 @@
   <data name="RailRetryingFmt" xml:space="preserve">
     <value>Retrying in {0}s (attempt {1})</value>
   </data>
-  <data name="RailRetryingWord" xml:space="preserve">
-    <value>Retrying</value>
-  </data>
   <data name="RailUnreachable" xml:space="preserve">
     <value>Unreachable</value>
   </data>
   <!-- ===== Settings ===== -->
-  <data name="SettingsAuthErrorGuidance" xml:space="preserve">
-    <value>The host refused this password. Check the gui_rpc_auth.cfg on {0}.</value>
-  </data>
-  <data name="SettingsFieldAddress" xml:space="preserve">
-    <value>Address</value>
-  </data>
-  <data name="SettingsFieldAddressRequired" xml:space="preserve">
-    <value>Address is required.</value>
-  </data>
-  <data name="SettingsFieldName" xml:space="preserve">
-    <value>Name</value>
-  </data>
-  <data name="SettingsFieldNamePlaceholder" xml:space="preserve">
-    <value>Defaults to the address</value>
-  </data>
-  <data name="SettingsFieldPassword" xml:space="preserve">
-    <value>Password</value>
-  </data>
-  <data name="SettingsFieldPasswordPlaceholder" xml:space="preserve">
-    <value>From gui_rpc_auth.cfg</value>
-  </data>
-  <data name="SettingsFieldPort" xml:space="preserve">
-    <value>Port</value>
-  </data>
-  <data name="SettingsFieldPortInvalid" xml:space="preserve">
-    <value>Port must be a number between 1 and 65535.</value>
-  </data>
-  <data name="SettingsHostsSection" xml:space="preserve">
-    <value>Hosts</value>
+  <data name="SettingsHostsPointer" xml:space="preserve">
+    <value>Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.</value>
   </data>
   <data name="SettingsIntervalSaveFailedFmt" xml:space="preserve">
     <value>Saving the polling interval failed: {0}</value>
@@ -313,18 +327,6 @@
   </data>
   <data name="SettingsPollingSection" xml:space="preserve">
     <value>Polling</value>
-  </data>
-  <data name="SettingsRemoveButton" xml:space="preserve">
-    <value>Remove host</value>
-  </data>
-  <data name="SettingsRemoveFailedFmt" xml:space="preserve">
-    <value>Removing failed: {0}</value>
-  </data>
-  <data name="SettingsSaveButton" xml:space="preserve">
-    <value>Save</value>
-  </data>
-  <data name="SettingsSaveFailedFmt" xml:space="preserve">
-    <value>Saving failed: {0}</value>
   </data>
   <data name="SettingsTestConnectionBusy" xml:space="preserve">
     <value>Testing…</value>
@@ -340,6 +342,24 @@
   </data>
   <data name="SettingsTitle" xml:space="preserve">
     <value>Settings</value>
+  </data>
+  <data name="SettingsThemeSection" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="SettingsThemeHeader" xml:space="preserve">
+    <value>Theme</value>
+  </data>
+  <data name="SettingsThemeDescription" xml:space="preserve">
+    <value>How Lattice follows light or dark mode</value>
+  </data>
+  <data name="ThemeLight" xml:space="preserve">
+    <value>Light</value>
+  </data>
+  <data name="ThemeDark" xml:space="preserve">
+    <value>Dark</value>
+  </data>
+  <data name="ThemeSystem" xml:space="preserve">
+    <value>System</value>
   </data>
   <!-- ===== Projects ===== -->
   <data name="ProjectsColAvgCredit" xml:space="preserve">

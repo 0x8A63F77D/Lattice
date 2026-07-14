@@ -3,6 +3,8 @@
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              xmlns:vm="using:Lattice.App.ViewModels"
              xmlns:loc="using:Lattice.App.Localization"
+             xmlns:infra="using:Lattice.App.Infrastructure"
+             xmlns:v="using:Lattice.App.Views"
              x:Class="Lattice.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <ScrollViewer>
@@ -10,55 +12,9 @@
       <TextBlock Text="{x:Static loc:Strings.SettingsTitle}" FontSize="16" FontWeight="SemiBold"
                  Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
 
-      <TextBlock Text="{x:Static loc:Strings.SettingsHostsSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+      <TextBlock Text="{x:Static loc:Strings.SettingsHostsPointer}" FontSize="12" Margin="0,4,0,8"
+                 TextWrapping="Wrap"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-      <ItemsControl ItemsSource="{Binding Hosts}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="vm:HostSettingsItemViewModel">
-            <ui:FASettingsExpander Header="{Binding DisplayName}"
-                                   Description="{Binding StatusText}"
-                                   IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
-                                   Margin="0,0,0,4">
-              <ui:FASettingsExpander.IconSource>
-                <ui:FAPathIconSource Data="{StaticResource IconServerRegular}" />
-              </ui:FASettingsExpander.IconSource>
-              <StackPanel Spacing="8" Margin="0,4">
-                <ui:FAInfoBar Severity="Error" IsOpen="{Binding HasAuthError}" IsClosable="False"
-                              Title="{x:Static loc:Strings.RailAuthFailed}" Message="{Binding AuthErrorText}" />
-                <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" ColumnSpacing="8" RowSpacing="8">
-                  <TextBlock Grid.Row="0" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldName}" VerticalAlignment="Center" />
-                  <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Name, Mode=TwoWay}"
-                           PlaceholderText="{x:Static loc:Strings.SettingsFieldNamePlaceholder}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldAddress}" VerticalAlignment="Center" />
-                  <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Address, Mode=TwoWay}" />
-                  <TextBlock Grid.Row="2" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldPort}" VerticalAlignment="Center" />
-                  <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding PortText, Mode=TwoWay}" />
-                  <TextBlock Grid.Row="3" Grid.Column="0" Text="{x:Static loc:Strings.SettingsFieldPassword}" VerticalAlignment="Center" />
-                  <!-- Known limitation (accepted + ledger-tracked): Avalonia's TextBoxAutomationPeer
-                       exposes the raw Text via UI Automation regardless of PasswordChar, and neither
-                       Avalonia 12 nor FluentAvalonia 3 ships a first-party PasswordBox. -->
-                  <TextBox Grid.Row="3" Grid.Column="1" PasswordChar="●"
-                           Text="{Binding Password, Mode=TwoWay}"
-                           PlaceholderText="{x:Static loc:Strings.SettingsFieldPasswordPlaceholder}" />
-                </Grid>
-                <TextBlock Text="{Binding ValidationError}" FontSize="12"
-                           IsVisible="{Binding ValidationError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           Foreground="{DynamicResource LatticeDangerFgBrush}" />
-                <TextBlock Text="{Binding TestResultText}" FontSize="12"
-                           IsVisible="{Binding TestResultText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                  <Button Content="{x:Static loc:Strings.SettingsTestConnectionButton}" Command="{Binding TestConnectionCommand}" />
-                  <Button Classes="accent" Content="{x:Static loc:Strings.SettingsSaveButton}" Command="{Binding SaveCommand}" />
-                  <Button Content="{x:Static loc:Strings.SettingsRemoveButton}" Command="{Binding RemoveCommand}"
-                          Background="Transparent"
-                          Foreground="{DynamicResource LatticeDangerFgBrush}" />
-                </StackPanel>
-              </StackPanel>
-            </ui:FASettingsExpander>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
 
       <TextBlock Text="{x:Static loc:Strings.SettingsPollingSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
@@ -72,6 +28,23 @@
       <TextBlock Text="{Binding PollingError}" FontSize="12"
                  IsVisible="{Binding PollingError, Converter={x:Static ObjectConverters.IsNotNull}}"
                  Foreground="{DynamicResource LatticeDangerFgBrush}" />
+
+      <TextBlock Text="{x:Static loc:Strings.SettingsThemeSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="ThemeExpander"
+                             Header="{x:Static loc:Strings.SettingsThemeHeader}"
+                             Description="{x:Static loc:Strings.SettingsThemeDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllThemes}"
+                    SelectedItem="{Binding SelectedTheme, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="infra:AppTheme">
+                <TextBlock Text="{Binding Converter={x:Static v:ThemeLabelConverter.Instance}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

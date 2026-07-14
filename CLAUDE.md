@@ -111,6 +111,14 @@ Practical, readable, .NET-idiomatic functional style — not purity maximalism. 
 - Design doc (`docs/design/m2/README.md`) is authoritative over plan wording when they conflict — cite the design line when deviating from a plan detail (window-width breakpoints case, PR #28).
 - Scheduled tasks (client-side cron): pre-approve their tools via "Run now" at creation, or unattended runs die on permission prompts.
 
+### Mutation gates (Stryker.NET pilot, issue #77)
+
+- Tier 0: the plain `dotnet test` per-PR gate — unchanged, still the default quality bar.
+- Tier 1 (test admission): PR job path-filtered to the mutation scope + its test project, runs Stryker incrementally (`--since:origin/main`). **Report-only during calibration** (~1 week of data); a `break` threshold is set from the observed score distribution afterwards, never guessed up front.
+- Tier 2 (regression audit): nightly full run over the scope; posts/updates a score comment on #77 (`scripts/post-mutation-report.sh`). Never blocks PRs.
+- Scope is pinned in `tests/Lattice.Tests/stryker-config.json` (currently `src/Lattice.Core/SnapshotBuilder.cs`) — never repo-wide. Two tooling limits shape it: Stryker.NET has no F# support (`Lattice.Core.Machine`, `Lattice.App.Aggregation` excluded), and its Roslyn-only recompile cannot build Avalonia projects (XamlIl-injected `InitializeComponent` doesn't exist ⇒ CS0103), so the `Lattice.App` ViewModels policy modules stay out until extracted to a non-UI assembly.
+- Survivor adjudication is a controller judgment call: equivalent mutants exist and cannot be killed; adding assertions solely to raise the score is banned — that is false-green in a new costume.
+
 ## Milestones
 
 **M1 — Protocol layer** (`Lattice.Boinc.GuiRpc`)

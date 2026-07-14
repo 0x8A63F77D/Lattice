@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Visual-regression calibration spike (issue #82). Report-only: this project is
+       gated out of the normal cross-platform CI run (see the LATTICE_RUN_VISUAL_TESTS
+       env-gate in the tests) and only exercised by the dedicated macOS
+       .github/workflows/visual-tests.yml job. It is the ONE project in the solution
+       that captures real pixels: it sets UseHeadlessDrawing=false + .UseSkia() in its
+       own TestAppBuilder (headless app config is per-assembly), which is why it lives
+       here rather than bolting onto Lattice.App.Tests (that host is pixel-less). -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- Committed baselines are checked in next to the source; never auto-accept. -->
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Verify snapshot lifecycle (received/verified, baseline promotion) for xUnit v3;
+         Verify 31.24.0 core flows in transitively. We drive Verify over the captured PNG
+         streams directly rather than through Verify.Avalonia's control converter: that
+         converter also emits a byte-exact visual-tree .txt target which short-circuits the
+         image comparison (and suppresses diff emission) whenever the tree changes — defeating
+         the image gate on exactly the regressions this pilot exists to catch (see the #82 PR
+         notes / TolerantPngComparer). The rest of the #81 stack is unchanged. -->
+    <PackageReference Include="Verify.XunitV3" Version="31.24.0" />
+    <!-- Real renderer: headless Skia produces pixels; base Avalonia.Headless does not. -->
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.0" />
+    <!-- Embedded font for the render path so captures do not depend on the macOS
+         system font stack (mirrors Avalonia's own render tests). App ships unchanged. -->
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <!-- Tolerant image comparison engine (the engine behind Verify.ImageSharp.Compare).
+         We register our own dual-tolerance comparer on it — see TolerantPngComparer. -->
+    <PackageReference Include="Codeuctivity.ImageSharpCompare" Version="4.1.390" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit.v3.assert" Version="3.2.2" />
+    <PackageReference Include="xunit.v3.core" Version="3.2.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Lattice.App/Lattice.App.csproj" />
+  </ItemGroup>
+</Project>

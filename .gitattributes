@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Visual-regression baselines are binary; never line-ending-normalize them (issue #82).
+*.png binary
+*.verified.png binary
+*.received.png binary

@@ -39,7 +39,12 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
-        registry.AddHost(TestData.MakeHostConfig());
+        // Two hosts + a tall viewport → Flat, so the "All hosts" sentinel leads the rail
+        // (a lone host now renders as SingleHost with no sentinel). The shell's own viewport
+        // feed (Task 8 wires it from Nav.Bounds) is stood in here by a direct call.
+        registry.AddHost(TestData.MakeHostConfig(name: "a"));
+        registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        shell.SetRailViewportHeight(1000.0);
         Layout(window);
 
         var sentinelRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
@@ -55,12 +60,16 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
-        var host = TestData.MakeHostConfig();
+        var host = TestData.MakeHostConfig(name: "a");
         registry.AddHost(host);
+        registry.AddHost(TestData.MakeHostConfig(name: "b"));
+        shell.SetRailViewportHeight(1000.0);   // Flat rail (see First_rail_row_ note)
         Layout(window);
 
-        // Index 0 is the All-hosts sentinel; the sole host lives at index 1.
-        window.HostList.SelectedIndex = 1;
+        // Scope to host "a" with a real click — the scope trigger is the click gesture
+        // (OnHostRailTapped), so a bare SelectedIndex assignment no longer scopes.
+        var hostRow = shell.RailEntries.OfType<HostRailItemViewModel>().Single(r => r.HostId == host.Id);
+        RailInput.ClickRow(window, hostRow);
         Layout(window);
         Assert.Equal(host.Id, shell.Scope.HostId);
 
@@ -77,7 +86,10 @@ public class ShellRailTests
     {
         var (window, shell, registry) = MakeShell();
         window.Show();
+        // Two hosts + tall viewport → Flat, so the sentinel is present (see First_rail_row_ note).
         registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        registry.AddHost(TestData.MakeHostConfig(name: "home-pc"));
+        shell.SetRailViewportHeight(1000.0);
         Layout(window);
 
         var sentinelText = window.GetVisualDescendants().OfType<StackPanel>()
@@ -164,6 +176,29 @@ public class ShellRailTests
                     $"nav icon resource '{key}' ({view.Title}) should resolve");
                 Assert.IsType<StreamGeometry>(value);
             }
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Hosts_block_is_hosted_in_the_pane_footer_slot()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        Layout(window);
+
+        // Design 3a: the hosts block lives in the PaneFooter slot, NOT the rejected
+        // on-top PaneCustomContent slot. This discriminates the two layouts (order alone
+        // does not — PaneCustomContent also sits above the footer menu).
+        Assert.Null(window.Nav.PaneCustomContent);
+        var footer = Assert.IsAssignableFrom<Control>(window.Nav.PaneFooter);
+        Assert.Contains(window.HostList.GetVisualAncestors(), a => ReferenceEquals(a, footer));
+
+        // Secondary sanity: still renders above Settings (FooterMenuItems).
+        var hostsTop = window.HostList.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        var settingsTop = window.NavSettings.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        Assert.True(hostsTop < settingsTop,
+            $"hosts (y={hostsTop}) must render above Settings (y={settingsTop})");
         window.Close();
     }
 }

@@ -69,7 +69,13 @@ public class TransfersViewTests
     [AvaloniaFact]
     public void All_hosts_scope_shows_the_seven_design_headers_including_Status()
     {
-        var (window, _, _, _, _, _) = MakeView();
+        // The seventh header is Host, shown only under genuine multi-host
+        // presentation (IsAllHostsScope). Post-ScopeMachine that keys on >1
+        // registered host, not on the AllHosts scope alone, so this aggregate
+        // render must register two hosts to earn the Host column.
+        var (window, _, _, registry, _, fakes) = MakeView();
+        AddHost(registry, fakes, "host-a", new FakeGuiRpcClient());
+        AddHost(registry, fakes, "host-b", new FakeGuiRpcClient());
         window.Show();
         Layout(window);
 

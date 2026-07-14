@@ -5,11 +5,17 @@
                     xmlns:loc="using:Lattice.App.Localization"
                     x:Class="Lattice.App.Views.AddHostDialog"
                     x:DataType="vm:AddHostViewModel"
-                    Title="{x:Static loc:Strings.AddHostDialogTitle}"
-                    PrimaryButtonText="{x:Static loc:Strings.AddHostPrimaryButton}"
+                    Title="{Binding DialogTitle}"
+                    PrimaryButtonText="{Binding PrimaryButtonText}"
+                    SecondaryButtonText="{Binding TestButtonText}"
                     CloseButtonText="{x:Static loc:Strings.AddHostCloseButton}"
                     DefaultButton="Primary"
                     IsPrimaryButtonEnabled="{Binding CanAddNow}">
+  <ui:FAContentDialog.Styles>
+    <Style Selector="TextBox.danger">
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeDangerFgBrush}" />
+    </Style>
+  </ui:FAContentDialog.Styles>
   <StackPanel Spacing="8" MinWidth="360">
     <ui:FAInfoBar Severity="Error" IsOpen="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}"
                   IsClosable="False" Title="{x:Static loc:Strings.AddHostErrorTitle}" Message="{Binding ErrorText}" />
@@ -18,7 +24,15 @@
     <TextBox Text="{Binding PortText, Mode=TwoWay}" PlaceholderText="{x:Static loc:Strings.AddHostFieldPortPlaceholder}" />
     <!-- PasswordChar masks rendering only; the automation peer still exposes raw
          Text (platform limitation, accepted + ledger-tracked — see SettingsView). -->
-    <TextBox Text="{Binding Password, Mode=TwoWay}" PasswordChar="●" PlaceholderText="{x:Static loc:Strings.AddHostFieldPasswordPlaceholder}" />
+    <TextBox x:Name="PasswordBox" Text="{Binding Password, Mode=TwoWay}" PasswordChar="●"
+             Classes.danger="{Binding HasPasswordError}"
+             PlaceholderText="{x:Static loc:Strings.AddHostFieldPasswordPlaceholder}" />
+    <TextBlock Text="{Binding PasswordErrorText}" FontSize="12"
+               IsVisible="{Binding HasPasswordError}"
+               Foreground="{DynamicResource LatticeDangerFgBrush}" />
+    <TextBlock Text="{Binding TestResultText}" FontSize="12"
+               IsVisible="{Binding TestResultText, Converter={x:Static ObjectConverters.IsNotNull}}"
+               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
     <ui:FAInfoBar Severity="Informational" IsOpen="True" IsClosable="False"
                   Message="{x:Static loc:Strings.AddHostRemoteAccessInfo}" />
     <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" />

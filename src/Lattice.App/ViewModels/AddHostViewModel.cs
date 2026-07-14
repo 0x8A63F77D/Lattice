@@ -7,23 +7,59 @@ using Lattice.Core;
 
 namespace Lattice.App.ViewModels;
 
+/// <summary>Which flow <see cref="AddHostViewModel"/> is driving: a new host or an existing one.</summary>
+public enum HostDialogMode { Add, Edit }
+
 /// <summary>
-/// Add-host dialog: validates, test-connects, then registers. The dialog stays
-/// open on failure (design 2d: failure renders an InfoBar in the dialog).
+/// Add/Edit-host dialog. Add mode validates, test-connects, then registers; the
+/// dialog stays open on failure (design 2d: failure renders an InfoBar in the
+/// dialog). Edit mode (design 3b) prefills from an existing host, retitles for
+/// editing, and saves locally without a connection test — mirroring the old
+/// Settings card, which persisted rename/address/password changes to an
+/// unreachable host. Edit mode also exposes an advisory Test-connection command
+/// and an openable password-error state (auth-failed deep link).
 /// </summary>
 public sealed partial class AddHostViewModel : ObservableObject
 {
     private readonly HostRegistry _registry;
     private readonly Func<IGuiRpcClient> _clientFactory;
+    private readonly Guid _editId;       // Guid.Empty in Add mode
 
     public AddHostViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory)
+        : this(registry, clientFactory, Guid.Empty, HostDialogMode.Add)
+    {
+    }
+
+    private AddHostViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, Guid editId, HostDialogMode mode)
     {
         _registry = registry;
         _clientFactory = clientFactory;
+        _editId = editId;
+        Mode = mode;
     }
+
+    /// <summary>Edit an existing host: prefilled, retitled, Save→UpdateHost.</summary>
+    public static AddHostViewModel ForEdit(HostRegistry registry, Func<IGuiRpcClient> clientFactory,
+        HostConfig host, bool authError) =>
+        new(registry, clientFactory, host.Id, HostDialogMode.Edit)
+        {
+            Name = host.Name,
+            Address = host.Address,
+            PortText = host.Port.ToString(),
+            Password = host.Password,
+            HasPasswordError = authError,
+            PasswordErrorText = authError ? string.Format(Strings.EditHostPasswordError, host.DisplayName) : null,
+        };
 
     /// <summary>Ceiling for the pre-add connection test — a dead host must not pin the dialog forever.</summary>
     internal TimeSpan TestTimeout { get; set; } = TimeSpan.FromSeconds(10);
+
+    public HostDialogMode Mode { get; private init; } = HostDialogMode.Add;
+
+    public string DialogTitle => Mode == HostDialogMode.Edit ? Strings.EditHostDialogTitle : Strings.AddHostDialogTitle;
+    public string PrimaryButtonText => Mode == HostDialogMode.Edit ? Strings.EditHostPrimaryButton : Strings.AddHostPrimaryButton;
+    public bool ShowTestButton => Mode == HostDialogMode.Edit;
+    public string? TestButtonText => ShowTestButton ? Strings.SettingsTestConnectionButton : null;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AddCommand))]
@@ -40,6 +76,9 @@ public sealed partial class AddHostViewModel : ObservableObject
     [ObservableProperty] private string _password = "";
     [ObservableProperty] private string? _errorText;
     [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private bool _hasPasswordError;
+    [ObservableProperty] private string? _passwordErrorText;
+    [ObservableProperty] private string? _testResultText;
 
     /// <summary>
     /// Mirror of <see cref="CanAdd"/> as a plain bindable bool. FAContentDialog's
@@ -60,44 +99,71 @@ public sealed partial class AddHostViewModel : ObservableObject
     partial void OnPortTextChanged(string value) => CanAddNow = CanAdd();
     partial void OnIsBusyChanged(bool value) => CanAddNow = CanAdd();
 
+    // The danger border lifts once the user starts correcting the password.
+    partial void OnPasswordChanged(string value)
+    {
+        HasPasswordError = false;
+        PasswordErrorText = null;
+    }
+
     [RelayCommand(CanExecute = nameof(CanAdd))]
     private async Task AddAsync()
     {
         IsBusy = true;
         try
         {
-            var candidate = new HostConfig(
-                Guid.NewGuid(), Name.Trim(), Address.Trim(), int.Parse(PortText), Password);
+            HostConfig candidate = Candidate();   // CanAdd already gated address/port
+            if (Mode == HostDialogMode.Edit)
+            {
+                // Save is local-only: never blocked by an unreachable host.
+                if (Register(candidate, edit: true) is { } error) ErrorText = error;
+                else { Succeeded = true; ErrorText = null; }
+                return;
+            }
             using var cts = new CancellationTokenSource(TestTimeout);
             TestConnectionResult result =
                 await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
             if (result.Success)
             {
-                // AddHost persists the host list to disk synchronously; a write
-                // failure must land in the dialog's InfoBar, not escape the
-                // async void PrimaryButtonClick handler and down the app.
-                if (RegistryGuard.TryMutate(() => _registry.AddHost(candidate)) is { } error)
-                {
-                    ErrorText = string.Format(Strings.AddHostSaveFailedFmt, error);
-                }
-                else
-                {
-                    Succeeded = true;
-                    ErrorText = null;
-                }
+                if (Register(candidate, edit: false) is { } error) ErrorText = error;
+                else { Succeeded = true; ErrorText = null; }
             }
-            else
-            {
-                ErrorText = result.Error;
-            }
+            else ErrorText = result.Error;
         }
-        catch (OperationCanceledException)
-        {
-            ErrorText = Strings.AddHostTimeoutError;
-        }
-        finally
-        {
-            IsBusy = false;
-        }
+        catch (OperationCanceledException) { ErrorText = Strings.AddHostTimeoutError; }
+        finally { IsBusy = false; }
     }
+
+    // AllowConcurrentExecutions = false: while a test is in flight, CanExecute
+    // reports false, so a Button bound to this command (Avalonia's Button.OnClick
+    // re-checks CanExecute on every click) will not invoke a second overlapping
+    // run that could race the first and overwrite TestResultText with a stale
+    // result. Explicit here so the guarantee survives regardless of what
+    // CommunityToolkit.Mvvm's unmarked-attribute default happens to be.
+    [RelayCommand(AllowConcurrentExecutions = false)]
+    private async Task TestConnectionAsync()
+    {
+        var candidate = new HostConfig(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
+            Name.Trim(), Address.Trim(), int.TryParse(PortText, out var p) ? p : 0, Password);
+        TestResultText = Strings.SettingsTestConnectionBusy;
+        try
+        {
+            using var cts = new CancellationTokenSource(TestTimeout);
+            var r = await HostMonitorManager.TestConnectionAsync(candidate, _clientFactory, cts.Token);
+            TestResultText = r.Success
+                ? string.Format(Strings.SettingsTestConnectionSuccess, r.Version!.Major, r.Version.Minor, r.Version.Release)
+                : r.Error;
+        }
+        catch (OperationCanceledException) { TestResultText = Strings.SettingsTestConnectionTimeout; }
+    }
+
+    /// <summary>Field values as a HostConfig; keeps the edited host's id (new id in Add).</summary>
+    private HostConfig Candidate() =>
+        new(_editId == Guid.Empty ? Guid.NewGuid() : _editId,
+            Name.Trim(), Address.Trim(), int.Parse(PortText), Password);
+
+    private string? Register(HostConfig cfg, bool edit) =>
+        RegistryGuard.TryMutate(() => { if (edit) _registry.UpdateHost(cfg); else _registry.AddHost(cfg); }) is { } err
+            ? string.Format(edit ? Strings.EditHostSaveFailedFmt : Strings.AddHostSaveFailedFmt, err)
+            : null;
 }

@@ -1,0 +1,64 @@
+name: Visual Regression (report-only)
+
+# Screenshot-baseline visual-regression pilot (issue #82). REPORT-ONLY during calibration:
+# image diffs never fail the build (the test step is continue-on-error), mirroring the
+# Stryker #77 cadence. macOS only — baselines are macOS/Skia captures and the gate is pinned
+# to that platform. The normal cross-platform ci.yml leaves LATTICE_RUN_VISUAL_TESTS unset,
+# so these tests skip there; this workflow is the sole place they run.
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tests/Lattice.VisualTests/**'
+      - 'src/Lattice.App/**'
+      - '.github/workflows/visual-tests.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/Lattice.VisualTests/**'
+      - 'src/Lattice.App/**'
+      - '.github/workflows/visual-tests.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: visual-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  visual:
+    name: visual (macOS, report-only)
+    runs-on: macos-latest
+    env:
+      # Gate: opt these tests in (ci.yml leaves it unset so they skip in the normal run).
+      LATTICE_RUN_VISUAL_TESTS: '1'
+      # Send diff masks + the calibration report somewhere the upload step can find them.
+      LATTICE_VISUAL_ARTIFACTS: ${{ github.workspace }}/artifacts/visual
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet build tests/Lattice.VisualTests/Lattice.VisualTests.csproj -c Release
+      - name: Run visual tests (report-only)
+        id: visual
+        continue-on-error: true
+        run: dotnet test tests/Lattice.VisualTests/Lattice.VisualTests.csproj -c Release --no-build --logger "trx;LogFileName=visual.trx"
+      - name: Upload received / diff / calibration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-artifacts-${{ github.run_id }}
+          path: |
+            artifacts/visual/**
+            tests/Lattice.VisualTests/**/*.received.png
+          if-no-files-found: warn
+      - name: Report-only note
+        if: always()
+        run: |
+          {
+            echo "### Visual regression (report-only)"
+            echo ""
+            echo "Test outcome: \`${{ steps.visual.outcome }}\` — image diffs never fail this build."
+            echo "The calibration report and any received/diff PNGs are in the **visual-artifacts** upload."
+          } >> "$GITHUB_STEP_SUMMARY"
