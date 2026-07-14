@@ -141,8 +141,12 @@
                fixed instead: when the columns exceed the viewport (narrow window or a column
                dragged wider) the grid overflows into a working h-scrollbar; when they fit, the
                DataGridFillerColumn takes the trailing space (native Task-Manager idiom). -->
+          <!-- SortMemberPath: a template column has no Binding for the DataGrid to derive a sort
+               key from (unlike the text columns), so it is unsortable unless given an explicit path.
+               Point each at the underlying COMPARABLE property so sorting uses the real value, not
+               the formatted display string (e.g. Fraction, not "34%"; Deadline, not its text). -->
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}"
-                                   Width="230" MinWidth="230">
+                                   Width="230" MinWidth="230" SortMemberPath="Data.Name">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
@@ -150,7 +154,8 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="112" MinWidth="112">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="112" MinWidth="112"
+                                   SortMemberPath="Data.Fraction">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -170,7 +175,8 @@
           <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
                                Binding="{Binding Data.RemainingText}" Width="74" MinWidth="74"
                                CellStyleClasses="numericCell" />
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100" MinWidth="100">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100" MinWidth="100"
+                                   SortMemberPath="Data.Deadline">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
@@ -183,7 +189,8 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="112" MinWidth="112">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="112" MinWidth="112"
+                                   SortMemberPath="Data.StateKind">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">

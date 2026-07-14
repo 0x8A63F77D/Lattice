@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -616,6 +617,56 @@ public class TasksViewTests
             Assert.NotNull(tb.FontFeatures);
             Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
         }
+        window.Close();
+    }
+
+    private static TaskRow TaskHolder(string name, double fraction, DateTimeOffset deadline, TaskStateKind state) =>
+        new(new TaskRowViewModel(
+            Project: "p", Application: "a", Name: name, Fraction: fraction, PercentText: "x",
+            ElapsedText: "e", RemainingText: "r", DeadlineText: "d", Deadline: deadline,
+            StateKind: state, StateText: state.ToString(), IsDeadlineAtRisk: false,
+            IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a").Key,
+            new TaskRowViewModel(
+                Project: "p", Application: "a", Name: name, Fraction: fraction, PercentText: "x",
+                ElapsedText: "e", RemainingText: "r", DeadlineText: "d", Deadline: deadline,
+                StateKind: state, StateText: state.ToString(), IsDeadlineAtRisk: false,
+                IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a"));
+
+    // The four template columns (Task, Progress, Deadline, State) had no Binding for the DataGrid
+    // to derive a sort key from, so clicking their headers did nothing (owner report). SortMemberPath
+    // now points each at its underlying comparable property. Assert they report CanUserSort and that
+    // a real sort orders by the underlying VALUE (Deadline chronologically, not the display string).
+    [AvaloniaFact]
+    public void Task_template_columns_are_sortable_by_their_underlying_value()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
+        vm.Rows.Add(TaskHolder("beta",  0.5, t.AddHours(2), TaskStateKind.Waiting));
+        vm.Rows.Add(TaskHolder("alpha", 0.9, t.AddHours(3), TaskStateKind.Running));
+        vm.Rows.Add(TaskHolder("gamma", 0.1, t.AddHours(1), TaskStateKind.Suspended));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        // Task(2) Progress(3) Deadline(6) State(7)
+        foreach (var i in new[] { 2, 3, 6, 7 })
+            Assert.True(grid.Columns[i].CanUserSort, $"column {i} ({grid.Columns[i].Header}) should be sortable");
+
+        // Sort by Deadline ascending: order by the DateTimeOffset, not the "d" display text —
+        // gamma(+1h), beta(+2h), alpha(+3h).
+        grid.Columns[6].Sort(ListSortDirection.Ascending);
+        Layout(window);
+        // Read the sorted VIEW order from the realized rows, robust to headless row recycling
+        // (a recycled container can briefly duplicate a DataContext): group by name and take each
+        // row's minimum Index. Avalonia sorts the collection view, not vm.Rows, so vm.Rows is
+        // deliberately left in insertion order.
+        var order = grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.DataContext is TaskRow)
+            .GroupBy(r => ((TaskRow)r.DataContext!).Data.Name)
+            .OrderBy(g => g.Min(r => r.Index))
+            .Select(g => g.Key)
+            .ToArray();
+        Assert.Equal(new[] { "gamma", "beta", "alpha" }, order);
         window.Close();
     }
 }
