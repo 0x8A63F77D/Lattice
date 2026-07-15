@@ -45,7 +45,17 @@ public static class CollectionReconciler
                     rows.RemoveAt(rem.Index);
                     break;
                 case ReconcileOp<TKey, TRow>.Move mv:
-                    rows.Move(mv.FromIndex, mv.ToIndex);
+                    // Avalonia 12.1's DataGrid does NOT visually reflect a CollectionChanged.Move:
+                    // ObservableCollection.Move reorders the backing collection but the rendered
+                    // rows stay put (Projects header-sort "did nothing" while every VM/F# test —
+                    // which only inspect collection order — passed; 2026-07-15). Express the move as
+                    // the Remove+Insert of the SAME holder instance instead — the shape the DataGrid
+                    // DOES re-render, and the one expand/collapse already relies on. Holder identity
+                    // survives (the same object is reinserted); .NET's ObservableCollection.Move is
+                    // itself Remove(from)+Insert(to), so these indices need no adjustment.
+                    var moved = rows[mv.FromIndex];
+                    rows.RemoveAt(mv.FromIndex);
+                    rows.Insert(mv.ToIndex, moved);
                     break;
                 default:
                     throw new UnreachableException($"Unhandled ReconcileOp: {op}");

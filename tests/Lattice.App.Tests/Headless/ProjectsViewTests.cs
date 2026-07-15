@@ -88,6 +88,59 @@ public class ProjectsViewTests
     private static IEnumerable<string?> TextsIn(Visual row) =>
         row.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text);
 
+    // A parent holder with a caller-chosen project name + url, so a reorder is visible in the
+    // Project cell text. (ParentHolder hardcodes Name="P", useless for order assertions.)
+    private static ProjectRow NamedParent(string name, string url)
+    {
+        var data = new ProjectRowViewModel(
+            Key: ProjectRowKey.NewParentKey(url),
+            MasterUrl: url, IsParent: true, IsExpanded: false, ShowChevron: false,
+            Name: name, HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
+            AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
+            StatusKind: ProjectStatusKind.Active, StatusText: "s");
+        return new ProjectRow(data.Key, data);
+    }
+
+    // The Project-name text of each REALIZED DataGridRow, ordered by on-screen Y (visual order,
+    // NOT DataGridRow.Index — the whole question is whether the visual follows the collection).
+    private static List<string?> RenderedProjectNames(ProjectsView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
+            .OrderBy(r => r.Bounds.Y)
+            .Select(r => VisualTree.FindInVisualTree<TextBlock>(r, t => t.Classes.Contains("projectName"))?.Text)
+            .ToList();
+
+    // ROOT CAUSE of "Projects can't sort" (2026-07-15): a header-click sort reorders the Rows
+    // COLLECTION through a reconciler Move op, but Avalonia 12.1's DataGrid does not visually
+    // reflect a CollectionChanged.Move — the rendered rows stayed put while every VM/F# test (all
+    // of which inspect only collection order) passed. Sorting is the FIRST feature that ever
+    // reorders rows: before it, compute was always RAC-desc and expand/collapse only inserted or
+    // removed in place, so the Move path never reached the real DataGrid. This drives the reorder
+    // through the ACTUAL reconciler (CollectionReconciler.Apply on a real diff that yields a Move)
+    // and asserts the RENDERED order — the layer the collection-only tests could not see. Red
+    // before the applier translated Move to Remove+Insert; green after.
+    [AvaloniaFact]
+    public void A_reconciler_move_reorders_the_rendered_grid_not_just_the_collection()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(NamedParent("Alpha", "u-a"));
+        vm.Rows.Add(NamedParent("Beta", "u-b"));
+        Layout(window);
+        Assert.Equal(new string?[] { "Alpha", "Beta" }, RenderedProjectNames(view));
+
+        // The exact call ProjectsViewModel.Rebuild makes: diff current vs a swapped target. With two
+        // surviving keys in flipped order the diff emits a single Move — the op the DataGrid ignored.
+        var existing = vm.Rows.Select(h => (h.Key, h.Data)).ToArray();
+        var target = new[] { (vm.Rows[1].Key, vm.Rows[1].Data), (vm.Rows[0].Key, vm.Rows[0].Data) };
+        CollectionReconciler.Apply(vm.Rows, Reconcile.diff(existing, target), (k, r) => new ProjectRow(k, r));
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.Equal(new string?[] { "Beta", "Alpha" }, RenderedProjectNames(view));
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void Parent_and_child_rows_carry_their_hierarchy_classes()
     {

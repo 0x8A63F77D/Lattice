@@ -33,8 +33,15 @@ public class CollectionReconcilerTests
         Assert.Equal("a2", rows[0].Data);
     }
 
+    // A reorder is applied as Remove+Insert of the SAME holder instances, NOT ObservableCollection
+    // .Move: Avalonia 12.1's DataGrid ignores a CollectionChanged.Move (the backing collection
+    // reorders but the rendered rows do not — the "Projects can't sort" root cause, 2026-07-15).
+    // The invariants that matter are unchanged and asserted here: never a Reset (Clear), and the
+    // moved holder OBJECT identity survives so in-place value liveness/selection is preserved. The
+    // rendered-grid proof of this workaround is A_reconciler_move_reorders_the_rendered_grid... in
+    // the headless ProjectsViewTests.
     [Fact]
-    public void Reorder_moves_holders_without_reset()
+    public void Reorder_reinserts_holders_without_reset()
     {
         var rows = Collection((1, "a"), (2, "b"));
         var first = rows[0];
@@ -45,7 +52,11 @@ public class CollectionReconcilerTests
         ReconcileInto(rows, (2, "b"), (1, "a"));
 
         Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, events);
-        Assert.Contains(NotifyCollectionChangedAction.Move, events);
+        // The DataGrid-visible shape: Remove then Insert, not a Move it would ignore.
+        Assert.DoesNotContain(NotifyCollectionChangedAction.Move, events);
+        Assert.Contains(NotifyCollectionChangedAction.Remove, events);
+        Assert.Contains(NotifyCollectionChangedAction.Add, events);
+        // Same holder OBJECTS, reordered — identity preserved through the reinsert.
         Assert.Same(second, rows[0]);
         Assert.Same(first, rows[1]);
     }
