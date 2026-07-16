@@ -110,6 +110,25 @@ public class ProjectRowViewModelTests
     }
 
     [Fact]
+    public void Parent_and_child_rows_carry_the_ProjectRows_sort_key()
+    {
+        // The exact shape hierarchical sort (issue #57) hangs the grid comparer off:
+        // Parent's SortKey is ProjectRows.parentKey(g) (Level = ParentRow); Child's is
+        // ProjectRows.childKey(g, a) (Level = ChildRow(host)). Pinned via equality against
+        // the F# oracle itself, not a hand-reconstructed shape, so it tracks GroupSortKey
+        // field changes automatically.
+        var g = ProjectRows.compute([Att(rac: 100.4), Att(host: "host-b", rac: 100.4)])[0];
+
+        var parentRow = ProjectRowViewModel.Parent(g, isAllHostsScope: true);
+        Assert.Equal(ProjectRows.parentKey(g), parentRow.SortKey);
+        Assert.Equal(RowLevel.ParentRow, parentRow.SortKey.Level);
+
+        var childRow = ProjectRowViewModel.Child(g, g.Attachments[0]);
+        Assert.Equal(ProjectRows.childKey(g, g.Attachments[0]), childRow.SortKey);
+        Assert.Equal(RowLevel.NewChildRow(g.Attachments[0].HostName, g.Attachments[0].HostId), childRow.SortKey.Level);
+    }
+
+    [Fact]
     public void Single_host_scope_renders_plain_status_text()
     {
         // Scoped groups contain only the selected host's attachment; "on all

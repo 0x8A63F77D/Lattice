@@ -59,13 +59,11 @@
 
     <!-- Row-severity tints (design 2c): warning + error rows only. Info rows are
          untinted. Set via RowClassBinder in code-behind (holder-tracking, so an
-         in-place Data swap re-applies) — the same liveness kit TasksView rides. -->
-    <Style Selector="DataGridRow.warning">
-      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
-    </Style>
-    <Style Selector="DataGridRow.error">
-      <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
-    </Style>
+         in-place Data swap re-applies) — the same liveness kit TasksView rides.
+         The tint brushes themselves (incl. hover-keep) are centralized in
+         DataGridStyles.axaml (DataGrid.lattice DataGridRow.warning/.error) — this
+         view carries "lattice eventlog" so those shared rules apply; no local
+         duplicate needed. -->
     <!-- The lattice DataGrid theme's row height is 36; the log wants 26. RowHeight
          on the grid is a local value that already beats the theme setter, but the
          theme also floors the row at a MinHeight, so pin DataGridRow height too and
@@ -80,6 +78,17 @@
          4px content box in a 20px column, so its cells zero the padding. -->
     <Style Selector="DataGrid.eventlog DataGridCell.priorityIcon">
       <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <!-- Severity gutter column: no header divider (mockup §2c grid-template-columns
+         128px 84px 140px 20px 1fr). Targeted from the end (nth-last-child(2), with
+         Message always last) so it survives the Host column hiding in single-host
+         scope — severity is always immediately before Message regardless of Host's
+         visibility. Body-side divider is killed via CellStyleClasses="noDivider"
+         on the column itself (Task 6's DataGridCell.noDivider rule in
+         DataGridStyles.axaml). -->
+    <Style Selector="DataGridColumnHeadersPresenter > DataGridColumnHeader:nth-last-child(2)">
+      <Setter Property="AreSeparatorsVisible" Value="False" />
     </Style>
   </UserControl.Styles>
 
@@ -149,14 +158,14 @@
     <Panel>
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice eventlog"
                 ItemsSource="{Binding Rows}" IsReadOnly="True"
-                RowHeight="26" HeadersVisibility="None"
+                RowHeight="26"
                 CanUserSortColumns="False" CanUserReorderColumns="False">
         <DataGrid.Columns>
           <!-- Column plan = the mockup's grid-template-columns: 128px 84px 140px
                20px 1fr (Time · Host · Project · priority icon · Message). Time is
                128px for the widest mono timestamp stack alone (design README:159:
                "size the timestamp column (128px) for the widest stack"). -->
-          <DataGridTemplateColumn Width="128">
+          <DataGridTemplateColumn Width="128" MinWidth="128" Header="{x:Static loc:Strings.EventLogColTime}">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <TextBlock Text="{Binding Data.TimestampText}" VerticalAlignment="Center"
@@ -164,15 +173,19 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Binding="{Binding Data.Host}" Width="84"
+          <DataGridTextColumn Binding="{Binding Data.Host}" Width="84" MinWidth="84"
+                              Header="{x:Static loc:Strings.ColHost}"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                               IsVisible="{Binding IsAllHostsScope}" />
-          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140"
+          <DataGridTextColumn Binding="{Binding Data.Project}" Width="140" MinWidth="140"
+                              Header="{x:Static loc:Strings.ColProject}"
                               FontSize="12" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
           <!-- Priority icon: its own 20px column on EVERY row (mockup §2c) —
                info rows get the regular gray glyph, warning/error the filled
-               colored ones. -->
-          <DataGridTemplateColumn Width="20" CellStyleClasses="priorityIcon">
+               colored ones. No header text; "noDivider" collapses its body cell
+               divider (Task 6's shared rule), and the header separator is killed
+               declaratively above (nth-last-child(2)). -->
+          <DataGridTemplateColumn Width="20" MinWidth="20" CellStyleClasses="priorityIcon noDivider">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <Panel Width="16" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -189,7 +202,12 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Width="*">
+          <!-- Fixed width, NOT a star column (Finding A round 2): a star pins the grid total to the
+               viewport, so it never overflows — horizontal scroll never engages and a long message
+               can't be revealed by dragging. Fixed columns overflow into a working h-scrollbar; the
+               DataGridFillerColumn fills any trailing slack. Message is the widest column since log
+               bodies are long. -->
+          <DataGridTemplateColumn Width="560" MinWidth="560" Header="{x:Static loc:Strings.EventLogColMessage}">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:EventLogRow">
                 <!-- Single line with ellipsis: the mockup's message span is

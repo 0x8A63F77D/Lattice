@@ -179,6 +179,12 @@
     <value>Couldn’t save changes: {0}</value>
   </data>
   <!-- ===== EventLog ===== -->
+  <data name="EventLogColMessage" xml:space="preserve">
+    <value>Message</value>
+  </data>
+  <data name="EventLogColTime" xml:space="preserve">
+    <value>Time</value>
+  </data>
   <data name="EventLogCountsFmt" xml:space="preserve">
     <value>{0} messages · {1} reachable hosts</value>
   </data>

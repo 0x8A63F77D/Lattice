@@ -65,3 +65,22 @@ module Reconcile =
             |> Array.mapFold settleSlot survivors
 
         removals @ List.concat slotOps
+
+    /// Reorder target rows so keys already present keep their existing relative
+    /// order and new keys append (in target relative order). diff over the
+    /// result then emits no Move — used when a collection view, not the
+    /// source, owns display order (otherwise reorders churn through the
+    /// applier's Move→Remove+Insert translation, costing selection).
+    /// Precondition: keys unique within `target` (same as diff).
+    let alignToExisting (existingKeys: 'Key[]) (target: struct ('Key * 'Row)[]) : struct ('Key * 'Row)[] =
+        // Construction-only lookup state; never escapes this function.
+        let targetByKey = target |> Seq.map (fun struct (k, r) -> k, struct (k, r)) |> dict
+        let existingSet = HashSet(existingKeys)
+        let survivors =
+            existingKeys
+            |> Array.choose (fun k ->
+                match targetByKey.TryGetValue k with
+                | true, row -> Some row
+                | false, _ -> None)
+        let newcomers = target |> Array.filter (fun struct (k, _) -> not (existingSet.Contains k))
+        Array.append survivors newcomers

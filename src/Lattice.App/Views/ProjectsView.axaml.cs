@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using FluentAvalonia.UI.Controls;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.ViewModels;
 
@@ -40,5 +41,23 @@ public partial class ProjectsView : UserControl
     {
         if (args.Reason == FAInfoBarCloseReason.CloseButton && DataContext is ProjectsViewModel vm)
             vm.DismissPartialCommand.Execute(null);
+    }
+
+    // The DataGrid's built-in sort is FLAT; on this hierarchical grid it would scatter child
+    // (per-host) rows away from their parent (and, if left unhandled, install a path sort). Cancel
+    // it unconditionally and route to the VM, which swaps RowsView's single custom sort description
+    // (design: only the parent aggregate sorts, children follow). Each sortable column's
+    // SortMemberPath is the F# column token; the token→column mapping lives ONLY in F#
+    // (ProjectRows.tryColumnOfToken — compile-time total over the DU), so this router has no case
+    // list to fall out of sync. The chevron column has no SortMemberPath ⇒ None ⇒ no-op, never a
+    // flat sort.
+    private void OnGridSorting(object? sender, DataGridColumnEventArgs e)
+    {
+        e.Handled = true;
+        if (DataContext is not ProjectsViewModel vm)
+            return;
+        var column = ProjectRows.tryColumnOfToken(e.Column.SortMemberPath);
+        if (column is not null)
+            vm.ToggleSort(column.Value);
     }
 }

@@ -38,6 +38,23 @@ public class ThemeResourceTests
     }
 
     [AvaloniaTheory]
+    [InlineData("LatticeGridDividerBrush", "#FFEDEBE9", "#FF333333")]
+    // Dark hover deliberately subtle (owner visual feedback: #383838 was dazzling / eye-straining).
+    [InlineData("LatticeRowHoverBrush",    "#FFF5F5F5", "#FF2D2D2D")]
+    public void New_grid_tokens_resolve_to_spec_colors(string key, string lightHex, string darkHex)
+    {
+        AssertBrush(key, ThemeVariant.Light, lightHex);
+        AssertBrush(key, ThemeVariant.Dark, darkHex);
+    }
+
+    private static void AssertBrush(string key, ThemeVariant variant, string expectedHex)
+    {
+        Assert.True(Application.Current!.TryGetResource(key, variant, out var res), $"{key} missing for {variant}");
+        var brush = Assert.IsAssignableFrom<ISolidColorBrush>(res);
+        Assert.Equal(Color.Parse(expectedHex), brush.Color);
+    }
+
+    [AvaloniaTheory]
     [InlineData("IconServerRegular")]
     [InlineData("IconCheckmarkCircleRegular")]
     [InlineData("IconArrowSyncRegular")]

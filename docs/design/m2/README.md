@@ -38,6 +38,10 @@ into three "turns". Each card has a **badge id** (e.g. `1c`, `3a`) shown top-lef
 
 **Turn 2 — Views (all on the `1c` shell):**
 - `2a` **Projects** — the Tasks DataGrid with one adaptation: hierarchical parent/child rows (chevron + indent).
+  Header sort is **view-owned** (a custom DataGridSortDescription over the pure `compareRows`, swapped in a
+  DataGridCollectionView), so the grid lights its native sort arrows. Only the parent **aggregates** order;
+  a group's children always follow their parent, host-ascending and direction-invariant. Ties break on
+  MasterUrl, also direction-invariant. Resource share sorts by `(max, min)` of the per-host shares (#57).
 - `2b` **Transfers** — active/retrying/queued rows; empty state is the common case.
 - `2c` **Event log** — merged stream + Host column; priority filters; follow-scroll; **has a column header
   row** (Time / Host / Project / severity / Message) so columns are drag-resizable.

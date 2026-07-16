@@ -14,10 +14,10 @@
   </UserControl.KeyBindings>
 
   <UserControl.Styles>
-    <!-- Retrying-row tint (design 2b), the Transfers analogue of Tasks' atRisk row. -->
-    <Style Selector="DataGridRow.retrying">
-      <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
-    </Style>
+    <!-- Retrying-row tint (design 2b), the Transfers analogue of Tasks' atRisk row, is
+         CENTRALIZED in DataGridStyles.axaml (DataGrid.lattice DataGridRow.retrying, plus its
+         :pointerover hover-keep) — it applies here because Grid carries the "lattice" class.
+         No local rule needed. -->
     <!-- Progress-fill Border: accent color. Unlike Tasks, Transfers rows have
          no suspended variant, so there is only the base rule. -->
     <Style Selector="Border.progressFill">
@@ -87,7 +87,12 @@
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
                 ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True">
         <DataGrid.Columns>
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColFile}" Width="*" MinWidth="140">
+          <!-- Fixed width, NOT a star column (Finding A round 2): a star pins the grid total to the
+               viewport so it can never overflow — no horizontal scroll, and drag just reshuffles
+               space. Fixed columns overflow into a working h-scrollbar; the DataGridFillerColumn
+               fills any trailing slack when they fit. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColFile}" Width="200" MinWidth="200"
+                                   SortMemberPath="Data.Name">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <TextBlock Text="{Binding Data.Name}" VerticalAlignment="Center"
@@ -96,11 +101,15 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
-                               Binding="{Binding Data.Project}" Width="140" />
+                               Binding="{Binding Data.Project}" Width="140" MinWidth="140" />
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}"
-                               Binding="{Binding Data.DirectionText}" Width="80" />
+                               Binding="{Binding Data.DirectionText}" Width="80" MinWidth="80" />
           <!-- Progress 190: 56px bar + "34.2 / 51.7 MB" text, same shape as the Tasks Progress cell. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190">
+          <!-- SortMemberPath on the template columns (File/Progress/Status): without an explicit
+               path a template column has no sort key and stays unsortable. Point at the underlying
+               comparable value (Fraction/UiState), not the display text. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190" MinWidth="190"
+                                   SortMemberPath="Data.Fraction">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -114,10 +123,12 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
-                               Binding="{Binding Data.SpeedText}" Width="90" />
+                               Binding="{Binding Data.SpeedText}" Width="90" MinWidth="90"
+                               CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210" MinWidth="210"
+                                   SortMemberPath="Data.UiState">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
@@ -139,7 +150,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
-                               Binding="{Binding Data.Host}" Width="80"
+                               Binding="{Binding Data.Host}" Width="80" MinWidth="80"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>
       </DataGrid>

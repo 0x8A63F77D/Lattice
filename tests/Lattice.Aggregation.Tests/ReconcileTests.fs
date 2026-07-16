@@ -93,3 +93,38 @@ let ``a surviving key is never removed or inserted`` (before: struct (int * stri
 let ``no-op diff for equal inputs`` (arr: struct (int * string)[]) =
     Reconcile.diff arr arr |> List.isEmpty
 
+[<Fact>]
+let ``alignToExisting keeps survivor order and appends newcomers`` () =
+    let existingKeys = [| 2; 1; 3 |]
+    let target = [| struct (1, "a"); struct (4, "d"); struct (3, "c"); struct (2, "b") |]
+    let aligned = Reconcile.alignToExisting existingKeys target
+    Assert.Equal<struct (int * string)[]>(
+        [| struct (2, "b"); struct (1, "a"); struct (3, "c"); struct (4, "d") |], aligned)
+
+[<Fact>]
+let ``alignToExisting drops existing keys absent from target and preserves target-relative newcomer order`` () =
+    // existingKeys carries a departed key (9, not in target) — it must simply be
+    // skipped, never surfaced as a survivor slot.
+    let existingKeys = [| 9; 1 |]
+    let target = [| struct (1, "a"); struct (2, "b"); struct (3, "c") |]
+    let aligned = Reconcile.alignToExisting existingKeys target
+    Assert.Equal<struct (int * string)[]>(
+        [| struct (1, "a"); struct (2, "b"); struct (3, "c") |], aligned)
+
+[<Property(Arbitrary = [| typeof<ReconcileArbs> |])>]
+let ``alignToExisting is a permutation of target`` (before: struct (int * string)[], after: struct (int * string)[]) =
+    let existingKeys = before |> Array.map (fun struct (k, _) -> k)
+    let aligned = Reconcile.alignToExisting existingKeys after
+    aligned.Length = after.Length && Set.ofArray aligned = Set.ofArray after
+
+[<Property(Arbitrary = [| typeof<ReconcileArbs> |])>]
+let ``diff over alignToExisting never emits a Move`` (before: struct (int * string)[], after: struct (int * string)[]) =
+    let existingKeys = before |> Array.map (fun struct (k, _) -> k)
+    let aligned = Reconcile.alignToExisting existingKeys after
+    Reconcile.diff before aligned
+    |> List.forall (function
+        | Move _ -> false
+        | Update _
+        | Insert _
+        | RemoveAt _ -> true)
+

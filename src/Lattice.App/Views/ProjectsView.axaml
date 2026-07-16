@@ -81,6 +81,14 @@
     <Style Selector="ToggleButton.chevron:checked:pressed /template/ ContentPresenter#PART_ContentPresenter">
       <Setter Property="Background" Value="Transparent" />
     </Style>
+
+    <!-- Chevron gutter column: no header divider (spec .dg-p>*:first-child). Body divider is
+         off via CellStyleClasses="noDivider" on the column; the header separator has no
+         per-column style-class hook, so target the first header positionally (chevron is
+         always column 0). -->
+    <Style Selector="DataGridColumnHeadersPresenter > DataGridColumnHeader:nth-child(1)">
+      <Setter Property="AreSeparatorsVisible" Value="False" />
+    </Style>
   </UserControl.Styles>
 
   <DockPanel>
@@ -137,11 +145,30 @@
 
     <!-- Grid + overlays -->
     <Panel>
+      <!-- The grid binds RowsView (a DataGridCollectionView) whose single custom sort description
+           OWNS display order. A header click no longer reorders anything itself: OnGridSorting
+           (code-behind) cancels the DataGrid's built-in FLAT sort — which would scatter child
+           (per-host) rows away from their parent, and if left unhandled would install a path sort —
+           then routes the clicked column to the VM, which swaps RowsView's one sort description
+           (design: only the parent aggregate sorts, children follow). Each sortable column's
+           SortMemberPath is the F# ProjectSortColumn case name ("ByName"…"ByStatus"); the native
+           sort ARROW lights because that token equals ProjectSortDescription.PropertyPath (the
+           DataGrid refreshes every header's :sortascending/:sortdescending pseudo-class whenever the
+           view's SortDescriptions change). Chevron stays unsortable (no SortMemberPath); Share is now
+           sortable (by (max,min) share).
+
+           CanUserSort="True" is REQUIRED on every sortable column: the SortMemberPath tokens are not
+           real properties, so DataGrid's implicit CanUserSort — which resolves SortMemberPath to an
+           IComparable property on the item type — evaluates false, and DataGridColumnHeader.ProcessSort
+           returns BEFORE ever raising Sorting, so the header click would silently do nothing. Setting
+           it explicitly short-circuits that reflection check (verified against Avalonia DataGrid 12.1
+           source: DataGridColumn.CanUserSort / DataGridColumnHeader.ProcessSort). -->
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="False">
+                ItemsSource="{Binding RowsView}" IsReadOnly="True" CanUserSortColumns="True"
+                Sorting="OnGridSorting">
         <DataGrid.Columns>
           <!-- Chevron 24 -->
-          <DataGridTemplateColumn Width="24">
+          <DataGridTemplateColumn Width="24" MinWidth="24" CellStyleClasses="noDivider">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <ToggleButton Classes="chevron" Background="Transparent" Padding="2"
@@ -161,7 +188,8 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <!-- Project 200 (parent: name; child: host name) -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200">
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200" MinWidth="200"
+                                   SortMemberPath="ByName" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="6">
@@ -176,10 +204,12 @@
           <!-- Hidden in single-host scope (design 2a): same treatment as the Tasks
                Host column; the single-host headless test asserts it. -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
-                               Binding="{Binding Data.HostsText}" Width="110"
-                               IsVisible="{Binding IsAllHostsScope}" />
-          <!-- Resource share 140: bar (when ShowShareBar) + text -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140">
+                               Binding="{CompiledBinding Data.HostsText, DataType=vm:ProjectRow}"
+                               Width="110" MinWidth="110" SortMemberPath="ByHostCount" CanUserSort="True"
+                               IsVisible="{Binding IsAllHostsScope}" CellStyleClasses="numericCell" />
+          <!-- Resource share 140: bar (when ShowShareBar) + text. Sortable by (max,min) share. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140" MinWidth="140"
+                                   SortMemberPath="ByShare" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -198,11 +228,19 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}"
-                               Binding="{Binding Data.AvgCreditText}" Width="100" />
+                               Binding="{CompiledBinding Data.AvgCreditText, DataType=vm:ProjectRow}"
+                               Width="100" MinWidth="100"
+                               SortMemberPath="ByAvgCredit" CanUserSort="True" CellStyleClasses="numericCell" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
-                               Binding="{Binding Data.TotalCreditText}" Width="110" />
-          <!-- Status *: icon + text, no pills (explicit design decision) -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="*">
+                               Binding="{CompiledBinding Data.TotalCreditText, DataType=vm:ProjectRow}"
+                               Width="110" MinWidth="110"
+                               SortMemberPath="ByTotalCredit" CanUserSort="True" CellStyleClasses="numericCell" />
+          <!-- Status: icon + text, no pills (explicit design decision). Fixed width, NOT a star
+               column — a star pins the grid total to the viewport, defeating horizontal scroll and
+               drag-to-reveal (Finding A round 2). With every column fixed the grid overflows into a
+               working h-scrollbar when tight and the DataGridFillerColumn fills any trailing slack. -->
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="300" MinWidth="300"
+                                   SortMemberPath="ByStatus" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">

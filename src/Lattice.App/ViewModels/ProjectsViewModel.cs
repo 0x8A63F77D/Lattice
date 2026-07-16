@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
+using Avalonia.Collections;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
+using Microsoft.FSharp.Collections;
 
 namespace Lattice.App.ViewModels;
 
@@ -25,6 +27,13 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // dashboard reopens collapsed; revisit only if users ask).
     private readonly HashSet<string> _expanded = [];
 
+    // Header-click sort, session-local. DefaultSort = compute's RAC-desc order
+    // (lights no header arrow). The VIEW owns display order via RowsView's single
+    // sort description; ToggleSort swaps it. Only the parent AGGREGATE sorts;
+    // children always follow their parent (design — encoded in
+    // ProjectRows.compareRows / orderedRows, not by ordering the source here).
+    private ProjectSort _sort = ProjectSort.DefaultSort;
+
     // Episode semantics live in PartialBarPolicy, the call protocol (current/
     // dismissed fingerprints, scope gate) in PartialBarState; this class only
     // holds the instance.
@@ -34,6 +43,10 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     {
         _store = store;
         _clock = clock;
+        RowsView = new DataGridCollectionView(Rows);
+        // Install the always-on default order BEFORE the first Rebuild, so the
+        // grid (which binds RowsView, not Rows) is never unsorted for a frame.
+        RowsView.SortDescriptions.Add(ProjectSortDescription.For(ProjectSort.DefaultSort));
         store.Changed += OnStoreChanged;
         clock.Tick += OnTick;
         Rebuild();
@@ -46,6 +59,15 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // creates real ProjectRow instances, so DataContext at the view layer is
     // always a ProjectRow at runtime.
     public ObservableCollection<RowHolder<ProjectRowKey, ProjectRowViewModel>> Rows { get; } = [];
+
+    /// <summary>
+    /// The grid's ItemsSource: a live view over <see cref="Rows"/> whose single
+    /// sort description (index 0) is swapped by <see cref="ToggleSort"/>. The grid
+    /// binds this rather than Rows so the native header sort arrows light (via the
+    /// description's PropertyPath ↔ column SortMemberPath) and the VIEW owns
+    /// display order — the source collection stays in reconcile-friendly order.
+    /// </summary>
+    public DataGridCollectionView RowsView { get; }
 
     /// <summary>Pushed by ShellViewModel whenever the global rail scope changes.</summary>
     public ScopeSelection Scope
@@ -89,6 +111,28 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         Rebuild();
     }
 
+    /// <summary>
+    /// Header-click sort, driven from the view's Sorting handler. Re-clicking the
+    /// same column flips direction; a new column selects it ascending. Only the
+    /// parent aggregate sorts — child (per-host) rows stay grouped under their
+    /// parent. No Rebuild: the row SET is unchanged, so this only swaps the view's
+    /// single sort description; the view re-sorts itself and refreshes the header
+    /// arrows on every column.
+    /// </summary>
+    public void ToggleSort(ProjectSortColumn column)
+    {
+        _sort = ProjectRows.toggleSort(column, _sort);
+        // Replacing SortDescriptions[0] (an AvaloniaList indexer) raises one
+        // Replace event ⇒ one view refresh + a header pseudo-class update on
+        // every column. Never Add a second description — the view carries exactly
+        // one, swapped in place.
+        RowsView.SortDescriptions[0] = ProjectSortDescription.For(_sort);
+    }
+
+    /// <summary>The active sort (DefaultSort = RAC-descending, no header arrow), so
+    /// tests and the view can read the current column/direction.</summary>
+    public ProjectSort Sort => _sort;
+
     private void OnStoreChanged(object? sender, EventArgs e) => Rebuild();
 
     // The clock tick only ever moves freshness text/staleness forward, but
@@ -115,26 +159,38 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 
         var groups = ProjectRows.compute(slice.AllRows);
 
-        // Hierarchy flattening is a trivial projection (grouping/aggregation —
-        // the decision logic — lives in F#); children render only in the
-        // All-hosts scope (design 2a: single-host hides child rows).
-        var target = groups.SelectMany(g =>
+        // Canonical display order is decided by the pure core (orderedRows): only
+        // the parent aggregate sorts, children follow their parent. The grid's
+        // RowsView re-sorts to match via ProjectSortDescription — the C# here only
+        // reconciles the row SET. Map each ordered slot 1:1 to a keyed holder.
+        var slots = ProjectRows.orderedRows(_sort, IsAllHostsScope, SetModule.OfSeq(_expanded), groups);
+        var target = slots.Select(slot => slot switch
         {
-            var expanded = IsAllHostsScope && _expanded.Contains(g.MasterUrl);
-            var parent = ProjectRowViewModel.Parent(g, IsAllHostsScope) with { IsExpanded = expanded };
-            IEnumerable<ProjectRowViewModel> rows = expanded
-                ? [parent, .. g.Attachments.Select(a => ProjectRowViewModel.Child(g, a))]
-                : [parent];
-            return rows;
+            RowSlot.ParentSlot p =>
+                ProjectRowViewModel.Parent(p.group, IsAllHostsScope) with { IsExpanded = p.isExpanded },
+            RowSlot.ChildSlot c => ProjectRowViewModel.Child(c.group, c.attachment),
+            _ => throw new InvalidOperationException("unreachable: closed DU"),
         }).Select(r => (r.Key, r)).ToArray();
+        var canonicalKeys = target.Select(t => t.Key).ToArray();
 
-        // Keyed reconcile instead of replace: in-place Data updates keep holder
-        // identity (DataGrid selection) and steady-state polls raise no
-        // CollectionChanged at all (issue #24). A collapse/expand edits only the
-        // affected child rows — the parent holder survives.
+        // Align the target so surviving keys keep their current source order: the
+        // diff then emits no Move, so nothing churns through the applier's
+        // Move→Remove+Insert translation (RowsView owns display order here). Keyed
+        // reconcile keeps holder identity (DataGrid selection) and lets
+        // steady-state polls raise no CollectionChanged at all (issue #24).
+        var existingKeys = Rows.Select(h => h.Key).ToArray();
+        var aligned = Reconcile.alignToExisting(existingKeys, target);
         var existing = Rows.Select(h => (h.Key, h.Data)).ToArray();
-        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, target),
+        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, aligned),
             (key, row) => new ProjectRow(key, row));
+
+        // The view does NO live shaping: an in-place Update can change a
+        // sort-relevant value without the view re-sorting, and survivors are never
+        // re-compared. Compare the view's displayed keys to the canonical order and
+        // Refresh only on a mismatch — conditional so steady-state polls stay
+        // zero-event (issue #24), yet a value change that reorders is honored.
+        if (!RowsView.Cast<ProjectRow>().Select(r => r.Key).SequenceEqual(canonicalKeys))
+            RowsView.Refresh();
 
         CountsText = string.Format(Strings.ProjectsCountsFmt, groups.Length, slice.CoveredIds.Count);
         PollingText = string.Format(Strings.PollingFmt, _store.PollingIntervalSeconds);

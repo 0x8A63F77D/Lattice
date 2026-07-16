@@ -34,6 +34,14 @@
       <x:Double x:Key="DataGridRowSelectedUnfocusedBackgroundOpacity">1</x:Double>
       <x:Double x:Key="DataGridRowSelectedHoveredBackgroundOpacity">1</x:Double>
       <x:Double x:Key="DataGridRowSelectedHoveredUnfocusedBackgroundOpacity">1</x:Double>
+      <!-- The Fluent DataGridColumnHeader template reserves a fixed sort-icon slot on every header
+           via ColumnDefinition MinWidth="{DynamicResource DataGridSortIconMinWidth}" (theme default
+           32px), UNCONDITIONALLY — even while the sort glyph is hidden. On the narrow Tasks columns
+           (Elapsed 68 / Remaining 74) that 32px plus the 8,0 cell padding truncates the label and
+           leaves a blank reserved slot to its right (owner Finding C). Zero the reservation so the
+           label uses the real column width; the slot is Width="Auto", so the glyph still sizes in
+           when a column is actually sorted (it then squeezes only that one active header slightly). -->
+      <x:Double x:Key="DataGridSortIconMinWidth">0</x:Double>
     </ResourceDictionary>
   </Styles.Resources>
 
@@ -52,6 +60,10 @@
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
     <Setter Property="Padding" Value="8,0" />
+    <!-- Column-header separators (Rectangle#VerticalSeparator) match the body divider color;
+         the trailing star column's separator auto-collapses (no cell to paint), and gutter
+         headers opt out per-view later via their own class. -->
+    <Setter Property="SeparatorBrush" Value="{DynamicResource LatticeGridDividerBrush}" />
   </Style>
 
   <Style Selector="DataGrid.lattice">
@@ -63,14 +75,42 @@
     <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeight}" />
     <Setter Property="FontSize" Value="13" />
     <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />
+    <!-- The Fluent DataGrid ControlTheme defaults GridLinesVisibility to None, so row rules and
+         column dividers render nowhere by default regardless of the brush setters below. All
+         must render (row rules + column dividers) per spec. The trailing star-column divider
+         auto-collapses (filler column has no cell to paint), and per-cell gutter dividers are
+         killed separately later; this setter is the on/off switch only. -->
+    <Setter Property="GridLinesVisibility" Value="All" />
     <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource LatticeStrokeSubtleBrush}" />
-    <Setter Property="VerticalGridLinesBrush" Value="Transparent" />
+    <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource LatticeGridDividerBrush}" />
     <Setter Property="Background" Value="{DynamicResource LatticeSurfaceBrush}" />
   </Style>
 
   <Style Selector="DataGrid.lattice.compact">
     <Setter Property="RowHeight" Value="{DynamicResource LatticeRowHeightCompact}" />
     <Setter Property="FontSize" Value="12" />
+  </Style>
+
+  <!-- Pin the per-row Height to the density pitch so the horizontal row rule sits INSIDE it.
+       GridLinesVisibility=All draws the horizontal rule ADDITIVELY below a RowHeight-sized row,
+       which would push a Tasks/Transfers row's measured height to 37/29 (36/28 + 1px) — 1px over
+       the spec, whose mockup uses box-sizing:border-box (the 1px bottom rule lives inside the 36px
+       pitch). Setting an explicit Height (which the DataGridRow bounds honor even with an additive
+       gridline — same reason EventLog's pinned 26px and Projects' pinned 40/32 rows never grew)
+       keeps the pitch at exactly 36/28 with the rule inside. No MinHeight: it would floor Projects'
+       32px child rows. Projects (.projectParent/.projectChild) and EventLog (.eventlog DataGridRow)
+       set their own more-specific/local Heights and override these. -->
+  <Style Selector="DataGrid.lattice DataGridRow">
+    <Setter Property="Height" Value="{DynamicResource LatticeRowHeight}" />
+  </Style>
+  <Style Selector="DataGrid.lattice.compact DataGridRow">
+    <Setter Property="Height" Value="{DynamicResource LatticeRowHeightCompact}" />
+  </Style>
+
+  <!-- The header bottom rule is a template part painted from the system DataGridGridLinesBrush;
+       repaint it to the Lattice stroke (#E0E0E0 / #3D3D3D) per the 32px-header bottom border. -->
+  <Style Selector="DataGrid.lattice /template/ Rectangle#PART_ColumnHeadersAndRowsSeparator">
+    <Setter Property="Fill" Value="{DynamicResource LatticeStrokeBrush}" />
   </Style>
 
   <Style Selector="DataGridCell">
@@ -82,5 +122,85 @@
     <!-- OpenType tabular (fixed-width) numerals for aligned numeric columns.
          FontFeatures is a TextElement inherited attached property (HarfBuzz tag syntax). -->
     <Setter Property="FontFeatures" Value="+tnum" />
+  </Style>
+
+  <!-- Gutter/icon columns suppress their column divider. EnsureGridLine owns the part's
+       IsVisible as a local value, so collapse the divider by zeroing its Width (the part is
+       Grid.Column=1, so 0 width also reclaims the layout slot). -->
+  <Style Selector="DataGridCell.noDivider /template/ Rectangle#PART_RightGridLine">
+    <Setter Property="Width" Value="0" />
+  </Style>
+
+  <!-- Numeric text columns: tabular (fixed-width) figures on the generated cell TextBlock.
+       For DataGridTextColumn cells (no direct handle on their TextBlock). -->
+  <Style Selector="DataGridCell.numericCell TextBlock">
+    <Setter Property="FontFeatures" Value="+tnum" />
+  </Style>
+
+  <!-- Row hover: whole row -> #F5F5F5 (light) / #2D2D2D (dark), applied INSTANTLY (no fade).
+       Sits UNDER the state tints — the .tint:pointerover rules below re-assert each tint so a
+       hovered at-risk / retrying / warning / error row keeps its color. Selection paints on the
+       row's BackgroundRectangle overlay (already above Background), so selected rows are unaffected.
+
+       No BrushTransition: the earlier 100ms fade produced a sweeping shimmer of trailing
+       highlights as the pointer crossed rows, which the owner found eye-straining in dark mode
+       (visual verdict). Instant hover is the norm for a dense monitoring grid (Task Manager) and
+       removes the strobe in both themes; the dark hover brush was also toned down (Tokens.axaml).
+       (Headless color probes read Background synchronously; with no transition the read is already
+       the settled value.) -->
+  <Style Selector="DataGrid.lattice DataGridRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeRowHoverBrush}" />
+  </Style>
+
+  <!-- Base state tints (shared so hover-keep is uniform). Per-view files declared these
+       before; they are being centralized here. -->
+  <Style Selector="DataGrid.lattice DataGridRow.atRisk">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.retrying">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.warning">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.error">
+    <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
+  </Style>
+  <!-- Hover-keep: re-assert the tint explicitly under :pointerover as defense-in-depth against
+       declaration-order drift. Empirically (Avalonia 12.1), a bare class selector (.atRisk) and
+       a bare pseudo-class selector (:pointerover) tie on specificity here and the LATER-DECLARED
+       rule wins — not the strict "pseudo-class always out-specifies class" tiering the Avalonia
+       docs table implies. Verified via mutation-testing this file both ways: (a) deleting just
+       these combo rules, with the base .tint rules still declared after the plain :pointerover
+       rule above, leaves the tint-keeping tests green (declaration order alone protects them
+       today); (b) reordering the base .tint rules to BEFORE the plain :pointerover rule, with
+       these combo rules removed, turns Hovering_an_at_risk_row_keeps_its_warning_tint red (hover
+       wins). So these combo selectors are the real, order-independent guarantee — keep them so
+       tint-keeping does not silently break if the rules above get reordered later. -->
+  <Style Selector="DataGrid.lattice DataGridRow.atRisk:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.retrying:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.warning:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeWarningTintBrush}" />
+  </Style>
+  <Style Selector="DataGrid.lattice DataGridRow.error:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LatticeDangerTintBrush}" />
+  </Style>
+
+  <!-- Headers do not hover: baseline the root part to Transparent unconditionally (so "before"
+       and "after" hover are the literal same brush, not null-vs-Transparent), then re-assert it
+       under :pointerover/:pressed — those pseudo-classed selectors out-specify the Fluent
+       theme's own "^:pointerover /template/ Grid#PART_ColumnHeaderRoot" background swap. -->
+  <Style Selector="DataGridColumnHeader /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="DataGridColumnHeader:pointerover /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="DataGridColumnHeader:pressed /template/ Grid#PART_ColumnHeaderRoot">
+    <Setter Property="Background" Value="Transparent" />
   </Style>
 </Styles>

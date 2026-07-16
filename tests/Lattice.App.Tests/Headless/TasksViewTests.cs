@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -5,8 +6,10 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -553,4 +556,167 @@ public class TasksViewTests
         await manager.DisposeAsync();
         window.Close();
     }
+
+    [AvaloniaFact]
+    public void Task_column_middle_ellipsizes_and_other_text_columns_end_ellipsize()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var row = new TaskRowViewModel(
+            Project: "einstein", Application: "O3AS", Name: "h1_1234_long_task_name_0_1",
+            Fraction: 0.2, PercentText: "20%", ElapsedText: "1m 00s", RemainingText: "5m 00s",
+            DeadlineText: "07-11 00:00", Deadline: DateTimeOffset.UtcNow.AddHours(1),
+            StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        var taskTb = grid.GetVisualDescendants().OfType<TextBlock>()
+            .Single(t => t.Text == "h1_1234_long_task_name_0_1");
+        Assert.Same(TextTrimming.PrefixCharacterEllipsis, taskTb.TextTrimming);
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Tasks_default_column_widths_match_the_spec()
+    {
+        var (window, _, _, _, _, _) = MakeView();
+        window.Show();
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        double W(int i) => grid.Columns[i].Width.Value;
+        Assert.Equal(108, W(0)); // Project
+        Assert.Equal(118, W(1)); // Application
+        Assert.False(grid.Columns[2].Width.IsStar); // Task fixed (not a star — Finding A)
+        Assert.Equal(230, W(2)); // Task
+        Assert.Equal(112, W(3)); // Progress
+        Assert.Equal(68,  W(4)); // Elapsed
+        Assert.Equal(74,  W(5)); // Remaining
+        Assert.Equal(100, W(6)); // Deadline
+        Assert.Equal(112, W(7)); // State
+        Assert.Equal(76,  W(8)); // Host
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Elapsed_and_remaining_cells_use_tabular_figures()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var row = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: "t", Fraction: 0.2, PercentText: "20%",
+            ElapsedText: "1m 00s", RemainingText: "5m 00s", DeadlineText: "07-11 00:00",
+            Deadline: DateTimeOffset.UtcNow.AddHours(1), StateKind: TaskStateKind.Running, StateText: "Running",
+            IsDeadlineAtRisk: false, IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a");
+        vm.Rows.Add(new TaskRow(row.Key, row));
+        Layout(window);
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        foreach (var text in new[] { "1m 00s", "5m 00s" })
+        {
+            var tb = grid.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == text);
+            Assert.NotNull(tb.FontFeatures);
+            Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
+        }
+        window.Close();
+    }
+
+    private static TaskRow TaskHolder(
+        string name, double fraction, DateTimeOffset deadline, TaskStateKind state, double elapsedSeconds = 0)
+    {
+        var vm = new TaskRowViewModel(
+            Project: "p", Application: "a", Name: name, Fraction: fraction, PercentText: "x",
+            ElapsedText: "e", RemainingText: "r", DeadlineText: "d", Deadline: deadline,
+            StateKind: state, StateText: state.ToString(), IsDeadlineAtRisk: false,
+            IsSuspended: false, HostId: Guid.NewGuid(), Host: "host-a", ElapsedSeconds: elapsedSeconds);
+        return new TaskRow(vm.Key, vm);
+    }
+
+    // The four template columns (Task, Progress, Deadline, State) had no Binding for the DataGrid
+    // to derive a sort key from, so clicking their headers did nothing (owner report). SortMemberPath
+    // now points each at its underlying comparable property. Assert they report CanUserSort and that
+    // a real sort orders by the underlying VALUE (Deadline chronologically, not the display string).
+    [AvaloniaFact]
+    public void Task_template_columns_are_sortable_by_their_underlying_value()
+    {
+        var (window, _, vm, _, _, _) = MakeView();
+        window.Show();
+        var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
+        // Deadline and Elapsed orders differ, so each proves it sorts by its own underlying value.
+        vm.Rows.Add(TaskHolder("beta",  0.5, t.AddHours(2), TaskStateKind.Waiting,   elapsedSeconds: 300));
+        vm.Rows.Add(TaskHolder("alpha", 0.9, t.AddHours(3), TaskStateKind.Running,   elapsedSeconds: 60));
+        vm.Rows.Add(TaskHolder("gamma", 0.1, t.AddHours(1), TaskStateKind.Suspended, elapsedSeconds: 600));
+        Layout(window);
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        // Task(2) Progress(3) Elapsed(4) Remaining(5) Deadline(6) State(7) all sort.
+        foreach (var i in new[] { 2, 3, 4, 5, 6, 7 })
+            Assert.True(grid.Columns[i].CanUserSort, $"column {i} ({grid.Columns[i].Header}) should be sortable");
+
+        // Sort by Deadline ascending: order by the DateTimeOffset, not the "d" text —
+        // gamma(+1h), beta(+2h), alpha(+3h).
+        grid.Columns[6].Sort(ListSortDirection.Ascending);
+        Layout(window);
+        Assert.Equal(new[] { "gamma", "beta", "alpha" }, SortedNames(grid));
+
+        // Sort by Elapsed ascending: order by the raw seconds (60/300/600), not the "e" text —
+        // alpha(60), beta(300), gamma(600). A different order than Deadline, so this can't pass by
+        // accident.
+        grid.Columns[4].Sort(ListSortDirection.Ascending);
+        Layout(window);
+        Assert.Equal(new[] { "alpha", "beta", "gamma" }, SortedNames(grid));
+        window.Close();
+    }
+
+    // Ported from the retired Projects reconciler-Move rendered test (#57 step 6). Projects now let
+    // a view own display order, but Tasks/Transfers still bind their Rows collection directly, and
+    // their polls CAN reorder SURVIVING rows — a Reconcile.diff over a value-ordered target (e.g.
+    // Elapsed/Remaining changing) emits a Move. Avalonia 12.1's DataGrid ignores a raw
+    // CollectionChanged.Move (the backing collection reorders but the rendered rows do not), so the
+    // load-bearing workaround is CollectionReconciler.Apply translating Move → Remove+Insert of the
+    // SAME holder — the shape the DataGrid DOES re-render. This pins the RENDERED order following a
+    // survivor swap on the real Tasks grid; without the translation it would stay put.
+    [AvaloniaFact]
+    public void A_reconciler_move_reorders_the_rendered_task_grid_not_just_the_collection()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        window.Show();
+        var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
+        vm.Rows.Add(TaskHolder("alpha", 0.2, t.AddHours(1), TaskStateKind.Running));
+        vm.Rows.Add(TaskHolder("beta", 0.3, t.AddHours(2), TaskStateKind.Running));
+        Layout(window);
+        Assert.Equal(new[] { "alpha", "beta" }, RenderedTaskNames(view));
+
+        // Two surviving keys in flipped target order → the diff emits a single Move (the op the
+        // DataGrid ignores raw). The applier translates it to Remove+Insert of the same holders.
+        var existing = vm.Rows.Select(h => (h.Key, h.Data)).ToArray();
+        var target = new[] { (vm.Rows[1].Key, vm.Rows[1].Data), (vm.Rows[0].Key, vm.Rows[0].Data) };
+        CollectionReconciler.Apply(vm.Rows, Reconcile.diff(existing, target), (k, r) => new TaskRow(k, r));
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.Equal(new[] { "beta", "alpha" }, RenderedTaskNames(view));
+        window.Close();
+    }
+
+    // The Task-name text of each displayed row in on-screen Y order (a sort/reorder Reset can leave
+    // a recycled ghost container behind — IsVisible=false / zero height — so filter it out).
+    private static string[] RenderedTaskNames(TasksView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.DataContext is TaskRow && r.IsVisible && r.Bounds.Height > 0)
+            .OrderBy(r => r.Bounds.Y)
+            .Select(r => ((TaskRow)r.DataContext!).Data.Name)
+            .ToArray();
+
+    // Sorted VIEW order from the realized rows, robust to headless row recycling (a recycled
+    // container can briefly duplicate a DataContext): group by name, take each name's min Index.
+    // Avalonia sorts the collection view, not vm.Rows, so vm.Rows stays in insertion order.
+    private static string[] SortedNames(DataGrid grid) =>
+        grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.DataContext is TaskRow)
+            .GroupBy(r => ((TaskRow)r.DataContext!).Data.Name)
+            .OrderBy(g => g.Min(r => r.Index))
+            .Select(g => g.Key)
+            .ToArray();
 }
