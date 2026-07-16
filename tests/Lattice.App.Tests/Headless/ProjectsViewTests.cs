@@ -15,6 +15,7 @@ using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Microsoft.Extensions.Time.Testing;
@@ -52,6 +53,43 @@ public class ProjectsViewTests
         var window = new Window { Width = 1280, Height = 800, Content = view };
         return (window, view, vm);
     }
+
+    // Store-backed view: registers one host per (address, fake) and drives the real
+    // store → VM pipeline (compute/orderedRows/reconcile), needed by U4 where genuine
+    // expansion must materialize child rows the hand-built fixtures can't. Uses the
+    // PRODUCTION AvaloniaUiDispatcher (not Immediate/Locking): the manager polls on a
+    // background thread, so Rebuild must be marshalled onto the Avalonia UI thread or
+    // the DataGrid never realizes rows on it — HeadlessSync pumps those posts via
+    // Dispatcher.UIThread.RunJobs between polls.
+    private static (Window Window, ProjectsView View, ProjectsViewModel Vm, HostMonitorManager Manager) MakeStoreView(
+        params (string Address, FakeGuiRpcClient Fake)[] hosts)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var fakes = new Dictionary<string, FakeGuiRpcClient>();
+        foreach (var (address, fake) in hosts)
+        {
+            fakes[address] = fake;
+            registry.AddHost(TestData.MakeHostConfig(name: address, address: address));
+        }
+        var manager = new HostMonitorManager(
+            registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
+        var vm = new ProjectsViewModel(store, new ManualUiClock());
+        var view = new ProjectsView { DataContext = vm };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        return (window, view, vm, manager);
+    }
+
+    private static Project Proj(string url, string name, double rac) =>
+        TestData.MakeProject(url, name, 100) with { HostExpavgCredit = rac };
+
+    private static FakeGuiRpcClient FakeWithProjects(params Project[] projects) =>
+        new() { OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects)) };
+
+    // The Project-cell text (parent: project name; child: host name) of each REALIZED row in
+    // on-screen Y order — the same probe as RenderedProjectNames but named for the hierarchy.
+    private static List<string?> RenderedRowLabels(ProjectsView view) => RenderedProjectNames(view);
 
     // Hand-built holders don't run compute/groupKey — they build a plausible
     // GroupSortKey by hand (values don't matter, this file never exercises
@@ -108,55 +146,184 @@ public class ProjectsViewTests
         row.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text);
 
     // A parent holder with a caller-chosen project name + url, so a reorder is visible in the
-    // Project cell text. (ParentHolder hardcodes Name="P", useless for order assertions.)
-    private static ProjectRow NamedParent(string name, string url)
+    // Project cell text. (ParentHolder hardcodes Name="P", useless for order assertions.) The
+    // SortKey's NameKey is DERIVED from the name (compute lowercases it) and AvgCredit is a
+    // caller knob — otherwise every hand-built parent ties on both, and ByName/DefaultSort
+    // probes could not distinguish them.
+    private static ProjectRow NamedParent(string name, string url, double avgCredit = 10) =>
+        NamedParentRow(name, url, avgCredit, isExpanded: false, showChevron: false);
+
+    private static ProjectRow NamedParentRow(
+        string name, string url, double avgCredit, bool isExpanded, bool showChevron)
     {
+        var sortKey = new RowSortKey(
+            new GroupSortKey(
+                nameKey: name.ToLowerInvariant(), hostCount: 1, shareMax: 100, shareMin: 100,
+                avgCredit: avgCredit, totalCredit: 20, statusRank: 0, masterUrl: url),
+            RowLevel.ParentRow);
         var data = new ProjectRowViewModel(
             Key: ProjectRowKey.NewParentKey(url),
-            MasterUrl: url, IsParent: true, IsExpanded: false, ShowChevron: false,
+            MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: name, HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
-            StatusKind: ProjectStatusKind.Active, StatusText: "s", SortKey: ParentSortKey(url));
+            StatusKind: ProjectStatusKind.Active, StatusText: "s", SortKey: sortKey);
         return new ProjectRow(data.Key, data);
     }
 
-    // The Project-name text of each REALIZED DataGridRow, ordered by on-screen Y (visual order,
-    // NOT DataGridRow.Index — the whole question is whether the visual follows the collection).
+    // The Project-cell text of each DISPLAYED row, ordered by on-screen Y (visual order, NOT
+    // DataGridRow.Index — the whole question is whether the visual follows the view's order). A
+    // sort Reset recycles rows and the headless DataGrid can leave a ghost container behind
+    // (IsVisible=false, zero height, stale content); filter to genuinely displayed rows so the
+    // ghost never pollutes the order (same recycling caveat TasksViewTests.SortedNames guards).
     private static List<string?> RenderedProjectNames(ProjectsView view) =>
-        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
-            .OrderBy(r => r.Bounds.Y)
+        DisplayedRows(view)
             .Select(r => VisualTree.FindInVisualTree<TextBlock>(r, t => t.Classes.Contains("projectName"))?.Text)
             .ToList();
 
-    // ROOT CAUSE of "Projects can't sort" (2026-07-15): a header-click sort reorders the Rows
-    // COLLECTION through a reconciler Move op, but Avalonia 12.1's DataGrid does not visually
-    // reflect a CollectionChanged.Move — the rendered rows stayed put while every VM/F# test (all
-    // of which inspect only collection order) passed. Sorting is the FIRST feature that ever
-    // reorders rows: before it, compute was always RAC-desc and expand/collapse only inserted or
-    // removed in place, so the Move path never reached the real DataGrid. This drives the reorder
-    // through the ACTUAL reconciler (CollectionReconciler.Apply on a real diff that yields a Move)
-    // and asserts the RENDERED order — the layer the collection-only tests could not see. Red
-    // before the applier translated Move to Remove+Insert; green after.
+    // Realized rows that are actually on-screen (a recycled ghost is IsVisible=false / zero height),
+    // ordered top-to-bottom by Y.
+    private static List<DataGridRow> DisplayedRows(ProjectsView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.IsVisible && r.Bounds.Height > 0)
+            .OrderBy(r => r.Bounds.Y)
+            .ToList();
+
+    // The real, realized user column headers (those whose Content is one of our column strings —
+    // the corner/filler headers carry no string Content).
+    private static List<DataGridColumnHeader> DataHeaders(ProjectsView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
+            .Where(h => h.Content is string).ToList();
+
+    // A genuine header click through the input stack (MouseDown/Up), the same idiom the
+    // real-click sort tests use — routes through ProcessSort → the Sorting event → OnGridSorting.
+    private static void ClickHeader(Window window, DataGridColumnHeader header)
+    {
+        var pt = header.TranslatePoint(new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), window)!.Value;
+        window.MouseMove(pt, RawInputModifiers.None);
+        window.MouseDown(pt, MouseButton.Left, RawInputModifiers.None);
+        window.MouseUp(pt, MouseButton.Left, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+    }
+
+    // DESIGN FALSIFIER (issue #57): the whole view-owned-sort design rests on the DataGrid lighting
+    // its NATIVE sort-arrow pseudo-class when a SortDescription's PropertyPath equals a column's
+    // SortMemberPath. DefaultSort carries a null PropertyPath (no arrow anywhere); a real header
+    // click swaps RowsView's single description to ColumnSort(ByName, …), whose PropertyPath is the
+    // "ByName" token = the Project column's SortMemberPath, so exactly that header lights — ascending
+    // on the first click, descending on the second. Was IMPOSSIBLE under the old cancel-only hack
+    // (no description ever matched a column). Mechanical assertion (pseudo-class presence), not look.
     [AvaloniaFact]
-    public void A_reconciler_move_reorders_the_rendered_grid_not_just_the_collection()
+    public void Real_header_clicks_light_the_native_sort_arrow_pseudo_class()
+    {
+        var (window, view, vm) = MakeView(hostCount: 2);
+        window.Show();
+        vm.Rows.Add(NamedParent("Alpha", "u-a"));
+        vm.Rows.Add(NamedParent("Beta", "u-b", avgCredit: 20));
+        vm.IsLoading = false;
+        vm.IsEmpty = false;
+        Layout(window);
+
+        // Startup = DefaultSort (null PropertyPath): no header carries a sort arrow.
+        foreach (var h in DataHeaders(view))
+        {
+            Assert.DoesNotContain(":sortascending", h.Classes);
+            Assert.DoesNotContain(":sortdescending", h.Classes);
+        }
+
+        var project = DataHeaders(view).Single(h => (h.Content as string) == Strings.ColProject);
+        ClickHeader(window, project);
+        Layout(window);
+        Assert.Contains(":sortascending", project.Classes);
+        Assert.DoesNotContain(":sortdescending", project.Classes);
+        // The arrow is exclusive to the sorted column.
+        foreach (var h in DataHeaders(view).Where(h => !ReferenceEquals(h, project)))
+        {
+            Assert.DoesNotContain(":sortascending", h.Classes);
+            Assert.DoesNotContain(":sortdescending", h.Classes);
+        }
+
+        ClickHeader(window, project);
+        Layout(window);
+        Assert.Contains(":sortdescending", project.Classes);
+        Assert.DoesNotContain(":sortascending", project.Classes);
+        window.Close();
+    }
+
+    // U2 — a ToggleSort reorders the RENDERED rows (view-owned order), and the view's own
+    // enumeration matches that rendered order (which licenses the VM's post-reconcile order check
+    // reading RowsView). Beta has the higher aggregate RAC, so DefaultSort renders it first; a
+    // ByName toggle flips to Alpha-first, and toggling again flips back.
+    [AvaloniaFact]
+    public void ToggleSort_reorders_the_rendered_rows_and_the_view_enumeration_agrees()
     {
         var (window, view, vm) = MakeView();
         window.Show();
-        vm.Rows.Add(NamedParent("Alpha", "u-a"));
-        vm.Rows.Add(NamedParent("Beta", "u-b"));
+        vm.Rows.Add(NamedParent("Alpha", "u-a", avgCredit: 10));
+        vm.Rows.Add(NamedParent("Beta", "u-b", avgCredit: 20));
+        Layout(window);
+        // DefaultSort = aggregate RAC descending: Beta (20) before Alpha (10).
+        Assert.Equal(new string?[] { "Beta", "Alpha" }, RenderedProjectNames(view));
+
+        vm.ToggleSort(ProjectSortColumn.ByName);
         Layout(window);
         Assert.Equal(new string?[] { "Alpha", "Beta" }, RenderedProjectNames(view));
+        // The view's enumeration order equals the rendered Y-order.
+        Assert.Equal(new[] { "Alpha", "Beta" }, vm.RowsView.Cast<ProjectRow>().Select(r => r.Data.Name));
 
-        // The exact call ProjectsViewModel.Rebuild makes: diff current vs a swapped target. With two
-        // surviving keys in flipped order the diff emits a single Move — the op the DataGrid ignored.
-        var existing = vm.Rows.Select(h => (h.Key, h.Data)).ToArray();
-        var target = new[] { (vm.Rows[1].Key, vm.Rows[1].Data), (vm.Rows[0].Key, vm.Rows[0].Data) };
-        CollectionReconciler.Apply(vm.Rows, Reconcile.diff(existing, target), (k, r) => new ProjectRow(k, r));
+        vm.ToggleSort(ProjectSortColumn.ByName); // same column → descending
         Layout(window);
-        Dispatcher.UIThread.RunJobs();
-        Layout(window);
-
         Assert.Equal(new string?[] { "Beta", "Alpha" }, RenderedProjectNames(view));
+        window.Close();
+    }
+
+    // U3 — selection rides on holder identity, and ToggleSort never touches the source holders
+    // (it only swaps the view's sort description), so the DataGrid re-selects the same instance
+    // across the view's Reset.
+    [AvaloniaFact]
+    public void Selection_survives_a_sort_toggle()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        var alpha = NamedParent("Alpha", "u-a", avgCredit: 10);
+        vm.Rows.Add(alpha);
+        vm.Rows.Add(NamedParent("Beta", "u-b", avgCredit: 20));
+        Layout(window);
+
+        view.Grid.SelectedItem = alpha;
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Layout(window);
+
+        Assert.Same(alpha, view.Grid.SelectedItem);
+        window.Close();
+    }
+
+    // U5 — a ToggleSort drives a view Reset that recycles rows (re-firing LoadingRow), so the
+    // hierarchy classes AND design row heights (40 parent / 32 child) must be re-applied by
+    // RowClassBinder afterwards.
+    [AvaloniaFact]
+    public void Row_classes_and_design_heights_survive_a_sort_reset()
+    {
+        var (window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll, showChevron: true));
+        vm.Rows.Add(ChildHolder("host-a"));
+        Layout(window);
+
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Layout(window);
+
+        // Read the displayed rows (a sort Reset recycles rows; FindRow's Single(Index==n) would
+        // trip over the headless ghost container). Parent-then-child by the Level tiebreak.
+        var displayed = DisplayedRows(view);
+        Assert.Equal(2, displayed.Count);
+        var parent = displayed[0];
+        var child = displayed[1];
+        Assert.Contains("projectParent", parent.Classes);
+        Assert.DoesNotContain("projectChild", parent.Classes);
+        Assert.Contains("projectChild", child.Classes);
+        Assert.DoesNotContain("projectParent", child.Classes);
+        Assert.Equal(40, parent.Bounds.Height, precision: 0);
+        Assert.Equal(32, child.Bounds.Height, precision: 0);
         window.Close();
     }
 
@@ -496,6 +663,43 @@ public class ProjectsViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(ProjectSort.NewColumnSort(ProjectSortColumn.ByName, SortDirection.Ascending), vm.Sort);
+        window.Close();
+    }
+
+    // U4 — expansion under an ACTIVE header sort. Two hosts each attach both projects, so each
+    // group has two children. Under a live ByName sort, expanding a group inserts its children
+    // DIRECTLY beneath it (host-ascending), and the other parent keeps its sorted place — the
+    // children follow their parent, they are never scattered into the flat sort order.
+    [AvaloniaFact]
+    public async Task Expanding_a_group_under_an_active_sort_keeps_its_children_directly_under_it()
+    {
+        var (window, view, vm, manager) = MakeStoreView(
+            ("host-a", FakeWithProjects(Proj("u-a", "Alpha", 1), Proj("u-b", "Beta", 5))),
+            ("host-b", FakeWithProjects(Proj("u-a", "Alpha", 1), Proj("u-b", "Beta", 5))));
+        window.Show();
+        manager.Start();
+        await HeadlessSync.WaitUntilAsync(() => vm.Rows.Count == 2);
+        Layout(window);
+        // DefaultSort = aggregate RAC descending: Beta (10) before Alpha (2).
+        Assert.Equal(new string?[] { "Beta", "Alpha" }, RenderedRowLabels(view));
+
+        // ByName ascending differs from DefaultSort — proves the header sort is genuinely active.
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Layout(window);
+        Assert.Equal(new string?[] { "Alpha", "Beta" }, RenderedRowLabels(view));
+
+        // Toggle again → descending: Beta, Alpha.
+        vm.ToggleSort(ProjectSortColumn.ByName);
+        Layout(window);
+        Assert.Equal(new string?[] { "Beta", "Alpha" }, RenderedRowLabels(view));
+
+        // Expand Beta (the NON-last group under this order): its two children sit directly under it,
+        // host-ascending, and Alpha stays last.
+        vm.ToggleExpandCommand.Execute("u-b");
+        Layout(window);
+        Assert.Equal(new string?[] { "Beta", "host-a", "host-b", "Alpha" }, RenderedRowLabels(view));
+
+        await manager.DisposeAsync();
         window.Close();
     }
 
