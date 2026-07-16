@@ -53,6 +53,23 @@ public class ProjectsViewTests
         return (window, view, vm);
     }
 
+    // Hand-built holders don't run compute/groupKey — they build a plausible
+    // GroupSortKey by hand (values don't matter, this file never exercises
+    // sort semantics; ProjectRowsTests + ProjectRowViewModelTests cover that).
+    private static RowSortKey ParentSortKey(string url) =>
+        new(
+            new GroupSortKey(
+                nameKey: "p", hostCount: 1, shareMax: 100, shareMin: 100, avgCredit: 10, totalCredit: 20,
+                statusRank: 0, masterUrl: url),
+            RowLevel.ParentRow);
+
+    private static RowSortKey ChildSortKey(string url, string hostName, Guid hostId) =>
+        new(
+            new GroupSortKey(
+                nameKey: "p", hostCount: 1, shareMax: 100, shareMin: 100, avgCredit: 10, totalCredit: 20,
+                statusRank: 0, masterUrl: url),
+            RowLevel.NewChildRow(hostName, hostId));
+
     private static ProjectRow ParentHolder(
         ProjectStatusKind statusKind, string statusText, bool showChevron = false, bool isExpanded = false,
         string? url = null)
@@ -63,18 +80,20 @@ public class ProjectsViewTests
             MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: "P", HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
-            StatusKind: statusKind, StatusText: statusText);
+            StatusKind: statusKind, StatusText: statusText, SortKey: ParentSortKey(url));
         return new ProjectRow(data.Key, data);
     }
 
     private static ProjectRow ChildHolder(string hostName)
     {
+        var hostId = Guid.NewGuid();
         var data = new ProjectRowViewModel(
-            Key: ProjectRowKey.NewChildKey(Url, Guid.NewGuid()),
+            Key: ProjectRowKey.NewChildKey(Url, hostId),
             MasterUrl: Url, IsParent: false, IsExpanded: false, ShowChevron: false,
             Name: hostName, HostsText: "", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: string.Format(Strings.ProjectsTaskCountFmt, 3),
-            StatusKind: ProjectStatusKind.Active, StatusText: Strings.ProjectsStatusActive);
+            StatusKind: ProjectStatusKind.Active, StatusText: Strings.ProjectsStatusActive,
+            SortKey: ChildSortKey(Url, hostName, hostId));
         return new ProjectRow(data.Key, data);
     }
 
@@ -97,7 +116,7 @@ public class ProjectsViewTests
             MasterUrl: url, IsParent: true, IsExpanded: false, ShowChevron: false,
             Name: name, HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
-            StatusKind: ProjectStatusKind.Active, StatusText: "s");
+            StatusKind: ProjectStatusKind.Active, StatusText: "s", SortKey: ParentSortKey(url));
         return new ProjectRow(data.Key, data);
     }
 

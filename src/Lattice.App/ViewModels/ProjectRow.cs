@@ -29,7 +29,8 @@ public sealed record ProjectRowViewModel(
     string TotalCreditText,
     string TasksText,          // child rows: "3 tasks"; parent: ""
     ProjectStatusKind StatusKind,
-    string StatusText)
+    string StatusText,
+    RowSortKey SortKey)
 {
     public static ProjectRowViewModel Parent(ProjectGroup g, bool isAllHostsScope)
     {
@@ -55,7 +56,8 @@ public sealed record ProjectRowViewModel(
             TotalCreditText: Num(g.TotalCredit),
             TasksText: "",
             StatusKind: StatusKindOf(g.Status),
-            StatusText: StatusTextOf(g.Status, isAllHostsScope));
+            StatusText: StatusTextOf(g.Status, isAllHostsScope),
+            SortKey: ProjectRows.parentKey(g));
     }
 
     public static ProjectRowViewModel Child(ProjectGroup g, ProjectAttachment a)
@@ -77,7 +79,8 @@ public sealed record ProjectRowViewModel(
             TotalCreditText: Num(a.TotalCredit),
             TasksText: string.Format(Strings.ProjectsTaskCountFmt, a.TaskCount),
             StatusKind: KindOf(status),
-            StatusText: TextOf(status));
+            StatusText: TextOf(status),
+            SortKey: ProjectRows.childKey(g, a));
     }
 
     // Credits and shares render as whole numbers (design 2a mock);
