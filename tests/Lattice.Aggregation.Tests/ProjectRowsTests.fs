@@ -378,6 +378,30 @@ let ``DefaultSort is equivalent to ColumnSort(ByAvgCredit, Descending)`` (c: Ord
     let byColumn = ProjectRows.orderedRows (ColumnSort(ByAvgCredit, Descending)) c.Aggregate c.Expanded c.Groups
     byDefault = byColumn
 
+// The token family (XAML SortMemberPath ↔ description PropertyPath ↔ click
+// router) has exactly one home: columnToken/tryColumnOfToken. Enumerating the
+// cases by reflection means a FUTURE column is covered by this test with zero
+// edits — the C# sides carry no case list at all (Codex P2, PR #74).
+[<Fact>]
+let ``columnToken round-trips through tryColumnOfToken for every column case`` () =
+    let cases =
+        Microsoft.FSharp.Reflection.FSharpType.GetUnionCases typeof<ProjectSortColumn>
+        |> Array.map (fun c ->
+            Microsoft.FSharp.Reflection.FSharpValue.MakeUnion(c, [||]) :?> ProjectSortColumn)
+    Assert.Equal(6, cases.Length) // bump deliberately when a column is added
+    for column in cases do
+        Assert.Equal(Some column, ProjectRows.tryColumnOfToken (ProjectRows.columnToken column))
+
+[<Fact>]
+let ``tryColumnOfToken rejects unknown and null tokens`` () =
+    Assert.Equal(None, ProjectRows.tryColumnOfToken "Bogus")
+    Assert.Equal(None, ProjectRows.tryColumnOfToken null)
+
+[<Fact>]
+let ``flipDirection swaps the two directions`` () =
+    Assert.Equal(Descending, ProjectRows.flipDirection Ascending)
+    Assert.Equal(Ascending, ProjectRows.flipDirection Descending)
+
 [<Fact>]
 let ``toggleSort covers the full transition table`` () =
     Assert.Equal(ColumnSort(ByName, Ascending), ProjectRows.toggleSort ByName DefaultSort)

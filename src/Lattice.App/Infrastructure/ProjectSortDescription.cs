@@ -24,22 +24,13 @@ public sealed class ProjectSortDescription : DataGridSortDescription
 
     /// <summary>
     /// DefaultSort carries no column identity (it lights no header arrow); a
-    /// ColumnSort's path is the DU case name, matched against the column Tag
-    /// idiom the view already uses (ProjectsView.axaml.cs's OnGridSorting).
+    /// ColumnSort's path is the column's token, matched against the column
+    /// SortMemberPath. The token mapping lives in F# (ProjectRows.columnToken)
+    /// where the match is compile-time total — a C# switch over the DU's int
+    /// Tag would need a default arm and could only fail at runtime (Codex P2).
     /// </summary>
     public override string? PropertyPath =>
-        _sort is ProjectSort.ColumnSort cs
-            ? cs.column.Tag switch
-            {
-                ProjectSortColumn.Tags.ByName => nameof(ProjectSortColumn.ByName),
-                ProjectSortColumn.Tags.ByHostCount => nameof(ProjectSortColumn.ByHostCount),
-                ProjectSortColumn.Tags.ByShare => nameof(ProjectSortColumn.ByShare),
-                ProjectSortColumn.Tags.ByAvgCredit => nameof(ProjectSortColumn.ByAvgCredit),
-                ProjectSortColumn.Tags.ByTotalCredit => nameof(ProjectSortColumn.ByTotalCredit),
-                ProjectSortColumn.Tags.ByStatus => nameof(ProjectSortColumn.ByStatus),
-                _ => throw new InvalidOperationException("unreachable: closed DU"),
-            }
-            : null;
+        _sort is ProjectSort.ColumnSort cs ? ProjectRows.columnToken(cs.column) : null;
 
     public override ListSortDirection Direction =>
         _sort is ProjectSort.ColumnSort { direction.IsDescending: true }
@@ -51,16 +42,12 @@ public sealed class ProjectSortDescription : DataGridSortDescription
     public override IComparer<object> Comparer =>
         Comparer<object>.Create((x, y) => ProjectRows.compareRows(_sort, KeyOf(x), KeyOf(y)));
 
+    // Direction flip lives in F# (total match) for the same reason as the token
+    // mapping above — no runtime-only DU switch in this adapter.
     public override DataGridSortDescription SwitchSortDirection() =>
-        _sort is ProjectSort.ColumnSort cs ? For(ProjectSort.NewColumnSort(cs.column, Flip(cs.direction))) : this;
-
-    private static SortDirection Flip(SortDirection direction) =>
-        direction.Tag switch
-        {
-            SortDirection.Tags.Ascending => SortDirection.Descending,
-            SortDirection.Tags.Descending => SortDirection.Ascending,
-            _ => throw new InvalidOperationException("unreachable: closed DU"),
-        };
+        _sort is ProjectSort.ColumnSort cs
+            ? For(ProjectSort.NewColumnSort(cs.column, ProjectRows.flipDirection(cs.direction)))
+            : this;
 
     // Fail-fast: this DataGridSortDescription is only ever installed on the
     // Projects grid's SortDescriptions, whose ItemsSource is exclusively

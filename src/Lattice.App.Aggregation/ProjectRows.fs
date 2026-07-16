@@ -239,6 +239,38 @@ module ProjectRows =
         | ParentSlot(g, _) -> parentKey g
         | ChildSlot(g, a) -> childKey g a
 
+    /// The stable string token of a sortable column — the XAML SortMemberPath,
+    /// the sort description's PropertyPath, and the click router all speak it.
+    /// Total match: this is the ONE compile-gated home of the token family; the
+    /// C# adapter/router deliberately contain no DU switch (a C# switch over an
+    /// F# DU's int Tag cannot be made exhaustive — the compiler demands a default
+    /// arm, so a new case would only fail at runtime there; Codex P2, PR #74).
+    let columnToken (column: ProjectSortColumn) : string =
+        match column with
+        | ByName -> nameof ByName
+        | ByHostCount -> nameof ByHostCount
+        | ByShare -> nameof ByShare
+        | ByAvgCredit -> nameof ByAvgCredit
+        | ByTotalCredit -> nameof ByTotalCredit
+        | ByStatus -> nameof ByStatus
+
+    /// Every ProjectSortColumn case, enumerated by reflection ONCE at module
+    /// init so the set can never silently lag a new case (a hand-written list
+    /// could). Construction-only; the cases themselves are the F# singletons.
+    let private allColumns : ProjectSortColumn[] =
+        Reflection.FSharpType.GetUnionCases typeof<ProjectSortColumn>
+        |> Array.map (fun c -> Reflection.FSharpValue.MakeUnion(c, [||]) :?> ProjectSortColumn)
+
+    /// Inverse of columnToken (None for unknown/null tokens — e.g. the chevron
+    /// column has no SortMemberPath, so its click routes to nothing).
+    let tryColumnOfToken (token: string) : ProjectSortColumn option =
+        allColumns |> Array.tryFind (fun c -> columnToken c = token)
+
+    let flipDirection (direction: SortDirection) : SortDirection =
+        match direction with
+        | Ascending -> Descending
+        | Descending -> Ascending
+
     /// Header-click toggle: same column flips direction; a new column selects it
     /// Ascending; from DefaultSort a click selects the column Ascending. There is
     /// no path back to DefaultSort. Exhaustive over ProjectSort × SortDirection —
