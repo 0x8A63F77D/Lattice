@@ -176,22 +176,6 @@ module ProjectRows =
         | UniformShare v -> v, v
         | VariesShare(min, max) -> max, min
 
-    /// Reorder the parent groups by a chosen aggregate column (children follow
-    /// their parent, so only groups are ordered here). Stable ascending sort,
-    /// reversed for descending. `compute` keeps its RAC-descending default; this
-    /// is applied only when the user has picked a column via a header click.
-    /// TODO(#57): superseded by orderedRows/compareRows; deleted in a later step.
-    let sortGroups (column: ProjectSortColumn) (descending: bool) (groups: ProjectGroup[]) : ProjectGroup[] =
-        let ascending =
-            match column with
-            | ByName -> groups |> Array.sortBy (fun g -> g.DisplayName.ToLowerInvariant())
-            | ByHostCount -> groups |> Array.sortBy (fun g -> g.Attachments.Length)
-            | ByShare -> groups |> Array.sortBy (fun g -> shareBounds g.Share)
-            | ByAvgCredit -> groups |> Array.sortBy (fun g -> g.AvgCredit)
-            | ByTotalCredit -> groups |> Array.sortBy (fun g -> g.TotalCredit)
-            | ByStatus -> groups |> Array.sortBy (fun g -> statusRank g.Status)
-        if descending then Array.rev ascending else ascending
-
     /// The comparable value one column extracts from a group — a DU so comparing
     /// two values of the same column is structural and total.
     type private ColumnKey =

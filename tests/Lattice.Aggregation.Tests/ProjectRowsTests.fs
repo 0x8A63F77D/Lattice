@@ -72,33 +72,6 @@ let ``duplicate (MasterUrl, host) attachments collapse to the first occurrence``
     Assert.Equal(10.0, groups[0].TotalCredit)
     Assert.Equal(1, groups[0].TaskCount)
 
-[<Fact>]
-let ``sortGroups orders parent groups; attachments and their order are untouched`` () =
-    // Beta has two hosts (RAC 5+5 = 10); Alpha 9; Gamma 1. compute's default is RAC desc.
-    let groups =
-        ProjectRows.compute
-            [| att "u-b" "Beta"  "z" hostB false false 100.0 5.0 10.0 1
-               att "u-b" "Beta"  "a" hostA false false 100.0 5.0 10.0 1
-               att "u-a" "Alpha" "a" hostA false false 100.0 9.0 10.0 1
-               att "u-c" "Gamma" "a" hostA false false 100.0 1.0 10.0 1 |]
-    let names gs = gs |> Array.map (fun (g: ProjectGroup) -> g.DisplayName)
-    Assert.Equal<string[]>([| "Alpha"; "Beta"; "Gamma" |], names (ProjectRows.sortGroups ByName false groups))
-    Assert.Equal<string[]>([| "Gamma"; "Beta"; "Alpha" |], names (ProjectRows.sortGroups ByName true groups))
-    Assert.Equal<string[]>([| "Gamma"; "Alpha"; "Beta" |], names (ProjectRows.sortGroups ByAvgCredit false groups))
-    // Children (attachments) are never reordered by a group sort — they stay under their parent in
-    // compute's host-name order. Beta keeps [a; z] after sorting groups by name.
-    let beta = ProjectRows.sortGroups ByName false groups |> Array.find (fun g -> g.DisplayName = "Beta")
-    Assert.Equal<string[]>([| "a"; "z" |], beta.Attachments |> Array.map (fun a -> a.HostName))
-
-[<Fact>]
-let ``sortGroups by status ranks healthy before degraded`` () =
-    let groups =
-        ProjectRows.compute
-            [| att "u-ok"   "Ok"   "a" hostA false false 100.0 1.0 1.0 0
-               att "u-susp" "Susp" "a" hostA true  false 100.0 1.0 1.0 0 |]
-    let ordered = ProjectRows.sortGroups ByStatus false groups |> Array.map (fun g -> g.DisplayName)
-    Assert.Equal<string[]>([| "Ok"; "Susp" |], ordered) // AllSame Active (0) before AllSame Suspended (2)
-
 let attachmentsGen =
     gen {
         let! n = Gen.choose (0, 8)

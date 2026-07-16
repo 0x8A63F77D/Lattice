@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -666,6 +667,47 @@ public class TasksViewTests
         Assert.Equal(new[] { "alpha", "beta", "gamma" }, SortedNames(grid));
         window.Close();
     }
+
+    // Ported from the retired Projects reconciler-Move rendered test (#57 step 6). Projects now let
+    // a view own display order, but Tasks/Transfers still bind their Rows collection directly, and
+    // their polls CAN reorder SURVIVING rows — a Reconcile.diff over a value-ordered target (e.g.
+    // Elapsed/Remaining changing) emits a Move. Avalonia 12.1's DataGrid ignores a raw
+    // CollectionChanged.Move (the backing collection reorders but the rendered rows do not), so the
+    // load-bearing workaround is CollectionReconciler.Apply translating Move → Remove+Insert of the
+    // SAME holder — the shape the DataGrid DOES re-render. This pins the RENDERED order following a
+    // survivor swap on the real Tasks grid; without the translation it would stay put.
+    [AvaloniaFact]
+    public void A_reconciler_move_reorders_the_rendered_task_grid_not_just_the_collection()
+    {
+        var (window, view, vm, _, _, _) = MakeView();
+        window.Show();
+        var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
+        vm.Rows.Add(TaskHolder("alpha", 0.2, t.AddHours(1), TaskStateKind.Running));
+        vm.Rows.Add(TaskHolder("beta", 0.3, t.AddHours(2), TaskStateKind.Running));
+        Layout(window);
+        Assert.Equal(new[] { "alpha", "beta" }, RenderedTaskNames(view));
+
+        // Two surviving keys in flipped target order → the diff emits a single Move (the op the
+        // DataGrid ignores raw). The applier translates it to Remove+Insert of the same holders.
+        var existing = vm.Rows.Select(h => (h.Key, h.Data)).ToArray();
+        var target = new[] { (vm.Rows[1].Key, vm.Rows[1].Data), (vm.Rows[0].Key, vm.Rows[0].Data) };
+        CollectionReconciler.Apply(vm.Rows, Reconcile.diff(existing, target), (k, r) => new TaskRow(k, r));
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.Equal(new[] { "beta", "alpha" }, RenderedTaskNames(view));
+        window.Close();
+    }
+
+    // The Task-name text of each displayed row in on-screen Y order (a sort/reorder Reset can leave
+    // a recycled ghost container behind — IsVisible=false / zero height — so filter it out).
+    private static string[] RenderedTaskNames(TasksView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.DataContext is TaskRow && r.IsVisible && r.Bounds.Height > 0)
+            .OrderBy(r => r.Bounds.Y)
+            .Select(r => ((TaskRow)r.DataContext!).Data.Name)
+            .ToArray();
 
     // Sorted VIEW order from the realized rows, robust to headless row recycling (a recycled
     // container can briefly duplicate a DataContext): group by name, take each name's min Index.

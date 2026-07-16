@@ -38,8 +38,10 @@ public class CollectionReconcilerTests
     // reorders but the rendered rows do not — the "Projects can't sort" root cause, 2026-07-15).
     // The invariants that matter are unchanged and asserted here: never a Reset (Clear), and the
     // moved holder OBJECT identity survives so in-place value liveness/selection is preserved. The
-    // rendered-grid proof of this workaround is A_reconciler_move_reorders_the_rendered_grid... in
-    // the headless ProjectsViewTests.
+    // rendered-grid proof of this workaround is
+    // A_reconciler_move_reorders_the_rendered_task_grid_not_just_the_collection in the headless
+    // TasksViewTests (Tasks/Transfers still bind their Rows collection directly; Projects moved to a
+    // view-owned order in #57, so its copy of this proof was retired).
     [Fact]
     public void Reorder_reinserts_holders_without_reset()
     {
