@@ -212,6 +212,11 @@ public class ProjectsViewModelTests : IAsyncLifetime
         Assert.Same(firstRow, vm.Rows[0]);
     }
 
+    // Display order is now the VIEW's (RowsView), not the source Rows collection —
+    // the source stays in reconcile-friendly order. Assert the rendered sequence.
+    private static IEnumerable<string> ViewNames(ProjectsViewModel vm) =>
+        vm.RowsView.Cast<ProjectRow>().Select(r => r.Data.Name);
+
     [Fact]
     public async Task Parents_sort_by_aggregate_rac_descending()
     {
@@ -222,7 +227,7 @@ public class ProjectsViewModelTests : IAsyncLifetime
         _manager.Start();
         await Wait.UntilAsync(() => vm.Rows.Count == 2);
 
-        Assert.Equal(["High", "Low"], vm.Rows.Select(r => r.Data.Name));
+        Assert.Equal(["High", "Low"], ViewNames(vm));
     }
 
     [Fact]
@@ -284,28 +289,59 @@ public class ProjectsViewModelTests : IAsyncLifetime
         _manager.Start();
         await Wait.UntilAsync(() => vm.Rows.Count == 2, "two parent groups aggregate");
         // compute's default is RAC descending: Beta (5+5=10) before Alpha (1).
-        Assert.Equal(new[] { "Beta", "Alpha" }, vm.Rows.Select(r => r.Data.Name));
+        // Order is the VIEW's (RowsView), not the source Rows collection.
+        Assert.Equal(new[] { "Beta", "Alpha" }, ViewNames(vm));
 
-        // Sort by project name ascending (ToggleSort → Rebuild, synchronous).
+        // Sort by project name ascending: the view re-sorts, parents reorder.
         vm.ToggleSort(ProjectSortColumn.ByName);
-        Assert.Equal(new[] { "Alpha", "Beta" }, vm.Rows.Select(r => r.Data.Name));
+        Assert.Equal(new[] { "Alpha", "Beta" }, ViewNames(vm));
 
-        // Expand Beta: its two children sit directly under it.
+        // Expand Beta: its two children sit directly under it in the view.
         vm.ToggleExpandCommand.Execute("u-b");
-        Assert.Equal(4, vm.Rows.Count);
-        Assert.Equal("Alpha", vm.Rows[0].Data.Name);
-        Assert.Equal("Beta", vm.Rows[1].Data.Name);
-        Assert.False(vm.Rows[2].Data.IsParent);
-        Assert.False(vm.Rows[3].Data.IsParent);
-        Assert.Equal("u-b", vm.Rows[2].Data.MasterUrl);
-        Assert.Equal("u-b", vm.Rows[3].Data.MasterUrl);
+        var expanded = vm.RowsView.Cast<ProjectRow>().ToList();
+        Assert.Equal(4, expanded.Count);
+        Assert.Equal("Alpha", expanded[0].Data.Name);
+        Assert.Equal("Beta", expanded[1].Data.Name);
+        Assert.False(expanded[2].Data.IsParent);
+        Assert.False(expanded[3].Data.IsParent);
+        Assert.Equal("u-b", expanded[2].Data.MasterUrl);
+        Assert.Equal("u-b", expanded[3].Data.MasterUrl);
 
         // Toggle to descending: Beta moves above Alpha and its expanded children move WITH it.
         vm.ToggleSort(ProjectSortColumn.ByName);
-        Assert.Equal(4, vm.Rows.Count);
-        Assert.Equal("Beta", vm.Rows[0].Data.Name);
-        Assert.False(vm.Rows[1].Data.IsParent);
-        Assert.False(vm.Rows[2].Data.IsParent);
-        Assert.Equal("Alpha", vm.Rows[3].Data.Name);
+        var descending = vm.RowsView.Cast<ProjectRow>().ToList();
+        Assert.Equal(4, descending.Count);
+        Assert.Equal("Beta", descending[0].Data.Name);
+        Assert.False(descending[1].Data.IsParent);
+        Assert.False(descending[2].Data.IsParent);
+        Assert.Equal("Alpha", descending[3].Data.Name);
+    }
+
+    // Steady-state polls with unchanged data must be zero-churn end-to-end: no
+    // CollectionChanged on the source Rows AND no view Refresh (Reset) on
+    // RowsView — the order check in Rebuild is conditional precisely so an
+    // unchanged poll never re-shapes the view. Holder identity survives too.
+    [Fact]
+    public async Task Steady_state_poll_raises_no_source_events_and_no_view_refresh()
+    {
+        AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+
+        var firstRow = vm.Rows[0];
+        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        var sourceChanges = 0;
+        var viewChanges = 0;
+        vm.Rows.CollectionChanged += (_, _) => sourceChanges++;
+        vm.RowsView.CollectionChanged += (_, _) => viewChanges++;
+
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+        _clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal(0, sourceChanges);
+        Assert.Equal(0, viewChanges);
+        Assert.Same(firstRow, vm.Rows[0]);
     }
 }

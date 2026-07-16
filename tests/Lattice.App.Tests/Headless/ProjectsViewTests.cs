@@ -484,7 +484,7 @@ public class ProjectsViewTests
         vm.IsLoading = false;
         vm.IsEmpty = false;
         Layout(window);
-        Assert.Null(vm.SortState.Column);
+        Assert.Equal(ProjectSort.DefaultSort, vm.Sort);
 
         var header = view.Grid.GetVisualDescendants().OfType<DataGridColumnHeader>()
             .Single(h => (h.Content as string) == Strings.ColProject);
@@ -495,8 +495,7 @@ public class ProjectsViewTests
         Layout(window);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(ProjectSortColumn.ByName, vm.SortState.Column);
-        Assert.False(vm.SortState.Descending); // first click = ascending
+        Assert.Equal(ProjectSort.NewColumnSort(ProjectSortColumn.ByName, SortDirection.Ascending), vm.Sort);
         window.Close();
     }
 
@@ -526,7 +525,7 @@ public class ProjectsViewTests
 
         // The click was swallowed by the overlay — no sort. (Documents the bug; see the real-click
         // test above for the working steady-state path.)
-        Assert.Null(vm.SortState.Column);
+        Assert.Equal(ProjectSort.DefaultSort, vm.Sort);
         window.Close();
     }
 }
