@@ -195,11 +195,17 @@ to Opus on first failed fix*):
    loading/empty overlays (`TasksView.axaml:235`, `EventLogView.axaml:226`, …), so it must **not**
    be blanket-transparentised. Introduce a **dedicated command-bar region brush** (e.g.
    `LatticeCommandBarSurfaceBrush`, seeded to today's `#292929`) that the four command bars switch
-   to, and have the Mica toggle flip **that** brush (plus `LatticeNavSurfaceBrush` for the pane)
-   transparent↔opaque — one toggle, all four views, content/overlays untouched. **Design-fidelity
-   check at execution:** the design names `#202020` for *both* nav and command-bar; the command bar
-   is currently `#292929` — confirm with design/owner whether the command-bar region should become
-   `#202020`; flag, don't silently change it.
+   to, and have the Mica toggle flip **that** brush transparent↔opaque — one toggle, all four views,
+   content/overlays untouched. **The nav pane needs real binding first:** `LatticeNavSurfaceBrush`
+   is **declared but unused** (only `Tokens.axaml:9,32`; grep-confirmed no consumer) — the
+   `FANavigationView` pane is currently painted by **FA's own default pane-background theme
+   resource**, so toggling `LatticeNavSurfaceBrush` would be a **no-op** and leave the pane opaque
+   over Mica (Codex P2 on PR #89). PR A must first **bind/override the actual FA pane background**
+   (avalonia-docs: find FA 3.0.1's NavigationView pane-background theme key, or set the pane
+   background explicitly) to the region brush, then toggle *that*. **Design-fidelity check:** the
+   design names `#202020` for *both* nav and command-bar; the command bar is currently `#292929` —
+   confirm with design/owner whether the command-bar region should become `#202020`; flag, don't
+   silently change.
 4. **Invariant:** no feature depends on the material being present (CLAUDE.md); when Mica is denied
    the app is the opaque fallback — pixel-identical to today (no token changes; the region brushes
    already exist).
@@ -208,8 +214,10 @@ to Opus on first failed fix*):
 other level → both-opaque); headless test that under the headless platform (grants no Mica) the
 window + nav/command-bar regions resolve the opaque fallback and content/overlays stay opaque — i.e.
 CI exercises the fallback path. Assert the command-bar surface is driven by the **shared**
-`LatticeCommandBarSurfaceBrush` in **all four** views (Tasks/Projects/Transfers/EventLog), so no
-view is left opaque over Mica.
+`LatticeCommandBarSurfaceBrush` in **all four** views (Tasks/Projects/Transfers/EventLog), and that
+the **FA nav pane's effective background** is the (now-bound) region brush — not FA's default and
+not the unused `LatticeNavSurfaceBrush` — so both the pane and every command bar actually respond to
+the Mica toggle (no surface left opaque over Mica).
 
 **Owner gate (VISUAL):** one screenshot on macOS confirming the solid fallback is unchanged
 (one version → owner eyeball). **On-hardware Mica verification is NOT in this PR** — it is issue
