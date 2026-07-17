@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Lattice.App.Infrastructure;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
@@ -11,6 +12,15 @@ namespace Lattice.App;
 
 public partial class App : Application
 {
+    /// <summary>
+    /// The single-instance guard, set by <see cref="Program"/> when this process is
+    /// the primary (null otherwise — headless tests never run Program.Main, and a
+    /// guard-Unavailable launch also leaves it null). Wired to a show-window
+    /// activation callback once the main window exists, and disposed on Exit.
+    /// PR C swaps the callback body to TrayResidencyController.ShowWindow.
+    /// </summary>
+    internal static SingleInstanceGuard? ActivationGuard { get; set; }
+
     public override void Initialize() => AvaloniaXamlLoader.Load(this);
 
     public override void OnFrameworkInitializationCompleted()
@@ -35,9 +45,25 @@ public partial class App : Application
             var uiState = new UiStateStore();
             var shell = new ShellViewModel(registry, store, clock, uiState, factory);
 
-            desktop.MainWindow = new ShellWindow { DataContext = shell };
+            var shellWindow = new ShellWindow { DataContext = shell };
+            desktop.MainWindow = shellWindow;
+
+            // Single-instance activation (#92): a secondary launch pings the primary
+            // instead of starting a second app; surface the existing window. Until
+            // PR C, "surface" is Show()+Activate(); PR C routes this through the tray
+            // controller (which also un-hides from the tray).
+            if (ActivationGuard is { } guard)
+            {
+                guard.SetActivationCallback(() => Dispatcher.UIThread.Post(() =>
+                {
+                    shellWindow.Show();
+                    shellWindow.Activate();
+                }));
+            }
+
             desktop.Exit += (_, _) =>
             {
+                ActivationGuard?.Dispose(); // stop accepting activations, release the lock
                 clock.Dispose();
                 shell.Dispose();
                 store.Dispose();
