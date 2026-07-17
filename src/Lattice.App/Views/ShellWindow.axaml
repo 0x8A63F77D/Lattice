@@ -11,7 +11,7 @@
         Icon="/Assets/lattice.ico"
         Width="1280" Height="800" MinWidth="1000" MinHeight="700"
         TransparencyLevelHint="Mica, None"
-        Background="{DynamicResource LatticeCanvasBrush}">
+        TransparencyBackgroundFallback="{DynamicResource LatticeCanvasBrush}">
 
   <Window.KeyBindings>
     <KeyBinding Gesture="Ctrl+D1" Command="{Binding SelectViewCommand}" CommandParameter="0" />
@@ -66,7 +66,13 @@
   </Window.Styles>
 
   <Panel>
-    <v:FirstRunView x:Name="FirstRun" x:FieldModifier="public" IsVisible="{Binding !HasHosts}" />
+    <!-- First-run empty state is a CONTENT surface (design: content surfaces are always opaque).
+         It sits at the shell root, NOT inside PageHost, so it needs its own canvas paint — without
+         it a granted Mica would show through the empty state on a new install (window background is
+         transparent under Mica). Same canvas colour the window painted before, so the opaque
+         fallback is unchanged. -->
+    <v:FirstRunView x:Name="FirstRun" x:FieldModifier="public" IsVisible="{Binding !HasHosts}"
+                    Background="{DynamicResource LatticeCanvasBrush}" />
 
     <!-- Responsive rail (design 1i / card 3a; README:104): the pane auto-collapses to the 48px
          compact strip below 1280px window width and is fully open (260px) at >= 1280. FA's native
@@ -268,7 +274,11 @@
            8px, the outgoing fades out, over 150 ms decelerateMid. TransitioningContentControl
            assigns Content synchronously the moment CurrentPage changes, so the page's data is
            bound before the transition plays — the motion is cosmetic and never delays a data
-           update (value-first). -->
+           update (value-first).
+           Deliberately NOT painted opaque: a command bar lives at the top of each hosted view, and
+           under Mica it goes transparent to reveal the material — an opaque host behind it would
+           reveal the canvas instead of the window/Mica (Codex P2, PR #99). Content opacity is owned
+           per-view by each page's ContentRegion (everything below the command bar). -->
       <TransitioningContentControl x:Name="ViewHost" x:FieldModifier="public"
                                    Content="{Binding CurrentPage}">
         <TransitioningContentControl.PageTransition>

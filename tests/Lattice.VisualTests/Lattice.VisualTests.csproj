@@ -41,5 +41,8 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/Lattice.App/Lattice.App.csproj" />
+    <!-- xunit-free shared fakes (FakeGuiRpcClient) so the fallback pixel gate can render a real view
+         over a real (never-started) host graph without a live daemon. -->
+    <ProjectReference Include="../Lattice.TestSupport/Lattice.TestSupport.csproj" />
   </ItemGroup>
 </Project>

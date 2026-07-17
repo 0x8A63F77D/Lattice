@@ -6,6 +6,13 @@
     <ResourceDictionary x:Key="Light">
       <SolidColorBrush x:Key="LatticeCanvasBrush" Color="#FAFAFA" />
       <SolidColorBrush x:Key="LatticeSurfaceBrush" Color="#FFFFFF" />
+      <!-- Command-bar region surface. The design groups the nav and command-bar as one Mica region
+           ("the nav and command-bar regions use Mica material; #202020 is the solid fallback"), so its
+           opaque fallback is the NAV-region colour (#F5F5F5 light / #202020 dark = LatticeNavSurfaceBrush),
+           NOT the content surface. The shell flips a window-level override of THIS key transparent when
+           Mica is granted; kept a separate key from LatticeNavSurfaceBrush so the command-bar toggle
+           never touches the nav pane, and from LatticeSurfaceBrush (loading/empty overlays, always opaque). -->
+      <SolidColorBrush x:Key="LatticeCommandBarSurfaceBrush" Color="#F5F5F5" />
       <SolidColorBrush x:Key="LatticeNavSurfaceBrush" Color="#F5F5F5" />
       <SolidColorBrush x:Key="LatticeStrokeBrush" Color="#E0E0E0" />
       <SolidColorBrush x:Key="LatticeStrokeSubtleBrush" Color="#F0F0F0" />
@@ -29,6 +36,10 @@
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="LatticeCanvasBrush" Color="#1F1F1F" />
       <SolidColorBrush x:Key="LatticeSurfaceBrush" Color="#292929" />
+      <!-- Command-bar region surface — see the Light dictionary. Dark region fallback #202020 (the
+           design's stated Mica solid fallback = nav colour), aligned from the old #292929 surface per
+           owner decision (2026-07-19: "按照设计稿执行"). -->
+      <SolidColorBrush x:Key="LatticeCommandBarSurfaceBrush" Color="#202020" />
       <SolidColorBrush x:Key="LatticeNavSurfaceBrush" Color="#202020" />
       <SolidColorBrush x:Key="LatticeStrokeBrush" Color="#3D3D3D" />
       <SolidColorBrush x:Key="LatticeStrokeSubtleBrush" Color="#333333" />

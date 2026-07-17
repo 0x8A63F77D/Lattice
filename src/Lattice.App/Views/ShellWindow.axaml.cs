@@ -24,6 +24,13 @@ public partial class ShellWindow : Window
     private readonly HashSet<Guid> _testHostsInFlight = [];
     private IDisposable? _navBoundsSubscription;
     private IDisposable? _navPaneSubscription;
+    // Window-level (not shell-dependent): the granted transparency level and the theme-aware
+    // canvas brush both feed ApplyBackdrop. Kept as fields so ApplyBackdrop can re-run whenever
+    // EITHER changes (OS grants/revokes Mica, or the theme flips light↔dark).
+    private IDisposable? _transparencySubscription;
+    private IDisposable? _canvasBrushSubscription;
+    private WindowTransparencyLevel _grantedTransparency;
+    private IBrush? _canvasBrush;
 
     // Test seam (InternalsVisibleTo): the header-tap group toggle is deferred (see OnHostRailTapped).
     // Behind IUiDispatcher so a test can swap in a QueueUiDispatcher and drain the deferral EXPLICITLY,
@@ -40,7 +47,82 @@ public partial class ShellWindow : Window
     public ShellWindow()
     {
         InitializeComponent();
+        WireBackdrop();
         DataContextChanged += (_, _) => AttachShell();
+    }
+
+    // #11 code half. The shell requests TransparencyLevelHint="Mica, None", but Win10/macOS/Linux
+    // and battery-saver mode DENY Mica and hand back a lower level; the old shell painted an opaque
+    // brush over whatever came back, wasting a granted Mica. Branch on ActualTransparencyLevel (the
+    // GRANTED level, never the hint) via MicaBackdropPolicy. Both GetObservable/GetResourceObservable
+    // push their current value on subscribe, so ApplyBackdrop runs once synchronously here (Nav
+    // exists — InitializeComponent has run) and again whenever the OS re-negotiates Mica or the theme
+    // flips. Subscribe the brush FIRST so _canvasBrush is populated before the level observer fires.
+    private void WireBackdrop()
+    {
+        _canvasBrushSubscription = this.GetResourceObservable("LatticeCanvasBrush")
+            .Subscribe(new AnonymousObserver<object?>(value =>
+            {
+                _canvasBrush = value as IBrush;
+                ApplyBackdrop();
+            }));
+        _transparencySubscription = this.GetObservable(TopLevel.ActualTransparencyLevelProperty)
+            .Subscribe(new AnonymousObserver<WindowTransparencyLevel>(level =>
+            {
+                _grantedTransparency = level;
+                ApplyBackdrop();
+            }));
+    }
+
+    private void ApplyBackdrop()
+    {
+        BackdropChoice choice = MicaBackdropPolicy.Resolve(_grantedTransparency);
+        // Window: transparent so the OS material shows through; else the opaque canvas. _canvasBrush
+        // is resolved theme-aware (re-applied on theme switch), so the fallback tracks light/dark.
+        // TransparencyBackgroundFallback (XAML) covers the window paint in the sub-frame before the
+        // brush observer seeds _canvasBrush.
+        Background = choice.WindowTransparent ? Brushes.Transparent : _canvasBrush;
+        // Command-bar region: flip a window-level override of the dedicated region brush transparent so
+        // the material shows through all four view command bars at once; else remove the override so it
+        // reverts to the theme-dict opaque seed (pixel-identical fallback). One toggle, all four views.
+        // LatticeSurfaceBrush (loading/empty overlays) and LatticeCanvasBrush (content/first-run) are
+        // deliberately untouched — those content surfaces stay opaque unconditionally (design).
+        //
+        // The write MUST be idempotent: mutating Window.Resources raises ResourcesChanged, which
+        // re-notifies the GetResourceObservable("LatticeCanvasBrush") subscription above and re-enters
+        // ApplyBackdrop. The ResourceDictionary indexer raises even when the value is unchanged, so an
+        // unconditional write recurses until the UI thread stack overflows (Codex P1, PR #99). Only
+        // flip the override when its presence actually needs to change; the re-entry then finds the
+        // desired state already in place, writes nothing, and unwinds.
+        bool overridePresent = Resources.ContainsKey("LatticeCommandBarSurfaceBrush");
+        if (choice.RegionSurfacesTransparent && !overridePresent)
+            Resources["LatticeCommandBarSurfaceBrush"] = Brushes.Transparent;
+        else if (!choice.RegionSurfacesTransparent && overridePresent)
+            Resources.Remove("LatticeCommandBarSurfaceBrush");
+        // Nav pane: NOT toggled here. Empirically FA 3.0.1's NavigationView paints its pane with an
+        // already-transparent background (#00F3F3F3 in both themes; its SplitView PaneBackground does
+        // not bind to NavigationViewDefaultPaneBackground), so the pane reveals the window backdrop
+        // (Mica) with no extra wiring, and the earlier Nav.Background toggle was a no-op. Binding the
+        // pane to an OPAQUE region brush would change the fallback nav colour and is a design-fidelity
+        // call escalated to the controller/owner (PR #99).
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _transparencySubscription?.Dispose();
+        _canvasBrushSubscription?.Dispose();
+        base.OnClosed(e);
+    }
+
+    // Test seam (InternalsVisibleTo): the headless platform coerces ActualTransparencyLevel to the
+    // levels it can provide (never Mica), so a test cannot drive the Mica branch through the real
+    // property. Applying a chosen granted level directly still exercises the real ApplyBackdrop path,
+    // including the Window.Resources mutation and its re-entrant resource-observer callback (the P1
+    // recursion trigger).
+    internal void ApplyBackdropForTest(WindowTransparencyLevel granted)
+    {
+        _grantedTransparency = granted;
+        ApplyBackdrop();
     }
 
     private void AttachShell()
