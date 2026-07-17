@@ -393,12 +393,15 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 
 ## Scheduling & dependencies
 
-- **#67 (fixture consolidation) MERGED today (PR #90 @ `edf90fc`)** — its shared `HeadlessAppFixture`
-  (`FakeTimeProvider`-by-construction + deterministic `QueueUiDispatcher` drain, replacing the ~7
-  near-duplicate `MakeView`/`MakeVm` copies and the real-time `Wait.UntilAsync` ceiling) is now
-  available. **PRs C1 and C2 add headless motion tests over the view fixtures → they build on that
-  consolidated fixture** (dependency satisfied; write no new per-view fixture copies — reuse
-  `HeadlessAppFixture`). (#13/#88 also sequence after #67, per project status.)
+- **#67 (fixture consolidation) MERGED to `main` today (PR #90 @ `edf90fc`)** — its shared
+  `HeadlessAppFixture` (`FakeTimeProvider`-by-construction + deterministic `QueueUiDispatcher` drain,
+  replacing the ~7 near-duplicate `MakeView`/`MakeVm` copies and the real-time `Wait.UntilAsync`
+  ceiling) lives on `main`. **This plan branch does NOT contain it** — it forked from `786f823`,
+  before #90; that is expected for a docs-only PR, and `HeadlessAppFixture` is reached by the
+  **execution chips, which branch from `main`** *after* this plan merges (not from this branch).
+  **PRs C1 and C2 add headless motion tests over the view fixtures → they reuse `HeadlessAppFixture`
+  (write no new per-view fixture copies).** So the C1/C2 dependency is **satisfied on `main`**, not a
+  pending blocker. (#13/#88 also sequence after #67, per project status.)
 - **PRs A, B, and E do not touch the view fixtures** (Mica policy has its own unit test; the
   icon-swap and rail-collapse tests target the shell nav, not a data view) → they can proceed in
   parallel with / ahead of #67.
