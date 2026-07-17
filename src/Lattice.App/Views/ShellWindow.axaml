@@ -67,9 +67,27 @@
   <Panel>
     <v:FirstRunView x:Name="FirstRun" x:FieldModifier="public" IsVisible="{Binding !HasHosts}" />
 
+    <!-- Responsive rail (design 1i / card 3a; README:104): the pane auto-collapses to the 48px
+         compact strip below 1280px window width and is fully open (260px) at >= 1280. FA's native
+         adaptive PaneDisplayMode="Auto" drives it: it flips IsPaneOpen itself (verified in the Skia
+         render path — False in Compact), so the existing #Nav.IsPaneOpen consumers and the
+         SetRailPaneCompact feed keep working untouched. ExpandedModeThresholdWidth pins the single
+         design rail breakpoint (1280). CompactModeThresholdWidth=0 makes the rail a clean TWO-state
+         control at every width — Compact below 1280, Expanded at/above — so FA's third "LeftMinimal"
+         state (a hidden hamburger pane) is never reachable: the rail is never hidden, only compacted
+         (card 3a keeps it always visible). The 1100 figure in the responsive table is the
+         column-shed band edge (ColumnVisibilityPolicy), not a second rail state. Nav fills the
+         window, so Auto measures WINDOW width, not the pane-relative content width (PR #28).
+         NOTE ON TESTS: FA Auto re-evaluates its DisplayMode on a real size-CHANGE / render pass, which
+         the plain headless-drawing harness (Lattice.App.Tests) does not run — there the pane stays
+         Expanded regardless of width. The end-to-end collapse is therefore gated in the Skia render
+         path (Lattice.VisualTests, ShellRailCollapseVisualTests); Lattice.App.Tests pins the adaptive
+         CONFIG that makes it collapse. -->
     <ui:FANavigationView x:Name="Nav" x:FieldModifier="public"
                        IsVisible="{Binding HasHosts}"
-                       PaneDisplayMode="Left"
+                       PaneDisplayMode="Auto"
+                       ExpandedModeThresholdWidth="1280"
+                       CompactModeThresholdWidth="0"
                        OpenPaneLength="260" CompactPaneLength="48"
                        IsSettingsVisible="False"
                        IsBackButtonVisible="False"
