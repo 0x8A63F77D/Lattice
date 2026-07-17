@@ -184,14 +184,22 @@ to Opus on first failed fix*):
    **window background goes transparent** AND the **nav + command-bar region surfaces stop painting
    opaque** so the material shows through; otherwise keep today's opaque surfaces. **Content
    surfaces stay opaque always** — never bound to the Mica state.
-3. **Reconcile the fallback color (design authoritative):** the design solid fallback is `#202020`;
-   `Tokens.axaml` dark `LatticeCanvasBrush` is `#1F1F1F`. **Align the dark fallback token to
-   `#202020`** per the design — OR, if `#1F1F1F` was a deliberate prior choice, record it as a
-   deliberate deviation with rationale in-file. Do not silently diverge (plan header rule; design
-   wins).
+3. **Region fallback brushes — do NOT retoken the global canvas.** The design's `#202020` is the
+   *Mica-region* fallback, and it **already exists** as `LatticeNavSurfaceBrush` (dark `#202020`,
+   `Tokens.axaml:32`) — it is **not** the content canvas (`LatticeCanvasBrush` dark `#1F1F1F`,
+   `Tokens.axaml:30`, which paints Settings/content and MUST stay). So there is **no canvas
+   retoken** (an earlier draft's "align `LatticeCanvasBrush`→`#202020`" was wrong — retokening the
+   canvas would darken dark-mode content areas; Codex P2 on PR #89). The nav + command-bar region
+   surfaces already carry their own opaque brushes (`LatticeNavSurfaceBrush` `#202020`;
+   command bar `LatticeSurfaceBrush` `#292929`, `TasksView.axaml:46`); PR A makes **those region
+   surfaces** go transparent when Mica is granted and paint their brush when denied — the canvas
+   and all content stay opaque. **Design-fidelity check at execution:** the design names `#202020`
+   for *both* nav and command-bar regions, but the command bar currently uses `#292929` — confirm
+   with the design/owner whether the command-bar fallback should become `#202020`; flag, don't
+   silently change it.
 4. **Invariant:** no feature depends on the material being present (CLAUDE.md); when Mica is denied
-   the app is the opaque fallback (pixel-identical to today except the intentional `#1F1F1F`→
-   `#202020` token nudge, if taken).
+   the app is the opaque fallback — pixel-identical to today (no token changes; the region brushes
+   already exist).
 
 **Machine gate (CORRECTNESS):** headless test on `MicaBackdropPolicy` (Mica → both-transparent; any
 other level → both-opaque); headless test that under the headless platform (grants no Mica) the
@@ -242,24 +250,31 @@ P2 on PR #89 — see reconciliation.)
 
 **Contract-level tasks** (Sonnet-tier; judgment-routing as above; **avalonia-docs REQUIRED**):
 
-1. Drive the pane state from **window width** at the design breakpoint: width ≥ 1280 → open
-   (260px); 1100 ≤ width < 1280 → compact (48px). avalonia-docs FIRST: whether FA
-   `FANavigationView` supports adaptive `PaneDisplayMode="Auto"` + settable
-   `CompactModeThresholdWidth`/`ExpandedModeThresholdWidth` (or equivalent). If those can be set to
-   the **design 1i** thresholds, use them (design is authoritative over FA defaults — cite `1i`).
-   If FA's adaptive thresholds cannot be pinned to 1100/1280, drive `IsPaneOpen` from a width
-   handler instead, mirroring TasksView's `BreakpointWidth => _topLevel.Bounds.Width` pattern —
-   **window-width, NOT pane-relative width** (the PR #28 landmine).
+1. Drive the pane between exactly **two** states at the design's single 1280 breakpoint: width ≥
+   1280 → **expanded** (260px, `PaneDisplayMode=Left`); **1000 ≤ width < 1280 → 48px compact**
+   (`PaneDisplayMode=LeftCompact`, pane visible, icons-only). The compact rail must hold across the
+   **whole** 1000–1279 band (the rail stays 48px below 1100 while columns shed — design `1i`), never
+   the menu-button-only Minimal pane. avalonia-docs FIRST: confirm FA 3.0.1 exposes `LeftCompact`.
+   **Do NOT use `PaneDisplayMode=Auto` with `CompactModeThresholdWidth=1100`** — FA `Auto` has three
+   tiers (Minimal → Compact → Expanded) and `CompactModeThresholdWidth` is the width at which
+   *Compact* begins, so 1100 renders the supported **1000–1099** range as **Minimal** (menu-button
+   only, pane hidden), not the 48px compact rail the design requires (Codex P2 on PR #89). Prefer an
+   explicit `LeftCompact`/`Left` toggle from a **window-width** handler (mirror TasksView's
+   `BreakpointWidth => _topLevel.Bounds.Width` — window-width, NOT pane-relative, the PR #28
+   landmine). If `Auto` is used instead, `CompactModeThresholdWidth` must be ≤ the 1000 minimum (so
+   Minimal is never reached) with `ExpandedModeThresholdWidth = 1280`.
 2. **Invariants:** the existing consumers already react to `IsPaneOpen` correctly (row-text hides,
    icons-only via `#Nav.IsPaneOpen`; `SetRailPaneCompact` force-expands Healthy so icons show,
    decisions §5) — this PR adds only the width→collapse *driver* and must not change those
    consumers; the manual pane toggle still works; the height-driven flat↔grouped fit math
    (`SetRailViewportHeight`) is orthogonal and untouched.
 
-**Machine gate (CORRECTNESS):** headless — resize the window to ~1200px → `Nav.IsPaneOpen` is
-false (compact); resize to ~1300px → true (open); the crossing sits at the design threshold. Real
-machine signal (pane state readable headlessly); dovetails with the existing `ShellRailTests`
-compact pins (`Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`).
+**Machine gate (CORRECTNESS):** headless — at **~1050px** (inside the 1000–1099 band) the rail is
+the **48px compact** pane (present, icons-only), **NOT** Minimal/menu-button-only; at ~1200px
+compact; at ~1300px **expanded** (260px). The ~1050 case is the one the design's below-1100 range
+needs and the naive 1200/1300 pair would miss (the P2 root cause). Real machine signal (pane
+mode/width readable headlessly); dovetails with the existing `ShellRailTests` compact pins
+(`Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`).
 
 **Owner gate (VISUAL):** one screenshot at ~1200px showing the 48px compact rail → owner eyeball.
 
@@ -401,10 +416,13 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 
 ## Risks & open judgment calls
 
-- **Mica is region-scoped, fallback `#202020`** (PR A): resolved at joint review — the design
-  prescribes Mica on the nav + command-bar regions only, content always opaque, `#202020` solid
-  fallback; there is **no** whole-window tint token. PR A aligns the `#1F1F1F` dark canvas token to
-  the design's `#202020` (or records a deliberate deviation). No open STOP condition remains for PR A.
+- **Mica is region-scoped; no canvas retoken** (PR A): the design prescribes Mica on the nav +
+  command-bar regions only, content always opaque. `#202020` is the *region* fallback and **already
+  exists** as `LatticeNavSurfaceBrush`; the content canvas `LatticeCanvasBrush` (`#1F1F1F`) is a
+  different surface and stays. So there is **no** whole-window tint and **no canvas retoken** — PR A
+  toggles the existing region surfaces transparent/opaque on the Mica state. One open design-fidelity
+  check (not a blocker): whether the command-bar fallback should be `#202020` (design) vs its current
+  `#292929` — confirm with design/owner at execution, flag don't silently change.
 - **Compact grouped rail** — owner ruled **defer to M3** at joint review (issue #96); no longer a
   Wave-3 judgment call.
 - **FA default transitions** (PR C2 task 4): treat "FluentAvalonia already animates InfoBar/dialog
