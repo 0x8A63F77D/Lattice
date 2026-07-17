@@ -173,7 +173,7 @@ public class TasksViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Rows_sort_by_deadline_ascending_with_nulls_last()
+    public async Task View_sorts_by_deadline_ascending_with_nulls_last()
     {
         var later = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
         var sooner = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
@@ -191,7 +191,58 @@ public class TasksViewModelTests : IAsyncLifetime
         _manager.Start();
         await Wait.UntilAsync(() => vm.Rows.Count == 3);
 
-        Assert.Equal(["sooner", "later", "no_deadline"], vm.Rows.Select(r => r.Data.Name));
+        // Display order is view-owned (issue #86): the grid binds RowsView, whose
+        // default sort description carries the deadline order. The source Rows
+        // stay in reconcile-friendly order and pin nothing about display.
+        Assert.Equal(["sooner", "later", "no_deadline"], vm.RowsView.Cast<TaskRow>().Select(r => r.Data.Name));
+    }
+
+    // Issue #86 (Tasks leg): a poll that reorders SURVIVING rows — here two
+    // tasks swapping deadlines — must not touch the source collection. The old
+    // VM-ordered source replayed the reorder as Move→Remove+Insert, which cost
+    // DataGrid selection; now Reconcile.alignToExisting keeps survivors in
+    // their existing source slots (in-place Updates only) and the VIEW re-sorts
+    // itself via the conditional order guard.
+    [Fact]
+    public async Task Deadline_swap_reorders_the_view_not_the_source_collection()
+    {
+        var sooner = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var later = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        IReadOnlyList<Result> results =
+        [
+            TestData.MakeResult(name: "first", deadline: sooner),
+            TestData.MakeResult(name: "second", deadline: later),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetResults = _ => Task.FromResult(results) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        Assert.Equal(["first", "second"], vm.RowsView.Cast<TaskRow>().Select(r => r.Data.Name));
+        var first = vm.Rows.Single(r => r.Data.Name == "first");
+        var second = vm.Rows.Single(r => r.Data.Name == "second");
+        var sourceEvents = new List<NotifyCollectionChangedAction>();
+        vm.Rows.CollectionChanged += (_, e) => sourceEvents.Add(e.Action);
+
+        // Swapped deadlines AND swapped list positions: the daemon's result
+        // order is not contractual, so the unaligned target would reorder the
+        // source (a Move) even without any VM-side sort.
+        results =
+        [
+            TestData.MakeResult(name: "second", deadline: sooner),
+            TestData.MakeResult(name: "first", deadline: later),
+        ];
+        _store.RequestRefresh(null);
+        await Wait.UntilAsync(() => second.Data.Deadline == sooner);
+
+        // Source: same holders in the same slots, updated in place — no
+        // collection event at all, so a bound grid never saw a remove.
+        Assert.Empty(sourceEvents);
+        Assert.Same(first, vm.Rows[0]);
+        Assert.Same(second, vm.Rows[1]);
+        // View: the default deadline order re-asserts itself over the new values.
+        Assert.Equal(["second", "first"], vm.RowsView.Cast<TaskRow>().Select(r => r.Data.Name));
     }
 
     [Fact]
@@ -606,12 +657,18 @@ public class TasksViewModelTests : IAsyncLifetime
         _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
         var collectionChanges = 0;
         vm.Rows.CollectionChanged += (_, _) => collectionChanges++;
+        // The VIEW must stay quiet too (issue #86): the post-reconcile order
+        // guard only Refreshes on a genuine order violation, so a steady-state
+        // tick must not Reset the grid's ItemsSource every second.
+        var viewChanges = 0;
+        ((INotifyCollectionChanged)vm.RowsView).CollectionChanged += (_, _) => viewChanges++;
 
         _clock.Advance(TimeSpan.FromSeconds(1));
         _clock.Advance(TimeSpan.FromSeconds(1));
         _clock.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Equal(0, collectionChanges);
+        Assert.Equal(0, viewChanges);
         Assert.Same(firstRow, vm.Rows[0]);
         // The tick path itself must stay alive: freshness text still advances.
         Assert.Equal(string.Format(Strings.UpdatedSecondsFmt, 3), vm.UpdatedText);
