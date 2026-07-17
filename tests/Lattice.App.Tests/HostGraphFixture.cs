@@ -79,11 +79,17 @@ internal sealed class RoutingGuiRpcClient(IReadOnlyDictionary<string, FakeGuiRpc
 ///
 /// Lives in Lattice.App.Tests (not Lattice.TestSupport): the graph is made of
 /// Lattice.App types, and TestSupport stays App-free and xunit-free (#16).
-/// The fixture itself is xunit-free (plain IAsyncDisposable), so suites use it
-/// from both [Fact] and [AvaloniaFact] contexts; only the latter may
-/// <see cref="Host"/> a view.
+/// The fixture itself is xunit-free (plain IAsyncDisposable / IDisposable), so
+/// suites use it from both [Fact] and [AvaloniaFact] contexts; only the latter
+/// may <see cref="Host"/> a view.
+///
+/// Teardown comes in two forms because the two suite families differ:
+/// IAsyncLifetime VM suites (and any view fact that Start()s the manager) await
+/// <see cref="DisposeAsync"/>; synchronous [AvaloniaFact] view facts — which
+/// never start the manager, so its monitors' loops are still Task.CompletedTask
+/// and tear down without any UI-thread await — use <see cref="Dispose"/>.
 /// </summary>
-public sealed class HostGraphFixture : IAsyncDisposable
+public sealed class HostGraphFixture : IAsyncDisposable, IDisposable
 {
     /// <summary>
     /// Hang diagnostic only — NOT a settle mechanism. Exceeding it means the
@@ -252,6 +258,24 @@ public sealed class HostGraphFixture : IAsyncDisposable
     {
         Store.Dispose();
         await Manager.DisposeAsync();
+        Cleanup();
+    }
+
+    /// <summary>
+    /// Synchronous teardown for view facts that never started the manager (its
+    /// monitors' loops are still Task.CompletedTask, so the DisposeAsync await
+    /// completes inline with no UI-thread post to deadlock the GetResult). A
+    /// started-manager fact must use <see cref="DisposeAsync"/> instead.
+    /// </summary>
+    public void Dispose()
+    {
+        Store.Dispose();
+        Manager.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        Cleanup();
+    }
+
+    private void Cleanup()
+    {
         _window?.Close();
         File.Delete(_configPath);
         if (_ownedUiStatePath is not null) File.Delete(_ownedUiStatePath);

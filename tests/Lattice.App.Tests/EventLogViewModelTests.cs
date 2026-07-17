@@ -5,7 +5,6 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
