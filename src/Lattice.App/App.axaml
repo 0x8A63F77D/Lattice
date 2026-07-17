@@ -5,13 +5,22 @@
              RequestedThemeVariant="Default">
   <Application.Styles>
     <sty:FluentAvaloniaTheme />
-    <!-- FluentAvalonia's non-Windows text-alignment correction (TextVerticalAlignmentOverride)
-         covers CheckBox/RadioButton/ComboBox but not TextBox, whose Stretch alignment
-         top-aligns glyphs inside the stretched line box (~3px high with macOS font metrics).
-         Same fix FA applies to the covered controls. A future multi-line TextBox
-         (AcceptsReturn) should set Stretch locally. -->
+    <!-- TextBox: its default Stretch alignment top-aligns glyphs inside the stretched line
+         box (~3px high with macOS font metrics). VerticalContentAlignment=Center centers the
+         TextPresenter — the same technique FA applies to the controls it does correct. A future
+         multi-line TextBox (AcceptsReturn) should set Stretch locally. -->
     <Style Selector="TextBox">
       <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <!-- ComboBox: the closed selection text also sits high (owner-observed on macOS during PR #84;
+         an earlier comment WRONGLY assumed FA's TextVerticalAlignmentOverride covered ComboBox).
+         Measured, not assumed (headless-Skia ink-gap, tests/Lattice.VisualTests/ComboBoxTextCenteringVisualTests):
+         the glyph ink bias (topGap−bottomGap) is −5px, i.e. high. ComboBox.VerticalContentAlignment
+         does NOT fix it — FA's template does not bind the closed-box ContentPresenter's alignment to
+         it (setting it measured as a no-op). Centering that template part (#ContentPresenter) directly
+         moves the bias to +1px (centered), identical in light and dark. -->
+    <Style Selector="ComboBox /template/ ContentPresenter#ContentPresenter">
+      <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <StyleInclude Source="avares://Lattice/Theming/DataGridStyles.axaml" />
