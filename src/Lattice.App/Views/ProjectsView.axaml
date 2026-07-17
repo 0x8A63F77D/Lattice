@@ -269,8 +269,8 @@
         </DataGrid.Columns>
       </DataGrid>
 
-      <!-- Loading overlay -->
-      <Border Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
+      <!-- Loading overlay. dataOverlay (issue #88): inset below the column header. -->
+      <Border Classes="dataOverlay" Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
           <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
           <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
@@ -282,8 +282,9 @@
         </StackPanel>
       </Border>
 
-      <!-- Empty overlay (design 2a: same text in both scopes) -->
-      <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+      <!-- Empty overlay (design 2a: same text in both scopes).
+           dataOverlay (issue #88): inset below the column header. -->
+      <Border Classes="dataOverlay" IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
         <TextBlock Text="{x:Static loc:Strings.ProjectsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       </Border>

@@ -118,6 +118,19 @@
     <Setter Property="HorizontalContentAlignment" Value="Left" />
   </Style>
 
+  <!-- Empty/loading overlay clearance (issue #88): each data view stacks its
+       overlay Border on top of the DataGrid in a shared Panel wrapper. Left
+       ungoverned the Border covers the whole grid, column header included — an
+       empty view then shows no table structure and (since the header became
+       click-to-sort) the overlay swallows those clicks. This single shared class,
+       applied to every view's overlay Border(s), insets the overlay below the
+       fixed header band so the header stays visible and hit-testable in every
+       overlay state. DynamicResource for the same load-order reason as the
+       dimension setters above. -->
+  <Style Selector="Border.dataOverlay">
+    <Setter Property="Margin" Value="{DynamicResource LatticeDataOverlayInset}" />
+  </Style>
+
   <Style Selector="TextBlock.numeric">
     <!-- OpenType tabular (fixed-width) numerals for aligned numeric columns.
          FontFeatures is a TextElement inherited attached property (HarfBuzz tag syntax). -->

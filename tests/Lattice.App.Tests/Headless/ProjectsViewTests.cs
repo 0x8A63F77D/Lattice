@@ -685,12 +685,14 @@ public class ProjectsViewTests
         await fx.DisposeAsync();
     }
 
-    // Regression pin for the sort-blocker: the loading overlay is an opaque Border layered OVER the
-    // grid, so while it is up a header click never reaches the header (no Sorting raised). This is
-    // why "Projects can't be sorted" while it is still loading. Fixing it means the overlay must not
-    // cover the header row.
+    // Real-input hit-test for the #88 fix: while the loading overlay is up, a header click must
+    // REACH the header and sort — the overlay is now inset below the header band (Border.dataOverlay),
+    // so it no longer swallows the click. Before the fix the opaque overlay covered the whole grid
+    // and this click raised no Sorting, leaving DefaultSort (the "Projects can't be sorted while
+    // loading" bug). The geometry counterpart across all four views lives in
+    // OverlayHeaderClearanceTests.
     [AvaloniaFact]
-    public void Header_click_is_blocked_while_the_loading_overlay_covers_the_grid()
+    public void Header_click_reaches_the_header_through_the_loading_overlay()
     {
         var (fx, window, view, vm) = MakeView(hostCount: 2);
         window.Show();
@@ -709,9 +711,8 @@ public class ProjectsViewTests
         fx.Layout();
         Dispatcher.UIThread.RunJobs();
 
-        // The click was swallowed by the overlay — no sort. (Documents the bug; see the real-click
-        // test above for the working steady-state path.)
-        Assert.Equal(ProjectSort.DefaultSort, vm.Sort);
+        // The click landed on the header (not the overlay): the Project column sorted ByName ascending.
+        Assert.Equal(ProjectSort.NewColumnSort(ProjectSortColumn.ByName, SortDirection.Ascending), vm.Sort);
         fx.Dispose();
     }
 }

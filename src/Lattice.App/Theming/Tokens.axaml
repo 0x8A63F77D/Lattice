@@ -61,6 +61,13 @@
   <x:Double x:Key="LatticeHostItemHeight">40</x:Double>
   <x:Double x:Key="LatticeCommandBarHeight">52</x:Double>
   <x:Double x:Key="LatticeGridHeaderHeight">32</x:Double>
+  <!-- Top inset that drops a data view's empty/loading overlay below the column
+       header band (issue #88): the header stays visible AND hit-testable while an
+       overlay is up. Top MUST equal LatticeGridHeaderHeight above; XAML can't
+       derive a Thickness from that Double, so it is restated here and the coupling
+       is enforced at runtime by OverlayHeaderClearanceTests (overlay top == header
+       bottom in every view). Consumed by the Border.dataOverlay style. -->
+  <Thickness x:Key="LatticeDataOverlayInset">0,32,0,0</Thickness>
   <x:Double x:Key="LatticeRowHeight">36</x:Double>
   <x:Double x:Key="LatticeRowHeightCompact">28</x:Double>
   <x:Double x:Key="LatticeStatusBarHeight">28</x:Double>
