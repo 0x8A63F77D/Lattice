@@ -74,7 +74,7 @@ wave = the "REMAINS" rows.** Dropped items are listed with the reason.
 |---|---|---|---|
 | **InfoBadge (nav counts)** | **DONE (core)** | `FAInfoBadge` bound to Event-log unread — `Views/ShellWindow.axaml:113-115`; `EventLogViewModel.cs:58` computes the count; `ShellViewModel.cs:158`. | **Dropped from core scope.** Only "per-host InfoBadge refinements beyond current behavior" (decisions §9) could remain, and the design package specs a badge only on the Event-log nav item — no per-host nav badge is specified. Treated as **not required**; if the owner wants more during the walkthrough, file a follow-up. |
 | **Window-width breakpoints** | **DONE** | `Views/TasksView.axaml.cs:48-188` sheds Elapsed→Application on **window-width** thresholds (≥1280/1100/1000, card `2f`/`1i` authoritative — comment cites the window-width-not-pane-width fix, PR #28); rail auto-collapse to 48px via `ShellWindow.axaml.cs:73` Nav-bounds subscription; `MinWidth=1000 MinHeight=700`. | **Dropped from scope.** Design sheds only Tasks columns; other grids have no shed list. Residual is a *walkthrough check item* (resize hits all breakpoints), not code. |
-| **Filled nav icons (selected/active)** | **NOT wired** | `Theming/Icons.axaml` defines `*Filled` geometries; `NavItemViewModel.cs:4` carries `IconFilledKey`; **but** `Views/ShellWindow.axaml:87-112` binds the four `FANavigationViewItem` `IconSource`s to the `*Regular` geometry only — no rest→selected outline→filled swap. | **REMAINS → PR B.** |
+| **Filled nav icons (selected/active)** | **MOSTLY DONE** | The four **view** items already swap outline→filled at runtime: `ShellWindow.axaml.cs:228-241` `UpdateMenuIcons()` resolves `IconFilledKey` when selected / `IconKey` otherwise, called on first render (`:85`) and on every selection change (`:222`); covered by `ShellRailTests`. The XAML `*Regular` `IconSource` (`ShellWindow.axaml:87-112`) is only the initial value the code-behind overwrites. **Gap:** the **Settings** footer item (`ShellWindow.axaml:242-245`) hard-codes `IconSettingsRegular` and sits outside the `_shell.Views` loop, so it never fills when Settings is active. `IconSettingsFilled` is already defined. *(Reconciliation corrected per Codex P2 on PR #89 — the original "NOT wired" read grepped only the XAML and missed the code-behind runtime swap.)* | **REMAINS (Settings item only) → PR B.** |
 | **Mica-adjacent polish (#11)** | **NOT wired** | `ShellWindow.axaml:12` requests `TransparencyLevelHint="Mica, None"` but `:13` sets an **opaque** `Background="{DynamicResource LatticeCanvasBrush}"` (`Tokens.axaml:7,30` = `#FAFAFA`/`#1F1F1F` solids); nothing reacts to `ActualTransparencyLevel`. #11 comment (2026-07-11) confirms Mica is invisible even on Win11 today. | **REMAINS → PR A** (folds #11's code half). On-hardware verification stays in **#11**. |
 | **Motion / transition polish** (spec §11 / card `1h`) | **PARTIAL** | Present: `Connecting` spinner (`ShellWindow.axaml:29` infinite animation), Projects chevron transform 120 ms (`ProjectsView.axaml:44-47`). Deliberately **instant** (owner visual verdict, #74): DataGrid row hover — *no* fade (`DataGridStyles.axaml:143-155`, documented). Missing vs card `1h`: view-switch (`ShellWindow.axaml:248` `ContentControl` has no `PageTransition`), progress-bar width, row enter/remove, transfer completed-row fade-out, expander height, **reduce-motion** gate (none anywhere). | **REMAINS → PR C1 + PR C2** (largest chunk). |
 | **Compact grouped rail rendering** — stacked single-icon per collapsed Healthy group + 8 px badge dot (decisions §5/§9) | **NOT built (explicitly deferred)** | decisions §5: M2 renders individual host state-icons when compact; the "one stacked icon per collapsed group" + 8 px dot deferred to the #32 polish wave. | **REMAINS → PR D (optional, owner-call).** Highest custom-draw risk; per the failure-mode-locality razor (memory), entering the custom-draw domain is the weakest link in the AI loop. Scoped small and flagged; the owner decides at concept-summary time whether it ships in M2 or defers to M3. |
@@ -176,28 +176,33 @@ the headless platform (which grants no Mica) — i.e. the fallback path is the t
 **#11**, which stays open and runs on real Win11 hardware after this merges. This PR's completion
 comment on #11 links here and states "code half landed; on-hardware check remains."
 
-### PR B — Filled nav icons on selection
+### PR B — Filled Settings nav icon on active (extends the existing view-icon swap)
 
-**Goal:** the four view nav items render the **outlined `*Regular`** glyph at rest and the
-**`*Filled`** glyph when selected/active (design README asset note: "outlined regular at rest,
-filled for selected/active"; sizes 16/20).
+**Goal:** close the ONE remaining filled-icon gap — the **Settings** footer nav item. The four
+view items already swap outline→filled via `UpdateMenuIcons()` (see reconciliation); this PR
+**extends that same mechanism** to the Settings footer item so it fills when Settings is the active
+page, matching the design asset rule ("outlined regular at rest, filled for selected/active").
 
 **Contract-level tasks** (Sonnet-tier; judgment-routing as above):
 
-1. Make each `FANavigationViewItem`'s `IconSource` **resolve `*Filled` when the item is selected,
-   `*Regular` otherwise.** The data (`NavItemViewModel.IconKey`/`IconFilledKey`) and the geometries
-   (`Icons.axaml`) already exist; this is the swap wiring only. avalonia-docs: confirm the
-   FluentAvalonia `FANavigationViewItem` selected-state selector / `IsSelected` pseudo-class and
-   whether `IconSource` swaps via a style setter or a bound converter (prefer a `Selector`-driven
-   style over code-behind).
-2. **Invariant:** exactly one filled glyph at a time (the selected item); Settings footer item
-   follows the same rule; compact (48px) rail unaffected (icons already the only content there).
+1. Extend the existing icon-swap path — **do NOT add a parallel mechanism** (altitude; a
+   `Selector`-driven style would duplicate the working code-behind swap). When the active page is
+   Settings, `NavSettings.IconSource` resolves `IconSettingsFilled`, else `IconSettingsRegular`.
+   `UpdateMenuIcons()` currently loops `_shell.Views` only; fold the Settings footer item into the
+   same recompute (it is tracked separately by `SyncNavSelection`, `ShellWindow.axaml.cs:192` —
+   `CurrentPage == Settings ? NavSettings`). `IconSettingsFilled` is already defined in
+   `Icons.axaml`; the XAML `IconSettingsRegular` stays the initial value the recompute overwrites
+   (same pattern as the view items).
+2. **Invariant:** exactly one filled glyph across the whole rail (the active destination — a view
+   OR Settings, never both); deselecting Settings restores `IconSettingsRegular`; compact (48px)
+   rail unaffected.
 
-**Machine gate (CORRECTNESS):** headless test — after navigating to view *N*, the item *N* icon
-resolves the `*Filled` geometry and the other three resolve `*Regular`; switching selection flips
-them. (Geometry identity is readable headlessly — this is a real machine signal.)
+**Machine gate (CORRECTNESS):** headless test — navigate to Settings → `NavSettings` resolves
+`IconSettingsFilled` and all four view items resolve `*Regular`; navigate back to a view →
+`NavSettings` returns to `IconSettingsRegular`. Extends the existing `ShellRailTests` view-icon
+coverage; geometry identity is readable headlessly.
 
-**Owner gate (VISUAL):** one screenshot of the rail with a view selected (filled look) →
+**Owner gate (VISUAL):** one screenshot of the rail with Settings active (filled Settings glyph) →
 owner eyeball.
 
 ### PR C1 — Motion: view-switch + progress-bar width
