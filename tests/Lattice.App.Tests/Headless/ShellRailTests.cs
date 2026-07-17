@@ -115,6 +115,91 @@ public class ShellRailTests
         window.Close();
     }
 
+    // Builds a two-host shell shown at a given WINDOW width and settled. FA's adaptive
+    // PaneDisplayMode="Auto" (ShellWindow.axaml) drives the pane state from width; a shown Avalonia
+    // Window re-measures against its own client size (fixed at Show), so headless sizes the window
+    // BEFORE Show and settles on the width's EXPECTED pane state (design threshold 1280) rather than
+    // a fixed pump count — the loop only pumps FA's adaptive re-evaluation, never sets the flag, so a
+    // broken config never converges and the caller's assertions still fail; the cap is a hang
+    // backstop. The caller owns Close().
+    private static (ShellWindow Window, ShellViewModel Shell) ShellShownAt(double width)
+    {
+        var (window, shell, registry) = MakeShell();
+        registry.AddHost(TestData.MakeHostConfig(name: "office-pc"));
+        registry.AddHost(TestData.MakeHostConfig(name: "home-pc"));
+        shell.SetRailViewportHeight(1000.0);
+        window.Width = width;
+        window.Show();
+        bool expectedOpen = width >= 1280;
+        for (var i = 0; i < 20 && window.Nav.IsPaneOpen != expectedOpen; i++)
+        {
+            Layout(window);
+            Dispatcher.UIThread.RunJobs();
+        }
+        Layout(window);   // final pass so the probed geometry reflects the settled pane
+        return (window, shell);
+    }
+
+    [AvaloniaFact]
+    public void Rail_is_open_at_or_above_the_width_breakpoint()
+    {
+        // At/above the 1280 design breakpoint the rail is fully open (260px) — FA Auto resolves to its
+        // Expanded state (design 1i / card 3a; docs/design/m2/README.md:104). Assert the flag AND the
+        // rendered end-state: a host row's name/subtext block is visible (the open rail shows labels).
+        var (window, _) = ShellShownAt(1300);
+        Assert.True(window.Nav.IsPaneOpen, "rail should be open at 1300px (>= 1280 breakpoint)");
+        var hostText = window.GetVisualDescendants().OfType<StackPanel>().First(p => p.Name == "HostText");
+        Assert.True(hostText.IsVisible, "open rail should render host name/subtext labels");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Rail_auto_collapses_below_the_width_breakpoint()
+    {
+        // Below 1280 (down to the 1000px minimum window) the rail auto-collapses to the 48px compact
+        // pane. Assert the width-driven path all the way to the RENDERED geometry (Codex PR #100 P2: a
+        // flag-only test would pass on a false render where the icons are clipped/hidden). Same probes
+        // as Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only, but reached by WIDTH via FA Auto,
+        // not a manual toggle: labels hidden, and a host row renders within the 48px compact strip,
+        // icon unclipped.
+        var (window, _) = ShellShownAt(1200);
+        Assert.False(window.Nav.IsPaneOpen, "rail should auto-collapse at 1200px (< 1280 breakpoint)");
+
+        var hostText = window.GetVisualDescendants().OfType<StackPanel>().First(p => p.Name == "HostText");
+        Assert.False(hostText.IsVisible, "compact rail should hide host name/subtext (icon-only)");
+
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is HostRailItemViewModel);
+        var origin = hostRow.TranslatePoint(new Point(0, 0), window)!.Value;
+        Assert.True(origin.X >= 0, $"compact host row starts off-screen at x={origin.X}");
+        Assert.True(hostRow.Bounds.Width <= window.Nav.CompactPaneLength,
+            $"compact host row width {hostRow.Bounds.Width} exceeds the {window.Nav.CompactPaneLength}px strip");
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void Rail_stays_compact_not_minimal_in_the_1000_1099_band()
+    {
+        // Inside the supported 1000–1099 band the rail must be FA's 48px Compact pane (icons-only,
+        // always visible — card 3a), NEVER the LeftMinimal pane (hidden behind a menu button). This
+        // is the regression guard for CompactModeThresholdWidth sitting BELOW the 1000px minimum
+        // window (=0): raising it to 1100 would make ~1050 resolve to Minimal (FA Auto's three tiers
+        // are Minimal → Compact → Expanded, gated at CompactModeThresholdWidth then
+        // ExpandedModeThresholdWidth — merged plan PR E, docs/superpowers/plans/…-wave3-polish.md).
+        var (window, _) = ShellShownAt(1050);
+        Assert.False(window.Nav.IsPaneOpen, "rail should be compact (not open) at 1050px");
+        // DisplayMode is the direct Compact-vs-Minimal discriminator; Minimal would redden here.
+        Assert.Equal(FANavigationViewDisplayMode.Compact, window.Nav.DisplayMode);
+
+        // Minimal would not lay out the host rail at all; assert its content is actually rendered
+        // within the 48px strip (present + icons-only), not hidden behind a menu button.
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .First(li => li.DataContext is HostRailItemViewModel);
+        Assert.True(hostRow.Bounds.Width > 0 && hostRow.Bounds.Width <= window.Nav.CompactPaneLength,
+            $"compact host row width {hostRow.Bounds.Width} must be within (0, {window.Nav.CompactPaneLength}]");
+        window.Close();
+    }
+
     [AvaloniaFact]
     public void Navigating_to_tasks_renders_a_TasksView()
     {

@@ -216,8 +216,9 @@ public class ShellWindowTests
     // no page overflows — the DataGridFillerColumn takes the trailing slack (no scrollbar). This
     // guards the width budget: if a future column-width bump pushes a view's total past the ~1008px
     // content area, it reddens (the grid would then show a scrollbar at the default window).
-    // (The min-window 1000×700 case is an owner visual gate: headless does not reproduce the
-    // FANavigationView pane collapse, so its content width there is not faithful.)
+    // (Headless now reproduces the FANavigationView pane collapse — PaneDisplayMode="Auto" compacts
+    // the rail to 48px below 1280 — so the narrow-window content width is faithful; see
+    // Narrow_window_overflows_each_page_into_a_working_scrollbar and ShellRailTests.)
     [AvaloniaTheory]
     [InlineData("0")] // Tasks
     [InlineData("1")] // Projects
@@ -253,6 +254,12 @@ public class ShellWindowTests
     public void Narrow_window_overflows_each_page_into_a_working_scrollbar(string tag)
     {
         var (window, shell, registry) = MakeShell();
+        // Drop the 1000px MinWidth so 760 is the ACTUAL width (it was silently clamped to 1000
+        // before). The responsive rail now auto-collapses to 48px below 1280 (PaneDisplayMode=Auto),
+        // so a clamped-1000 window would leave a 951px content area — too wide for the fixed columns
+        // to overflow. A genuine 760px window gives a ~712px content area, narrower than every page's
+        // fixed-column total, so the horizontal scrollbar surfaces (owner Finding A).
+        window.MinWidth = 0;
         window.Width = 760;
         window.Height = 700;
         window.Show();
