@@ -41,7 +41,7 @@ Motion/polish changes are **visual**. Two distinct gates, stated per task:
   produces *one* rendition, captures the screenshot/recording artifact, and stops. There is no
   machine acceptance signal for "does this motion feel right"; self-iteration on visuals drifts
   (owner ruling, memory: *user-review-boundaries*). The owner is the merge gate for visual
-  fidelity. This applies to every transition timing, easing, filled-icon look, and Mica tint.
+  fidelity. This applies to every transition timing, easing, filled-icon look, and Mica region material.
 - **CORRECTNESS gate — headless assertions (machine-gated).** Everything with an observable
   end-state gets a headless test: reduce-motion **zeroes** durations, a transition is **present/
   absent** under the right pseudo-class, **data updates never block on animation** (value-first),
@@ -86,7 +86,7 @@ wave = the "REMAINS" rows.** Dropped items are listed with the reason.
 | **Filled nav icons (selected/active)** | **MOSTLY DONE** | The four **view** items already swap outline→filled at runtime: `ShellWindow.axaml.cs:228-241` `UpdateMenuIcons()` resolves `IconFilledKey` when selected / `IconKey` otherwise, called on first render (`:85`) and on every selection change (`:222`); covered by `ShellRailTests`. The XAML `*Regular` `IconSource` (`ShellWindow.axaml:87-112`) is only the initial value the code-behind overwrites. **Gap:** the **Settings** footer item (`ShellWindow.axaml:242-245`) hard-codes `IconSettingsRegular` and sits outside the `_shell.Views` loop, so it never fills when Settings is active. `IconSettingsFilled` is already defined. *(Reconciliation corrected per Codex P2 on PR #89 — the original "NOT wired" read grepped only the XAML and missed the code-behind runtime swap.)* | **REMAINS (Settings item only) → PR B.** |
 | **Mica-adjacent polish (#11)** | **NOT wired** | `ShellWindow.axaml:12` requests `TransparencyLevelHint="Mica, None"` but `:13` sets an **opaque** `Background="{DynamicResource LatticeCanvasBrush}"` (`Tokens.axaml:7,30` = `#FAFAFA`/`#1F1F1F` solids); nothing reacts to `ActualTransparencyLevel`. #11 comment (2026-07-11) confirms Mica is invisible even on Win11 today. | **REMAINS → PR A** (folds #11's code half). On-hardware verification stays in **#11**. |
 | **Motion / transition polish** (spec §11 / card `1h`) | **PARTIAL** | Present: `Connecting` spinner (`ShellWindow.axaml:29` infinite animation), Projects chevron transform 120 ms (`ProjectsView.axaml:44-47`). Deliberately **instant** (owner visual verdict, #74): DataGrid row hover — *no* fade (`DataGridStyles.axaml:143-155`, documented). Missing vs card `1h`: view-switch (`ShellWindow.axaml:248` `ContentControl` has no `PageTransition`), progress-bar width, row enter/remove, transfer completed-row fade-out, expander height, **reduce-motion** gate (none anywhere). | **REMAINS → PR C1 + PR C2** (largest chunk). |
-| **Compact grouped rail rendering** — stacked single-icon per collapsed Healthy group + 8 px badge dot (decisions §5/§9) | **NOT built (explicitly deferred)** | decisions §5: M2 renders individual host state-icons when compact; the "one stacked icon per collapsed group" + 8 px dot deferred to the #32 polish wave. | **REMAINS → PR D (optional, owner-call).** Highest custom-draw risk; per the failure-mode-locality razor (memory), entering the custom-draw domain is the weakest link in the AI loop. Scoped small and flagged; the owner decides at concept-summary time whether it ships in M2 or defers to M3. |
+| **Compact grouped rail rendering** — stacked single-icon per collapsed Healthy group + 8 px badge dot (decisions §5/§9) | **NOT built (explicitly deferred)** | decisions §5: M2 renders individual host state-icons when compact; the "one stacked icon per collapsed group" + 8 px dot deferred to the #32 polish wave. | **DEFERRED to M3 (owner ruling, 2026-07-17) → issue #96.** The wave's only **custom-draw** surface; per the failure-mode-locality razor (memory) the AI loop is weakest on hand-drawn UI, against Lattice's all-native-components posture. Out of this wave's scope; #96 (milestone M3) carries the reference. |
 
 **Opportunistically-swept adjacent issues** (issue #32 "candidates to sweep if cheap"), assessed:
 
@@ -105,28 +105,33 @@ precedent), two candidates were examined:
 
 ### `MicaBackdropPolicy` (NEW — pure C# static in `Lattice.App`) — **adopt**
 
-The Mica fix is a **derivation**, not inline reactive glue: *given the window's requested
-transparency and the level the OS actually granted, choose the window background* (transparent/
-tinted when Mica is live, opaque canvas otherwise). That is exactly the small, exhaustively-
-testable decision the repo extracts into a policy — and #11's own acceptance shape demands an
-**automated assertion** on it. Naming it at plan time keeps the risk in a pure function
-(bounded failure: wrong output, machine-checkable) instead of scattered `ActualTransparencyLevel`
-handlers (unbounded, eyeball-only) — the failure-mode-locality razor.
+The Mica fix is a **derivation**, not inline reactive glue: *given the level the OS actually
+granted, decide whether the Mica-bearing surfaces go transparent or fall back to opaque*. That is
+exactly the small, testable decision the repo extracts into a policy — and #11's own acceptance
+shape demands an **automated assertion** on it. Naming it at plan time keeps the risk in a pure
+function (bounded failure: wrong output, machine-checkable) instead of scattered
+`ActualTransparencyLevel` handlers (unbounded, eyeball-only) — the failure-mode-locality razor.
 
-Home: `src/Lattice.App/Infrastructure/MicaBackdropPolicy.cs` (pure static, no Avalonia-visual
-dependency beyond the `WindowTransparencyLevel` enum it maps). **F# declined** with the same
-rationale as shell-design §7: a 2–3 case map over an Avalonia framework enum does not pay a
-cross-project translation layer, and `Lattice.App.Aggregation` must stay Avalonia-free. Contract
-(the executor writes the body; this is the input→output the headless test pins):
+Home: `src/Lattice.App/Infrastructure/MicaBackdropPolicy.cs` (pure static). **Framework fact
+(controller-verified 2026-07-17):** `WindowTransparencyLevel` in Avalonia 12.1 is a **readonly
+struct with static properties** (`None` / `Transparent` / `Blur` / `AcrylicBlur` / `Mica` are `P:`
+entries in the package XML docs), **not an enum** — so there is no compiler exhaustiveness to lean
+on; the map is **equality-based** and totality comes from the **else-branch**. **F# declined** with
+the same rationale as shell-design §7: a one-line equality map over an Avalonia framework struct
+does not pay a cross-project translation layer, and `Lattice.App.Aggregation` must stay
+Avalonia-free. Contract (the executor writes the body; this is the input→output the headless test
+pins):
 
 ```
-// input:  the level the platform reports as ACTUALLY applied (WindowTransparencyLevel)
-// output: BackdropChoice { bool UseTransparentBackground; string BackgroundBrushKey }
-//   Mica                -> transparent content backdrop; brush key = the tint token (design 1g §Mica)
-//   None / any opaque   -> opaque fallback; brush key = "LatticeCanvasBrush" (today's behavior)
-// Total, no wildcard on the handled levels; the residual (Blur/AcrylicBlur/Transparent) maps to
-// the opaque fallback with a boundary comment (M2 requests only "Mica, None", so only those two
-// are reachable — the others fold to fallback, never to a broken transparent-without-Mica state).
+// input:  the level the platform reports as ACTUALLY applied (WindowTransparencyLevel struct)
+// output: BackdropChoice { bool WindowTransparent; bool RegionSurfacesTransparent }
+//   level == WindowTransparencyLevel.Mica -> { WindowTransparent = true;  RegionSurfacesTransparent = true }
+//   anything else (the fallback)          -> { WindowTransparent = false; RegionSurfacesTransparent = false }
+// EQUALITY-BASED, not a switch over enum cases (WindowTransparencyLevel is a struct — no
+// exhaustiveness). Totality is the else-branch; a boundary comment states that ONLY Mica takes the
+// transparent path and every other granted level (including a DENIED Mica reported as None) falls
+// back to opaque — never a broken transparent-without-material state. CONTENT surfaces are NOT part
+// of this choice: they stay opaque unconditionally (design: "content surfaces are always opaque").
 ```
 
 > Naming trap to avoid at execution: the switch must NOT branch on the **requested** hint
@@ -155,30 +160,43 @@ data not blocked) is headless-gated.
 Ordering rationale: **PR A and PR B are independent and headless-gatable up front** (Mica policy +
 icon-swap have crisp correctness assertions and don't touch the shared view fixtures). **PR C1/C2
 add headless motion tests over the view fixtures and therefore build on the consolidated
-`HeadlessAppFixture` from #67** (see Scheduling). PR D is owner-optional and last.
+`HeadlessAppFixture` from #67** (see Scheduling). PR D (compact grouped rail) is **deferred to M3
+(#96)** and retained below only as an M3 reference.
 
 ### PR A — Mica backdrop wiring (folds #11 code half)
 
-**Goal:** make Mica actually visible when the OS grants it; keep the exact opaque look everywhere
-it doesn't. Closes the code half of #11.
+**Goal:** make Mica visible in the **nav + command-bar regions** when Windows grants it; keep the
+exact opaque look everywhere it doesn't. Closes the code half of #11.
+
+**Design prescription (controller read the design HTML at joint review, 2026-07-17):** the design's
+only Mica line is — *"Mica: on Windows, the nav and command-bar regions use Mica material; `#202020`
+is the solid fallback for macOS/Linux and battery saver; content surfaces are always opaque."* So
+the effect is **region-scoped, not a whole-window tint, and there is NO Mica tint token to read**
+(the plan's earlier STOP-on-missing-tint condition triggered and was resolved here).
 
 **Contract-level tasks** (Sonnet-tier; *executor may pick the cheapest sufficient tier; escalate
 to Opus on first failed fix*):
 
-1. **`MicaBackdropPolicy`** per the contract above. Born-pure, exhaustive over the reachable
-   levels, boundary comment on the residual arm.
+1. **`MicaBackdropPolicy`** per the contract above (equality-based, boundary comment on the
+   else-branch; `WindowTransparencyLevel` is a struct — no enum switch).
 2. **Wire `ShellWindow`** to observe `ActualTransparencyLevel` (avalonia-docs: confirm the property
-   + change notification shape for Avalonia 12) and apply `MicaBackdropPolicy` output — set the
-   window `Background` to transparent (or the design-`1g` Mica tint token) when Mica is live, else
-   keep `LatticeCanvasBrush`. Add the tint token to `Tokens.axaml` (light+dark) per design card
-   `1g` §Mica — **do not invent a value; read the design token.** If the design package does not
-   specify a Mica tint, STOP and surface to the controller (do not guess a tint).
-3. **Invariant:** no feature depends on the material being present (CLAUDE.md); when Mica is denied
-   the app is pixel-identical to today.
+   + change-notification shape for Avalonia 12) and apply the policy: when Mica is granted, the
+   **window background goes transparent** AND the **nav + command-bar region surfaces stop painting
+   opaque** so the material shows through; otherwise keep today's opaque surfaces. **Content
+   surfaces stay opaque always** — never bound to the Mica state.
+3. **Reconcile the fallback color (design authoritative):** the design solid fallback is `#202020`;
+   `Tokens.axaml` dark `LatticeCanvasBrush` is `#1F1F1F`. **Align the dark fallback token to
+   `#202020`** per the design — OR, if `#1F1F1F` was a deliberate prior choice, record it as a
+   deliberate deviation with rationale in-file. Do not silently diverge (plan header rule; design
+   wins).
+4. **Invariant:** no feature depends on the material being present (CLAUDE.md); when Mica is denied
+   the app is the opaque fallback (pixel-identical to today except the intentional `#1F1F1F`→
+   `#202020` token nudge, if taken).
 
-**Machine gate (CORRECTNESS):** headless test on `MicaBackdropPolicy` (Mica→transparent+tint key;
-None→opaque+`LatticeCanvasBrush`); headless test that the window resolves the opaque fallback under
-the headless platform (which grants no Mica) — i.e. the fallback path is the tested one on CI.
+**Machine gate (CORRECTNESS):** headless test on `MicaBackdropPolicy` (Mica → both-transparent; any
+other level → both-opaque); headless test that under the headless platform (grants no Mica) the
+window + regions resolve the opaque fallback and content stays opaque — i.e. CI exercises the
+fallback path.
 
 **Owner gate (VISUAL):** one screenshot on macOS confirming the solid fallback is unchanged
 (one version → owner eyeball). **On-hardware Mica verification is NOT in this PR** — it is issue
@@ -246,9 +264,8 @@ compact pins (`Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`).
 **Owner gate (VISUAL):** one screenshot at ~1200px showing the 48px compact rail → owner eyeball.
 
 **Dependency:** independent of #67 (shell-level, no view fixture) and of motion — runs alongside
-PR A/B, ahead of #67. **PR D (compact grouped rendering) reads more naturally after PR E**, since
-E is what makes the compact rail reachable by width (D is also reachable via the manual toggle, so
-this is a soft ordering, not a hard block).
+PR A/B. (The deferred M3 compact grouped-rail work, #96, will build on E's width-reachable compact
+rail.)
 
 ### PR C1 — Motion: view-switch + progress-bar width
 
@@ -304,27 +321,22 @@ wall-clock delay — use the deterministic drain, not a real sleep); row/expande
 **Owner gate (VISUAL):** one recording of: a row entering/leaving, a transfer completing, an
 expander toggling, and the app under OS reduce-motion → owner eyeball. One version, no iteration.
 
-### PR D — Compact grouped rail rendering (OWNER-OPTIONAL, decided at concept summary)
+### PR D — Compact grouped rail rendering — DEFERRED to M3 (owner, 2026-07-17) → #96
 
-**Goal (if the owner opts in):** the compact (48 px) rail renders **one stacked icon per collapsed
-Healthy group** and an **8 px status dot** badge, per card `3a`'s compact vision (deferred at
-decisions §5).
+**Not in this wave.** At joint review (2026-07-17) the owner ruled the compact grouped-rail
+rendering (one stacked icon per collapsed Healthy group + 8 px status dot, card `3a` compact
+vision, decisions §5) **defers to M3** — it is the wave's only **custom-draw** surface, and the
+failure-mode-locality razor (memory: *hobby-project-idealized-design*) makes hand-drawn UI the
+weakest link in the AI verification loop, against Lattice's all-native-components posture. Tracked
+as **issue #96 (milestone M3)**.
 
-**Why gated to an explicit owner decision:** this is the wave's only **custom-draw** surface. The
-failure-mode-locality razor (memory: *hobby-project-idealized-design*) says the AI verification
-loop is weakest on hand-drawn UI, and "no rashly entering the custom-draw domain" is Lattice's
-standing posture (all-native-components). The rest of M2 ships without it; M3 may be the more
-natural home. The controller presents this trade-off in the concept summary and the owner chooses
-**ship-in-M2 / defer-to-M3**. If deferred, file/annotate a follow-up and this PR is dropped.
-
-**Contract-level tasks (only if opted in):** a compact-mode template that collapses a Healthy group
-to a single stacked state-icon + 8 px dot; Attention hosts still render individually (decisions §5);
-the pure `RailLayoutPolicy` is **untouched** (compact is the orthogonal pane-collapse axis — it must
-not leak into the height-driven core).
-
-**Machine gate (CORRECTNESS):** headless — in compact mode a collapsed Healthy group yields exactly
-one icon element and one 8 px dot; Attention hosts remain individual; expanded (260 px) rail
-unchanged. **Owner gate (VISUAL):** one screenshot of the compact rail → owner eyeball.
+**M3 reference (what #96 will scope), retained here for continuity:** a compact-mode template
+collapsing a Healthy group to a single stacked state-icon + 8 px dot; Attention hosts still render
+individually (decisions §5); the pure `RailLayoutPolicy` stays **untouched** (compact is the
+orthogonal pane-collapse axis — it must not leak into the height-driven core). Machine gate then:
+headless — a collapsed Healthy group yields exactly one icon element + one 8 px dot, Attention hosts
+individual, expanded (260 px) rail unchanged; plus one owner-eyeball screenshot. Until then the
+current behavior stands — individual host state-icons when the pane is compact (decisions §5).
 
 ---
 
@@ -366,17 +378,17 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 
 ## Scheduling & dependencies
 
-- **#67 (fixture consolidation) is in flight** and **#13/#88 land after it**. #67 introduces the
-  shared `HeadlessAppFixture` (`FakeTimeProvider`-by-construction + deterministic `QueueUiDispatcher`
-  drain, replacing the ~7 near-duplicate `MakeView`/`MakeVm` copies and the real-time `Wait.UntilAsync`
-  ceiling). **PRs C1 and C2 add headless motion tests over the view fixtures → they build on the
-  consolidated fixture and must sequence AFTER #67 merges.** Writing new per-view headless copies
-  before #67 would regrow exactly what #67 consolidates.
+- **#67 (fixture consolidation) MERGED today (PR #90 @ `edf90fc`)** — its shared `HeadlessAppFixture`
+  (`FakeTimeProvider`-by-construction + deterministic `QueueUiDispatcher` drain, replacing the ~7
+  near-duplicate `MakeView`/`MakeVm` copies and the real-time `Wait.UntilAsync` ceiling) is now
+  available. **PRs C1 and C2 add headless motion tests over the view fixtures → they build on that
+  consolidated fixture** (dependency satisfied; write no new per-view fixture copies — reuse
+  `HeadlessAppFixture`). (#13/#88 also sequence after #67, per project status.)
 - **PRs A, B, and E do not touch the view fixtures** (Mica policy has its own unit test; the
   icon-swap and rail-collapse tests target the shell nav, not a data view) → they can proceed in
   parallel with / ahead of #67.
-- Suggested order: **A, B, E (parallel, shell-level, pre-/independent of #67) → [#67 merges] → C1 →
-  C2 → (D, owner-optional, after E so compact is width-reachable) → owner walkthrough → close #32.**
+- Suggested order: **A, B, E (parallel, shell-level, independent of #67) → C1 → C2 (both on the now-
+  merged #67 fixture) → owner walkthrough → close #32.** (PR D deferred to M3 / #96.)
 - **Isolation:** any two execution chips that run in parallel get **separate worktrees** (git-index
   race rule); the controller integrates. Verify `git branch --show-current` before every controller
   commit after a chip runs.
@@ -389,12 +401,12 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 
 ## Risks & open judgment calls
 
-- **Mica tint value** (PR A task 2): the exact transparent/tint token comes from design card `1g`
-  §Mica. If the design package does not specify it, that is a genuine design gap → **STOP and
-  surface to the controller**, do not guess a tint. (Everything else in PR A is settled by #11's
-  comment + the policy contract.)
-- **Compact grouped rail (PR D)** is a real product judgment call (ship-in-M2 vs defer-to-M3),
-  deliberately routed to the owner at concept-summary time rather than guessed here.
+- **Mica is region-scoped, fallback `#202020`** (PR A): resolved at joint review — the design
+  prescribes Mica on the nav + command-bar regions only, content always opaque, `#202020` solid
+  fallback; there is **no** whole-window tint token. PR A aligns the `#1F1F1F` dark canvas token to
+  the design's `#202020` (or records a deliberate deviation). No open STOP condition remains for PR A.
+- **Compact grouped rail** — owner ruled **defer to M3** at joint review (issue #96); no longer a
+  Wave-3 judgment call.
 - **FA default transitions** (PR C2 task 4): treat "FluentAvalonia already animates InfoBar/dialog
   to `1h`" as a claim to **verify via avalonia-docs**, not assume — a "framework already covers X"
   comment is an unverified claim until checked (memory: PR #84 lesson).
