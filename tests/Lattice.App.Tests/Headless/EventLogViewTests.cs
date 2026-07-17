@@ -399,7 +399,12 @@ public class EventLogViewTests
         var host = fx.AddHost("host-a");
 
         // Rows accrue while the page is hidden (arrived before the view is realized).
+        // Drain now, BEFORE Show(), so the 80 rows are genuinely in the VM ahead of
+        // the first mount — otherwise the queued batch would only land at Layout()'s
+        // drain after Show(), quietly turning this fresh-mount scenario into a
+        // visible-view append (Codex P2; matches the sibling prepopulated-row test).
         Raise(fx.Manager, host.Id, ManyMessages(80));
+        fx.Drain();
         Assert.True(vm.IsFollowing);
 
         window.Show();
