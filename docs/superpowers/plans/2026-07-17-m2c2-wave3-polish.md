@@ -184,27 +184,32 @@ to Opus on first failed fix*):
    **window background goes transparent** AND the **nav + command-bar region surfaces stop painting
    opaque** so the material shows through; otherwise keep today's opaque surfaces. **Content
    surfaces stay opaque always** — never bound to the Mica state.
-3. **Region fallback brushes — do NOT retoken the global canvas.** The design's `#202020` is the
-   *Mica-region* fallback, and it **already exists** as `LatticeNavSurfaceBrush` (dark `#202020`,
-   `Tokens.axaml:32`) — it is **not** the content canvas (`LatticeCanvasBrush` dark `#1F1F1F`,
-   `Tokens.axaml:30`, which paints Settings/content and MUST stay). So there is **no canvas
-   retoken** (an earlier draft's "align `LatticeCanvasBrush`→`#202020`" was wrong — retokening the
-   canvas would darken dark-mode content areas; Codex P2 on PR #89). The nav + command-bar region
-   surfaces already carry their own opaque brushes (`LatticeNavSurfaceBrush` `#202020`;
-   command bar `LatticeSurfaceBrush` `#292929`, `TasksView.axaml:46`); PR A makes **those region
-   surfaces** go transparent when Mica is granted and paint their brush when denied — the canvas
-   and all content stay opaque. **Design-fidelity check at execution:** the design names `#202020`
-   for *both* nav and command-bar regions, but the command bar currently uses `#292929` — confirm
-   with the design/owner whether the command-bar fallback should become `#202020`; flag, don't
-   silently change it.
+3. **Region fallback brushes — dedicated, NOT the shared canvas or surface brush.** The design's
+   `#202020` is the *Mica-region* fallback for the nav (already `LatticeNavSurfaceBrush` `#202020`,
+   `Tokens.axaml:32`). Do **not** retoken the content canvas (`LatticeCanvasBrush` `#1F1F1F`,
+   `:30` — paints Settings/content, MUST stay; retokening it darkens dark-mode content, Codex P2).
+   **Cover ALL command bars, not just Tasks:** every view's top command-bar `Border` paints
+   `LatticeSurfaceBrush` inline — `TasksView.axaml:45`, `ProjectsView.axaml:97`,
+   `TransfersView.axaml:35`, `EventLogView.axaml:97` — so naming only Tasks would leave the other
+   three opaque over Mica (Codex P2 on PR #89). But `LatticeSurfaceBrush` is **also** used by
+   loading/empty overlays (`TasksView.axaml:235`, `EventLogView.axaml:226`, …), so it must **not**
+   be blanket-transparentised. Introduce a **dedicated command-bar region brush** (e.g.
+   `LatticeCommandBarSurfaceBrush`, seeded to today's `#292929`) that the four command bars switch
+   to, and have the Mica toggle flip **that** brush (plus `LatticeNavSurfaceBrush` for the pane)
+   transparent↔opaque — one toggle, all four views, content/overlays untouched. **Design-fidelity
+   check at execution:** the design names `#202020` for *both* nav and command-bar; the command bar
+   is currently `#292929` — confirm with design/owner whether the command-bar region should become
+   `#202020`; flag, don't silently change it.
 4. **Invariant:** no feature depends on the material being present (CLAUDE.md); when Mica is denied
    the app is the opaque fallback — pixel-identical to today (no token changes; the region brushes
    already exist).
 
 **Machine gate (CORRECTNESS):** headless test on `MicaBackdropPolicy` (Mica → both-transparent; any
 other level → both-opaque); headless test that under the headless platform (grants no Mica) the
-window + regions resolve the opaque fallback and content stays opaque — i.e. CI exercises the
-fallback path.
+window + nav/command-bar regions resolve the opaque fallback and content/overlays stay opaque — i.e.
+CI exercises the fallback path. Assert the command-bar surface is driven by the **shared**
+`LatticeCommandBarSurfaceBrush` in **all four** views (Tasks/Projects/Transfers/EventLog), so no
+view is left opaque over Mica.
 
 **Owner gate (VISUAL):** one screenshot on macOS confirming the solid fallback is unchanged
 (one version → owner eyeball). **On-hardware Mica verification is NOT in this PR** — it is issue
@@ -353,6 +358,33 @@ headless — a collapsed Healthy group yields exactly one icon element + one 8 p
 individual, expanded (260 px) rail unchanged; plus one owner-eyeball screenshot. Until then the
 current behavior stands — individual host state-icons when the pane is compact (decisions §5).
 
+### PR F — DEBUG sample host (walkthrough prerequisite)
+
+**Goal:** build the DEBUG-only injectable sample host the final walkthrough (and shell-design §12.4 /
+§13.2) depends on. The live daemon has **0 attached projects**, so the data-rich states — 500+
+tasks (virtualization check), transfers in every state, multi-project aggregates — can only be
+exercised from canned data. **Codex P2 on PR #89 confirmed no `SampleHost`/canned-snapshot exists in
+the tree today** (grep of `src`/`tests` is empty); without it the owner cannot run walkthrough steps
+1–2, so this is a **hard prerequisite** to the walkthrough, not optional tooling.
+
+**Contract-level tasks** (Sonnet-tier; judgment-routing as above):
+
+1. A `#if DEBUG`-gated injectable host backed by canned `HostSnapshot`s (shell-design §12.4): ≥500
+   tasks (virtualization), transfers in all states (active/retrying/queued/completed), a
+   multi-project set that exercises Projects aggregation (`Varies`, mixed status tiers). Togglable in
+   a DEBUG build with no live daemon; it feeds the **same** `HostStore`/VM path as a real host (no
+   bypass — the UI computes nothing new).
+2. **Boundary:** DEBUG-only, never compiled into Release; **no protocol / `Lattice.Core` change** —
+   inject at the App/`HostStore` seam, the same shape as the fake `IGuiRpcClient` used in tests.
+
+**Machine gate (CORRECTNESS):** headless (DEBUG build) — with the sample host injected, the Tasks
+grid materializes ≥500 rows, Transfers shows each state, Projects shows a `Varies`/mixed-tier
+aggregate (reuses the `HeadlessAppFixture` fake-fed pattern; asserts the canned data reaches the
+grids). **No owner-visual gate for the tooling itself** — its visual payoff is the walkthrough.
+
+**Dependency:** independent of A/B/E and of the #67 fixture (an App-seam injectable); can build early
+alongside A/B/E, but **must land before the walkthrough** (it is that session's data source).
+
 ---
 
 ## Final M2 walkthrough — owner-run acceptance checklist artifact
@@ -360,8 +392,9 @@ current behavior stands — individual host state-icons when the pane is compact
 This is **not** an agent task. It is a live acceptance session the **owner runs** against the test
 daemon (BOINC 8.2.11, dedicated test machine), closing the M2 milestone and doubling as the README
 screenshot source (**#27**). The executor's deliverable is the **checklist artifact**
-(`docs/design/m2/M2-walkthrough-checklist.md`) + the DEBUG sample host enabled for the data-rich
-states; the **owner executes it** and its pass is what closes **#32**.
+(`docs/design/m2/M2-walkthrough-checklist.md`); the **DEBUG sample host it relies on for the
+data-rich states is built by PR F** (prerequisite above). The **owner executes** the checklist and
+its pass is what closes **#32**.
 
 Checklist artifact contents (the executor writes the checklist; the owner ticks it):
 
@@ -405,8 +438,9 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 - **PRs A, B, and E do not touch the view fixtures** (Mica policy has its own unit test; the
   icon-swap and rail-collapse tests target the shell nav, not a data view) → they can proceed in
   parallel with / ahead of #67.
-- Suggested order: **A, B, E (parallel, shell-level, independent of #67) → C1 → C2 (both on the now-
-  merged #67 fixture) → owner walkthrough → close #32.** (PR D deferred to M3 / #96.)
+- Suggested order: **A, B, E, F (parallel — shell-level + DEBUG tooling, independent of #67) → C1 →
+  C2 (both on the merged #67 fixture) → [PR F must be in place] → owner walkthrough → close #32.**
+  (PR D deferred to M3 / #96.)
 - **Isolation:** any two execution chips that run in parallel get **separate worktrees** (git-index
   race rule); the controller integrates. Verify `git branch --show-current` before every controller
   commit after a chip runs.
