@@ -85,9 +85,11 @@ public class OverlayHeaderClearanceTests
         window.Show();
         fx.Start();
 
-        await fx.SettleAsync(() => !vm.IsLoading);
+        // Settle on the ACTUAL end state (the empty overlay up, zero rows), not on
+        // !IsLoading — the fixture bans settling on a boolean that can flip before
+        // the expected state (matches the EventLog case below).
+        await fx.SettleAsync(() => vm.IsEmpty && vm.Rows.Count == 0);
         fx.Layout();
-        Assert.True(vm.IsEmpty);
 
         AssertOverlayClearsHeader(window);
         await fx.DisposeAsync();
@@ -104,9 +106,11 @@ public class OverlayHeaderClearanceTests
         window.Show();
         fx.Start();
 
-        await fx.SettleAsync(() => !vm.IsLoading);
+        // Settle on the ACTUAL end state (the empty overlay up, zero rows), not on
+        // !IsLoading — the fixture bans settling on a boolean that can flip before
+        // the expected state (matches the EventLog case below).
+        await fx.SettleAsync(() => vm.IsEmpty && vm.Rows.Count == 0);
         fx.Layout();
-        Assert.True(vm.IsEmpty);
 
         AssertOverlayClearsHeader(window);
         await fx.DisposeAsync();
@@ -123,9 +127,11 @@ public class OverlayHeaderClearanceTests
         window.Show();
         fx.Start();
 
-        await fx.SettleAsync(() => !vm.IsLoading);
+        // Settle on the ACTUAL end state (the empty overlay up, zero rows), not on
+        // !IsLoading — the fixture bans settling on a boolean that can flip before
+        // the expected state (matches the EventLog case below).
+        await fx.SettleAsync(() => vm.IsEmpty && vm.Rows.Count == 0);
         fx.Layout();
-        Assert.True(vm.IsEmpty);
 
         AssertOverlayClearsHeader(window);
         await fx.DisposeAsync();
