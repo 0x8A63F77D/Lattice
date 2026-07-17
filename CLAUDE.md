@@ -65,7 +65,7 @@ Remote hosts:
 
 ## Avalonia coding rules
 
-- **Avalonia is not WPF.** This is the #1 hallucination risk. Always consult the Avalonia Build MCP server (`avalonia-docs`) for API usage before writing XAML or framework-touching C#. When in doubt between a WPF-ism and an Avalonia-ism, look it up — do not guess.
+- **Avalonia is not WPF.** This is the #1 hallucination risk. Always consult the Avalonia Build MCP server (`avalonia-docs`) for API usage before writing XAML or framework-touching C#. When in doubt between a WPF-ism and an Avalonia-ism, look it up.
 - Known dialect traps: `StyledProperty<T>` / `DirectProperty` (not `DependencyProperty`); Avalonia selectors in `<Style Selector="...">` (not WPF triggers); `.axaml` files; `x:DataType` + `{CompiledBinding}` preferred everywhere — enable compiled bindings project-wide and treat binding errors as build failures.
 - Use FluentAvalonia controls (`FluentAvalonia.UI.Controls`) over hand-rolled equivalents: NavigationView for the shell, TabView, InfoBar/InfoBadge for status surfaces.
 - Window materials: request Mica via `TransparencyLevelHint` on Windows 11, with solid-color fallback on macOS/Linux/Win10. Never let a feature depend on the material being present.

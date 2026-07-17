@@ -108,7 +108,7 @@ here tends to break:
   triggers vs Avalonia selectors); a non-compiled binding where `x:DataType` + `{CompiledBinding}`
   is mandated; UI mutation off the UI thread (must marshal via `Dispatcher.UIThread`). When
   unsure whether something is a WPF-ism vs valid Avalonia, consult the **avalonia-docs** tools
-  before flagging — do not guess.
+  before flagging.
 - **Security / privacy** (when touched): secrets in code/logs, PII in URLs/query strings, an
   untrusted-input path parsed unsafely.
 
