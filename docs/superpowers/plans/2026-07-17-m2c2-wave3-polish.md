@@ -160,7 +160,7 @@ data not blocked) is headless-gated.
 Ordering rationale: **PR A and PR B are independent and headless-gatable up front** (Mica policy +
 icon-swap have crisp correctness assertions and don't touch the shared view fixtures). **PR C1/C2
 add headless motion tests over the view fixtures and therefore build on the consolidated
-`HeadlessAppFixture` from #67** (see Scheduling). PR D (compact grouped rail) is **deferred to M3
+`HostGraphFixture` from #67** (see Scheduling). PR D (compact grouped rail) is **deferred to M3
 (#96)** and retained below only as an M3 reference.
 
 ### PR A — Mica backdrop wiring (folds #11 code half)
@@ -379,7 +379,7 @@ the tree today** (grep of `src`/`tests` is empty); without it the owner cannot r
 
 **Machine gate (CORRECTNESS):** headless (DEBUG build) — with the sample host injected, the Tasks
 grid materializes ≥500 rows, Transfers shows each state, Projects shows a `Varies`/mixed-tier
-aggregate (reuses the `HeadlessAppFixture` fake-fed pattern; asserts the canned data reaches the
+aggregate (reuses the `HostGraphFixture` fake-fed pattern; asserts the canned data reaches the
 grids). **No owner-visual gate for the tooling itself** — its visual payoff is the walkthrough.
 
 **Dependency:** independent of A/B/E and of the #67 fixture (an App-seam injectable); can build early
@@ -427,12 +427,13 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
 ## Scheduling & dependencies
 
 - **#67 (fixture consolidation) MERGED to `main` today (PR #90 @ `edf90fc`)** — its shared
-  `HeadlessAppFixture` (`FakeTimeProvider`-by-construction + deterministic `QueueUiDispatcher` drain,
-  replacing the ~7 near-duplicate `MakeView`/`MakeVm` copies and the real-time `Wait.UntilAsync`
+  `HostGraphFixture` (`tests/Lattice.App.Tests/HostGraphFixture.cs`; `FakeTimeProvider`-by-construction
+  + deterministic single `QueueUiDispatcher` `Drain`, replacing the ~8 hand-rolled `MakeView`/`MakeVm`
+  copies and the real-time `Wait.UntilAsync`
   ceiling) lives on `main`. **This plan branch does NOT contain it** — it forked from `786f823`,
-  before #90; that is expected for a docs-only PR, and `HeadlessAppFixture` is reached by the
+  before #90; that is expected for a docs-only PR, and `HostGraphFixture` is reached by the
   **execution chips, which branch from `main`** *after* this plan merges (not from this branch).
-  **PRs C1 and C2 add headless motion tests over the view fixtures → they reuse `HeadlessAppFixture`
+  **PRs C1 and C2 add headless motion tests over the view fixtures → they reuse `HostGraphFixture`
   (write no new per-view fixture copies).** So the C1/C2 dependency is **satisfied on `main`**, not a
   pending blocker. (#13/#88 also sequence after #67, per project status.)
 - **PRs A, B, and E do not touch the view fixtures** (Mica policy has its own unit test; the
