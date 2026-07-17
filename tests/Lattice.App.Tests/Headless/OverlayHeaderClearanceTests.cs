@@ -57,8 +57,9 @@ public class OverlayHeaderClearanceTests
         Assert.True(header is { IsHitTestVisible: true, Bounds.Width: > 0, Bounds.Height: > 0 },
             "the column header must be rendered and hit-testable while the overlay is up");
 
-        // The header centre, expressed in the wrapper's coordinate space — where
-        // overlay.Bounds also lives.
+        // The header centre and bottom, expressed in the wrapper's coordinate
+        // space — where overlay.Bounds and grid.Bounds also live (both are direct
+        // children of the wrapper Panel, so their Bounds share that space).
         var headerCentre = header.TranslatePoint(
             new Point(header.Bounds.Width / 2, header.Bounds.Height / 2), wrapper)!.Value;
         var headerBottom = header.TranslatePoint(new Point(0, header.Bounds.Height), wrapper)!.Value.Y;
@@ -67,9 +68,22 @@ public class OverlayHeaderClearanceTests
         Assert.False(overlay.Bounds.Contains(headerCentre),
             $"overlay {overlay.Bounds} must not cover the header centre {headerCentre}");
 
-        // 3. Overlay excludes the header band: its top edge sits at or below the header's bottom.
-        Assert.True(overlay.Bounds.Y >= headerBottom - 0.5,
-            $"overlay must start at/below the header band: overlayTop={overlay.Bounds.Y}, headerBottom={headerBottom}");
+        // 3. Seam is EXACT — the overlay top coincides with the header bottom: no
+        //    gap (a sliver of empty grid body would show / a double separator line)
+        //    and no overlap (the overlay would clip the header's bottom rule).
+        Assert.True(Math.Abs(overlay.Bounds.Y - headerBottom) < 0.5,
+            $"overlay top must coincide with the header bottom: overlayTop={overlay.Bounds.Y}, headerBottom={headerBottom}");
+
+        // 4. The overlay still fully covers the data-rows region — its left, right
+        //    and bottom edges are flush with the grid, so no empty grid body peeks
+        //    out on any side below the header.
+        var g = grid.Bounds;
+        Assert.True(Math.Abs(overlay.Bounds.X - g.X) < 0.5,
+            $"overlay left must be flush with the grid: overlayX={overlay.Bounds.X}, gridX={g.X}");
+        Assert.True(Math.Abs(overlay.Bounds.Right - g.Right) < 0.5,
+            $"overlay right must be flush with the grid: overlayRight={overlay.Bounds.Right}, gridRight={g.Right}");
+        Assert.True(Math.Abs(overlay.Bounds.Bottom - g.Bottom) < 0.5,
+            $"overlay bottom must be flush with the grid: overlayBottom={overlay.Bounds.Bottom}, gridBottom={g.Bottom}");
     }
 
     // ---- Empty overlay: all four views ----------------------------------
