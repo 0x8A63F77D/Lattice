@@ -222,8 +222,8 @@
         </DataGrid.Columns>
       </DataGrid>
 
-      <!-- Empty overlay -->
-      <Border IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+      <!-- Empty overlay. dataOverlay (issue #88): inset below the column header. -->
+      <Border Classes="dataOverlay" IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
         <TextBlock Text="{x:Static loc:Strings.EventLogEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       </Border>

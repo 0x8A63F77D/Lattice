@@ -164,8 +164,8 @@
         </DataGrid.Columns>
       </DataGrid>
 
-      <!-- Loading overlay -->
-      <Border Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
+      <!-- Loading overlay. dataOverlay (issue #88): inset below the column header. -->
+      <Border Classes="dataOverlay" Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
           <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
           <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
@@ -182,7 +182,7 @@
            icon's muted foreground follows FirstRunView's established token
            (LatticeDisabledBrush; there is no separate LatticeTextDisabledBrush
            token in Tokens.axaml). -->
-      <Border x:Name="EmptyOverlay" IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
+      <Border x:Name="EmptyOverlay" Classes="dataOverlay" IsVisible="{Binding IsEmpty}" Background="{DynamicResource LatticeSurfaceBrush}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
           <PathIcon Width="24" Height="24" Data="{StaticResource IconArrowSwapRegular}"
                     Foreground="{DynamicResource LatticeDisabledBrush}" HorizontalAlignment="Center" />
