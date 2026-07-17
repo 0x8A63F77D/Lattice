@@ -66,8 +66,13 @@ public class ComboBoxTextCenteringVisualTests
         Application.Current!.RequestedThemeVariant = variant;
 
         // Warm the theme's Skia glyph/render caches once (first render of a variant differs) so the
-        // measured render is deterministic regardless of which theme ran first.
-        Render(variant, out _, out _);
+        // measured render is deterministic regardless of which theme ran first. Dispose the discarded
+        // window + Skia frame immediately: this test is not env-gated, so it shares the process with
+        // the screenshot-baseline captures, and a leaked WriteableBitmap can segfault libSkiaSharp
+        // (VisualCapture's Avalonia #19611 note).
+        var warmWindow = Render(variant, out _, out var warmFrame);
+        warmFrame.Dispose();
+        warmWindow.Close();
 
         var window = Render(variant, out var combo, out var frame);
         using (frame)
