@@ -45,17 +45,17 @@ public static class CollectionReconciler
                     rows.RemoveAt(rem.Index);
                     break;
                 case ReconcileOp<TKey, TRow>.Move mv:
-                    // Avalonia 12.1's DataGrid does NOT visually reflect a CollectionChanged.Move:
-                    // ObservableCollection.Move reorders the backing collection but the rendered
-                    // rows stay put (Projects header-sort "did nothing" while every VM/F# test —
-                    // which only inspect collection order — passed; 2026-07-15). Express the move as
-                    // the Remove+Insert of the SAME holder instance instead — the shape the DataGrid
-                    // DOES re-render, and the one expand/collapse already relies on. Holder identity
-                    // survives (the same object is reinserted); .NET's ObservableCollection.Move is
-                    // itself Remove(from)+Insert(to), so these indices need no adjustment.
-                    var moved = rows[mv.FromIndex];
-                    rows.RemoveAt(mv.FromIndex);
-                    rows.Insert(mv.ToIndex, moved);
+                    // Contract (#86): a collection the DataGrid renders must never receive a
+                    // Move — Avalonia 12.1's DataGridCollectionView.ProcessCollectionChanged has
+                    // no Move case, so a source Move silently never renders (the "Projects can't
+                    // sort" root cause, 2026-07-15). Every grid-bound consumer therefore aligns
+                    // its target (Reconcile.alignToExisting), letting the bound collection view
+                    // own display order; their diffs emit no Move by construction. A Move only
+                    // reaches collections nothing renders directly, so it applies natively.
+                    // (History: this used to translate to Remove+Insert of the same holder for
+                    // the then directly-bound Tasks/Transfers grids; retired with its last
+                    // consumer in #86.)
+                    rows.Move(mv.FromIndex, mv.ToIndex);
                     break;
                 default:
                     throw new UnreachableException($"Unhandled ReconcileOp: {op}");

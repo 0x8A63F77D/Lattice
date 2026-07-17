@@ -33,17 +33,15 @@ public class CollectionReconcilerTests
         Assert.Equal("a2", rows[0].Data);
     }
 
-    // A reorder is applied as Remove+Insert of the SAME holder instances, NOT ObservableCollection
-    // .Move: Avalonia 12.1's DataGrid ignores a CollectionChanged.Move (the backing collection
-    // reorders but the rendered rows do not — the "Projects can't sort" root cause, 2026-07-15).
-    // The invariants that matter are unchanged and asserted here: never a Reset (Clear), and the
-    // moved holder OBJECT identity survives so in-place value liveness/selection is preserved. The
-    // rendered-grid proof of this workaround is
-    // A_reconciler_move_reorders_the_rendered_task_grid_not_just_the_collection in the headless
-    // TasksViewTests (Tasks/Transfers still bind their Rows collection directly; Projects moved to a
-    // view-owned order in #57, so its copy of this proof was retired).
+    // A diff Move applies as the collection's native Move — ONE event, same holder objects, never
+    // a Reset. History (#57/#74/#86): this used to translate to Remove+Insert because Avalonia
+    // 12.1's DataGridCollectionView silently drops a source Move (the "Projects can't sort" root
+    // cause, 2026-07-15) and Tasks/Transfers bound their Rows to the grid directly. Since #86
+    // every grid-bound consumer aligns its reconcile target (Reconcile.alignToExisting), so its
+    // diff emits no Move at all and the translation's last consumer is gone — a Move now only
+    // reaches collections nothing renders directly, where Remove+Insert would just churn.
     [Fact]
-    public void Reorder_reinserts_holders_without_reset()
+    public void Reorder_moves_holders_as_a_single_move_without_reset()
     {
         var rows = Collection((1, "a"), (2, "b"));
         var first = rows[0];
@@ -53,12 +51,8 @@ public class CollectionReconcilerTests
 
         ReconcileInto(rows, (2, "b"), (1, "a"));
 
-        Assert.DoesNotContain(NotifyCollectionChangedAction.Reset, events);
-        // The DataGrid-visible shape: Remove then Insert, not a Move it would ignore.
-        Assert.DoesNotContain(NotifyCollectionChangedAction.Move, events);
-        Assert.Contains(NotifyCollectionChangedAction.Remove, events);
-        Assert.Contains(NotifyCollectionChangedAction.Add, events);
-        // Same holder OBJECTS, reordered — identity preserved through the reinsert.
+        Assert.Equal([NotifyCollectionChangedAction.Move], events);
+        // Same holder OBJECTS, reordered — identity preserved through the move.
         Assert.Same(second, rows[0]);
         Assert.Same(first, rows[1]);
     }

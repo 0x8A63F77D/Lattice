@@ -15,6 +15,7 @@ using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
 using Microsoft.Extensions.Time.Testing;
@@ -56,6 +57,33 @@ public class TasksViewTests
         fakes[address] = fake;
         registry.AddHost(host);
         return host;
+    }
+
+    // Store-backed view for facts whose polls mutate rows WHILE the grid renders
+    // them (the ProjectsViewTests.MakeStoreView idiom): uses the PRODUCTION
+    // AvaloniaUiDispatcher, not Immediate/Locking — the manager polls on a
+    // background thread, so Rebuild must be marshalled onto the Avalonia UI
+    // thread or the DataGrid mutates off-thread. HeadlessSync.WaitUntilAsync
+    // pumps those posts via Dispatcher.UIThread.RunJobs between checks.
+    private static (Window Window, TasksView View, TasksViewModel Vm, HostMonitorManager Manager) MakeStoreView(
+        params (string Address, FakeGuiRpcClient Fake)[] hosts)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var fakes = new Dictionary<string, FakeGuiRpcClient>();
+        foreach (var (address, fake) in hosts)
+        {
+            fakes[address] = fake;
+            registry.AddHost(TestData.MakeHostConfig(name: address, address: address));
+        }
+        var manager = new HostMonitorManager(
+            registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var vm = new TasksViewModel(store, new ManualUiClock(), uiState, new DensityPreference(uiState));
+        var view = new TasksView { DataContext = vm };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        return (window, view, vm, manager);
     }
 
     [AvaloniaFact]
@@ -668,35 +696,104 @@ public class TasksViewTests
         window.Close();
     }
 
-    // Ported from the retired Projects reconciler-Move rendered test (#57 step 6). Projects now let
-    // a view own display order, but Tasks/Transfers still bind their Rows collection directly, and
-    // their polls CAN reorder SURVIVING rows — a Reconcile.diff over a value-ordered target (e.g.
-    // Elapsed/Remaining changing) emits a Move. Avalonia 12.1's DataGrid ignores a raw
-    // CollectionChanged.Move (the backing collection reorders but the rendered rows do not), so the
-    // load-bearing workaround is CollectionReconciler.Apply translating Move → Remove+Insert of the
-    // SAME holder — the shape the DataGrid DOES re-render. This pins the RENDERED order following a
-    // survivor swap on the real Tasks grid; without the translation it would stay put.
+    // Issue #86 headline (Tasks leg): a poll that reorders SURVIVING rows must not cost the
+    // DataGrid selection. Display order is view-owned — the source collection never
+    // removes/reinserts a surviving holder (Reconcile.alignToExisting keeps its slot; the old
+    // Move→Remove+Insert replay is what cleared selection) — and the rendered order still follows
+    // the new deadline order because the post-reconcile guard Refreshes the view, across whose
+    // Reset selection rides holder identity (Projects U3 precedent).
     [AvaloniaFact]
-    public void A_reconciler_move_reorders_the_rendered_task_grid_not_just_the_collection()
+    public async Task Selected_row_survives_a_poll_that_reorders_surviving_rows()
     {
-        var (window, view, vm, _, _, _) = MakeView();
+        var sooner = new DateTimeOffset(2026, 7, 20, 0, 0, 0, TimeSpan.Zero);
+        var later = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+        IReadOnlyList<Result> results =
+        [
+            TestData.MakeResult(name: "alpha", deadline: sooner),
+            TestData.MakeResult(name: "beta", deadline: later),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetResults = _ => Task.FromResult(results) };
+        var (window, view, vm, manager) = MakeStoreView(("host-a", fake));
         window.Show();
-        var t = new DateTimeOffset(2026, 7, 14, 0, 0, 0, TimeSpan.Zero);
-        vm.Rows.Add(TaskHolder("alpha", 0.2, t.AddHours(1), TaskStateKind.Running));
-        vm.Rows.Add(TaskHolder("beta", 0.3, t.AddHours(2), TaskStateKind.Running));
+        manager.Start();
+        await HeadlessSync.WaitUntilAsync(() => vm.Rows.Count == 2);
         Layout(window);
         Assert.Equal(new[] { "alpha", "beta" }, RenderedTaskNames(view));
 
-        // Two surviving keys in flipped target order → the diff emits a single Move (the op the
-        // DataGrid ignores raw). The applier translates it to Remove+Insert of the same holders.
-        var existing = vm.Rows.Select(h => (h.Key, h.Data)).ToArray();
-        var target = new[] { (vm.Rows[1].Key, vm.Rows[1].Data), (vm.Rows[0].Key, vm.Rows[0].Data) };
-        CollectionReconciler.Apply(vm.Rows, Reconcile.diff(existing, target), (k, r) => new TaskRow(k, r));
+        // Select the row the reorder MOVES (the diff extracts beta into slot 0):
+        // beta is exactly the holder the old Move→Remove+Insert replay removed,
+        // clearing its selection — alpha never left the collection either way.
+        var beta = vm.Rows.Single(r => r.Data.Name == "beta");
+        view.Grid.SelectedItem = beta;
+
+        // The next poll swaps the two deadlines AND the list positions (daemon
+        // result order is not contractual): same keys, surviving rows, new order.
+        results =
+        [
+            TestData.MakeResult(name: "beta", deadline: sooner),
+            TestData.MakeResult(name: "alpha", deadline: later),
+        ];
+        vm.RefreshCommand.Execute(null);
+        await HeadlessSync.WaitUntilAsync(() => beta.Data.Deadline == sooner);
         Layout(window);
         Dispatcher.UIThread.RunJobs();
         Layout(window);
 
         Assert.Equal(new[] { "beta", "alpha" }, RenderedTaskNames(view));
+        Assert.Same(beta, view.Grid.SelectedItem);
+
+        await manager.DisposeAsync();
+        window.Close();
+    }
+
+    // Issue #86: the built-in header sort must COMPOSE with view-owned order. A header click
+    // installs the column's FromPath description through the grid's own ProcessSort (replacing
+    // the VM's default deadline order), and an in-place poll Update that violates the clicked
+    // order re-sorts through the same conditional-Refresh guard — the collection view alone
+    // never re-compares survivors. Selection rides holder identity across that Reset.
+    [AvaloniaFact]
+    public async Task Header_sort_stays_live_across_in_place_updates()
+    {
+        IReadOnlyList<Result> results =
+        [
+            TestData.MakeResult(name: "alpha", finalElapsed: 60),
+            TestData.MakeResult(name: "beta", finalElapsed: 300),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetResults = _ => Task.FromResult(results) };
+        var (window, view, vm, manager) = MakeStoreView(("host-a", fake));
+        window.Show();
+        manager.Start();
+        await HeadlessSync.WaitUntilAsync(() => vm.Rows.Count == 2);
+        Layout(window);
+
+        // Elapsed ascending via the real column-sort path (index 4, as
+        // Task_template_columns_are_sortable_by_their_underlying_value pins).
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        grid.Columns[4].Sort(ListSortDirection.Ascending);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+        Assert.Equal(new[] { "alpha", "beta" }, RenderedTaskNames(view));
+
+        var alpha = vm.Rows.Single(r => r.Data.Name == "alpha");
+        view.Grid.SelectedItem = alpha;
+
+        // The next poll inverts the elapsed order — an in-place Update, invisible
+        // to the view's own event processing.
+        results =
+        [
+            TestData.MakeResult(name: "alpha", finalElapsed: 600),
+            TestData.MakeResult(name: "beta", finalElapsed: 300),
+        ];
+        vm.RefreshCommand.Execute(null);
+        await HeadlessSync.WaitUntilAsync(() => alpha.Data.ElapsedSeconds == 600);
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.Equal(new[] { "beta", "alpha" }, RenderedTaskNames(view));
+        Assert.Same(alpha, view.Grid.SelectedItem);
+
+        await manager.DisposeAsync();
         window.Close();
     }
 

@@ -153,6 +153,117 @@ public class TransfersViewModelTests : IAsyncLifetime
         Assert.Equal("75 / 100 MB", holder.Data.ProgressText);
     }
 
+    // Display order is view-owned (issue #86): the grid binds RowsView, whose
+    // default sort description carries the project-then-name ordinal order
+    // formerly imposed on the source by Rebuild.
+    [Fact]
+    public async Task View_sorts_by_project_then_name_ordinal()
+    {
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetFileTransfers = () => Task.FromResult<IReadOnlyList<FileTransfer>>(
+            [
+                TestData.MakeTransfer(name: "z_file", projectUrl: "https://a.example/", projectName: "Alpha"),
+                TestData.MakeTransfer(name: "b_file", projectUrl: "https://m.example/", projectName: "Mu"),
+                TestData.MakeTransfer(name: "a_file", projectUrl: "https://m.example/", projectName: "Mu"),
+            ]),
+        };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 3);
+
+        Assert.Equal(
+            ["z_file", "a_file", "b_file"],
+            vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name));
+    }
+
+    // Issue #86 (Transfers leg): the narrow real trigger — a tie on the
+    // (project, name) sort key (an upload and a download of the same file)
+    // whose snapshot order flips between polls. The old VM-ordered source
+    // replayed that flip as Move→Remove+Insert, costing DataGrid selection;
+    // now survivors keep their source slots (Reconcile.alignToExisting), the
+    // view's tie order stays first-seen, and neither collection raises any
+    // reorder event.
+    [Fact]
+    public async Task Tie_order_flip_between_polls_moves_nothing_and_raises_no_events()
+    {
+        const double mb = 1024.0 * 1024.0;
+        IReadOnlyList<FileTransfer> transfers =
+        [
+            TestData.MakeTransfer(name: "file.dat", isUpload: true, nbytes: 100 * mb),
+            TestData.MakeTransfer(name: "file.dat", isUpload: false, nbytes: 100 * mb),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        var upload = vm.Rows.Single(r => r.Key.IsUpload);
+        var download = vm.Rows.Single(r => !r.Key.IsUpload);
+        Assert.Equal([upload.Key, download.Key], vm.RowsView.Cast<TransferRow>().Select(r => r.Key));
+        var sourceEvents = new List<NotifyCollectionChangedAction>();
+        vm.Rows.CollectionChanged += (_, e) => sourceEvents.Add(e.Action);
+        var viewEvents = new List<NotifyCollectionChangedAction>();
+        ((INotifyCollectionChanged)vm.RowsView).CollectionChanged += (_, e) => viewEvents.Add(e.Action);
+
+        // Same two transfers, flipped list order; a progress change on the
+        // download gives the poll an observable settle signal.
+        transfers =
+        [
+            TestData.MakeTransfer(name: "file.dat", isUpload: false, nbytes: 100 * mb, bytesXferred: 25 * mb),
+            TestData.MakeTransfer(name: "file.dat", isUpload: true, nbytes: 100 * mb),
+        ];
+        _store.RequestRefresh(null);
+        await Wait.UntilAsync(() => download.Data.Fraction == 0.25);
+
+        // In-place updates only: no source event, no view event, same holders,
+        // and the tie keeps its first-seen display order.
+        Assert.Empty(sourceEvents);
+        Assert.Empty(viewEvents);
+        Assert.Same(upload, vm.Rows[0]);
+        Assert.Same(download, vm.Rows[1]);
+        Assert.Equal([upload.Key, download.Key], vm.RowsView.Cast<TransferRow>().Select(r => r.Key));
+    }
+
+    // Issue #86: the post-reconcile order guard must also serve a HEADER sort.
+    // Installing a FromPath description the way the grid's own ProcessSort does
+    // (clear + add on RowsView.SortDescriptions), an in-place progress update
+    // that inverts the sorted order must re-sort the view — the collection view
+    // never re-compares survivors on its own.
+    [Fact]
+    public async Task Header_sort_stays_live_across_in_place_updates()
+    {
+        const double mb = 1024.0 * 1024.0;
+        IReadOnlyList<FileTransfer> transfers =
+        [
+            TestData.MakeTransfer(name: "small", nbytes: 100 * mb, bytesXferred: 10 * mb),
+            TestData.MakeTransfer(name: "large", nbytes: 100 * mb, bytesXferred: 50 * mb),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
+        AddHost("host-a", fake);
+        var vm = MakeVm();
+        _manager.Start();
+        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+
+        vm.RowsView.SortDescriptions.Clear();
+        vm.RowsView.SortDescriptions.Add(
+            Avalonia.Collections.DataGridSortDescription.FromPath("Data.Fraction"));
+        Assert.Equal(["small", "large"], vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name));
+
+        // The next poll inverts the fractions — in-place Updates only.
+        transfers =
+        [
+            TestData.MakeTransfer(name: "small", nbytes: 100 * mb, bytesXferred: 75 * mb),
+            TestData.MakeTransfer(name: "large", nbytes: 100 * mb, bytesXferred: 50 * mb),
+        ];
+        _store.RequestRefresh(null);
+        await Wait.UntilAsync(() => vm.Rows.Single(r => r.Data.Name == "small").Data.Fraction == 0.75);
+
+        Assert.Equal(["large", "small"], vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name));
+    }
+
     [Fact]
     public async Task Retrying_row_status_text_counts_down_as_the_manual_clock_advances()
     {

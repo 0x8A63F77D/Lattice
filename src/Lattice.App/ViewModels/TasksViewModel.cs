@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Collections;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Aggregation;
@@ -37,6 +38,23 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     // holds the instance.
     private readonly PartialBarState _partialBar = new();
 
+    // The default (no-header-click) display order, view-owned (issue #86): the
+    // deadline-ascending-nulls-last ordering Rebuild used to impose on the
+    // source collection. FromComparer carries a null PropertyPath, so no header
+    // arrow lights until the user clicks a column — a click routes through the
+    // grid's built-in ProcessSort, which clears this default and installs the
+    // clicked column's FromPath sort in its place (flat grid: no custom
+    // DataGridSortDescription subclass needed, unlike Projects' hierarchy).
+    private static readonly DataGridSortDescription DefaultOrder =
+        DataGridSortDescription.FromComparer(Comparer<object>.Create(static (x, y) =>
+        {
+            var a = ((RowHolder<TaskRowKey, TaskRowViewModel>)x).Data;
+            var b = ((RowHolder<TaskRowKey, TaskRowViewModel>)y).Data;
+            if (a.Deadline is null) return b.Deadline is null ? 0 : 1;
+            if (b.Deadline is null) return -1;
+            return a.Deadline.Value.CompareTo(b.Deadline.Value);
+        }));
+
     public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore, DensityPreference density)
     {
         _store = store;
@@ -47,6 +65,10 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         // Field write, not property: restoring the shared preference must not
         // re-save it through OnIsCompactChanged.
         _isCompact = density.Value;
+        RowsView = new DataGridCollectionView(Rows);
+        // Install the always-on default order BEFORE the first Rebuild, so the
+        // grid (which binds RowsView, not Rows) is never unsorted for a frame.
+        RowsView.SortDescriptions.Add(DefaultOrder);
         store.Changed += OnStoreChanged;
         clock.Tick += OnTick;
         density.Changed += OnDensityChanged;
@@ -60,6 +82,16 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     // creates real TaskRow instances, so DataContext at the view layer is
     // always a TaskRow at runtime.
     public ObservableCollection<RowHolder<TaskRowKey, TaskRowViewModel>> Rows { get; } = [];
+
+    /// <summary>
+    /// The grid's ItemsSource: a live view over <see cref="Rows"/> that OWNS
+    /// display order (issue #86). It starts with the default deadline order and
+    /// a header click swaps in the clicked column's built-in FromPath sort; the
+    /// source collection stays in reconcile-friendly order, so a poll that
+    /// reorders surviving rows raises no collection event and selection rides
+    /// holder identity through the view's Reset/insert paths.
+    /// </summary>
+    public DataGridCollectionView RowsView { get; }
 
     /// <summary>Pushed by ShellViewModel whenever the global rail scope changes.</summary>
     public ScopeSelection Scope
@@ -166,20 +198,31 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             h => h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray());
         var allRows = slice.AllRows;
 
+        // No OrderBy here: display order is view-owned (issue #86) — the default
+        // deadline order lives in RowsView's sort description and a header click
+        // swaps in the clicked column's. The source collection has no order
+        // contract beyond stability.
         var target = allRows
             .Where(MatchesFilters)
-            .OrderBy(r => r.Deadline is null)
-            .ThenBy(r => r.Deadline)
             .Select(r => (r.Key, r))
             .ToArray();
 
-        // Keyed reconcile instead of replace: in-place Data updates keep
-        // holder identity (DataGrid selection) and steady-state polls raise
-        // no CollectionChanged at all — the SequenceEqual full-replace guard
-        // this superseded still fired Reset + N Adds on every 1s tick even
-        // when nothing changed (issue #24).
+        // Align the target so surviving keys keep their current source slots:
+        // the diff then emits no Move at all — a source reorder is invisible to
+        // the grid (RowsView owns display order) and would only churn the
+        // selected row through a remove it cannot survive. New keys append; the
+        // view inserts each at its sorted position. Keyed reconcile keeps holder
+        // identity (DataGrid selection) and steady-state polls raise no
+        // CollectionChanged at all (issue #24).
+        var aligned = Reconcile.alignToExisting(Rows.Select(h => h.Key).ToArray(), target);
         var existing = Rows.Select(h => (h.Key, h.Data)).ToArray();
-        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, target), (key, row) => new TaskRow(key, row));
+        CollectionReconciler.Apply(Rows, Reconcile.diff(existing, aligned), (key, row) => new TaskRow(key, row));
+
+        // The view does NO live shaping: an in-place Update can change a
+        // sort-relevant value (a deadline, or whatever column the user header-
+        // sorted by) without the view re-sorting. Refresh only on a genuine
+        // order violation so steady-state polls stay zero-event (issue #24).
+        CollectionViewOrder.RefreshIfStale(RowsView);
 
         // Counts/at-risk cover the reachable, UNFILTERED set: a stable summary
         // that the text/state filter shouldn't perturb.

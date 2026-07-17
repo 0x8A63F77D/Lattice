@@ -84,8 +84,14 @@
 
     <!-- Grid + overlays -->
     <Panel>
+      <!-- The grid binds RowsView (a DataGridCollectionView), not Rows: the VIEW owns display
+           order (issue #86, same mechanics as TasksView). Default project/name order lives in a
+           comparer sort description (null PropertyPath = no header arrow); a header click
+           replaces it via the grid's built-in ProcessSort/SortMemberPath path. The source
+           collection stays in reconcile-friendly order, so poll reorders never remove/reinsert
+           a selected row. -->
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True">
+                ItemsSource="{Binding RowsView}" IsReadOnly="True" CanUserSortColumns="True">
         <DataGrid.Columns>
           <!-- Fixed width, NOT a star column (Finding A round 2): a star pins the grid total to the
                viewport so it can never overflow — no horizontal scroll, and drag just reshuffles
@@ -100,10 +106,13 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
+          <!-- Text-column bindings carry an explicit DataType: the ItemsSource is RowsView (a
+               non-generic DataGridCollectionView), so the compiler can no longer infer the row
+               type from the collection (Projects-column idiom). -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
-                               Binding="{Binding Data.Project}" Width="140" MinWidth="140" />
+                               Binding="{CompiledBinding Data.Project, DataType=vm:TransferRow}" Width="140" MinWidth="140" />
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}"
-                               Binding="{Binding Data.DirectionText}" Width="80" MinWidth="80" />
+                               Binding="{CompiledBinding Data.DirectionText, DataType=vm:TransferRow}" Width="80" MinWidth="80" />
           <!-- Progress 190: 56px bar + "34.2 / 51.7 MB" text, same shape as the Tasks Progress cell. -->
           <!-- SortMemberPath on the template columns (File/Progress/Status): without an explicit
                path a template column has no sort key and stays unsortable. Point at the underlying
@@ -123,7 +132,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
-                               Binding="{Binding Data.SpeedText}" Width="90" MinWidth="90"
+                               Binding="{CompiledBinding Data.SpeedText, DataType=vm:TransferRow}" Width="90" MinWidth="90"
                                CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
@@ -150,7 +159,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
-                               Binding="{Binding Data.Host}" Width="80" MinWidth="80"
+                               Binding="{CompiledBinding Data.Host, DataType=vm:TransferRow}" Width="80" MinWidth="80"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>
       </DataGrid>

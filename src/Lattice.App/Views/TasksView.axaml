@@ -127,13 +127,23 @@
 
     <!-- Grid + overlays -->
     <Panel>
+      <!-- The grid binds RowsView (a DataGridCollectionView), not Rows: the VIEW owns display
+           order (issue #86). The VM installs the default deadline order as a comparer sort
+           description (null PropertyPath = no header arrow); a header click routes through the
+           grid's own ProcessSort, which replaces it with the clicked column's SortMemberPath
+           sort — flat grid, so the built-in FromPath machinery composes without the custom
+           description subclass Projects' hierarchy needs. The source collection stays in
+           reconcile-friendly order, so poll reorders never remove/reinsert a selected row. -->
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
-                ItemsSource="{Binding Rows}" IsReadOnly="True" CanUserSortColumns="True">
+                ItemsSource="{Binding RowsView}" IsReadOnly="True" CanUserSortColumns="True">
         <DataGrid.Columns>
+          <!-- Text-column bindings carry an explicit DataType: the ItemsSource is RowsView (a
+               non-generic DataGridCollectionView), so the compiler can no longer infer the row
+               type from the collection (Projects-column idiom). -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
-                               Binding="{Binding Data.Project}" Width="108" MinWidth="108" />
+                               Binding="{CompiledBinding Data.Project, DataType=vm:TaskRow}" Width="108" MinWidth="108" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}"
-                               Binding="{Binding Data.Application}" Width="118" MinWidth="118" />
+                               Binding="{CompiledBinding Data.Application, DataType=vm:TaskRow}" Width="118" MinWidth="118" />
           <!-- Fixed width (NOT a star column): a star (*) column makes the DataGrid fit-to-width,
                which pins the grid total to the viewport — it can never overflow, so horizontal
                scroll never engages and dragging a column just reshuffles space between columns
@@ -172,10 +182,10 @@
           <!-- SortMemberPath overrides the (text) binding for sorting so these sort by the raw
                duration in seconds, not the formatted string ("10m" would sort before "9m"). -->
           <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
-                               Binding="{Binding Data.ElapsedText}" Width="68" MinWidth="68"
+                               Binding="{CompiledBinding Data.ElapsedText, DataType=vm:TaskRow}" Width="68" MinWidth="68"
                                CellStyleClasses="numericCell" SortMemberPath="Data.ElapsedSeconds" />
           <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
-                               Binding="{Binding Data.RemainingText}" Width="74" MinWidth="74"
+                               Binding="{CompiledBinding Data.RemainingText, DataType=vm:TaskRow}" Width="74" MinWidth="74"
                                CellStyleClasses="numericCell" SortMemberPath="Data.RemainingSeconds" />
           <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100" MinWidth="100"
                                    SortMemberPath="Data.Deadline">
@@ -216,7 +226,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
-                               Binding="{Binding Data.Host}" Width="76" MinWidth="76"
+                               Binding="{CompiledBinding Data.Host, DataType=vm:TaskRow}" Width="76" MinWidth="76"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>
       </DataGrid>

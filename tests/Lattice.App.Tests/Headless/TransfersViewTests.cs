@@ -3,7 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Lattice.Boinc.GuiRpc;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -44,6 +46,41 @@ public class TransfersViewTests
         registry.AddHost(host);
         return host;
     }
+
+    // Store-backed view for facts whose polls mutate rows WHILE the grid renders
+    // them (the ProjectsViewTests/TasksViewTests.MakeStoreView idiom): the
+    // PRODUCTION AvaloniaUiDispatcher marshals background-thread poll results
+    // onto the UI thread; HeadlessSync.WaitUntilAsync pumps those posts.
+    private static (Window Window, TransfersView View, TransfersViewModel Vm, HostMonitorManager Manager) MakeStoreView(
+        params (string Address, FakeGuiRpcClient Fake)[] hosts)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var fakes = new Dictionary<string, FakeGuiRpcClient>();
+        foreach (var (address, fake) in hosts)
+        {
+            fakes[address] = fake;
+            registry.AddHost(TestData.MakeHostConfig(name: address, address: address));
+        }
+        var manager = new HostMonitorManager(
+            registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
+        var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
+        var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json"));
+        var vm = new TransfersViewModel(store, new ManualUiClock(), new DensityPreference(uiState));
+        var view = new TransfersView { DataContext = vm };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        return (window, view, vm, manager);
+    }
+
+    // The displayed rows' holders in on-screen Y order (both rows here share one
+    // file name, so identity — not text — is the probe), filtered to genuinely
+    // visible rows per the recycled-ghost caveat TasksViewTests documents.
+    private static TransferRow[] DisplayedHolders(TransfersView view) =>
+        view.Grid.GetVisualDescendants().OfType<DataGridRow>()
+            .Where(r => r.DataContext is TransferRow && r.IsVisible && r.Bounds.Height > 0)
+            .OrderBy(r => r.Bounds.Y)
+            .Select(r => (TransferRow)r.DataContext!)
+            .ToArray();
 
     private static TransferRowViewModel MakeRow(
         TransferUiState uiState, string statusText, string name = "file.dat", bool isUpload = false, Guid? hostId = null)
@@ -177,6 +214,55 @@ public class TransfersViewTests
 
         Assert.Contains("retrying", dataGridRow.Classes);
         Assert.Same(holder, view.Grid.SelectedItem);
+        window.Close();
+    }
+
+    // Issue #86 headline (Transfers leg): the narrow real trigger for a survivor reorder here is
+    // a tie on the (project, name) sort key — an upload and a download of the same file — whose
+    // snapshot order flips between polls. The old VM-ordered source replayed that as the
+    // Move→Remove+Insert of the moved holder, which cleared DataGrid selection; with display
+    // order view-owned the source never reorders, the tie keeps its first-seen rendered order,
+    // and the selected row stays selected.
+    [AvaloniaFact]
+    public async Task Selected_row_survives_a_poll_that_flips_tie_order()
+    {
+        const double mb = 1024.0 * 1024.0;
+        IReadOnlyList<FileTransfer> transfers =
+        [
+            TestData.MakeTransfer(name: "file.dat", isUpload: true, nbytes: 100 * mb),
+            TestData.MakeTransfer(name: "file.dat", isUpload: false, nbytes: 100 * mb),
+        ];
+        var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
+        var (window, view, vm, manager) = MakeStoreView(("host-a", fake));
+        window.Show();
+        manager.Start();
+        await HeadlessSync.WaitUntilAsync(() => vm.Rows.Count == 2);
+        Layout(window);
+
+        var upload = (TransferRow)vm.Rows.Single(r => r.Key.IsUpload);
+        var download = (TransferRow)vm.Rows.Single(r => !r.Key.IsUpload);
+        Assert.Equal(new[] { upload, download }, DisplayedHolders(view));
+        // The download is the holder the old code's Move→Remove+Insert replay
+        // removed (and re-inserted), clearing its selection.
+        view.Grid.SelectedItem = download;
+
+        // Same two transfers, flipped list order; the download's progress change
+        // gives the poll an observable settle signal.
+        transfers =
+        [
+            TestData.MakeTransfer(name: "file.dat", isUpload: false, nbytes: 100 * mb, bytesXferred: 25 * mb),
+            TestData.MakeTransfer(name: "file.dat", isUpload: true, nbytes: 100 * mb),
+        ];
+        vm.RefreshCommand.Execute(null);
+        await HeadlessSync.WaitUntilAsync(() => download.Data.Fraction == 0.25);
+        Layout(window);
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.Equal(new[] { upload, download }, DisplayedHolders(view));
+        Assert.Same(download, view.Grid.SelectedItem);
+
+        await manager.DisposeAsync();
         window.Close();
     }
 
