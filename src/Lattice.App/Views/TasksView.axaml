@@ -26,9 +26,20 @@
     <Style Selector="DataGridRow.suspended">
       <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
     </Style>
-    <!-- Progress-fill Border: accent normally, disabled-gray for suspended tasks. -->
+    <!-- Progress-fill Border: accent normally, disabled-gray for suspended tasks.
+         The bound Width updates immediately (value-first); the 200 ms easyEase width
+         transition is cosmetic and never gates the data (design card 1h / spec §11). -->
     <Style Selector="Border.progressFill">
       <Setter Property="Background" Value="{DynamicResource LatticeAccentBrush}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Width" Duration="0:0:0.2">
+            <DoubleTransition.Easing>
+              <SplineEasing X1="0.33" Y1="0" X2="0.67" Y2="1" />
+            </DoubleTransition.Easing>
+          </DoubleTransition>
+        </Transitions>
+      </Setter>
     </Style>
     <Style Selector="Border.progressFill.suspended">
       <Setter Property="Background" Value="{DynamicResource LatticeDisabledBrush}" />

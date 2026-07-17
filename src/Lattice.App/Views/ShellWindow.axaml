@@ -3,6 +3,7 @@
         xmlns:ui="using:FluentAvalonia.UI.Controls"
         xmlns:vm="using:Lattice.App.ViewModels"
         xmlns:v="using:Lattice.App.Views"
+        xmlns:inf="using:Lattice.App.Infrastructure"
         xmlns:loc="using:Lattice.App.Localization"
         x:Class="Lattice.App.Views.ShellWindow"
         x:DataType="vm:ShellViewModel"
@@ -263,8 +264,17 @@
         </ui:FANavigationViewItem>
       </ui:FANavigationView.FooterMenuItems>
 
-      <ContentControl Content="{Binding CurrentPage}">
-        <ContentControl.DataTemplates>
+      <!-- View switch (design card 1h / spec §11): the incoming page fades in while rising
+           8px, the outgoing fades out, over 150 ms decelerateMid. TransitioningContentControl
+           assigns Content synchronously the moment CurrentPage changes, so the page's data is
+           bound before the transition plays — the motion is cosmetic and never delays a data
+           update (value-first). -->
+      <TransitioningContentControl x:Name="ViewHost" x:FieldModifier="public"
+                                   Content="{Binding CurrentPage}">
+        <TransitioningContentControl.PageTransition>
+          <inf:FadeSlidePageTransition />
+        </TransitioningContentControl.PageTransition>
+        <TransitioningContentControl.DataTemplates>
           <DataTemplate DataType="vm:PlaceholderViewModel">
             <v:PlaceholderView />
           </DataTemplate>
@@ -283,8 +293,8 @@
           <DataTemplate DataType="vm:EventLogViewModel">
             <v:EventLogView />
           </DataTemplate>
-        </ContentControl.DataTemplates>
-      </ContentControl>
+        </TransitioningContentControl.DataTemplates>
+      </TransitioningContentControl>
     </ui:FANavigationView>
   </Panel>
 </Window>
