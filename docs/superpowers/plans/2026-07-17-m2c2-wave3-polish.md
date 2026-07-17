@@ -70,10 +70,19 @@ fidelity, `d70406f`), and **#87** (#86 view-owned order, `786f823`). Below is wh
 already folded in, verified against the current tree, and what genuinely remains. **Scope of this
 wave = the "REMAINS" rows.** Dropped items are listed with the reason.
 
+> **Reconciliation-methodology note (corrections during Codex review, PR #89).** The first draft of
+> this table marked two items "DONE" by *inferring* completion from a grep hit rather than reading
+> the implementing behavior — both were wrong and Codex caught both: (1) filled nav icons (the
+> code-behind `UpdateMenuIcons` swap was missed → over-scoped), and (2) rail auto-collapse (a
+> height-fit subscription was mis-read as a width-collapse driver → under-scoped, dropped a real
+> requirement). Every "DONE / already-landed" verdict in the table above has since been re-checked
+> **against the implementing code, not a keyword match.** This is the expected outcome of routing a
+> single-author draft through the normal review loop (memory: *own-output-not-pre-reviewed*).
+
 | Deferred-visual item (issue #32 / decisions §9) | Status after #84/#74/#87 | Evidence (current tree) | Verdict |
 |---|---|---|---|
-| **InfoBadge (nav counts)** | **DONE (core)** | `FAInfoBadge` bound to Event-log unread — `Views/ShellWindow.axaml:113-115`; `EventLogViewModel.cs:58` computes the count; `ShellViewModel.cs:158`. | **Dropped from core scope.** Only "per-host InfoBadge refinements beyond current behavior" (decisions §9) could remain, and the design package specs a badge only on the Event-log nav item — no per-host nav badge is specified. Treated as **not required**; if the owner wants more during the walkthrough, file a follow-up. |
-| **Window-width breakpoints** | **DONE** | `Views/TasksView.axaml.cs:48-188` sheds Elapsed→Application on **window-width** thresholds (≥1280/1100/1000, card `2f`/`1i` authoritative — comment cites the window-width-not-pane-width fix, PR #28); rail auto-collapse to 48px via `ShellWindow.axaml.cs:73` Nav-bounds subscription; `MinWidth=1000 MinHeight=700`. | **Dropped from scope.** Design sheds only Tasks columns; other grids have no shed list. Residual is a *walkthrough check item* (resize hits all breakpoints), not code. |
+| **InfoBadge (nav counts)** | **DONE (Event-log unread)** | `FAInfoBadge Value="{Binding EventLogUnread}" IsVisible="{Binding HasEventLogUnread}"` — `Views/ShellWindow.axaml:113-115`; count from `EventLogViewModel.cs:58` / `ShellViewModel.cs:158`. (Direct XAML binding, verified by reading — not inferred.) | **Dropped from scope.** The Event-log unread badge is wired. Whether the HTML spec calls for additional per-view/per-host nav badges is a **walkthrough verify-against-spec item** (card `1c`/`1e`), not asserted here; if the owner finds a missing badge during the walkthrough, file a follow-up. |
+| **Window-width breakpoints** | **PARTIAL** | **Column-shed DONE:** `Views/TasksView.axaml.cs` `ApplyColumnVisibility(BreakpointWidth)` sheds Application/Elapsed on **window-width** (`BreakpointWidth => _topLevel.Bounds.Width`, card `2f`/`1i`, PR #28). **Rail auto-collapse NOT implemented:** `ShellWindow.axaml:72` pins `PaneDisplayMode="Left"` (always-open pane); the `ShellWindow.axaml.cs:73` Bounds subscription feeds **height** into `SetRailViewportHeight` (the flat↔grouped fit math, decisions §3), **not** a width→pane-collapse driver; no handler sets `IsPaneOpen`/`PaneDisplayMode` at the 1100 breakpoint (the `#Nav.IsPaneOpen` refs are consumers that hide text when compact). *(Corrected per Codex P2 on PR #89 — the original "DONE" read inferred rail-collapse from the Bounds subscription without reading that it drives height, not width.)* | **Column-shed dropped (done); rail auto-collapse REMAINS → PR E.** |
 | **Filled nav icons (selected/active)** | **MOSTLY DONE** | The four **view** items already swap outline→filled at runtime: `ShellWindow.axaml.cs:228-241` `UpdateMenuIcons()` resolves `IconFilledKey` when selected / `IconKey` otherwise, called on first render (`:85`) and on every selection change (`:222`); covered by `ShellRailTests`. The XAML `*Regular` `IconSource` (`ShellWindow.axaml:87-112`) is only the initial value the code-behind overwrites. **Gap:** the **Settings** footer item (`ShellWindow.axaml:242-245`) hard-codes `IconSettingsRegular` and sits outside the `_shell.Views` loop, so it never fills when Settings is active. `IconSettingsFilled` is already defined. *(Reconciliation corrected per Codex P2 on PR #89 — the original "NOT wired" read grepped only the XAML and missed the code-behind runtime swap.)* | **REMAINS (Settings item only) → PR B.** |
 | **Mica-adjacent polish (#11)** | **NOT wired** | `ShellWindow.axaml:12` requests `TransparencyLevelHint="Mica, None"` but `:13` sets an **opaque** `Background="{DynamicResource LatticeCanvasBrush}"` (`Tokens.axaml:7,30` = `#FAFAFA`/`#1F1F1F` solids); nothing reacts to `ActualTransparencyLevel`. #11 comment (2026-07-11) confirms Mica is invisible even on Win11 today. | **REMAINS → PR A** (folds #11's code half). On-hardware verification stays in **#11**. |
 | **Motion / transition polish** (spec §11 / card `1h`) | **PARTIAL** | Present: `Connecting` spinner (`ShellWindow.axaml:29` infinite animation), Projects chevron transform 120 ms (`ProjectsView.axaml:44-47`). Deliberately **instant** (owner visual verdict, #74): DataGrid row hover — *no* fade (`DataGridStyles.axaml:143-155`, documented). Missing vs card `1h`: view-switch (`ShellWindow.axaml:248` `ContentControl` has no `PageTransition`), progress-bar width, row enter/remove, transfer completed-row fade-out, expander height, **reduce-motion** gate (none anywhere). | **REMAINS → PR C1 + PR C2** (largest chunk). |
@@ -205,6 +214,42 @@ coverage; geometry identity is readable headlessly.
 **Owner gate (VISUAL):** one screenshot of the rail with Settings active (filled Settings glyph) →
 owner eyeball.
 
+### PR E — Responsive rail auto-collapse (1100–1279 → 48px compact)
+
+**Goal:** implement the missing responsive breakpoint (design card `1i`; README:106) — the nav/
+hosts rail **auto-collapses to the 48px compact pane** when window width is in **1100–1279**, and
+is fully open (260px) at **≥1280**. Today `PaneDisplayMode="Left"` pins the pane open at every
+width; compact is reachable only via the manual pane toggle, never by width. (Discovered by Codex
+P2 on PR #89 — see reconciliation.)
+
+**Contract-level tasks** (Sonnet-tier; judgment-routing as above; **avalonia-docs REQUIRED**):
+
+1. Drive the pane state from **window width** at the design breakpoint: width ≥ 1280 → open
+   (260px); 1100 ≤ width < 1280 → compact (48px). avalonia-docs FIRST: whether FA
+   `FANavigationView` supports adaptive `PaneDisplayMode="Auto"` + settable
+   `CompactModeThresholdWidth`/`ExpandedModeThresholdWidth` (or equivalent). If those can be set to
+   the **design 1i** thresholds, use them (design is authoritative over FA defaults — cite `1i`).
+   If FA's adaptive thresholds cannot be pinned to 1100/1280, drive `IsPaneOpen` from a width
+   handler instead, mirroring TasksView's `BreakpointWidth => _topLevel.Bounds.Width` pattern —
+   **window-width, NOT pane-relative width** (the PR #28 landmine).
+2. **Invariants:** the existing consumers already react to `IsPaneOpen` correctly (row-text hides,
+   icons-only via `#Nav.IsPaneOpen`; `SetRailPaneCompact` force-expands Healthy so icons show,
+   decisions §5) — this PR adds only the width→collapse *driver* and must not change those
+   consumers; the manual pane toggle still works; the height-driven flat↔grouped fit math
+   (`SetRailViewportHeight`) is orthogonal and untouched.
+
+**Machine gate (CORRECTNESS):** headless — resize the window to ~1200px → `Nav.IsPaneOpen` is
+false (compact); resize to ~1300px → true (open); the crossing sits at the design threshold. Real
+machine signal (pane state readable headlessly); dovetails with the existing `ShellRailTests`
+compact pins (`Collapsed_pane_keeps_the_all_hosts_sentinel_icon_only`).
+
+**Owner gate (VISUAL):** one screenshot at ~1200px showing the 48px compact rail → owner eyeball.
+
+**Dependency:** independent of #67 (shell-level, no view fixture) and of motion — runs alongside
+PR A/B, ahead of #67. **PR D (compact grouped rendering) reads more naturally after PR E**, since
+E is what makes the compact rail reachable by width (D is also reachable via the manual toggle, so
+this is a soft ordering, not a hard block).
+
 ### PR C1 — Motion: view-switch + progress-bar width
 
 **Goal:** the two highest-visibility motions from card `1h`.
@@ -327,10 +372,11 @@ Checklist artifact contents (the executor writes the checklist; the owner ticks 
   ceiling). **PRs C1 and C2 add headless motion tests over the view fixtures → they build on the
   consolidated fixture and must sequence AFTER #67 merges.** Writing new per-view headless copies
   before #67 would regrow exactly what #67 consolidates.
-- **PR A and PR B do not touch the view fixtures** (Mica policy has its own unit test; the icon-swap
-  test targets the shell nav, not a data view) → they can proceed in parallel with / ahead of #67.
-- Suggested order: **A, B (parallel, pre-/independent of #67) → [#67 merges] → C1 → C2 → (D, owner-
-  optional) → owner walkthrough → close #32.**
+- **PRs A, B, and E do not touch the view fixtures** (Mica policy has its own unit test; the
+  icon-swap and rail-collapse tests target the shell nav, not a data view) → they can proceed in
+  parallel with / ahead of #67.
+- Suggested order: **A, B, E (parallel, shell-level, pre-/independent of #67) → [#67 merges] → C1 →
+  C2 → (D, owner-optional, after E so compact is width-reachable) → owner walkthrough → close #32.**
 - **Isolation:** any two execution chips that run in parallel get **separate worktrees** (git-index
   race rule); the controller integrates. Verify `git branch --show-current` before every controller
   commit after a chip runs.
