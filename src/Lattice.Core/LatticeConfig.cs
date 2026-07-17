@@ -6,7 +6,15 @@ namespace Lattice.Core;
 /// The persisted application configuration: polling cadence plus the host list.
 /// Stored as camelCase JSON; writes are atomic (tmp file + rename).
 /// </summary>
-public sealed record LatticeConfig(int PollingIntervalSeconds, IReadOnlyList<HostConfig> Hosts)
+/// <param name="PollingIntervalSeconds">Steady-state polling interval, seconds.</param>
+/// <param name="Hosts">The registered hosts, in insertion order.</param>
+/// <param name="FullSpeedHiddenPolling">
+/// When true, the relaxed hidden-window polling floor is bypassed (issue #92). Appended
+/// LAST with a default so pre-#92 config.json files (no such key) deserialize unchanged
+/// to false — the missing-key-safe default trick, matching the Hosts fallback in Load.
+/// </param>
+public sealed record LatticeConfig(
+    int PollingIntervalSeconds, IReadOnlyList<HostConfig> Hosts, bool FullSpeedHiddenPolling = false)
 {
     /// <summary>Factory default: 5-second polling, no hosts.</summary>
     public static LatticeConfig Default { get; } = new(5, []);

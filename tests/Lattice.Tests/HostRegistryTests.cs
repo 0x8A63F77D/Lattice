@@ -89,6 +89,43 @@ public class HostRegistryTests
     }
 
     [Fact]
+    public void SetFullSpeedHiddenPolling_persists_and_raises_intervalchanged()
+    {
+        string path = TempPath();
+        var registry = new HostRegistry(LatticeConfig.Default, path);
+        List<RegistryChangedEventArgs> events = [];
+        registry.Changed += (_, e) => events.Add(e);
+
+        Assert.False(registry.FullSpeedHiddenPolling);
+
+        registry.SetFullSpeedHiddenPolling(true);
+        Assert.True(registry.FullSpeedHiddenPolling);
+        Assert.True(LatticeConfig.Load(path).FullSpeedHiddenPolling);
+        // Reuses IntervalChanged rather than adding a RegistryChangeKind case (plan Part 4).
+        Assert.Equal(RegistryChangeKind.IntervalChanged, events.Single().Kind);
+        Assert.Null(events.Single().Host);
+        // The polling interval itself is untouched by the flag change.
+        Assert.Equal(LatticeConfig.Default.PollingIntervalSeconds, registry.PollingIntervalSeconds);
+    }
+
+    [Fact]
+    public void SetFullSpeedHiddenPolling_is_noop_when_unchanged()
+    {
+        string path = TempPath();
+        var registry = new HostRegistry(LatticeConfig.Default, path);
+        List<RegistryChangedEventArgs> events = [];
+        registry.Changed += (_, e) => events.Add(e);
+
+        // Already false: setting false again neither persists nor raises.
+        registry.SetFullSpeedHiddenPolling(false);
+        Assert.Empty(events);
+
+        registry.SetFullSpeedHiddenPolling(true);
+        registry.SetFullSpeedHiddenPolling(true);
+        Assert.Single(events);
+    }
+
+    [Fact]
     public void Load_reads_existing_file()
     {
         string path = TempPath();
