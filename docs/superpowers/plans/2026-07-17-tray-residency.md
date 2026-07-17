@@ -43,14 +43,17 @@ Repo facts the design leans on:
 
 Presentation per project discipline: product-language consequence, steelmanned alternative, what-would-prove-me-wrong.
 
-### Q1. Hidden-state polling cadence — **configurable, default relaxed (60 s floor)** — OWNER DECISION (recommended default below)
+### Q1. Hidden-state polling cadence — **DECIDED (owner, 2026-07-17): configurable, default relaxed with a modest 30 s floor; BOINC-style split is the M4 evolution path**
 
-**Recommendation:** While the window is hidden, each host's effective polling interval becomes `max(configuredInterval, 60 s)`. A Settings toggle "Full-speed polling while in the tray" (default OFF) removes the floor. On every window restore, all monitors get an immediate `RequestRefresh()` burst fired *before* the window is shown. Honest semantics (the refresh is async — `RequestRefresh` wakes the poll loop, it does not block on the RPC): the first frame may briefly show the last-polled (≤60 s old) data, and fresh data lands one RPC round-trip later — sub-second on a LAN. The burst shrinks the user-visible staleness from "up to the next relaxed tick" to that round-trip.
+**Decision:** While the window is hidden, each host's effective polling interval becomes `max(configuredInterval, 30 s)`. A Settings toggle "Full-speed polling while in the tray" (default OFF) removes the floor. On every window restore, all monitors get an immediate `RequestRefresh()` burst fired *before* the window is shown. Honest semantics (the refresh is async — `RequestRefresh` wakes the poll loop, it does not block on the RPC): the first frame may briefly show the last-polled (≤30 s old) data, and fresh data lands one RPC round-trip later — sub-second on a LAN. The burst shrinks the user-visible staleness from "up to the next relaxed tick" to that round-trip.
 
-- **Product consequence:** with the window closed, Lattice wakes each host's TCP connection once a minute instead of every 2–60 s. Laptop users get near-zero background cost; on reopen, fresh data arrives within about a second of the window appearing (refresh burst). Future M4 notifications (task failures, unreachable hosts) arrive with ≤60 s latency in relaxed mode — acceptable for a monitoring tray, and the toggle exists for users who disagree.
-- **Steelmanned alternative (full speed by default):** BOINCTasks polls continuously and its users are accustomed to instant, always-hot data; the delta RPCs (`get_cc_status`/`get_results`) are a few KB each, negligible on a desktop main; a relaxed default makes the M4 notification latency non-deterministic up to 60 s. Rejected because: the owner's issue text leans relaxed; the refresh-burst-on-restore shrinks the *visible* symptom of relaxed polling to a sub-second flash of last-polled data; and battery cost is asymmetric (a laptop silently draining is worse than a notification arriving 40 s later).
-- **What would prove me wrong:** M4 notification requirements landing with a <60 s hard-latency budget, or owner-observed staleness on restore that outlives ~a second (would indicate the burst isn't wired right, which is a bug, not a design flaw).
-- Deliberately **not** a numeric setting: one boolean keeps the Settings surface flat; the 60 s floor is a named constant (`PollingCadencePolicy.HiddenFloorSeconds`), trivially changeable if taste says 30 or 120.
+**Evidence base (source study of the official BOINC Manager, [issue #92 comment](https://github.com/0x8A63F77D/Lattice/issues/92#issuecomment-5002876374); all citations pinned to `BOINC/boinc` master@`8372513`):**
+
+- **The "full stop while hidden" steelman is SOURCE-REFUTED.** The official Manager never stops polling when hidden. Its hidden-state guard ([MainDocument.cpp:1050](https://github.com/BOINC/boinc/blob/83725138b71c2712b31fadc9eebe750727cae9a6/clientgui/MainDocument.cpp#L1050)) pauses only the per-visible-tab *detail* RPCs (`get_results`, `get_project_status`, transfers, statistics, disk); the cheap/urgent layer stays hot precisely to feed the tray: `get_cc_status` at 1 s, `get_messages` every ~1 s **unconditionally**, `get_notices` at 60 s. `get_messages` is deliberately never gated because the daemon's message ring buffer is finite — slow polling can silently drop messages ([MainDocument.cpp:970](https://github.com/BOINC/boinc/blob/83725138b71c2712b31fadc9eebe750727cae9a6/clientgui/MainDocument.cpp#L970)), which makes an aggressive floor a **correctness** risk on busy hosts, not just a latency cost. This is why the floor is 30 s (modest, shape (c) in the research), not 60.
+- **Shape (b) — the BOINC-style light-status/heavy-detail split — is the OWNER-APPROVED M4 evolution path.** BOINC keeps a per-host cheap heartbeat (cc_status/messages/notices) at full speed while hidden and pauses only the heavy detail layer. Lattice's single combined snapshot poll cannot express that split today; adopting it means splitting the snapshot poll into a light status poll + heavy detail poll. **Trigger for doing that work:** M4 notification requirements needing sub-minute hidden-state liveness (BOINC targets ~1 s for tray state). **Warning recorded now:** that split changes `HostMonitor.cs` polling semantics, so the verification-sync contract (F# spec + Promela + probe inventory, CLAUDE.md) applies when that day comes.
+- **Product consequence (this issue, shape (c)):** with the window closed, Lattice polls each host at most every 30 s instead of every 2–60 s. Laptop background cost stays near-zero; message-gap exposure on busy hosts is half of what a 60 s floor would risk; on reopen, fresh data arrives within about a second of the window appearing (refresh burst). The toggle exists for users who want the hidden heartbeat at full configured speed.
+- **What would prove the floor wrong (concrete falsifiers from the source study):** (1) M4 landing a tray/notification signal that needs sub-minute liveness while hidden — that triggers the shape-(b) split rather than another floor tweak; (2) observed message gaps on a busy host whose floored interval outruns the daemon's buffer turnover.
+- Deliberately **not** a numeric setting: one boolean keeps the Settings surface flat; the 30 s floor is a named constant (`PollingCadencePolicy.HiddenFloorSeconds`), trivially changeable if evidence says otherwise.
 
 ### Q2. macOS Dock presence while tray-resident — **SETTLED: regular app, Dock icon stays** (framework evidence, not taste)
 
@@ -158,8 +161,9 @@ namespace Lattice.Core;
 /// </summary>
 public static class PollingCadencePolicy
 {
-    /// <summary>Relaxed floor while hidden: never poll faster than this (seconds).</summary>
-    public const int HiddenFloorSeconds = 60;
+    /// <summary>Relaxed floor while hidden: never poll faster than this (seconds).
+    /// 30, not 60 — get_messages gap risk on busy hosts bounds the floor (Q1).</summary>
+    public const int HiddenFloorSeconds = 30;
 
     public static int EffectiveIntervalSeconds(
         int configuredSeconds, bool windowVisible, bool fullSpeedHidden) =>
@@ -175,8 +179,9 @@ Transition table (test = exact `[Theory]` rows; `AllowedPollingIntervals` = 2, 5
 |---|---|---|---|
 | 2/5/10/30/60 | true | * | configured (unchanged) |
 | 2/5/10/30/60 | false | true | configured (unchanged) |
-| 2, 5, 10, 30 | false | false | **60** |
-| 60 | false | false | 60 |
+| 2, 5, 10 | false | false | **30** (floored) |
+| 30 | false | false | 30 (at the floor — passes through) |
+| 60 | false | false | 60 (above the floor — passes through) |
 
 **Manager invariant (I-CAD):** at every instant after any of {monitor created, visibility changed, `IntervalChanged` raised}, every live monitor's active interval equals `EffectiveIntervalSeconds(registry.PollingIntervalSeconds, visible, fullSpeedHidden)`. Single recompute funnel `ApplyCadence()` inside `HostMonitorManager`; the three triggers may not call `SetPollingInterval` directly.
 
@@ -298,7 +303,7 @@ Contract: append `bool FullSpeedHiddenPolling = false` as the LAST positional co
 
 **Files:** Modify `src/Lattice.Core/HostMonitorManager.cs`; Test `tests/Lattice.Tests/HostMonitorManagerTests.cs` (existing fake-client fixtures)
 
-Contract: private `_windowVisible = true`; `SetWindowVisible(bool)` + the `IntervalChanged` case both funnel into private `ApplyCadence()` (computes effective via policy, fans `SetPollingInterval` under `_gate`); `CreateMonitor` seeds with effective interval; `RequestRefreshAll()` forwards `RequestRefresh()` to all monitors. Invariant I-CAD verbatim in a doc comment. Tests: visibility flip changes the interval monitors receive (observable via existing fake/TimeProvider fixtures); host added while hidden starts at 60; `IntervalChanged` while hidden stays floored; full-speed flag bypasses floor. **Do not touch HostMonitor.cs** (Part 5 escalation rule; commit message states "no HostMonitor semantics changed → no verification-artifact update needed").
+Contract: private `_windowVisible = true`; `SetWindowVisible(bool)` + the `IntervalChanged` case both funnel into private `ApplyCadence()` (computes effective via policy, fans `SetPollingInterval` under `_gate`); `CreateMonitor` seeds with effective interval; `RequestRefreshAll()` forwards `RequestRefresh()` to all monitors. Invariant I-CAD verbatim in a doc comment. Tests: visibility flip changes the interval monitors receive (observable via existing fake/TimeProvider fixtures); host added while hidden starts at the 30 s floor; a 60 s-configured host stays at 60 while hidden (floor never *slows* an already-slow host); `IntervalChanged` while hidden stays floored; full-speed flag bypasses floor. **Do not touch HostMonitor.cs** (Part 5 escalation rule; commit message states "no HostMonitor semantics changed → no verification-artifact update needed").
 
 - [ ] Red-first per contract → green → full suite → commit `feat(core): window-visibility cadence input on HostMonitorManager (#92)` → push, PR B, Codex review
 
@@ -343,7 +348,7 @@ Machine-gated (CI + Codex, Tier 0): both policy transition tables (exhaustive), 
 
 - [ ] Close window → app stays in menu bar, Dock icon remains (Q2 expected behavior), BOINC data still updating when reopened
 - [ ] Menu-bar icon → menu shows "Show window"/"Exit"; Show restores window with prior size/position/view instantly (no reconnect flicker in the rail)
-- [ ] Reopen after >60 s hidden: fresh data lands within ~1 s of the window appearing (refresh burst; a brief flash of last-polled data is acceptable — what must NOT happen is data sitting stale until the next relaxed tick)
+- [ ] Reopen after >30 s hidden: fresh data lands within ~1 s of the window appearing (refresh burst; a brief flash of last-polled data is acceptable — what must NOT happen is data sitting stale until the next relaxed tick)
 - [ ] Dock icon click while hidden reopens the window (F10 path)
 - [ ] ⌘Q (app menu Quit) fully exits from both visible and hidden states; process gone
 - [ ] Settings: turn close-to-tray OFF → close button exits the app; turn back ON → residency returns
