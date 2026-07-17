@@ -21,6 +21,14 @@ public partial class App : Application
         {
             HostRegistry registry = LoadRegistryWithFallback(LatticeConfig.DefaultPath);
             Func<IGuiRpcClient> factory = () => new BoincGuiRpcClient();
+#if DEBUG
+            // DEBUG-only walkthrough aid (PR F): with LATTICE_SAMPLE_HOSTS set,
+            // inject a canned multi-host fleet through the same registry/monitor
+            // path as a real host, without touching the on-disk config. Off by
+            // default and absent from Release entirely (see SampleHost).
+            if (SampleHost.Enabled)
+                (registry, factory) = SampleHost.Compose(registry, factory, TimeProvider.System.GetUtcNow());
+#endif
             var manager = new HostMonitorManager(registry, factory, TimeProvider.System);
             var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
             var clock = new DispatcherUiClock();
