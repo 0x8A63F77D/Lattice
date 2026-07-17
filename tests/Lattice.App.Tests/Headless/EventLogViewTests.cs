@@ -13,35 +13,22 @@ using Lattice.App.Views;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
-using static Lattice.Tests.HeadlessLayout;
 
 namespace Lattice.App.Tests.Headless;
 
+// Composition root, dispatcher discipline and settle rules all come from the
+// shared HostGraphFixture — see its class doc. This suite adds only the view
+// hosting: which view it builds, and the window it renders in.
 public class EventLogViewTests
 {
-    private static (Window Window, EventLogView View, EventLogViewModel Vm,
-        HostRegistry Registry, HostMonitorManager Manager, Dictionary<string, FakeGuiRpcClient> Fakes) MakeView()
+    private static (HostGraphFixture Fx, Window Window, EventLogView View, EventLogViewModel Vm) MakeView()
     {
-        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-        var registry = new HostRegistry(new LatticeConfig(5, []), path);
-        var fakes = new Dictionary<string, FakeGuiRpcClient>();
-        var manager = new HostMonitorManager(registry, () => new RoutingGuiRpcClient(fakes), new FakeTimeProvider());
-        var store = new HostStore(registry, manager, new ImmediateUiDispatcher());
-        var vm = new EventLogViewModel(store);
+        var fx = new HostGraphFixture();
+        var vm = new EventLogViewModel(fx.Store);
         var view = new EventLogView { DataContext = vm };
-        var window = new Window { Width = 1280, Height = 800, Content = view };
-        return (window, view, vm, registry, manager, fakes);
-    }
-
-    private static HostConfig AddHost(
-        HostRegistry registry, Dictionary<string, FakeGuiRpcClient> fakes, string address)
-    {
-        var host = TestData.MakeHostConfig(name: address, address: address);
-        fakes[address] = new FakeGuiRpcClient();
-        registry.AddHost(host);
-        return host;
+        var window = fx.Host(view);
+        return (fx, window, view, vm);
     }
 
     private static DateTimeOffset T(int sec) =>
@@ -63,15 +50,15 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Warning_and_error_rows_carry_their_severity_classes()
     {
-        var (window, _, _, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, _) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id,
+        Raise(fx.Manager, host.Id,
             Msg(1, 1, "info", MessagePriority.Info),
             Msg(2, 2, "warn", MessagePriority.UserAlert),
             Msg(3, 3, "err", MessagePriority.InternalError));
-        Layout(window);
+        fx.Layout();
 
         var rows = window.GetVisualDescendants().OfType<DataGridRow>()
             .ToDictionary(r => ((EventLogRow)r.DataContext!).Data.Body);
@@ -95,7 +82,7 @@ public class EventLogViewTests
             Assert.NotNull(cell);
             Assert.Equal(20, (int)cell!.Bounds.Width);
         }
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- 2. Priority pill filters the grid ------------------------------
@@ -103,15 +90,15 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Turning_off_the_warning_pill_removes_warning_rows()
     {
-        var (window, _, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, vm) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id,
+        Raise(fx.Manager, host.Id,
             Msg(1, 1, "info", MessagePriority.Info),
             Msg(2, 2, "warn", MessagePriority.UserAlert),
             Msg(3, 3, "err", MessagePriority.InternalError));
-        Layout(window);
+        fx.Layout();
         Assert.Equal(3, vm.Rows.Count);
 
         // Drive the real pill control (two-way bound to ShowWarning), not the VM
@@ -121,11 +108,11 @@ public class EventLogViewTests
                 && tb.GetVisualDescendants().OfType<TextBlock>()
                     .Any(t => t.Text == Strings.EventLogPillWarning));
         warnPill.IsChecked = false;
-        Layout(window);
+        fx.Layout();
 
         Assert.False(vm.ShowWarning);
         Assert.Equal(["info", "err"], vm.Rows.Select(r => r.Data.Body));
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- 3. Following auto-scroll (observed-call seam) -------------------
@@ -133,20 +120,24 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Appending_a_batch_while_following_scrolls_the_last_row_into_view()
     {
-        var (window, view, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, view, vm) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
-        Layout(window);
+        fx.Layout();
         Assert.True(vm.IsFollowing); // default
 
         object? scrolled = null;
         view.ScrollRowIntoViewOverride = item => scrolled = item;
 
-        Raise(manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"), Msg(3, 3, "c"));
+        Raise(fx.Manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"), Msg(3, 3, "c"));
+        // Deliver the queued store post on this thread (the queue dispatcher's
+        // deterministic stand-in for the old immediate delivery); the VM append
+        // runs the view's follow auto-scroll synchronously in the same drain.
+        fx.Drain();
 
         Assert.NotNull(scrolled);
         Assert.Same(vm.Rows[^1], scrolled);
-        window.Close();
+        fx.Dispose();
     }
 
     // Badge flow: messages accrue while the Event log page is hidden, so the VM
@@ -156,11 +147,12 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Opening_the_log_with_prepopulated_rows_scrolls_to_the_newest()
     {
-        var (window, view, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, view, vm) = MakeView();
+        var host = fx.AddHost("host-a");
 
         // Populate BEFORE the view is shown/realized.
-        Raise(manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"), Msg(3, 3, "c"));
+        Raise(fx.Manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"), Msg(3, 3, "c"));
+        fx.Drain(); // deliver the batch to the (not-yet-shown) VM
         Assert.True(vm.IsFollowing);
         Assert.Equal(3, vm.Rows.Count);
 
@@ -168,28 +160,29 @@ public class EventLogViewTests
         view.ScrollRowIntoViewOverride = item => scrolled = item;
 
         window.Show();
-        Layout(window);
+        fx.Layout();
 
         Assert.Same(vm.Rows[^1], scrolled);
-        window.Close();
+        fx.Dispose();
     }
 
     [AvaloniaFact]
     public void No_auto_scroll_request_is_made_while_not_following()
     {
-        var (window, view, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, view, vm) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
-        Layout(window);
+        fx.Layout();
 
         vm.IsFollowing = false;
         var requests = 0;
         view.ScrollRowIntoViewOverride = _ => requests++;
 
-        Raise(manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"));
+        Raise(fx.Manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"));
+        fx.Drain(); // deliver the batch so "no scroll while not following" is genuinely exercised
 
         Assert.Equal(0, requests);
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- 4. Scrolling away from the bottom pauses Following --------------
@@ -197,12 +190,12 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Scrolling_away_from_the_bottom_pauses_following()
     {
-        var (window, _, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, vm) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id, ManyMessages(60));
-        Layout(window);
+        Raise(fx.Manager, host.Id, ManyMessages(60));
+        fx.Layout();
         Assert.True(vm.IsFollowing);
 
         var bar = VerticalScrollBar(window);
@@ -211,10 +204,10 @@ public class EventLogViewTests
 
         // Drive the offset away from the bottom, as a user drag would.
         bar.Value = bar.Maximum - 50;
-        Layout(window);
+        fx.Layout();
 
         Assert.False(vm.IsFollowing);
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- Feedback-loop guard (load-bearing) -----------------------------
@@ -226,27 +219,31 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Auto_scroll_offset_change_does_not_pause_following()
     {
-        var (window, _, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, vm) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id, ManyMessages(60));
-        Layout(window); // drains the initial auto-scroll's guard-clear posts
+        Raise(fx.Manager, host.Id, ManyMessages(60));
+        fx.Layout(); // drains the initial auto-scroll's guard-clear posts
         Assert.True(vm.IsFollowing);
 
         var bar = VerticalScrollBar(window);
         Assert.NotNull(bar);
 
         // A new message while Following arms the guard (ScrollToNewestIfFollowing
-        // sets _autoScrolling and posts a Background clear that has NOT run yet —
-        // no dispatcher pump between here and the offset move below).
-        Raise(manager, host.Id, Msg(61, 61, "newest", MessagePriority.Info));
+        // sets _autoScrolling and posts a Background clear to the REAL dispatcher).
+        // A BARE Drain delivers the store batch on this thread — arming the guard —
+        // WITHOUT pumping that Background clear (fx.Layout would RunJobs and clear
+        // it): the "no dispatcher pump between here and the offset move" the guard
+        // depends on is preserved exactly.
+        Raise(fx.Manager, host.Id, Msg(61, 61, "newest", MessagePriority.Info));
+        fx.Drain();
 
         // Simulate the offset moving off the bottom as the auto-scroll settles.
         bar!.Value = bar.Maximum - 50;
 
         Assert.True(vm.IsFollowing, "our own auto-scroll must not pause Following");
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- 5. Row height + teardown drain ---------------------------------
@@ -254,36 +251,36 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Log_rows_are_26px_tall()
     {
-        var (window, _, _, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, _) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"));
-        Layout(window);
+        Raise(fx.Manager, host.Id, Msg(1, 1, "a"), Msg(2, 2, "b"));
+        fx.Layout();
 
         var row = window.GetVisualDescendants().OfType<DataGridRow>().First();
         Assert.Equal(26, (int)row.Bounds.Height);
-        window.Close();
+        fx.Dispose();
     }
 
     [AvaloniaFact]
     public void Detaching_the_view_drains_all_row_class_subscriptions()
     {
-        var (window, view, _, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, view, _) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
 
-        Raise(manager, host.Id, Msg(1, 1, "a"));
-        Layout(window);
+        Raise(fx.Manager, host.Id, Msg(1, 1, "a"));
+        fx.Layout();
         Assert.True(view.RowSubscriptionCount > 0, "a realized row should have subscribed");
 
         // Shell navigation teardown: the view leaves the tree while ItemsSource
         // is untouched (no UnloadingRow fires) — detach must drain.
         window.Content = null;
-        Layout(window);
+        fx.Layout();
 
         Assert.Equal(0, view.RowSubscriptionCount);
-        window.Close();
+        fx.Dispose();
     }
 
     // ---- 6. Column header row (#55 / #57) --------------------------------
@@ -291,14 +288,14 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Event_log_has_a_visible_column_header_row_with_spec_labels()
     {
-        var (window, _, _, registry, manager, fakes) = MakeView();
+        var (fx, window, _, _) = MakeView();
         // Two hosts to earn the Host column: post-ScopeMachine, IsAllHostsScope keys on >1
         // registered host, so a single host hides Host (mirrors the Tasks/Transfers header tests).
-        var host = AddHost(registry, fakes, "host-a");
-        AddHost(registry, fakes, "host-b");
+        var host = fx.AddHost("host-a");
+        fx.AddHost("host-b");
         window.Show();
-        Raise(manager, host.Id, Msg(1, 1, "hello"));
-        Layout(window);
+        Raise(fx.Manager, host.Id, Msg(1, 1, "hello"));
+        fx.Layout();
 
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
         Assert.Equal(DataGridHeadersVisibility.Column, grid.HeadersVisibility);
@@ -310,17 +307,17 @@ public class EventLogViewTests
         Assert.Contains(Strings.ColHost, labels);
         Assert.Contains(Strings.ColProject, labels);
         Assert.Contains(Strings.EventLogColMessage, labels);
-        window.Close();
+        fx.Dispose();
     }
 
     [AvaloniaFact]
     public void Event_log_columns_are_resizable_via_header_edge_drag()
     {
-        var (window, _, _, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, _) = MakeView();
+        var host = fx.AddHost("host-a");
         window.Show();
-        Raise(manager, host.Id, Msg(1, 1, "hello"));
-        Layout(window);
+        Raise(fx.Manager, host.Id, Msg(1, 1, "hello"));
+        fx.Layout();
 
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
         Assert.True(grid.CanUserResizeColumns);
@@ -333,22 +330,22 @@ public class EventLogViewTests
         window.MouseDown(edge, MouseButton.Left, RawInputModifiers.None);
         window.MouseMove(target, RawInputModifiers.None);
         window.MouseUp(target, MouseButton.Left, RawInputModifiers.None);
-        Layout(window);
+        fx.Layout();
         Assert.True(header.Bounds.Width > start + 20, $"resize should widen Time: start={start}, now={header.Bounds.Width}");
-        window.Close();
+        fx.Dispose();
     }
 
     [AvaloniaFact]
     public void Severity_gutter_column_has_no_divider_in_body_or_header()
     {
-        var (window, _, _, registry, manager, fakes) = MakeView();
+        var (fx, window, _, _) = MakeView();
         // Two hosts so IsAllHostsScope is true and the Host column is present — the header order
         // asserted below (Time·Host·Project·severity·Message) needs it (post-ScopeMachine >1-host rule).
-        var host = AddHost(registry, fakes, "host-a");
-        AddHost(registry, fakes, "host-b");
+        var host = fx.AddHost("host-a");
+        fx.AddHost("host-b");
         window.Show();
-        Raise(manager, host.Id, Msg(1, 1, "hello"));
-        Layout(window);
+        Raise(fx.Manager, host.Id, Msg(1, 1, "hello"));
+        fx.Layout();
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
 
         var iconCells = grid.GetVisualDescendants().OfType<DataGridCell>()
@@ -368,15 +365,15 @@ public class EventLogViewTests
         // headers: Time(0) Host(1) Project(2) severity(3) Message(4)
         Assert.False(headers[3].AreSeparatorsVisible); // severity gutter
         Assert.True(headers[2].AreSeparatorsVisible);  // Project keeps its separator
-        window.Close();
+        fx.Dispose();
     }
 
     [AvaloniaFact]
     public void Event_log_default_column_widths_match_the_spec()
     {
-        var (window, _, _, _, _, _) = MakeView();
+        var (fx, window, _, _) = MakeView();
         window.Show();
-        Layout(window);
+        fx.Layout();
         var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
         double W(int i) => grid.Columns[i].Width.Value;
         Assert.Equal(128, W(0)); // Time
@@ -385,7 +382,7 @@ public class EventLogViewTests
         Assert.Equal(20,  W(3)); // severity
         Assert.False(grid.Columns[4].Width.IsStar); // Message fixed (not a star — Finding A)
         Assert.Equal(560, W(4)); // Message
-        window.Close();
+        fx.Dispose();
     }
 
     private static Message[] ManyMessages(int count) =>
@@ -398,21 +395,26 @@ public class EventLogViewTests
     [AvaloniaFact]
     public void Entering_the_log_while_following_lands_at_the_bottom()
     {
-        var (window, _, vm, registry, manager, fakes) = MakeView();
-        var host = AddHost(registry, fakes, "host-a");
+        var (fx, window, _, vm) = MakeView();
+        var host = fx.AddHost("host-a");
 
         // Rows accrue while the page is hidden (arrived before the view is realized).
-        Raise(manager, host.Id, ManyMessages(80));
+        // Drain now, BEFORE Show(), so the 80 rows are genuinely in the VM ahead of
+        // the first mount — otherwise the queued batch would only land at Layout()'s
+        // drain after Show(), quietly turning this fresh-mount scenario into a
+        // visible-view append (Codex P2; matches the sibling prepopulated-row test).
+        Raise(fx.Manager, host.Id, ManyMessages(80));
+        fx.Drain();
         Assert.True(vm.IsFollowing);
 
         window.Show();
-        Layout(window);
+        fx.Layout();
 
         var bar = VerticalScrollBar(window);
         Assert.NotNull(bar);
         Assert.True(bar!.Maximum > 1, "80 rows must overflow the viewport");
         Assert.True(bar.Value >= bar.Maximum - 0.5,
             $"entering while Following should sit at the newest row: value={bar.Value}, max={bar.Maximum}");
-        window.Close();
+        fx.Dispose();
     }
 }

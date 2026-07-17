@@ -6,66 +6,30 @@ using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
-using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
 
 /// <summary>
-/// Fixture idiom copied verbatim from TasksViewModelTests: RoutingGuiRpcClient
-/// hands out a per-host fake, LockingUiDispatcher serializes concurrent
-/// monitor callbacks under a single lock (safe for tests running more than
-/// one live monitor at a time).
+/// Composition root, dispatcher discipline and settle rules all come from the
+/// shared <see cref="HostGraphFixture"/> — see its class doc. This suite owns
+/// only what differs per suite: which VM it builds.
 /// </summary>
 public class TransfersViewModelTests : IAsyncLifetime
 {
-    private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-    private readonly string _uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
-    private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
-    private HostRegistry _registry = null!;
-    private HostMonitorManager _manager = null!;
-    private HostStore _store = null!;
-    private ManualUiClock _clock = null!;
-    private UiStateStore _uiStore = null!;
-    private DensityPreference _density = null!;
-    // The monitor's clock, captured (not inlined) so a fact can drive poll/backoff
-    // transitions by advancing virtual time — the deterministic idiom the sibling
-    // HostMonitorPollingTests use (Wait.AdvanceUntilAsync). Facts that never advance
-    // it leave the monitor frozen between the immediate first poll and explicit
-    // RequestRefresh/UpdateHost wakes.
-    private FakeTimeProvider _monitorTime = null!;
+    private HostGraphFixture _fx = null!;
 
     public ValueTask InitializeAsync()
     {
-        _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _monitorTime = new FakeTimeProvider();
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), _monitorTime);
-        _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
-        _clock = new ManualUiClock();
-        _uiStore = new UiStateStore(_uiPath);
-        // Shared, as ShellViewModel wires Tasks/Transfers in production — the
-        // clobber-direction fact below constructs a second, sibling VM and
-        // relies on both funneling through the same DensityPreference/store.
-        _density = new DensityPreference(_uiStore);
+        _fx = new HostGraphFixture();
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _manager.DisposeAsync();
-        File.Delete(_path);
-        File.Delete(_uiPath);
-    }
+    public async ValueTask DisposeAsync() => await _fx.DisposeAsync();
 
-    private HostConfig AddHost(string address, FakeGuiRpcClient fake)
-    {
-        var host = TestData.MakeHostConfig(name: address, address: address);
-        _fakes[address] = fake;
-        _registry.AddHost(host);
-        return host;
-    }
+    private HostConfig AddHost(string address, FakeGuiRpcClient fake) => _fx.AddHost(address, fake);
 
-    private TransfersViewModel MakeVm() => new(_store, _clock, _density);
+    private TransfersViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.Density);
 
     [Fact]
     public async Task Single_host_registry_is_not_aggregate_presentation()
@@ -81,8 +45,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         Assert.True(vm.Scope.IsAllHosts);
         Assert.False(vm.IsAllHostsScope);
@@ -104,8 +68,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         var hostA = AddHost("host-a", fakeA);
         AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2);
 
         Assert.True(vm.IsAllHostsScope);
         Assert.Contains(vm.Rows, r => r.Data.Name == "file_a" && r.Data.Host == "host-a");
@@ -128,17 +92,17 @@ public class TransfersViewModelTests : IAsyncLifetime
         };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         var holder = vm.Rows[0];
         var events = 0;
         vm.Rows.CollectionChanged += (_, _) => events++;
 
         // Steady-state ticks with identical data: zero CollectionChanged events.
-        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
-        _clock.Advance(TimeSpan.FromSeconds(1));
-        _clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Now = _fx.Store.Hosts[0].Snapshot!.Timestamp;
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Equal(0, events);
         Assert.Same(holder, vm.Rows[0]);
@@ -146,8 +110,8 @@ public class TransfersViewModelTests : IAsyncLifetime
 
         // Progress change: same key, holder identity survives, Data updates in place.
         t = TestData.MakeTransfer(name: "file_1", nbytes: 100 * mb, bytesXferred: 75 * mb);
-        _store.RequestRefresh(null);
-        await Wait.UntilAsync(() => vm.Rows[0].Data.Fraction == 0.75);
+        _fx.Store.RequestRefresh(null);
+        await _fx.SettleAsync(() => vm.Rows[0].Data.Fraction == 0.75);
 
         Assert.Same(holder, vm.Rows[0]);
         Assert.Equal("75 / 100 MB", holder.Data.ProgressText);
@@ -170,8 +134,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 3);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 3);
 
         Assert.Equal(
             ["z_file", "a_file", "b_file"],
@@ -197,8 +161,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2);
 
         var upload = vm.Rows.Single(r => r.Key.IsUpload);
         var download = vm.Rows.Single(r => !r.Key.IsUpload);
@@ -215,8 +179,8 @@ public class TransfersViewModelTests : IAsyncLifetime
             TestData.MakeTransfer(name: "file.dat", isUpload: false, nbytes: 100 * mb, bytesXferred: 25 * mb),
             TestData.MakeTransfer(name: "file.dat", isUpload: true, nbytes: 100 * mb),
         ];
-        _store.RequestRefresh(null);
-        await Wait.UntilAsync(() => download.Data.Fraction == 0.25);
+        _fx.Store.RequestRefresh(null);
+        await _fx.SettleAsync(() => download.Data.Fraction == 0.25);
 
         // In-place updates only: no source event, no view event, same holders,
         // and the tie keeps its first-seen display order.
@@ -244,8 +208,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2);
 
         vm.RowsView.SortDescriptions.Clear();
         vm.RowsView.SortDescriptions.Add(
@@ -258,8 +222,8 @@ public class TransfersViewModelTests : IAsyncLifetime
             TestData.MakeTransfer(name: "small", nbytes: 100 * mb, bytesXferred: 75 * mb),
             TestData.MakeTransfer(name: "large", nbytes: 100 * mb, bytesXferred: 50 * mb),
         ];
-        _store.RequestRefresh(null);
-        await Wait.UntilAsync(() => vm.Rows.Single(r => r.Data.Name == "small").Data.Fraction == 0.75);
+        _fx.Store.RequestRefresh(null);
+        await _fx.SettleAsync(() => vm.Rows.Single(r => r.Data.Name == "small").Data.Fraction == 0.75);
 
         Assert.Equal(["large", "small"], vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name));
     }
@@ -275,21 +239,21 @@ public class TransfersViewModelTests : IAsyncLifetime
         };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
-        var nextRequestTime = _store.Hosts[0].Snapshot!.Transfers.Single().Transfer.NextRequestTime!.Value;
+        var nextRequestTime = _fx.Store.Hosts[0].Snapshot!.Transfers.Single().Transfer.NextRequestTime!.Value;
 
         // Sync the manual clock so the countdown reads exactly 10s remaining,
         // independent of real wall-clock timing (the state classification
         // itself was already fixed at poll time by SnapshotBuilder). Setting
         // Now alone does not trigger a Rebuild — only Advance fires Tick — so
         // land one second short first, then Advance onto the checkpoint.
-        _clock.Now = nextRequestTime - TimeSpan.FromSeconds(11);
-        _clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Now = nextRequestTime - TimeSpan.FromSeconds(11);
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
         Assert.Equal("Retry in 00:10 (attempt 2)", vm.Rows[0].Data.StatusText);
 
-        _clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Equal("Retry in 00:09 (attempt 2)", vm.Rows[0].Data.StatusText);
     }
@@ -302,16 +266,16 @@ public class TransfersViewModelTests : IAsyncLifetime
         var fake = new FakeGuiRpcClient { OnGetFileTransfers = () => Task.FromResult(transfers) };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2);
 
         var survivor = vm.Rows.Single(r => r.Data.Name == "file_2");
         var actions = new List<NotifyCollectionChangedAction>();
         vm.Rows.CollectionChanged += (_, e) => actions.Add(e.Action);
 
         transfers = [TestData.MakeTransfer(name: "file_2")];
-        _store.RequestRefresh(null);
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Store.RequestRefresh(null);
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         Assert.Same(survivor, vm.Rows[0]);
         Assert.Equal("file_2", vm.Rows[0].Data.Name);
@@ -328,8 +292,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         Assert.True(vm.IsLoading);
         Assert.False(vm.IsEmpty);
 
-        _manager.Start();
-        await Wait.UntilAsync(() => !vm.IsLoading, "loading should clear once the first snapshot lands");
+        _fx.Start();
+        await _fx.SettleAsync(() => !vm.IsLoading, "loading should clear once the first snapshot lands");
 
         Assert.False(vm.IsLoading);
         Assert.True(vm.IsEmpty);
@@ -350,8 +314,8 @@ public class TransfersViewModelTests : IAsyncLifetime
         };
         AddHost("host-a", fake);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 3);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 3);
 
         // Literal pin (not indirected through Strings.TransfersCountsFmt): the
         // format string itself, not just the arg values, is under test here.
@@ -380,23 +344,23 @@ public class TransfersViewModelTests : IAsyncLifetime
         AddHost("host-a", fakeA);
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 3, "both hosts should contribute rows");
+        await _fx.SettleAsync(() => vm.Rows.Count == 3, "both hosts should contribute rows");
         Assert.Equal("3 transfers · 2 up · 1 down", vm.CountsText);
 
         // Kill B the same way the partial-bar tests do — poll failure, then auth
         // failure on reconnect — parking it in AuthFailed with its snapshot cached.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
-        _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
-        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        _fx.Store.RequestRefresh(hostB.Id);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _fx.Store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 1, "the dead host's stale rows should drop out");
+        await _fx.SettleAsync(() => vm.Rows.Count == 1, "the dead host's stale rows should drop out");
         Assert.Equal("1 transfers · 0 up · 1 down", vm.CountsText);
     }
 
@@ -411,14 +375,14 @@ public class TransfersViewModelTests : IAsyncLifetime
         var hostA = AddHost("host-a", fakeA);
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
 
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 2, 1),
             "partial bar should appear for the AuthFailed host with B's coverage counted");
         Assert.True(vm.ShowPartialBar);
@@ -431,14 +395,14 @@ public class TransfersViewModelTests : IAsyncLifetime
         // reconnect — the id-set grows from {A} to {A, B}.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnAuthorize = _ => Task.FromResult(false);
-        _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
-        _store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
+        _fx.Store.RequestRefresh(hostB.Id);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        _fx.Store.RequestRefresh(hostB.Id); // skip the remaining backoff, retry now
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.AuthFailed);
 
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 2, 2, 0),
             "partial bar should reappear: the unreachable id-set changed");
         Assert.True(vm.ShowPartialBar);
@@ -467,10 +431,10 @@ public class TransfersViewModelTests : IAsyncLifetime
         AddHost("host-b", fakeB);
         var hostC = AddHost("host-c", fakeC);
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 2),
             "A parks in AuthFailed while B and C feed the grid");
         Assert.True(vm.ShowPartialBar);
@@ -478,7 +442,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         vm.DismissPartialCommand.Execute(null);
         Assert.False(vm.ShowPartialBar);
 
-        await Wait.UntilAsync(() => fakeC.Calls.Count(c => c == "get_cc_status") > 0,
+        await _fx.SettleAsync(() => fakeC.Calls.Count(c => c == "get_cc_status") > 0,
             "C's first poll should be observed before the test breaks it");
 
         // Hold C in the Retrying tier (below the Unreachable threshold, so the
@@ -487,16 +451,16 @@ public class TransfersViewModelTests : IAsyncLifetime
         // failure) -> Retrying, never Connected again.
         fakeC.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeC.OnConnect = (_, _) => throw new BoincConnectionException("still down");
-        _store.RequestRefresh(hostC.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostC.Id).Status.State == HostConnectionState.Retrying);
-        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostC.Id).Snapshot);
+        _fx.Store.RequestRefresh(hostC.Id);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostC.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_fx.Store.Hosts.Single(h => h.Config.Id == hostC.Id).Snapshot);
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 1, "C's stale rows should drop out");
+        await _fx.SettleAsync(() => vm.Rows.Count == 1, "C's stale rows should drop out");
 
         // Unreachable tier is still just {A} — but the bar must reappear
         // because the covered set shrank from {B, C} to {B}.
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(
             () => vm.ShowPartialBar
                   && vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 1),
             "the bar must reappear: the covered set shrank even though the unreachable set stayed {A}");
@@ -513,12 +477,12 @@ public class TransfersViewModelTests : IAsyncLifetime
         AddHost("host-a", fakeA);
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected);
+        _fx.Start();
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected);
 
         // Break B and drive it to AuthFailed by advancing virtual time, exactly as the
-        // sibling HostMonitorPollingTests reconnect facts do (Wait.AdvanceUntilAsync).
+        // sibling HostMonitorPollingTests reconnect facts do (fixture AdvanceUntilAsync).
         // Repeated advances fire the steady-state poll wait (-> failing tick -> Retrying)
         // and then the backoff wait (-> reconnect -> rejected auth -> AuthFailed). This is
         // race-free by construction: a wait the monitor enters AFTER one advance is caught
@@ -527,7 +491,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         // heal below, stranding a broken B in Connected on the frozen clock (the ~5 s
         // timeout this fact used to flake with under load).
         await AdvanceUntilAuthFailedAsync(hostB, fakeB, "poll boom");
-        await Wait.UntilAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
+        await _fx.SettleAsync(() => vm.ShowPartialBar, "first outage should raise the bar");
 
         vm.DismissPartialCommand.Execute(null);
         Assert.False(vm.ShowPartialBar);
@@ -536,9 +500,9 @@ public class TransfersViewModelTests : IAsyncLifetime
         // recovery goes through UpdateHost (same address — routing stays valid).
         fakeB.OnGetCcStatus = () => Task.FromResult(FakeGuiRpcClient.DefaultStatus);
         fakeB.OnAuthorize = _ => Task.FromResult(true);
-        _registry.UpdateHost(hostB with { Name = "host-b-healed" });
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected,
+        _fx.Registry.UpdateHost(hostB with { Name = "host-b-healed" });
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Connected,
             "B should recover after the config update");
         Assert.False(vm.ShowPartialBar, "no outage, no bar");
 
@@ -546,7 +510,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         // is a NEW outage after a full recovery — it must be reported. Same
         // clock-driven poll-fail -> backoff -> AuthFailed cascade as the first break.
         await AdvanceUntilAuthFailedAsync(hostB, fakeB, "poll boom again");
-        await Wait.UntilAsync(() => vm.ShowPartialBar,
+        await _fx.SettleAsync(() => vm.ShowPartialBar,
             "the bar must reappear for a new outage after full recovery");
     }
 
@@ -558,8 +522,8 @@ public class TransfersViewModelTests : IAsyncLifetime
     {
         fake.OnGetCcStatus = () => throw new BoincConnectionException(error);
         fake.OnAuthorize = _ => Task.FromResult(false);
-        await Wait.AdvanceUntilAsync(_monitorTime,
-            () => _store.Hosts.Single(h => h.Config.Id == host.Id).Status.State == HostConnectionState.AuthFailed,
+        await _fx.AdvanceUntilAsync(
+            () => _fx.Store.Hosts.Single(h => h.Config.Id == host.Id).Status.State == HostConnectionState.AuthFailed,
             TimeSpan.FromSeconds(10));
     }
 
@@ -576,17 +540,17 @@ public class TransfersViewModelTests : IAsyncLifetime
         // before persisting, so this holds regardless of write order.
         AddHost("host-a", new FakeGuiRpcClient());
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => !vm.IsLoading);
+        _fx.Start();
+        await _fx.SettleAsync(() => !vm.IsLoading);
 
-        using var tasksVm = new TasksViewModel(_store, _clock, _uiStore, _density);
+        using var tasksVm = new TasksViewModel(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density);
         tasksVm.SetColumnPreference("Elapsed", false);
 
         // Transfers only ever touches CompactDensity (via the shared
         // DensityPreference), predating Tasks' ColumnVisibility write.
         vm.IsCompact = true;
 
-        var reloaded = _uiStore.Load();
+        var reloaded = _fx.UiState.Load();
         Assert.True(reloaded.CompactDensity, "Transfers' own density change must be saved");
         Assert.True(reloaded.ColumnVisibility.TryGetValue("Elapsed", out var elapsedVisible),
             "Tasks' column preference must survive Transfers' later save");
@@ -615,10 +579,10 @@ public class TransfersViewModelTests : IAsyncLifetime
         var hostB = AddHost("host-b", fakeB);
         AddHost("host-c", fakeC);
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(() => vm.Rows.Count == 2, "B and C should contribute rows");
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 2),
             "A parks in AuthFailed while B and C feed the grid");
 
@@ -629,17 +593,17 @@ public class TransfersViewModelTests : IAsyncLifetime
         // before attempt 4 would promote it to the Unreachable tier).
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
-        _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
-        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+        _fx.Store.RequestRefresh(hostB.Id);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 1, "B's stale rows should drop out");
+        await _fx.SettleAsync(() => vm.Rows.Count == 1, "B's stale rows should drop out");
         Assert.Equal("c_task", Assert.Single(vm.Rows).Data.Name);
 
         // Unreachable tier is still just {A} (B is Retrying, below the tier),
         // but coverage must now count ONLY C — the sole host feeding the grid.
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.TransfersPartialFmt, 1, 3, 1),
             "covered count should shrink to the hosts actually in the grid");
     }
