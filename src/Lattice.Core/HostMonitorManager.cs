@@ -17,6 +17,10 @@ public sealed class HostMonitorManager : IAsyncDisposable
     private readonly object _gate = new();
     private readonly Dictionary<Guid, HostMonitor> _monitors = [];
     private bool _started;
+    // The window's visibility, the sole tray-residency cadence input (issue #92).
+    // Guarded by _gate alongside _monitors; defaults visible (the app boots with the
+    // window shown). Monitors never see this — only the effective interval it produces.
+    private bool _windowVisible = true;
 
     /// <summary>Creates monitors for every registered host and subscribes to registry changes.</summary>
     public HostMonitorManager(HostRegistry registry, Func<IGuiRpcClient> clientFactory, TimeProvider timeProvider)
@@ -56,6 +60,34 @@ public sealed class HostMonitorManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Records whether the main window is visible and re-applies the resulting cadence
+    /// (issue #92). Hiding relaxes each host to the floor; showing restores the
+    /// configured interval. Idempotent — a no-op when the state is unchanged.
+    /// </summary>
+    public void SetWindowVisible(bool visible)
+    {
+        lock (_gate)
+        {
+            if (_windowVisible == visible)
+                return;
+            _windowVisible = visible;
+            ApplyCadence();
+        }
+    }
+
+    /// <summary>
+    /// Wakes every monitor for an immediate poll tick (the window-restore refresh burst,
+    /// issue #92). Fire-and-forget: each <see cref="HostMonitor.RequestRefresh"/> only
+    /// wakes the poll loop; it does not block on the RPC round-trip.
+    /// </summary>
+    public void RequestRefreshAll()
+    {
+        lock (_gate)
+            foreach (HostMonitor monitor in _monitors.Values)
+                monitor.RequestRefresh();
+    }
+
+    /// <summary>
     /// One-shot connect + auth + exchange_versions against a candidate config.
     /// Independent of the running monitors; never throws (cancellation excepted).
     /// </summary>
@@ -92,14 +124,36 @@ public sealed class HostMonitorManager : IAsyncDisposable
             await monitor.DisposeAsync().ConfigureAwait(false);
     }
 
+    // Seeds new monitors with the EFFECTIVE (not raw) interval so hosts added while the
+    // window is hidden start relaxed, satisfying I-CAD on creation (issue #92). Reads
+    // _windowVisible: safe because every call site holds _gate (the HostAdded case) or
+    // runs single-threaded before any monitor exists (the constructor).
     private HostMonitor CreateMonitor(HostConfig host)
     {
-        var monitor = new HostMonitor(host, _clientFactory, _time, _registry.PollingIntervalSeconds);
+        int effective = PollingCadencePolicy.EffectiveIntervalSeconds(
+            _registry.PollingIntervalSeconds, _windowVisible, _registry.FullSpeedHiddenPolling);
+        var monitor = new HostMonitor(host, _clientFactory, _time, effective);
         monitor.StatusChanged += (_, s) => StatusChanged?.Invoke(this, s);
         monitor.SnapshotUpdated += (_, s) => SnapshotUpdated?.Invoke(this, s);
         monitor.MessagesAdded += (_, m) => MessagesAdded?.Invoke(this, m);
         _monitors[host.Id] = monitor;
         return monitor;
+    }
+
+    /// <summary>
+    /// The single cadence recompute funnel (issue #92). Invariant I-CAD: at every instant
+    /// after any of {monitor created, visibility changed, IntervalChanged raised}, every
+    /// live monitor's active interval equals
+    /// EffectiveIntervalSeconds(registry.PollingIntervalSeconds, visible, fullSpeedHidden).
+    /// The three triggers may not call SetPollingInterval directly — they funnel here.
+    /// Caller must hold _gate.
+    /// </summary>
+    private void ApplyCadence()
+    {
+        int effective = PollingCadencePolicy.EffectiveIntervalSeconds(
+            _registry.PollingIntervalSeconds, _windowVisible, _registry.FullSpeedHiddenPolling);
+        foreach (HostMonitor monitor in _monitors.Values)
+            monitor.SetPollingInterval(effective);
     }
 
     private void OnRegistryChanged(object? sender, RegistryChangedEventArgs e)
@@ -138,9 +192,11 @@ public sealed class HostMonitorManager : IAsyncDisposable
                 break;
 
             case RegistryChangeKind.IntervalChanged:
+                // Funnels through ApplyCadence so a raw interval change is floored while
+                // hidden exactly like a visibility flip (I-CAD). This case also fires for
+                // SetFullSpeedHiddenPolling, which reuses IntervalChanged (HostRegistry).
                 lock (_gate)
-                    foreach (HostMonitor monitor in _monitors.Values)
-                        monitor.SetPollingInterval(_registry.PollingIntervalSeconds);
+                    ApplyCadence();
                 break;
         }
     }
