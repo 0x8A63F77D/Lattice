@@ -223,7 +223,12 @@ public class TransfersViewModelTests : IAsyncLifetime
             TestData.MakeTransfer(name: "large", nbytes: 100 * mb, bytesXferred: 50 * mb),
         ];
         _fx.Store.RequestRefresh(null);
-        await _fx.SettleAsync(() => vm.Rows.Single(r => r.Data.Name == "small").Data.Fraction == 0.75);
+        // Settle on the asserted end-state — the re-sorted view order — not the Data.Fraction
+        // proxy it derives from: the fraction can land a drain before the collection view
+        // re-compares the survivors, so settling on the proxy races the very re-sort under
+        // test and can settle on a stale order (#94).
+        await _fx.SettleAsync(
+            () => vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name).SequenceEqual(new[] { "large", "small" }));
 
         Assert.Equal(["large", "small"], vm.RowsView.Cast<TransferRow>().Select(r => r.Data.Name));
     }
