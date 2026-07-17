@@ -12,45 +12,26 @@ using Xunit;
 namespace Lattice.App.Tests;
 
 /// <summary>
-/// Fixture mirrors TasksViewModelTests: a RoutingGuiRpcClient hands a distinct
-/// fake per host address, the LockingUiDispatcher runs posts inline-but-
-/// serialized (two live monitors otherwise race the ObservableCollection), and
-/// every settle is a Wait.UntilAsync on an EXPECTED END STATE (row counts /
-/// text), never a transient boolean.
+/// Composition root, dispatcher discipline and settle rules all come from the
+/// shared <see cref="HostGraphFixture"/> — see its class doc. Every settle is
+/// still on an EXPECTED END STATE (row counts / text), never a transient
+/// boolean. This suite owns only what differs per suite: which VM it builds.
 /// </summary>
 public class ProjectsViewModelTests : IAsyncLifetime
 {
-    private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-    private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
-    private HostRegistry _registry = null!;
-    private HostMonitorManager _manager = null!;
-    private HostStore _store = null!;
-    private ManualUiClock _clock = null!;
+    private HostGraphFixture _fx = null!;
 
     public ValueTask InitializeAsync()
     {
-        _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
-        _store = new HostStore(_registry, _manager, new LockingUiDispatcher());
-        _clock = new ManualUiClock();
+        _fx = new HostGraphFixture();
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _manager.DisposeAsync();
-        File.Delete(_path);
-    }
+    public async ValueTask DisposeAsync() => await _fx.DisposeAsync();
 
-    private HostConfig AddHost(string address, FakeGuiRpcClient fake)
-    {
-        var host = TestData.MakeHostConfig(name: address, address: address);
-        _fakes[address] = fake;
-        _registry.AddHost(host);
-        return host;
-    }
+    private HostConfig AddHost(string address, FakeGuiRpcClient fake) => _fx.AddHost(address, fake);
 
-    private ProjectsViewModel MakeVm() => new(_store, _clock);
+    private ProjectsViewModel MakeVm() => new(_fx.Store, _fx.Clock);
 
     // Projects arrive via get_state (cached once per connection), so a project
     // row needs only the project present in the state — no results required.
@@ -69,15 +50,15 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
         AddHost("host-b", FakeWithProject("http://p/", "P", rac: 5));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1, "two hosts on one URL collapse to a single parent");
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1, "two hosts on one URL collapse to a single parent");
 
         var parent = vm.Rows[0];
         Assert.True(parent.Data.IsParent);
         Assert.True(parent.Data.ShowChevron);
 
         vm.ToggleExpandCommand.Execute("http://p/");
-        await Wait.UntilAsync(() => vm.Rows.Count == 3, "expanding inserts the two child rows");
+        await _fx.SettleAsync(() => vm.Rows.Count == 3, "expanding inserts the two child rows");
 
         // Parent identity survives the insert (reconciler, no Reset), children
         // in host-name order under it.
@@ -97,8 +78,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
         // user wrongly sees multi-host chrome.
         AddHost("host-a", FakeWithProject("http://p/", "P"));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         Assert.True(vm.Scope.IsAllHosts);
         Assert.False(vm.IsAllHostsScope);
@@ -109,11 +90,11 @@ public class ProjectsViewModelTests : IAsyncLifetime
     {
         var hostA = AddHost("host-a", FakeWithProject("http://p/", "P"));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         vm.Scope = new ScopeSelection(hostA.Id);
-        await Wait.UntilAsync(() => !vm.IsAllHostsScope);
+        await _fx.SettleAsync(() => !vm.IsAllHostsScope);
 
         Assert.False(vm.Rows[0].Data.ShowChevron);
 
@@ -129,15 +110,15 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
         AddHost("host-b", FakeWithProject("http://p/", "P", rac: 5));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         vm.ToggleExpandCommand.Execute("http://p/");
-        await Wait.UntilAsync(() => vm.Rows.Count == 3);
+        await _fx.SettleAsync(() => vm.Rows.Count == 3);
         var parent = vm.Rows[0];
 
         vm.ToggleExpandCommand.Execute("http://p/");
-        await Wait.UntilAsync(() => vm.Rows.Count == 1, "collapse removes exactly the children");
+        await _fx.SettleAsync(() => vm.Rows.Count == 1, "collapse removes exactly the children");
 
         Assert.Same(parent, vm.Rows[0]); // holder identity preserved across the collapse
     }
@@ -155,18 +136,18 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-a", fakeA);
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         vm.ToggleExpandCommand.Execute("http://p/");
-        await Wait.UntilAsync(() => vm.Rows.Count == 3, "expanding shows both hosts' children");
+        await _fx.SettleAsync(() => vm.Rows.Count == 3, "expanding shows both hosts' children");
         var parent = vm.Rows[0];
         Assert.Contains(vm.Rows, r => !r.Data.IsParent && r.Data.Name == "host-b");
 
         // Before breaking, wait until B's poll on the current connection is
         // observed (Calls log) — TasksViewModelTests' flake lesson: otherwise
         // the break can install itself before B's first tick.
-        await Wait.UntilAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
+        await _fx.SettleAsync(() => fakeB.Calls.Count(c => c == "get_cc_status") > 0,
             "B's first poll should be observed before the test breaks it");
 
         // Hold B in the Retrying tier deterministically (same idiom as the
@@ -176,12 +157,12 @@ public class ProjectsViewModelTests : IAsyncLifetime
         // hidden from the aggregation by the row-source gate.
         fakeB.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
         fakeB.OnConnect = (_, _) => throw new BoincConnectionException("still down");
-        _store.RequestRefresh(hostB.Id);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
-        Assert.NotNull(_store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
+        _fx.Store.RequestRefresh(hostB.Id);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Status.State == HostConnectionState.Retrying);
+        Assert.NotNull(_fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot);
 
-        await Wait.UntilAsync(() => vm.Rows.Count == 2, "B's child row should drop out of the expanded group");
+        await _fx.SettleAsync(() => vm.Rows.Count == 2, "B's child row should drop out of the expanded group");
 
         Assert.Same(parent, vm.Rows[0]); // parent holder survives the shrink
         Assert.True(vm.Rows[0].Data.IsParent);
@@ -196,17 +177,17 @@ public class ProjectsViewModelTests : IAsyncLifetime
     {
         AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         var firstRow = vm.Rows[0];
-        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        _fx.Clock.Now = _fx.Store.Hosts[0].Snapshot!.Timestamp;
         var collectionChanges = 0;
         vm.Rows.CollectionChanged += (_, _) => collectionChanges++;
 
-        _clock.Advance(TimeSpan.FromSeconds(1));
-        _clock.Advance(TimeSpan.FromSeconds(1));
-        _clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Equal(0, collectionChanges);
         Assert.Same(firstRow, vm.Rows[0]);
@@ -224,8 +205,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
             Proj("http://low/", "Low", rac: 5),
             Proj("http://high/", "High", rac: 20)));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2);
 
         Assert.Equal(["High", "Low"], ViewNames(vm));
     }
@@ -243,16 +224,16 @@ public class ProjectsViewModelTests : IAsyncLifetime
         var hostA = AddHost("host-a", fakeA);
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
-        await Wait.UntilAsync(() =>
-            _store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostA.Id).Status.State == HostConnectionState.AuthFailed);
+        await _fx.SettleAsync(() =>
+            _fx.Store.Hosts.Single(h => h.Config.Id == hostB.Id).Snapshot is not null);
 
         // Condition-driven: the store Waits above observe HostStore fields, which
         // are set BEFORE Changed fires — the VM lags the store by one Rebuild.
-        await Wait.UntilAsync(
+        await _fx.SettleAsync(
             () => vm.PartialBarText == string.Format(Strings.ProjectsPartialFmt, 1, 2, 1),
             "the Projects partial bar should use the projects-below copy");
         Assert.True(vm.ShowPartialBar);
@@ -268,8 +249,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
         Assert.True(vm.IsLoading);
         Assert.False(vm.IsEmpty);
 
-        _manager.Start();
-        await Wait.UntilAsync(() => !vm.IsLoading, "loading should clear once the first snapshot lands");
+        _fx.Start();
+        await _fx.SettleAsync(() => !vm.IsLoading, "loading should clear once the first snapshot lands");
 
         Assert.False(vm.IsLoading);
         Assert.True(vm.IsEmpty);
@@ -286,8 +267,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-a", FakeWithProjects(Proj("u-a", "Alpha", rac: 1), Proj("u-b", "Beta", rac: 5)));
         AddHost("host-b", FakeWithProjects(Proj("u-b", "Beta", rac: 5)));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 2, "two parent groups aggregate");
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 2, "two parent groups aggregate");
         // compute's default is RAC descending: Beta (5+5=10) before Alpha (1).
         // Order is the VIEW's (RowsView), not the source Rows collection.
         Assert.Equal(new[] { "Beta", "Alpha" }, ViewNames(vm));
@@ -326,19 +307,19 @@ public class ProjectsViewModelTests : IAsyncLifetime
     {
         AddHost("host-a", FakeWithProject("http://p/", "P", rac: 10));
         var vm = MakeVm();
-        _manager.Start();
-        await Wait.UntilAsync(() => vm.Rows.Count == 1);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Rows.Count == 1);
 
         var firstRow = vm.Rows[0];
-        _clock.Now = _store.Hosts[0].Snapshot!.Timestamp;
+        _fx.Clock.Now = _fx.Store.Hosts[0].Snapshot!.Timestamp;
         var sourceChanges = 0;
         var viewChanges = 0;
         vm.Rows.CollectionChanged += (_, _) => sourceChanges++;
         vm.RowsView.CollectionChanged += (_, _) => viewChanges++;
 
-        _clock.Advance(TimeSpan.FromSeconds(1));
-        _clock.Advance(TimeSpan.FromSeconds(1));
-        _clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
+        _fx.Clock.Advance(TimeSpan.FromSeconds(1));
 
         Assert.Equal(0, sourceChanges);
         Assert.Equal(0, viewChanges);

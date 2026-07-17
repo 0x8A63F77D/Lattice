@@ -14,42 +14,24 @@ namespace Lattice.App.Tests;
 /// The Event-log VM is fed by the MessagesReceived stream (raised here directly
 /// on the manager, the only way to exercise message-only behaviour — real
 /// polling couples messages with snapshots) folded through the pure MessageLog.
-/// store.Changed drives prune/count only. QueueUiDispatcher keeps every step
-/// synchronous: raise → Drain → assert.
+/// store.Changed drives prune/count only. The shared <see cref="HostGraphFixture"/>'s
+/// queue dispatcher keeps every step synchronous: raise → Drain → assert.
 /// </summary>
 public class EventLogViewModelTests : IAsyncLifetime
 {
-    private readonly string _path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
-    private readonly Dictionary<string, FakeGuiRpcClient> _fakes = [];
-    private HostRegistry _registry = null!;
-    private HostMonitorManager _manager = null!;
-    private HostStore _store = null!;
-    private QueueUiDispatcher _queue = null!;
+    private HostGraphFixture _fx = null!;
 
     public ValueTask InitializeAsync()
     {
-        _registry = new HostRegistry(new LatticeConfig(5, []), _path);
-        _manager = new HostMonitorManager(_registry, () => new RoutingGuiRpcClient(_fakes), new FakeTimeProvider());
-        _queue = new QueueUiDispatcher();
-        _store = new HostStore(_registry, _manager, _queue);
+        _fx = new HostGraphFixture();
         return ValueTask.CompletedTask;
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _manager.DisposeAsync();
-        File.Delete(_path);
-    }
+    public async ValueTask DisposeAsync() => await _fx.DisposeAsync();
 
-    private HostConfig AddHost(string address, FakeGuiRpcClient? fake = null)
-    {
-        var host = TestData.MakeHostConfig(name: address, address: address);
-        _fakes[address] = fake ?? new FakeGuiRpcClient();
-        _registry.AddHost(host);
-        return host;
-    }
+    private HostConfig AddHost(string address, FakeGuiRpcClient? fake = null) => _fx.AddHost(address, fake);
 
-    private EventLogViewModel MakeVm() => new(_store);
+    private EventLogViewModel MakeVm() => new(_fx.Store);
 
     // Distinct seconds ⇒ distinct MessageKey.TimestampTicks, so ordering is by time.
     private static DateTimeOffset T(int sec) => new(2026, 7, 11, 12, 0, sec, TimeSpan.Zero);
@@ -61,7 +43,7 @@ public class EventLogViewModelTests : IAsyncLifetime
 
     // Raise a per-host batch through the manager; posts to the queue (no drain).
     private void Raise(Guid hostId, params Message[] batch)
-        => ManagerTestAccess.RaiseMessagesAdded(_manager, new MessagesAddedEventArgs(hostId, batch));
+        => ManagerTestAccess.RaiseMessagesAdded(_fx.Manager, new MessagesAddedEventArgs(hostId, batch));
 
     [Fact]
     public void Batch_appends_in_time_order_and_a_replay_appends_nothing()
@@ -72,7 +54,7 @@ public class EventLogViewModelTests : IAsyncLifetime
 
         // Deliver out of order; rows must land in timestamp order.
         Raise(host.Id, Msg(2, 2, "second"), Msg(1, 1, "first"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.Equal(["first", "second"], vm.Rows.Select(r => r.Data.Body));
         Assert.False(vm.IsEmpty);
@@ -82,7 +64,7 @@ public class EventLogViewModelTests : IAsyncLifetime
         var changes = 0;
         vm.Rows.CollectionChanged += (_, _) => changes++;
         Raise(host.Id, Msg(2, 2, "second"), Msg(1, 1, "first"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.Equal(["first", "second"], vm.Rows.Select(r => r.Data.Body));
         Assert.Equal(0, changes);
@@ -99,7 +81,7 @@ public class EventLogViewModelTests : IAsyncLifetime
         var vm = MakeVm();
 
         Raise(a.Id, Msg(1, 1, "hello"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.True(vm.Scope.IsAllHosts);
         Assert.False(vm.IsAllHostsScope);
@@ -114,7 +96,7 @@ public class EventLogViewModelTests : IAsyncLifetime
 
         Raise(a.Id, Msg(1, 1, "a1"), Msg(2, 3, "a3"));
         Raise(b.Id, Msg(1, 2, "b2"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.True(vm.IsAllHostsScope);
         Assert.Equal(["a1", "b2", "a3"], vm.Rows.Select(r => r.Data.Body));
@@ -135,7 +117,7 @@ public class EventLogViewModelTests : IAsyncLifetime
             Msg(1, 1, "info", MessagePriority.Info),
             Msg(2, 2, "warn", MessagePriority.UserAlert),
             Msg(3, 3, "err", MessagePriority.InternalError));
-        _queue.Drain();
+        _fx.Drain();
         Assert.Equal(3, vm.Rows.Count);
 
         vm.ShowWarning = false;
@@ -156,7 +138,7 @@ public class EventLogViewModelTests : IAsyncLifetime
             Msg(1, 1, "contains SETI here", project: "X"),   // body match (case-insensitive)
             Msg(2, 2, "plain body", project: "seti@home"),   // project match
             Msg(3, 3, "unrelated", project: "other"));       // no match
-        _queue.Drain();
+        _fx.Drain();
 
         vm.FilterText = "seti";
 
@@ -175,7 +157,7 @@ public class EventLogViewModelTests : IAsyncLifetime
             Msg(1, 1, "w", MessagePriority.UserAlert),
             Msg(2, 2, "e", MessagePriority.InternalError),
             Msg(3, 3, "i", MessagePriority.Info));
-        _queue.Drain();
+        _fx.Drain();
         Assert.Equal(2, vm.UnreadCount);
 
         // Activation zeroes the badge.
@@ -184,7 +166,7 @@ public class EventLogViewModelTests : IAsyncLifetime
 
         // Arrivals while active don't accrue.
         Raise(a.Id, Msg(4, 4, "w2", MessagePriority.UserAlert));
-        _queue.Drain();
+        _fx.Drain();
         Assert.Equal(0, vm.UnreadCount);
     }
 
@@ -203,7 +185,7 @@ public class EventLogViewModelTests : IAsyncLifetime
 
         Raise(a.Id, Msg(1, 1, "a1"), Msg(2, 3, "a3"));
         Raise(b.Id, Msg(1, 2, "b2"));
-        _queue.Drain();
+        _fx.Drain();
 
         var expected = string.Join(Environment.NewLine,
             $"{Ts(1)}\thost-a\ta1",
@@ -220,7 +202,7 @@ public class EventLogViewModelTests : IAsyncLifetime
         Raise(a.Id,
             Msg(1, 1, "info", MessagePriority.Info),
             Msg(2, 2, "warn", MessagePriority.UserAlert));
-        _queue.Drain();
+        _fx.Drain();
 
         vm.ShowWarning = false;
 
@@ -248,7 +230,7 @@ public class EventLogViewModelTests : IAsyncLifetime
         var a = AddHost("host-a");
         var vm = MakeVm();
         Raise(a.Id, Msg(1, 1, "line1\r\nline2\tcol\rmid\nlast"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.Equal($"{Ts(1)}\thost-a\tline1 line2 col mid last", vm.BuildClipboardText());
     }
@@ -259,12 +241,10 @@ public class EventLogViewModelTests : IAsyncLifetime
     [Fact]
     public void Clipboard_text_flattens_control_characters_in_the_host_name()
     {
-        var host = TestData.MakeHostConfig(name: "host\tA\nnode", address: "addr-a");
-        _fakes["addr-a"] = new FakeGuiRpcClient();
-        _registry.AddHost(host);
+        var host = _fx.AddHost("addr-a", name: "host\tA\nnode");
         var vm = MakeVm();
         Raise(host.Id, Msg(1, 1, "body"));
-        _queue.Drain();
+        _fx.Drain();
 
         Assert.Equal($"{Ts(1)}\thost A node\tbody", vm.BuildClipboardText());
     }
@@ -278,12 +258,12 @@ public class EventLogViewModelTests : IAsyncLifetime
 
         Raise(a.Id, Msg(1, 1, "a1"));
         Raise(b.Id, Msg(1, 2, "b1"));
-        _queue.Drain();
+        _fx.Drain();
         Assert.Equal(2, vm.Rows.Count);
 
         // Registry removal flows synchronously: registry.Changed → HostStore
         // prunes _hosts and raises Changed → VM prunes the removed host's log.
-        _registry.RemoveHost(b.Id);
+        _fx.Registry.RemoveHost(b.Id);
 
         Assert.Equal("a1", Assert.Single(vm.Rows).Data.Body);
     }
@@ -294,17 +274,13 @@ public class EventLogViewModelTests : IAsyncLifetime
         var a = AddHost("host-a");
         AddHost("host-b");
         var vm = MakeVm();
-        _manager.Start();
+        _fx.Start();
 
         // One visible message; both hosts poll their way to Connected (reachable).
         Raise(a.Id, Msg(1, 1, "hello"));
 
-        await Wait.UntilAsync(
-            () =>
-            {
-                _queue.Drain();
-                return vm.CountsText == string.Format(Strings.EventLogCountsFmt, 1, 2);
-            },
+        await _fx.SettleAsync(
+            () => vm.CountsText == string.Format(Strings.EventLogCountsFmt, 1, 2),
             "one visible message and two reachable hosts");
     }
 }
