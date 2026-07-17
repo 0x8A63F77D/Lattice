@@ -238,6 +238,16 @@ public partial class ShellWindow : Window
                 icon.Data = ResolveIconGeometry(selected ? view.IconFilledKey : view.IconKey);
             }
         }
+        // The Settings footer item lives outside _shell.Views (tracked by SyncNavSelection),
+        // so fold its outline→filled swap into the same recompute rather than a parallel
+        // mechanism: filled when Settings is the active page, outlined otherwise. The XAML
+        // IconSettingsRegular is just the initial value this overwrites, exactly like the
+        // view items above.
+        if (NavSettings.IconSource is FAPathIconSource settingsIcon)
+        {
+            bool settingsActive = ReferenceEquals(_shell.CurrentPage, _shell.Settings);
+            settingsIcon.Data = ResolveIconGeometry(settingsActive ? "IconSettingsFilled" : "IconSettingsRegular");
+        }
     }
 
     private Geometry ResolveIconGeometry(string key)

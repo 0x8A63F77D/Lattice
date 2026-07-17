@@ -243,6 +243,43 @@ public class ShellRailTests
     }
 
     [AvaloniaFact]
+    public void Navigating_to_settings_fills_its_icon_and_leaving_restores_regular()
+    {
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig());
+        Layout(window);
+
+        Assert.True(Application.Current!.TryGetResource("IconSettingsFilled", null, out var settingsFilled));
+        Assert.True(Application.Current!.TryGetResource("IconSettingsRegular", null, out var settingsRegular));
+        var settingsIcon = Assert.IsType<FAPathIconSource>(window.NavSettings.IconSource);
+
+        // Default page is Tasks → the Settings footer item is outlined at rest.
+        Assert.Same(settingsRegular, settingsIcon.Data);
+
+        shell.NavigateToSettings();
+        Layout(window);
+
+        // Settings becomes the active destination → its glyph fills.
+        Assert.Same(settingsFilled, settingsIcon.Data);
+        // Invariant: exactly one filled glyph on the rail — no view item fills while
+        // Settings is active (all four view items resolve their *Regular geometry).
+        var viewItems = new[] { window.NavTasks, window.NavProjects, window.NavTransfers, window.NavEventLog };
+        for (var i = 0; i < viewItems.Length; i++)
+        {
+            Assert.True(Application.Current!.TryGetResource(shell.Views[i].IconKey, null, out var viewRegular));
+            var icon = Assert.IsType<FAPathIconSource>(viewItems[i].IconSource);
+            Assert.Same(viewRegular, icon.Data);
+        }
+
+        // Leaving Settings for a view restores the outlined Settings glyph.
+        shell.SelectViewCommand.Execute("0");
+        Layout(window);
+        Assert.Same(settingsRegular, settingsIcon.Data);
+        window.Close();
+    }
+
+    [AvaloniaFact]
     public void Every_nav_icon_key_resolves_against_the_shown_window()
     {
         // Invariant pin for ShellWindow.ResolveIconGeometry's fail-fast contract:
