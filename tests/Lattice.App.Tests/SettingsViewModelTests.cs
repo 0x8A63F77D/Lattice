@@ -15,12 +15,14 @@ public class SettingsViewModelTests : IAsyncLifetime
     private HostRegistry _registry = null!;
     private HostMonitorManager _manager = null!;
     private SettingsViewModel _settings = null!;
+    private UiStateStore _uiStore = null!;
 
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
-        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(_uiPath)));
+        _uiStore = new UiStateStore(_uiPath);
+        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), _uiStore);
         return ValueTask.CompletedTask;
     }
 
@@ -38,6 +40,53 @@ public class SettingsViewModelTests : IAsyncLifetime
         _settings.PollingIntervalSeconds = 30;
         Assert.Equal(30, _registry.PollingIntervalSeconds);
         Assert.Equal([2, 5, 10, 30, 60], SettingsViewModel.AllowedPollingIntervals);
+    }
+
+    [Fact]
+    public void CloseToTray_defaults_to_the_current_platforms_resolved_inverse()
+    {
+        // No stored ExitOnClose yet ⇒ platform default; displayed toggle is its inverse.
+        bool expectedDefault = !TrayResidencyDefaults.ExitOnCloseDefault(TrayResidencyDefaults.Current);
+        Assert.Equal(expectedDefault, _settings.CloseToTray);
+    }
+
+    [Fact]
+    public void CloseToTray_persists_the_inverse_as_a_concrete_bool()
+    {
+        _settings.CloseToTray = true;   // "keep in tray" ⇒ ExitOnClose = false
+        Assert.False(_uiStore.Load().ExitOnClose);
+        Assert.True(_settings.CloseToTray);
+
+        _settings.CloseToTray = false;  // "exit on close" ⇒ ExitOnClose = true
+        Assert.True(_uiStore.Load().ExitOnClose);
+        Assert.False(_settings.CloseToTray);
+    }
+
+    [Fact]
+    public void FullSpeedHiddenPolling_round_trips_through_the_registry()
+    {
+        Assert.False(_settings.FullSpeedHiddenPolling);
+        _settings.FullSpeedHiddenPolling = true;
+        Assert.True(_registry.FullSpeedHiddenPolling);
+        Assert.True(_settings.FullSpeedHiddenPolling);
+    }
+
+    [Fact]
+    public void FullSpeedHiddenPolling_persistence_failure_sets_error_and_keeps_old_value()
+    {
+        MakeConfigPathUnwritable();
+        try
+        {
+            _settings.FullSpeedHiddenPolling = true;
+
+            Assert.NotNull(_settings.PollingError);
+            Assert.False(_settings.FullSpeedHiddenPolling);
+            Assert.False(_registry.FullSpeedHiddenPolling);
+        }
+        finally
+        {
+            RestoreConfigPath();
+        }
     }
 
     /// <summary>Turns the registry's config path into a directory: Save's rename onto it throws.</summary>

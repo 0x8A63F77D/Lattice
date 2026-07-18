@@ -48,6 +48,23 @@
           </ComboBox>
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
+
+      <TextBlock Text="{x:Static loc:Strings.SettingsTraySection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="CloseToTrayExpander"
+                             Header="{x:Static loc:Strings.SettingsCloseToTrayLabel}"
+                             Description="{x:Static loc:Strings.SettingsCloseToTrayDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ToggleSwitch IsChecked="{Binding CloseToTray, Mode=TwoWay}" />
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+      <ui:FASettingsExpander x:Name="FullSpeedHiddenExpander"
+                             Header="{x:Static loc:Strings.SettingsFullSpeedHiddenLabel}"
+                             Description="{x:Static loc:Strings.SettingsFullSpeedHiddenDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ToggleSwitch IsChecked="{Binding FullSpeedHiddenPolling, Mode=TwoWay}" />
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -352,6 +352,30 @@
   <data name="SettingsThemeDescription" xml:space="preserve">
     <value>How Lattice follows light or dark mode</value>
   </data>
+  <data name="SettingsTraySection" xml:space="preserve">
+    <value>Tray</value>
+  </data>
+  <data name="SettingsCloseToTrayLabel" xml:space="preserve">
+    <value>Closing the window keeps Lattice running in the tray</value>
+  </data>
+  <data name="SettingsCloseToTrayDescription" xml:space="preserve">
+    <value>When on, the close button hides Lattice to the menu bar / notification area and polling continues in the background. On Linux this needs a StatusNotifierItem/AppIndicator-capable desktop.</value>
+  </data>
+  <data name="SettingsFullSpeedHiddenLabel" xml:space="preserve">
+    <value>Full-speed polling while in the tray</value>
+  </data>
+  <data name="SettingsFullSpeedHiddenDescription" xml:space="preserve">
+    <value>When off, hidden-window polling is floored at 30 seconds to save battery.</value>
+  </data>
+  <data name="TrayShowWindow" xml:space="preserve">
+    <value>Show window</value>
+  </data>
+  <data name="TrayExit" xml:space="preserve">
+    <value>Exit</value>
+  </data>
+  <data name="TrayToolTip" xml:space="preserve">
+    <value>Lattice</value>
+  </data>
   <data name="ThemeLight" xml:space="preserve">
     <value>Light</value>
   </data>

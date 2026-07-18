@@ -21,7 +21,8 @@ public class SettingsViewTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
         var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
-        var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(), new ThemePreference(new UiStateStore(uiPath)));
+        var uiStore = new UiStateStore(uiPath);
+        var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(), new ThemePreference(uiStore), uiStore);
         // Hosts are added to prove they do NOT render as expanders in this view
         // any more — host management lives entirely in the rail (design 3b).
         registry.AddHost(TestData.MakeHostConfig(name: "a"));
@@ -42,7 +43,8 @@ public class SettingsViewTests
         // this stays green across the sequence; the assertion is "no host-bound
         // expander remains" — every remaining expander is a named global one.
         Assert.Empty(window.GetVisualDescendants().OfType<FASettingsExpander>()
-            .Where(e => e.Name is not ("PollingExpander" or "ThemeExpander")));
+            .Where(e => e.Name is not ("PollingExpander" or "ThemeExpander"
+                or "CloseToTrayExpander" or "FullSpeedHiddenExpander")));
         var caption = window.GetVisualDescendants().OfType<TextBlock>()
             .SingleOrDefault(t => t.Text == Strings.SettingsHostsPointer);
         Assert.NotNull(caption);
