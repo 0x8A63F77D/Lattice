@@ -111,7 +111,7 @@ vintage/visibility per correspondence rule 2, not merely data-race absence.
 | `_config` | `_gate` (written in `UpdateConfig`; snapshotted in the interpreter's `SnapshotConfig` lock block) | Modeled: `curVersion` (current config generation) / `attemptVersion` (the generation an in-flight attempt snapshotted). I3's abortability property is exactly about the vintage gap between these two. |
 | `_configChanged` | `volatile` | Modeled directly as `configChanged`. Central to I1's guard discipline and I3. |
 | `_connectionCts` | `_gate` (created/canceled/disposed all under `_gate`, per the field's own doc comment in `HostMonitor.cs`) | Modeled: `ctsState` (None/Live/Canceled/Disposed). |
-| `_pollingIntervalSeconds` | `volatile` | Excluded from the model's state proper (the interval *value* participates in no invariant); `SetPollingInterval`'s only shared-state effect — a wake — is folded into the wake action already modeled. Its interleaving surface is L1's, covered by the `RequestRefresh` sweep arm; not independently swept (per the design's Toolchain section). |
+| `_pollingIntervalSeconds` | `volatile` | Excluded from the model's state proper (the interval *value* participates in no invariant). Two setters touch it: `SetPollingInterval`'s only shared-state effect — a wake — is folded into the wake action already modeled; `SetPollingIntervalQuiet` (issue #92, the setter `HostMonitorManager.ApplyCadence` uses) writes only the volatile value and deliberately does NOT wake, so it contributes no interleaving surface at all. The waking setter's surface is L1's, covered by the `RequestRefresh` sweep arm; not independently swept (per the design's Toolchain section). |
 | `_wake` | `_gate` (read/replaced under `_gate` in `Wake`/`WaitAsync`/`WaitForConfigChangeAsync`) | Modeled: sticky `wake` bit with the real TCS protocol (consume-if-completed-else-subscribe). L1's subject. |
 | `_loop` | `_gate`-guarded write in `Start`; `_gate`-guarded read in `DisposeAsync`; `internal` solely so the A5 sweep assertion can read task completion/fault state post-hoc | Modeled: `loopTask` publication variable (Initial/Stored/TokenRead/Running/Exited/Faulted) — load-bearing for I5/A6 per the design (without it, Spin would prove I5 vacuously). |
 | `_started` | `_gate` (test-and-set in `Start`) | Modeled: `started`. |
@@ -151,12 +151,14 @@ Outside what either verification layer checks (verbatim from the design):
 
 Event subscribers terminate (a blocking subscriber stalls the actor thread;
 liveness properties are conditional on this); subscribers may synchronously
-**reenter** `UpdateConfig`/`RequestRefresh`/`SetPollingInterval` from a
-handler — this is IN-contract and needs no new model states: publishes run
-outside `_gate` and a reentrant call's effects (flag/CTS/wake, all
-`_gate`-serialized) are a deterministic special case of the concurrent
-environment action already modeled at that boundary (the harness pins this
-with a targeted reentrant-`UpdateConfig`-from-`StatusChanged` case); what
+**reenter** `UpdateConfig`/`RequestRefresh`/`SetPollingInterval`/`SetPollingIntervalQuiet`
+from a handler — this is IN-contract and needs no new model states: publishes run
+outside `_gate`, a reentrant `UpdateConfig`/`RequestRefresh`/`SetPollingInterval`
+call's effects (flag/CTS/wake, all `_gate`-serialized) are a deterministic special
+case of the concurrent environment action already modeled at that boundary (the
+harness pins this with a targeted reentrant-`UpdateConfig`-from-`StatusChanged` case),
+and `SetPollingIntervalQuiet` (issue #92) only writes the excluded volatile interval
+value — no wake, no `_gate` — so it has no modeled effect at all; what
 subscribers must NOT do is synchronously block on the monitor's own
 lifecycle (e.g. `DisposeAsync().AsTask().Wait()` from a handler deadlocks the
 loop by construction — documented as out-of-contract, Codex PR #8 round-4);

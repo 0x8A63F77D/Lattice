@@ -45,6 +45,9 @@ public sealed class HostRegistry
     /// <summary>Steady-state polling interval in seconds.</summary>
     public int PollingIntervalSeconds => _config.PollingIntervalSeconds;
 
+    /// <summary>Whether the relaxed hidden-window polling floor is bypassed (issue #92).</summary>
+    public bool FullSpeedHiddenPolling => _config.FullSpeedHiddenPolling;
+
     /// <summary>Raised after every persisted mutation.</summary>
     public event EventHandler<RegistryChangedEventArgs>? Changed;
 
@@ -84,6 +87,22 @@ public sealed class HostRegistry
             throw new ArgumentOutOfRangeException(nameof(seconds), seconds,
                 "Allowed polling intervals: 2, 5, 10, 30, 60 seconds.");
         Mutate(_config with { PollingIntervalSeconds = seconds }, RegistryChangeKind.IntervalChanged, null);
+    }
+
+    /// <summary>
+    /// Toggles full-speed polling while the window is hidden (issue #92). Mirrors
+    /// <see cref="SetPollingInterval"/> including the no-op-on-equal guard.
+    /// </summary>
+    public void SetFullSpeedHiddenPolling(bool enabled)
+    {
+        // Reuse IntervalChanged rather than adding a RegistryChangeKind case: this is a
+        // cadence-parameter change like SetPollingInterval, HostMonitorManager recomputes
+        // the effective interval via ApplyCadence either way, and no consumer distinguishes
+        // the two causes. A new enum member would force the repo-wide exhaustive-switch
+        // sweep for zero behavioral gain (plan Part 4).
+        if (_config.FullSpeedHiddenPolling == enabled)
+            return;
+        Mutate(_config with { FullSpeedHiddenPolling = enabled }, RegistryChangeKind.IntervalChanged, null);
     }
 
     private int? IndexOf(Guid id)

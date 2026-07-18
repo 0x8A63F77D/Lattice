@@ -115,6 +115,35 @@ public class LatticeConfigTests
     }
 
     [Fact]
+    public void FullSpeedHiddenPolling_defaults_false_and_round_trips_when_true()
+    {
+        string path = TempPath();
+        var config = new LatticeConfig(10, []) { FullSpeedHiddenPolling = true };
+        config.Save(path);
+        LatticeConfig loaded = LatticeConfig.Load(path);
+        Assert.True(loaded.FullSpeedHiddenPolling);
+
+        Assert.False(new LatticeConfig(5, []).FullSpeedHiddenPolling);
+        Assert.False(LatticeConfig.Default.FullSpeedHiddenPolling);
+    }
+
+    [Fact]
+    public void Load_defaults_fullSpeedHiddenPolling_false_for_pre_92_config()
+    {
+        // A config.json written before #92 has no fullSpeedHiddenPolling key; the new
+        // positional component's default must fill in as false so old files round-trip.
+        string path = TempPath();
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path,
+            "{\"pollingIntervalSeconds\":10,\"hosts\":[]}");
+
+        LatticeConfig config = LatticeConfig.Load(path);
+
+        Assert.Equal(10, config.PollingIntervalSeconds);
+        Assert.False(config.FullSpeedHiddenPolling);
+    }
+
+    [Fact]
     public void DisplayName_falls_back_to_address()
     {
         var host = new HostConfig(Guid.NewGuid(), "", "10.0.0.5", 31416, "");
