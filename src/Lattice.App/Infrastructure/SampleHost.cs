@@ -45,6 +45,52 @@ internal static class SampleHost
     /// <summary>Set this env var to any of 1/true/yes/on to inject the fleet in a DEBUG run.</summary>
     public const string EnvVar = "LATTICE_SAMPLE_HOSTS";
 
+    /// <summary>
+    /// Opt-in DEBUG "live progress" aid (set to 1/true/yes/on ALONGSIDE <see cref="EnvVar"/>):
+    /// makes the canned fleet's ACTIVE transfers and running tasks advance their progress a
+    /// step on every poll, looping at the top. The canned data is otherwise static (a snapshot),
+    /// so a progress bar never changes value and its width transition never fires — this exists
+    /// purely so the owner can eyeball the Wave-3 progress-width motion (200 ms easyEase) on the
+    /// live app. Off by default; the fleet's shape (states, tiers, counts) is unchanged.
+    /// </summary>
+    public const string TickEnvVar = "LATTICE_SAMPLE_TICK";
+
+    public static bool Ticking => IsTruthy(Environment.GetEnvironmentVariable(TickEnvVar));
+
+    /// <summary>Per-poll progress step for the live-progress aid (fraction of the whole).</summary>
+    private const double TickStep = 0.08;
+
+    /// <summary>
+    /// Advances one transfer for the live-progress aid: an ACTIVE transfer climbs by
+    /// <see cref="TickStep"/> of its size and loops back near the start once it fills, so the bar
+    /// keeps moving for a walkthrough; retrying/queued transfers (not <c>XferActive</c>) are left
+    /// exactly as canned. Pure — same input, same output.
+    /// </summary>
+    internal static FileTransfer AdvanceTransfer(FileTransfer t)
+    {
+        if (!t.XferActive)
+            return t;
+        double next = t.BytesXferred + t.Nbytes * TickStep;
+        if (next >= t.Nbytes)
+            next = t.Nbytes * TickStep; // loop, don't clamp — a pinned-full bar would stop animating
+        return t with { BytesXferred = next, FileOffset = next };
+    }
+
+    /// <summary>
+    /// Advances one task for the live-progress aid: a running task (one that carries an
+    /// <see cref="ActiveTask"/>) climbs its <see cref="ActiveTask.FractionDone"/> and loops;
+    /// waiting/suspended/uploading tasks (no active task) are left as canned. Pure.
+    /// </summary>
+    internal static Result AdvanceResult(Result r)
+    {
+        if (r.ActiveTask is not { } active)
+            return r;
+        double next = active.FractionDone + TickStep;
+        if (next >= 1.0)
+            next = TickStep;
+        return r with { ActiveTask = active with { FractionDone = next } };
+    }
+
     // Stable identities so the fleet keeps the same host ids across restarts
     // (rail order, scope pins, and per-host UI state stay put).
     private static readonly Guid AlphaId = new("5a3f0001-0000-4000-8000-000000000001");
@@ -328,9 +374,17 @@ internal static class SampleHost
     }
 }
 
-/// <summary>Serves one <see cref="SampleHostData"/>'s canned RPC replies.</summary>
+/// <summary>
+/// Serves one <see cref="SampleHostData"/>'s canned RPC replies. State and status stay fixed;
+/// results and transfers are held mutably only to support the opt-in live-progress aid
+/// (<see cref="SampleHost.Ticking"/>) — with it off, every poll returns the canned lists
+/// unchanged (identity), exactly as before.
+/// </summary>
 internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
 {
+    private IReadOnlyList<Result> _results = data.Results;
+    private IReadOnlyList<FileTransfer> _transfers = data.Transfers;
+
     public Task ConnectAsync(string host, int port = 31416, CancellationToken ct = default) => Task.CompletedTask;
 
     public Task<bool> AuthorizeAsync(string password, CancellationToken ct = default) => Task.FromResult(true);
@@ -342,16 +396,24 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
 
     public Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default) => Task.FromResult(data.Status);
 
-    public Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default) =>
-        Task.FromResult(data.Results);
+    public Task<IReadOnlyList<Result>> GetResultsAsync(bool activeOnly = false, CancellationToken ct = default)
+    {
+        if (SampleHost.Ticking)
+            _results = [.. _results.Select(SampleHost.AdvanceResult)];
+        return Task.FromResult(_results);
+    }
 
     // BOINC's get_messages contract: only seqno-greater messages. First poll
     // (seqno 0) returns the batch; subsequent polls return nothing new.
     public Task<IReadOnlyList<Message>> GetMessagesAsync(int seqno = 0, CancellationToken ct = default) =>
         Task.FromResult<IReadOnlyList<Message>>([.. data.Messages.Where(m => m.Seqno > seqno)]);
 
-    public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default) =>
-        Task.FromResult(data.Transfers);
+    public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
+    {
+        if (SampleHost.Ticking)
+            _transfers = [.. _transfers.Select(SampleHost.AdvanceTransfer)];
+        return Task.FromResult(_transfers);
+    }
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
