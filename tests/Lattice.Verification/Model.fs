@@ -83,7 +83,8 @@ type Action =
     // environment (any interleaving point)
     | EnvStart
     | EnvUpdateConfig
-    | EnvWake                    // RequestRefresh / SetPollingInterval's Wake
+    | EnvWake                    // wake action: RequestRefresh / SetPollingInterval's Wake
+                                 // (NOT SetPollingIntervalQuiet — #92's non-waking setter)
     | EnvDispose
     // loop micro-steps
     | ExecCmd                    // execute head command / feed the next input

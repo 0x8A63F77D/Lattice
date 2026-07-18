@@ -198,6 +198,16 @@ public sealed class HostMonitor : IAsyncDisposable
         Wake();
     }
 
+    /// <summary>
+    /// Changes the steady-state polling interval WITHOUT waking the loop (issue #92):
+    /// the new value is picked up at the next wait boundary, never interrupting an
+    /// in-progress backoff or poll wait. The cadence funnel
+    /// (<see cref="HostMonitorManager"/>.ApplyCadence) uses this so hiding to the tray
+    /// cannot cut a Retrying host's exponential backoff short — immediate refresh remains
+    /// the sole job of <see cref="RequestRefresh"/>. Volatile write only; no _gate needed.
+    /// </summary>
+    public void SetPollingIntervalQuiet(int seconds) => _pollingIntervalSeconds = seconds;
+
     /// <summary>Stops the loop, disposes the client, and settles in Disconnected. Idempotent.</summary>
     public async ValueTask DisposeAsync()
     {

@@ -21,6 +21,11 @@ public sealed class HostMonitorManager : IAsyncDisposable
     // Guarded by _gate alongside _monitors; defaults visible (the app boots with the
     // window shown). Monitors never see this — only the effective interval it produces.
     private bool _windowVisible = true;
+    // The effective interval last pushed to monitors (I-CAD's tracked value). Lets
+    // ApplyCadence skip when the effective interval is unchanged, so a visibility flip or
+    // full-speed toggle that does not move the interval causes no work — and, critically,
+    // no wake. Seeded in the constructor to the interval new monitors are created with.
+    private int _appliedInterval;
 
     /// <summary>Creates monitors for every registered host and subscribes to registry changes.</summary>
     public HostMonitorManager(HostRegistry registry, Func<IGuiRpcClient> clientFactory, TimeProvider timeProvider)
@@ -28,6 +33,7 @@ public sealed class HostMonitorManager : IAsyncDisposable
         _registry = registry;
         _clientFactory = clientFactory;
         _time = timeProvider;
+        _appliedInterval = CurrentEffectiveInterval();
         foreach (HostConfig host in registry.Hosts)
             CreateMonitor(host);
         registry.Changed += OnRegistryChanged;
@@ -124,15 +130,18 @@ public sealed class HostMonitorManager : IAsyncDisposable
             await monitor.DisposeAsync().ConfigureAwait(false);
     }
 
+    // The effective interval right now, given the configured interval, window visibility,
+    // and the full-speed flag (issue #92). Reads _windowVisible: safe because every call
+    // site holds _gate or runs single-threaded before any monitor exists (the constructor).
+    private int CurrentEffectiveInterval() =>
+        PollingCadencePolicy.EffectiveIntervalSeconds(
+            _registry.PollingIntervalSeconds, _windowVisible, _registry.FullSpeedHiddenPolling);
+
     // Seeds new monitors with the EFFECTIVE (not raw) interval so hosts added while the
-    // window is hidden start relaxed, satisfying I-CAD on creation (issue #92). Reads
-    // _windowVisible: safe because every call site holds _gate (the HostAdded case) or
-    // runs single-threaded before any monitor exists (the constructor).
+    // window is hidden start relaxed, satisfying I-CAD on creation (issue #92).
     private HostMonitor CreateMonitor(HostConfig host)
     {
-        int effective = PollingCadencePolicy.EffectiveIntervalSeconds(
-            _registry.PollingIntervalSeconds, _windowVisible, _registry.FullSpeedHiddenPolling);
-        var monitor = new HostMonitor(host, _clientFactory, _time, effective);
+        var monitor = new HostMonitor(host, _clientFactory, _time, CurrentEffectiveInterval());
         monitor.StatusChanged += (_, s) => StatusChanged?.Invoke(this, s);
         monitor.SnapshotUpdated += (_, s) => SnapshotUpdated?.Invoke(this, s);
         monitor.MessagesAdded += (_, m) => MessagesAdded?.Invoke(this, m);
@@ -147,13 +156,22 @@ public sealed class HostMonitorManager : IAsyncDisposable
     /// EffectiveIntervalSeconds(registry.PollingIntervalSeconds, visible, fullSpeedHidden).
     /// The three triggers may not call SetPollingInterval directly — they funnel here.
     /// Caller must hold _gate.
+    ///
+    /// Uses the QUIET (non-waking) setter: a cadence change takes effect at each monitor's
+    /// NEXT wait boundary, never interrupting an in-progress backoff or poll wait. Waking a
+    /// Retrying host on hide would cut its exponential backoff short and increase reconnect
+    /// churn (Codex #105 P2); immediate refresh is the sole job of RequestRefreshAll. The
+    /// no-op-on-equal guard means an interval-preserving flip (e.g. hiding a 60s host, or
+    /// toggling full-speed while visible) does no work at all.
     /// </summary>
     private void ApplyCadence()
     {
-        int effective = PollingCadencePolicy.EffectiveIntervalSeconds(
-            _registry.PollingIntervalSeconds, _windowVisible, _registry.FullSpeedHiddenPolling);
+        int effective = CurrentEffectiveInterval();
+        if (effective == _appliedInterval)
+            return;
+        _appliedInterval = effective;
         foreach (HostMonitor monitor in _monitors.Values)
-            monitor.SetPollingInterval(effective);
+            monitor.SetPollingIntervalQuiet(effective);
     }
 
     private void OnRegistryChanged(object? sender, RegistryChangedEventArgs e)
