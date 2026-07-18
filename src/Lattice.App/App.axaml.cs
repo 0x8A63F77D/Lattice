@@ -53,6 +53,14 @@ public partial class App : Application
             var shellWindow = new ShellWindow { DataContext = shell };
             desktop.MainWindow = shellWindow;
 
+            // Tray residency (#92): the controller owns the TrayIcon, hide/show/exit
+            // funnels, and switches the app to OnExplicitShutdown. Code-constructed here
+            // inside the desktop guard (never in App.axaml) so headless test runs never
+            // instantiate a platform tray. The ShellWindow routes its close attempts
+            // through the controller's policy shell.
+            var tray = new TrayResidencyController(this, desktop, shellWindow, manager, uiState);
+            shellWindow.AttachTray(tray);
+
             // Single-instance activation (#92): a secondary launch pings the primary
             // instead of starting a second app; surface the existing window. Until
             // PR C, "surface" is Show()+Activate(); PR C routes this through the tray
@@ -68,6 +76,7 @@ public partial class App : Application
 
             desktop.Exit += (_, _) =>
             {
+                tray.Dispose(); // remove the TrayIcon first, before the monitor teardown chain
                 ActivationGuard?.Dispose(); // stop accepting activations, release the lock
                 clock.Dispose();
                 shell.Dispose();

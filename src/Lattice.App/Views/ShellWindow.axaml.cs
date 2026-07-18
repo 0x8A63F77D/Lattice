@@ -15,6 +15,10 @@ namespace Lattice.App.Views;
 public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
+    // Close-to-tray controller (issue #92), attached by App under the desktop lifetime.
+    // Null in headless tests / when no controller exists → OnClosing falls through to
+    // default close behavior (the _tray-is-null regression path).
+    private TrayResidencyController? _tray;
     private bool _addHostInFlight;
     private bool _editHostInFlight;
     private bool _removeConfirmInFlight;
@@ -123,6 +127,31 @@ public partial class ShellWindow : Window
     {
         _grantedTransparency = granted;
         ApplyBackdrop();
+    }
+
+    /// <summary>Wire the close-to-tray controller (issue #92). Called by App once the
+    /// controller exists; without it, <see cref="OnClosing"/> keeps default close behavior.</summary>
+    internal void AttachTray(TrayResidencyController tray) => _tray = tray;
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_tray is not { } tray)   // headless tests / no controller: default close behavior
+            return;
+        switch (WindowClosePolicy.Decide(e.CloseReason, e.IsProgrammatic,
+                    exitOnClose: tray.ExitOnClose, exitRequested: tray.ExitRequested))
+        {
+            case CloseVerdict.HideToTray:
+                e.Cancel = true;
+                tray.HideToTray();
+                break;
+            case CloseVerdict.ExitApplication:
+                tray.NotifyExitingViaClose();   // suppresses re-entrant policy on the shutdown-driven close
+                tray.ExitApplication();
+                break;
+            case CloseVerdict.AllowClose:
+                break;
+        }
     }
 
     private void AttachShell()
