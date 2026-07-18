@@ -62,17 +62,20 @@ public partial class App : Application
             shellWindow.AttachTray(tray);
 
             // Single-instance activation (#92): a secondary launch pings the primary
-            // instead of starting a second app; surface the existing window. Until
-            // PR C, "surface" is Show()+Activate(); PR C routes this through the tray
-            // controller (which also un-hides from the tray).
+            // instead of starting a second app; surface the existing window through the
+            // tray controller (which also un-hides from the tray and fires the refresh burst).
             if (ActivationGuard is { } guard)
-            {
-                guard.SetActivationCallback(() => Dispatcher.UIThread.Post(() =>
+                guard.SetActivationCallback(() => Dispatcher.UIThread.Post(tray.ShowWindow));
+
+            // macOS Dock-icon click while all windows are hidden (F10): reopen. Null-guarded
+            // via TryGetFeature — the feature is absent on Windows/Linux and headless backends.
+            // Activated is a UI-thread lifetime event, so ShowWindow can be called directly.
+            if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
+                activatable.Activated += (_, e) =>
                 {
-                    shellWindow.Show();
-                    shellWindow.Activate();
-                }));
-            }
+                    if (e.Kind == ActivationKind.Reopen)
+                        tray.ShowWindow();
+                };
 
             desktop.Exit += (_, _) =>
             {
