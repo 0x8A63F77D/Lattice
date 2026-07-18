@@ -181,8 +181,12 @@
               <DataTemplate x:DataType="vm:TaskRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                   <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
+                    <!-- SnapOnRebind stops the 200ms width transition from animating when this
+                         virtualized cell is recycled to another row (sort/scroll/filter) — it would
+                         otherwise slide from the previous row's progress (Codex P2 PR #103). -->
                     <Border Classes="progressFill" Classes.suspended="{Binding Data.IsSuspended}"
                             HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                            views:ProgressFillBehavior.SnapOnRebind="True"
                             Width="{Binding Data.Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
                   </Border>
                   <TextBlock Text="{Binding Data.PercentText}" FontSize="12" Classes="numeric" />

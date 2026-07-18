@@ -134,7 +134,10 @@
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                   <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
+                    <!-- SnapOnRebind: no width animation on cell recycle (see TasksView's progress
+                         cell and Codex P2 on PR #103). -->
                     <Border Classes="progressFill" HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                            views:ProgressFillBehavior.SnapOnRebind="True"
                             Width="{Binding Data.Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
                   </Border>
                   <TextBlock Text="{Binding Data.ProgressText}" FontSize="12" Classes="numeric" />
