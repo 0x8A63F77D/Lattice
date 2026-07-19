@@ -40,9 +40,11 @@ public class ProgressRingActivityTests
         Assert.True(RingOf(window).IsActive); // …ring animating
 
         fx.Start();
-        await fx.SettleAsync(() => !vm.IsLoading);
-        Assert.False(RingOf(window).IsActive); // the leak gate: hidden overlay must STOP the ring
-        fx.Dispose();
+        // Settle on the RING's end state, not the VM flag: the flag flips first and the
+        // binding target is the behavior under guard (fixture determinism contract).
+        await fx.SettleAsync(() => !RingOf(window).IsActive);
+        Assert.False(vm.IsLoading); // the leak gate held: loading ended and the ring stopped
+        await fx.DisposeAsync();
     }
 
     [AvaloniaFact]
@@ -59,9 +61,9 @@ public class ProgressRingActivityTests
         Assert.True(RingOf(window).IsActive);
 
         fx.Start();
-        await fx.SettleAsync(() => !vm.IsLoading);
-        Assert.False(RingOf(window).IsActive);
-        fx.Dispose();
+        await fx.SettleAsync(() => !RingOf(window).IsActive);
+        Assert.False(vm.IsLoading);
+        await fx.DisposeAsync();
     }
 
     [AvaloniaFact]
@@ -78,8 +80,8 @@ public class ProgressRingActivityTests
         Assert.True(RingOf(window).IsActive);
 
         fx.Start();
-        await fx.SettleAsync(() => !vm.IsLoading);
-        Assert.False(RingOf(window).IsActive);
-        fx.Dispose();
+        await fx.SettleAsync(() => !RingOf(window).IsActive);
+        Assert.False(vm.IsLoading);
+        await fx.DisposeAsync();
     }
 }
