@@ -590,6 +590,21 @@
   <data name="ConfirmCancel" xml:space="preserve">
     <value>Cancel</value>
   </data>
+  <data name="Resume" xml:space="preserve">
+    <value>Resume</value>
+  </data>
+  <data name="AbortConfirmTitle" xml:space="preserve">
+    <value>Abort task?</value>
+  </data>
+  <data name="AbortConfirmBodyFmt" xml:space="preserve">
+    <value>Abort "{0}" on {1}? The task's computed work will be permanently lost.</value>
+  </data>
+  <data name="ControlOpFailedTitleFmt" xml:space="preserve">
+    <value>{0} failed</value>
+  </data>
+  <data name="ControlHostNotConnected" xml:space="preserve">
+    <value>Host is not connected</value>
+  </data>
   <data name="TransfersTitle" xml:space="preserve">
     <value>Transfers</value>
   </data>

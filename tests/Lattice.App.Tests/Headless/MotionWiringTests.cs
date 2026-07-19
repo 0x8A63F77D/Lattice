@@ -88,7 +88,7 @@ public class MotionWiringTests
     public void Tasks_progress_fill_animates_its_width_over_200ms()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         var window = fx.Host(view);
         window.Show();

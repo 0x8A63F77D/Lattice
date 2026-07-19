@@ -141,6 +141,9 @@ public sealed class HostGraphFixture : IAsyncDisposable, IDisposable
         MonitorTime = new FakeTimeProvider();
         Manager = new HostMonitorManager(Registry, () => new RoutingGuiRpcClient(_fakes), MonitorTime);
         Store = new HostStore(Registry, Manager, _dispatcher);
+        // Control lane over the SAME manager + routing factory: op RPCs land on
+        // the per-address fake and success nudges the store's own monitors.
+        Control = new HostControlService(Registry, Manager, () => new RoutingGuiRpcClient(_fakes));
         Clock = new ManualUiClock();
         if (uiState is null)
         {
@@ -157,6 +160,7 @@ public sealed class HostGraphFixture : IAsyncDisposable, IDisposable
     public HostRegistry Registry { get; }
     public HostMonitorManager Manager { get; }
     public HostStore Store { get; }
+    public HostControlService Control { get; }
     public ManualUiClock Clock { get; }
     public UiStateStore UiState { get; }
     public DensityPreference Density { get; }

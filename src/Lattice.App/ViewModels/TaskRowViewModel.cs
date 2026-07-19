@@ -30,7 +30,11 @@ public sealed record TaskRowViewModel(
     // "10m" would otherwise order before "9m". Default 0 for hand-built test rows that don't
     // exercise duration sorting; From() always sets them from the snapshot.
     double ElapsedSeconds = 0,
-    double RemainingSeconds = 0)
+    double RemainingSeconds = 0,
+    // Task identity for control ops (design 1.5: tasks are addressed by
+    // (project_url, result name)). Default "" for hand-built test rows; From()
+    // always sets it from the snapshot.
+    string ProjectUrl = "")
 {
     public TaskRowKey Key => new(HostId, Name);
 
@@ -79,7 +83,8 @@ public sealed record TaskRowViewModel(
             HostId: hostId,
             Host: host,
             ElapsedSeconds: elapsedSeconds,
-            RemainingSeconds: remainingSeconds);
+            RemainingSeconds: remainingSeconds,
+            ProjectUrl: r.ProjectUrl);
     }
 
     private static double? ComputeFraction(Result r) => r.ActiveTask switch

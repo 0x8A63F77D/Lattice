@@ -29,7 +29,7 @@ public class TasksViewModelTests : IAsyncLifetime
 
     private HostConfig AddHost(string address, FakeGuiRpcClient fake) => _fx.AddHost(address, fake);
 
-    private TasksViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density);
+    private TasksViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density, _fx.Control);
 
     [Fact]
     public async Task AllHosts_merges_rows_from_both_hosts()

@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
@@ -79,7 +80,13 @@ public partial class TasksView : UserControl
         {
             LoadColumnPreferences();
             SyncStateFilterFromViewModel();
+            WireConfirmationHandler();
         };
+        // Right-click must move selection to the row under the pointer BEFORE
+        // the ContextFlyout opens, or the menu would act on a stale selection.
+        // Tunnel handling: the DataGrid's own pointer handling marks the event
+        // handled on the bubble path.
+        Grid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
         // Column-width persistence (#120): single-copy machinery, wired the same
         // one line in all four data views. Restores persisted widths on attach
         // and writes settled user resizes back — independent of the header-based
@@ -210,6 +217,37 @@ public partial class TasksView : UserControl
             4 => TaskStateKind.Uploading,
             _ => null,
         };
+    }
+
+    // Production wiring of the VM's dialog seam (design 2.5): the FA dialog is
+    // constructed only here, never in VM code, so headless VM tests fake the
+    // seam. Assign-if-null keeps a test-installed fake authoritative when the
+    // view is hosted on top of a pre-wired VM.
+    private void WireConfirmationHandler()
+    {
+        if (DataContext is TasksViewModel { ConfirmationHandler: null } vm)
+            vm.ConfirmationHandler = request =>
+                TopLevel.GetTopLevel(this) is { } top
+                    ? ConfirmationDialog.ConfirmAsync(top, request)
+                    : Task.FromResult(false); // not attached: fail safe, decline
+    }
+
+    private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(Grid).Properties.IsRightButtonPressed)
+            return;
+        if ((e.Source as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true) is { } row)
+            Grid.SelectedItem = row.DataContext;
+    }
+
+    // The failure bar holds the LAST op failure; any close (the bar's close
+    // button, or IsOpen flipping through the binding) clears the surface —
+    // unlike the partial bar there is no dismissal-episode bookkeeping here,
+    // a dismissed failure simply stays gone until a newer failure replaces it.
+    private void OnControlFailureClosed(FAInfoBar sender, FAInfoBarClosedEventArgs args)
+    {
+        if (args.Reason == FAInfoBarCloseReason.CloseButton && DataContext is TasksViewModel vm)
+            vm.ControlFailure.Clear();
     }
 
     // Only a close-button click is a dismissal episode (design § partial-bar

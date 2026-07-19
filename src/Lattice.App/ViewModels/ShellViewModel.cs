@@ -68,7 +68,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a
         // fixes its row heights), so it does not take the shared preference.
         var density = new DensityPreference(uiState);
-        Tasks = new TasksViewModel(store, clock, uiState, density);
+        // The control lane (M3): one service over the SAME manager the store
+        // listens to, so an op success nudges exactly the monitors whose
+        // snapshots feed the grids. Constructed here like the other VM-layer
+        // collaborators (DensityPreference, ThemePreference).
+        var control = new HostControlService(registry, store.Manager, clientFactory);
+        Tasks = new TasksViewModel(store, clock, uiState, density, control);
         Projects = new ProjectsViewModel(store, clock);
         Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);

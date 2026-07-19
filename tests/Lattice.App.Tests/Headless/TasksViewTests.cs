@@ -31,7 +31,7 @@ public class TasksViewTests
         UiStateStore? uiState = null)
     {
         var fx = new HostGraphFixture(uiState);
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         // The fixture's 1280px default width matters here beyond matching
         // ShellWindow: it is wide enough that the Elapsed (<1100) and

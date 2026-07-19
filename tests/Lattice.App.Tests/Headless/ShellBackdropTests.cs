@@ -99,7 +99,7 @@ public class ShellBackdropTests
     // would find two CommandBars/ContentRegions. A direct per-view render has exactly one of each.
     private static Control BuildDataView(int view, HostGraphFixture fx) => view switch
     {
-        0 => new TasksView { DataContext = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density) },
+        0 => new TasksView { DataContext = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control) },
         1 => new ProjectsView { DataContext = new ProjectsViewModel(fx.Store, fx.Clock) },
         2 => new TransfersView { DataContext = new TransfersViewModel(fx.Store, fx.Clock, fx.Density) },
         3 => new EventLogView { DataContext = new EventLogViewModel(fx.Store) },

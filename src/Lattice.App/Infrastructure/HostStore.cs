@@ -46,6 +46,11 @@ public sealed class HostStore : IDisposable
 
     public IReadOnlyList<HostEntry> Hosts => _hosts;
 
+    /// <summary>The monitor manager behind this store — exposed so ShellViewModel can
+    /// construct <see cref="HostControlService"/> over the SAME manager instance
+    /// (the control lane must nudge the monitors this store listens to).</summary>
+    internal HostMonitorManager Manager => _manager;
+
     /// <summary>Passthrough for the "Polling every {0}s" status text (Tasks view et al).</summary>
     public int PollingIntervalSeconds => _registry.PollingIntervalSeconds;
 

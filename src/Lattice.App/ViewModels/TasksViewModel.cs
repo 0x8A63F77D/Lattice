@@ -5,6 +5,12 @@ using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
+using Lattice.App.Views;
+using Lattice.Core;
+// The F# policy DUs deliberately duplicate the GuiRpc enums (Aggregation is
+// GuiRpc-free by module rule); alias both so neither is ever named bare.
+using AggTaskOp = Lattice.App.Aggregation.TaskOp;
+using GuiTaskOp = Lattice.Boinc.GuiRpc.TaskOp;
 
 namespace Lattice.App.ViewModels;
 
@@ -21,6 +27,7 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     private readonly IUiClock _clock;
     private readonly UiStateStore _uiStateStore;
     private readonly DensityPreference _density;
+    private readonly HostControlService _control;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // The persisted UI-preference record, loaded once at construction and used
@@ -55,13 +62,16 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             return a.Deadline.Value.CompareTo(b.Deadline.Value);
         }));
 
-    public TasksViewModel(HostStore store, IUiClock clock, UiStateStore uiStateStore, DensityPreference density)
+    public TasksViewModel(
+        HostStore store, IUiClock clock, UiStateStore uiStateStore, DensityPreference density,
+        HostControlService control)
     {
         _store = store;
         _clock = clock;
         _uiStateStore = uiStateStore;
         _uiState = uiStateStore.Load();
         _density = density;
+        _control = control;
         // Field write, not property: restoring the shared preference must not
         // re-save it through OnIsCompactChanged.
         _isCompact = density.Value;
@@ -154,6 +164,100 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
             var visibility = new Dictionary<string, bool>(s.ColumnVisibility) { [columnKey] = visible };
             return s with { ColumnVisibility = visibility };
         });
+    }
+
+    // --- M3 control ops (design 2.5; DI-1/DI-3). Flow per command: build the
+    //     F# ControlIntent → ConfirmationPolicy.classify → Instant executes,
+    //     Confirm consults the dialog seam first. The dialog itself is never
+    //     constructed here: the view assigns ConfirmationHandler (headless
+    //     tests fake it at this boundary). ---
+
+    /// <summary>Failure surface behind the view's dismissible InfoBar: last
+    /// control-op failure only; any op success clears it.</summary>
+    public ControlFailureSurface ControlFailure { get; } = new();
+
+    /// <summary>
+    /// The dialog seam: shows a confirmation and resolves to the user's choice.
+    /// Assigned by TasksView (production: <see cref="ConfirmationDialog.ConfirmAsync(Avalonia.Controls.TopLevel, ConfirmationRequest)"/>);
+    /// null (nothing wired yet) fails SAFE — Confirm-class ops decline.
+    /// </summary>
+    public Func<ConfirmationRequest, Task<bool>>? ConfirmationHandler { get; set; }
+
+    /// <summary>The grid's selected row holder (TwoWay-bound to DataGrid.SelectedItem).
+    /// Typed object: the grid hands back the RowHolder-derived TaskRow.</summary>
+    [ObservableProperty] private object? _selectedRow;
+
+    /// <summary>Why the control buttons are disabled (DI-3 tooltip), or null when
+    /// they are enabled or nothing is selected (a disabled button with no
+    /// selection is self-explanatory).</summary>
+    [ObservableProperty] private string? _controlDisabledReason;
+
+    private TaskRowViewModel? SelectedTask =>
+        (SelectedRow as RowHolder<TaskRowKey, TaskRowViewModel>)?.Data;
+
+    partial void OnSelectedRowChanged(object? value) => RefreshControlState();
+
+    // DI-3: control ops are enabled ONLY while the row's host is Connected —
+    // never queued, never fire-and-fail from a knowable precondition.
+    private bool CanControlSelectedTask() =>
+        SelectedTask is { } task && IsHostConnected(task.HostId);
+
+    private bool IsHostConnected(Guid hostId) =>
+        _store.Hosts.FirstOrDefault(h => h.Config.Id == hostId)?.Status.State
+            == HostConnectionState.Connected;
+
+    [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
+    private Task SuspendSelectedAsync() =>
+        RunTaskOpAsync(AggTaskOp.TaskSuspend, GuiTaskOp.Suspend, Strings.Suspend);
+
+    [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
+    private Task ResumeSelectedAsync() =>
+        RunTaskOpAsync(AggTaskOp.TaskResume, GuiTaskOp.Resume, Strings.Resume);
+
+    [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
+    private Task AbortSelectedAsync() =>
+        RunTaskOpAsync(AggTaskOp.TaskAbort, GuiTaskOp.Abort, Strings.Abort);
+
+    private async Task RunTaskOpAsync(AggTaskOp intentOp, GuiTaskOp wireOp, string opLabel)
+    {
+        if (SelectedTask is not { } task)
+            return;
+        if (ConfirmationPolicy.classify(ControlIntent.NewOfTask(intentOp))
+            is ConfirmationClass.Confirm confirm)
+        {
+            // TaskAbort is the only Confirm-class task op (DI-1 table), so the
+            // request wording is the abort wording; a policy change that
+            // promotes another task op re-visits this composition.
+            var request = new ConfirmationRequest(
+                Strings.AbortConfirmTitle,
+                string.Format(Strings.AbortConfirmBodyFmt, task.Name, task.Host),
+                opLabel,
+                confirm.Item);
+            if (ConfirmationHandler is not { } confirmationHandler
+                || !await confirmationHandler(request))
+                return;
+        }
+
+        ControlOpResult result =
+            await _control.PerformTaskOpAsync(task.HostId, wireOp, task.ProjectUrl, task.Name);
+        if (result.Outcome == ControlOpOutcome.Succeeded)
+            ControlFailure.Clear();
+        else
+            ControlFailure.Report(
+                string.Format(Strings.ControlOpFailedTitleFmt, opLabel), result.Error ?? "");
+        // Success needs no optimistic mutation: the service already nudged the
+        // monitor, so the grid converges on the next poll tick (~1 s).
+    }
+
+    private void RefreshControlState()
+    {
+        SuspendSelectedCommand.NotifyCanExecuteChanged();
+        ResumeSelectedCommand.NotifyCanExecuteChanged();
+        AbortSelectedCommand.NotifyCanExecuteChanged();
+        ControlDisabledReason =
+            SelectedTask is { } task && !IsHostConnected(task.HostId)
+                ? Strings.ControlHostNotConnected
+                : null;
     }
 
     [RelayCommand]
@@ -274,6 +378,10 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         LoadingText = IsLoading
             ? string.Format(Strings.LoadingFromFmt, string.Join(", ", scoped.Select(h => h.Config.DisplayName)))
             : "";
+
+        // Connection states may have changed (Rebuild runs on every store
+        // change/tick): re-derive the DI-3 enablement and its tooltip reason.
+        RefreshControlState();
     }
 
     public void Dispose()

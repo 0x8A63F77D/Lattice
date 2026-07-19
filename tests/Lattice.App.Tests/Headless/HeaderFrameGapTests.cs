@@ -55,7 +55,7 @@ public class HeaderFrameGapTests
     public void Tasks_grid_sits_flush_below_the_command_bar()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var window = fx.Host(new TasksView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         window.Show();
@@ -113,7 +113,7 @@ public class HeaderFrameGapTests
     public async Task Open_partial_bar_overlays_the_grid_without_displacing_it()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var window = fx.Host(new TasksView { DataContext = vm });
         fx.AddHost("host-up", new FakeGuiRpcClient());
         // An unauthorized host makes coverage partial, which opens the bar.
@@ -136,7 +136,10 @@ public class HeaderFrameGapTests
         // partial outage can persist for hours).
         double WY(Visual v) => v.TranslatePoint(new Point(0, 0), window)!.Value.Y;
         var (_, grid, _) = MeasureGap(window);
-        var infoBar = window.GetVisualDescendants().OfType<FAInfoBar>().Single();
+        // The view now hosts a second (closed) FAInfoBar — the M3 control-failure
+        // bar — so select the partial bar by its placement class.
+        var infoBar = window.GetVisualDescendants().OfType<FAInfoBar>()
+            .Single(b => b.Classes.Contains("partialBar"));
         Assert.True(infoBar is { IsOpen: true, IsVisible: true } && infoBar.Bounds.Height > 20,
             $"the open partial bar must be laid out with real height; got IsOpen={infoBar.IsOpen} " +
             $"IsVisible={infoBar.IsVisible} height={infoBar.Bounds.Height}");

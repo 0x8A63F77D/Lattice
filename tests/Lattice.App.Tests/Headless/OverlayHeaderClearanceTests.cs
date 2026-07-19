@@ -92,7 +92,7 @@ public class OverlayHeaderClearanceTests
     public async Task Tasks_empty_overlay_leaves_the_header_visible_and_hittable()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var window = fx.Host(new TasksView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         fx.AddHost("host-b", new FakeGuiRpcClient());
@@ -180,7 +180,7 @@ public class OverlayHeaderClearanceTests
     public void Tasks_loading_overlay_leaves_the_header_visible_and_hittable()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var window = fx.Host(new TasksView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         window.Show();

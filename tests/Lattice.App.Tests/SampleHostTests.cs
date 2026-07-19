@@ -58,7 +58,7 @@ public class SampleHostTests : IAsyncLifetime
     public async Task Tasks_grid_materializes_more_than_500_rows()
     {
         SeedFleet();
-        var vm = new TasksViewModel(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density);
+        var vm = new TasksViewModel(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density, _fx.Control);
         _fx.Start();
 
         // All-hosts scope merges every sample host; the busy host alone carries
