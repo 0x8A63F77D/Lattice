@@ -1,8 +1,8 @@
-name: Visual Regression (report-only)
+name: Visual Regression
 
-# Screenshot-baseline visual-regression pilot (issue #82). REPORT-ONLY during calibration:
-# image diffs never fail the build (the test step is continue-on-error), mirroring the
-# Stryker #77 cadence. macOS only — baselines are macOS/Skia captures and the gate is pinned
+# Screenshot-baseline visual-regression gate (issue #82). ENFORCING as of the #77/#82
+# threshold-flip: calibration is complete, so image diffs beyond the calibrated tolerances
+# now fail the build. macOS only — baselines are macOS/Skia captures and the gate is pinned
 # to that platform. The normal cross-platform ci.yml leaves LATTICE_RUN_VISUAL_TESTS unset,
 # so these tests skip there; this workflow is the sole place they run.
 
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   visual:
-    name: visual (macOS, report-only)
+    name: visual (macOS)
     runs-on: macos-latest
     env:
       # Gate: opt these tests in (ci.yml leaves it unset so they skip in the normal run).
@@ -40,9 +40,8 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet build tests/Lattice.VisualTests/Lattice.VisualTests.csproj -c Release
-      - name: Run visual tests (report-only)
+      - name: Run visual tests
         id: visual
-        continue-on-error: true
         run: dotnet test tests/Lattice.VisualTests/Lattice.VisualTests.csproj -c Release --no-build --logger "trx;LogFileName=visual.trx"
       - name: Upload received / diff / calibration artifacts
         if: always()
@@ -53,12 +52,12 @@ jobs:
             artifacts/visual/**
             tests/Lattice.VisualTests/**/*.received.png
           if-no-files-found: warn
-      - name: Report-only note
+      - name: Summary note
         if: always()
         run: |
           {
-            echo "### Visual regression (report-only)"
+            echo "### Visual regression"
             echo ""
-            echo "Test outcome: \`${{ steps.visual.outcome }}\` — image diffs never fail this build."
-            echo "The calibration report and any received/diff PNGs are in the **visual-artifacts** upload."
+            echo "Test outcome: \`${{ steps.visual.outcome }}\` — diffs beyond the calibrated tolerance fail this build."
+            echo "On a diff, the received/diff PNGs are in the **visual-artifacts** upload; review and rebaseline per the VisualTests README."
           } >> "$GITHUB_STEP_SUMMARY"

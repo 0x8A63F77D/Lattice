@@ -23,12 +23,18 @@ namespace Lattice.VisualTests;
 /// </summary>
 internal static class TolerantPngComparer
 {
-    // PLACEHOLDER tolerances — this spike is report-only. Final values are set from the
-    // run-to-run / dev-vs-CI distributions the CalibrationHarness produces, mirroring the
-    // Stryker #77 "calibrate, then flip the gate" cadence — never guessed as a break
-    // threshold up front. These are seeded with generous headroom above the same-machine
-    // run-to-run noise measured on the dev Mac (meanError ~0.05, count of supra-tolerance
-    // pixels ~0), leaving a wide margin below a real change (meanError ~16, count ~10k).
+    // CALIBRATED tolerances — set from the #82 calibration measurements (comment 2026-07-13),
+    // now that the gate is ENFORCING (visual-tests.yml no longer continue-on-error). Both sit
+    // comfortably above the observed cross-machine drift and far below a real change, per the
+    // Stryker #77 "calibrate, then flip" cadence:
+    //   - same-runner run-to-run (after cache warmup): meanError 0, supra-tolerance count 0.
+    //   - dev-Mac vs CI-Mac drift (the floor the gate must never trip on): meanError ≤ 0.0111,
+    //     supra-tolerance count ≤ 38 px (of 140,800), across both themes and two macOS versions.
+    //   - a real change (the #82 falsification demo): meanError ~12, ~7,000 px — ~3 orders louder.
+    // MeanErrorThreshold 1.0 is the top of the owner's stated 0.1–1.0 band: ~90x above the ≤0.011
+    // drift, ~12x below a real change — the upper edge maximizes margin against future runner-image
+    // drift while staying well under any genuine regression. PixelErrorCountGuard 400 is "low
+    // hundreds": ~10x above the ≤38-px drift, ~17x below the ~7,000-px real-change signal.
     public const double MeanErrorThreshold = 1.0;   // mean abs error per pixel, summed over RGB (0..765)
     public const int PixelErrorCountGuard = 400;    // max pixels differing by > per-pixel shift tolerance
 
@@ -63,7 +69,7 @@ internal static class TolerantPngComparer
         var maskPath = TryWriteDiffMask(receivedBytes, verifiedBytes);
         var message =
             $"""
-             Visual diff exceeded tolerance (report-only gate):
+             Visual diff exceeded tolerance:
                meanError       = {diff.MeanError:F4} (threshold {MeanErrorThreshold})
                pixelErrorCount = {diff.PixelErrorCount} (guard {PixelErrorCountGuard}, shift tol {GateMetrics.PerPixelShiftTolerance})
                pixelErrorPct   = {diff.PixelErrorPercentage:F4}%

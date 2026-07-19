@@ -48,6 +48,20 @@ public class SnapshotBuilderTests
     }
 
     [Fact]
+    public void Task_project_name_falls_back_to_url_when_joined_project_name_is_empty()
+    {
+        // Boundary pin for SnapshotBuilder.cs:43 (`proj.ProjectName.Length > 0`).
+        // A project exists in state for the result's URL but carries an EMPTY ProjectName
+        // (BOINC emits this before the project's account info arrives). An empty name is not
+        // a usable display value, so the Application/Project column must fall back to the
+        // master URL — not render blank. The strict `> 0` is what makes empty fall through;
+        // `>= 0` would (wrongly) treat "" as a real name.
+        CcState state = TestData.MakeState(projects: [TestData.MakeProject("https://example.org/", name: "")]);
+        HostSnapshot snapshot = Build(state, results: [TestData.MakeResult(projectUrl: "https://example.org/")]);
+        Assert.Equal("https://example.org/", snapshot.Tasks[0].ProjectName);
+    }
+
+    [Fact]
     public void Elapsed_uses_active_task_then_final_elapsed()
     {
         Result active = TestData.MakeResult(activeTask: new ActiveTask(1, 0.5, 100, 123), finalElapsed: 999);
@@ -69,6 +83,19 @@ public class SnapshotBuilderTests
         Assert.False(snapshot.Tasks[1].IsDeadlineAtRisk);
         Assert.False(snapshot.Tasks[2].IsDeadlineAtRisk);
         Assert.False(snapshot.Tasks[3].IsDeadlineAtRisk);
+    }
+
+    [Fact]
+    public void Deadline_at_risk_is_false_when_projected_finish_exactly_meets_deadline()
+    {
+        // Boundary pin for SnapshotBuilder.cs:52 (`now + remaining > deadline`).
+        // A projected finish (now + EstimatedCpuTimeRemaining) landing EXACTLY on the
+        // deadline is on-time, not at-risk: the rule is strictly-after. `estRemaining`
+        // is chosen so `Now + FromSeconds(estRemaining)` equals the deadline instant to the
+        // tick, exercising the `>` vs `>=` tie. `>=` would (wrongly) flag it at-risk.
+        Result exact = TestData.MakeResult(deadline: Now.AddSeconds(3600), estRemaining: 3600);
+        HostSnapshot snapshot = Build(results: [exact]);
+        Assert.False(snapshot.Tasks[0].IsDeadlineAtRisk);
     }
 
     [Fact]
@@ -95,6 +122,20 @@ public class SnapshotBuilderTests
             Build(state, transfers: [TestData.MakeTransfer()]).Transfers[0].ProjectName);
         Assert.Equal("https://x.org/",
             Build(transfers: [TestData.MakeTransfer(projectUrl: "https://x.org/")]).Transfers[0].ProjectName);
+    }
+
+    [Fact]
+    public void Transfer_project_name_falls_back_to_url_when_own_and_joined_names_are_empty()
+    {
+        // Boundary pin for SnapshotBuilder.cs:62 (inner `proj.ProjectName.Length > 0` on the
+        // transfer join). A transfer with no own ProjectName whose joined project also carries
+        // an empty ProjectName must fall back to the master URL, not render blank. This is the
+        // transfer-branch twin of the L43 gap; the strict `> 0` makes the empty joined name
+        // fall through to the URL, whereas `>= 0` would surface "".
+        CcState state = TestData.MakeState(projects: [TestData.MakeProject("https://example.org/", name: "")]);
+        HostSnapshot snapshot = Build(state,
+            transfers: [TestData.MakeTransfer(projectUrl: "https://example.org/", projectName: "")]);
+        Assert.Equal("https://example.org/", snapshot.Transfers[0].ProjectName);
     }
 
     [Fact]

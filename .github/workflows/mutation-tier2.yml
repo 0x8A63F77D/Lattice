@@ -1,7 +1,10 @@
 name: Mutation Tier 2
 
 # Nightly regression audit (issue #77): full Stryker over the pinned mutation
-# scope, score posted to the tracking issue. Never blocks PRs.
+# scope, score posted to the tracking issue. Never blocks PRs (scheduled run).
+# stryker-config.json now sets thresholds.break = 80, so a regression below it makes
+# the Stryker step exit non-zero; the post step runs `if: always()` so the tracking
+# issue is still updated with the regression score on that path.
 
 on:
   schedule:
@@ -26,6 +29,7 @@ jobs:
         working-directory: tests/Lattice.Tests
         run: dotnet dotnet-stryker
       - name: Post score to tracking issue
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash scripts/post-mutation-report.sh 77
