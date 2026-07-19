@@ -199,7 +199,13 @@ module AttachMachine =
         | LookupPolling of polls: int
         | AttachRequested                  // SendAttach in flight, awaiting EffectOk
         | AttachPolling of polls: int
-        | Done of Result<unit, AttachError>
+        // Success carries the daemon's attach messages for display. NOTE the
+        // semantics (design 2.3): errorNum 0 means the daemon ACCEPTED the attach
+        // and created the project entry (gstate.add_project returned 0) — it does
+        // NOT verify the authenticator, which the daemon only checks on its first
+        // scheduler RPC (failures surface in the event log afterwards). The dialog
+        // wording must say "attached", not "verified".
+        | Done of Result<string list, AttachError>
 
     type State =
         { Phase: Phase
@@ -275,10 +281,13 @@ module AttachMachine =
             if keepPolling errorNum then
                 if polls + 1 >= PollLimit then fail (TimedOut AttachStage)
                 else { state with Phase = AttachPolling (polls + 1) }, [ PollAttach ]
-            elif errorNum = 0 then { state with Phase = Done (Ok ()) }, []
+            elif errorNum = 0 then { state with Phase = Done (Ok messages) }, []
             else fail (AttachFailed (errorNum, messages))
 
-        | Done _, _ -> state, []            // terminal absorbs everything
+        // Terminal absorbs every input (enumerated: the exhaustiveness tripwire
+        // must fire here too when an Input case is added).
+        | Done _, (Start _ | EffectOk | LookupReply _ | AttachReply _ | Faulted _) ->
+            state, []
         | (Idle | LookupRequested | LookupPolling _ | AttachRequested | AttachPolling _),
           Faulted message -> fail (FlowFaulted message)
         // Safe settle for every remaining pair. The earlier rules already matched
@@ -292,7 +301,7 @@ module AttachMachine =
 ```
 
 - [ ] **E1.2** Red-first F# tests before wiring the runner:
-  - Transition table (xUnit `[<Theory>]`): every row above — happy path email flow (Start → EffectOk → in-progress ×2 → success reply → EffectOk → attach reply 0 → `Done (Ok ())`); authenticator skip; each failure exit; retry code −199 behaves like −204; poll #60 times out; `Done` absorbs all five input kinds; `Faulted` from every non-terminal phase.
+  - Transition table (xUnit `[<Theory>]`): every row above — happy path email flow (Start → EffectOk → in-progress ×2 → success reply → EffectOk → attach reply 0 with messages → `Done (Ok messages)`, messages preserved); authenticator skip; each failure exit; retry code −199 behaves like −204; poll #60 times out; `Done` absorbs all five input kinds; `Faulted` from every non-terminal phase.
   - FsCheck properties: (P1) for any input sequence, `step` never raises and poll commands per stage never exceed `PollLimit`; (P2) any state's `Phase = Done` is absorbing; (P3) `SendAttach` is always preceded (in the emitted command history) by either `AuthenticatorKey` start or a zero-`errorNum` `LookupReply` — i.e. an authenticator is never fabricated.
 - [ ] **E1.3** Commit `feat(machine): AttachMachine pure core (M3 PR E1)`.
 
@@ -452,7 +461,7 @@ module RunModePolicy =
 
 **Files:** Create `src/Lattice.App/Views/AttachProjectDialog.axaml(+.cs)`, `src/Lattice.App/ViewModels/AttachProjectViewModel.cs`; modify ProjectsView ("Add project…" enable); Strings.resx; tests `tests/Lattice.App.Tests/AttachProjectViewModelTests.cs`.
 
-- [ ] **I1** Dialog (FAContentDialog subclass + StyleKeyOverride; deferral pattern precedent: AddHostDialog): host picker (prefilled+locked when a host is scoped; dropdown of Connected hosts in All-hosts scope), project URL, credential toggle (email+password | account key), progress area driven by `Stage` reports ("Contacting project…" / "Attaching…"), failure area showing the flow error verbatim (display-only). Passwords: in-memory only, never logged/persisted (the VM holds them only for the flow's duration).
+- [ ] **I1** Dialog (FAContentDialog subclass + StyleKeyOverride; deferral pattern precedent: AddHostDialog): host picker (prefilled+locked when a host is scoped; dropdown of Connected hosts in All-hosts scope), project URL, credential toggle (email+password | account key), progress area driven by `Stage` reports ("Contacting project…" / "Attaching…"), failure area showing the flow error verbatim (display-only). Success wording is **"attached"**, never "verified" (design 2.3: the daemon accepts the attach without checking the authenticator — a bad account key on the direct-key path surfaces later in the event log via the first scheduler RPC), and any `Done (Ok messages)` daemon messages render in the success state. Passwords: in-memory only, never logged/persisted (the VM holds them only for the flow's duration).
 - [ ] **I2** VM drives `AttachFlowRunner.RunAsync`; success closes + the tick (PR C) or a `RequestRefresh` surfaces the new project; cancellation via dialog close token.
 - [ ] **I3** Red-first headless tests against a scripted runner seam: phase progression text, failure rendering, host-picker gating, busy-state (no double submit — deferral re-entrancy guard precedent AddHostDialog.axaml.cs:50).
 - [ ] **I4** Commit `feat(app): attach project dialog (M3 PR I)`. Owner eyeball before merge.
@@ -461,7 +470,7 @@ module RunModePolicy =
 
 ## PR J — docs: M3 owner walkthrough
 
-- [ ] **J1** `docs/design/m3/walkthrough.md` mirroring the M2 #32 checklist pattern: every assertion verified against **shipped runtime code** (standing lesson: not design intent) — suspend/resume/abort a task; suspend/resume/update a project single- and multi-host; detach + re-attach a test project (Einstein@Home on the dev machine's live BOINC 8.2.11); snooze 15 min + resume; unreachable-host disablement; auth-failure surface (temporarily wrong password). Include the DI-1/DI-2 dialog-appearance checks as explicit steps.
+- [ ] **J1** `docs/design/m3/walkthrough.md` mirroring the M2 #32 checklist pattern: every assertion verified against **shipped runtime code** (standing lesson: not design intent) — suspend/resume/abort a task; suspend/resume/update a project single- and multi-host; detach + re-attach a test project (Einstein@Home on the dev machine's live BOINC 8.2.11); attach with a deliberately bad account key via the direct-key path (expect: dialog reports attached, project appears, authenticator failure surfaces in the event log afterwards — design 2.3 semantics); snooze 15 min + resume; unreachable-host disablement; auth-failure surface (temporarily wrong password). Include the DI-1/DI-2 dialog-appearance checks as explicit steps.
 - [ ] **J2** Commit `docs(m3): owner walkthrough checklist (M3 PR J)`.
 
 ---
