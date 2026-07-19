@@ -5,6 +5,11 @@
       "**/SnapshotBuilder.cs"
     ],
     "reporters": ["ClearText", "Markdown", "Json"],
-    "mutation-level": "Standard"
+    "mutation-level": "Standard",
+    "thresholds": {
+      "high": 90,
+      "low": 80,
+      "break": 80
+    }
   }
 }

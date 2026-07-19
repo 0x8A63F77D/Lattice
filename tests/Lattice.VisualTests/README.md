@@ -62,6 +62,14 @@ measures; if that drift is negligible they stand, otherwise promote the CI runne
 
 ## Threshold status
 
-The comparer's `MeanErrorThreshold` / `PixelErrorCountGuard` are **placeholders** — the gate is
-report-only until the calibration distributions justify a value, exactly like the Stryker #77
-pilot. Flipping to enforcement is a separate PR.
+The gate is **enforcing**. The comparer's tolerances are calibrated from the #82 measurements
+(issue comment, 2026-07-13) and `visual-tests.yml` no longer runs `continue-on-error`:
+
+| tolerance | value | vs dev↔CI drift (≤ 0.0111 / ≤ 38 px) | vs a real change (~12 / ~7,000 px) |
+|---|---|---|---|
+| `MeanErrorThreshold` | `1.0` | ~90× above | ~12× below |
+| `PixelErrorCountGuard` | `400` | ~10× above | ~17× below |
+
+Both sit far above the observed cross-machine drift (so normal render variance never fails the
+build) and far below a genuine visual regression. The suite stays env-gated (`LATTICE_RUN_VISUAL_TESTS`),
+macOS-only. Widening coverage to more views is separate, owner-gated scope.
