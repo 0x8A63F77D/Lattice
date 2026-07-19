@@ -100,14 +100,30 @@ internal static class ComboOpenProbe
         Console.WriteLine($"[combo-probe] watch label={label} centerPx={centerPx.X},{centerPx.Y} " +
                           $"centerPt={centerPx.X / scaling:F0},{centerPx.Y / scaling:F0} scaling={scaling}");
 
-        long tPress = 0;
-        box.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
+        if (topLevel is null)
         {
+            Console.WriteLine("[combo-probe] watch FAILED: no TopLevel");
+            return;
+        }
+
+        // Timestamp hooks live on the TopLevel's tunnel, not the box's: tunnel runs
+        // root→target, so these fire before ANY handler on the box itself — including
+        // ComboBoxPressOpenBehavior's press-open tunnel handler, which otherwise opens
+        // the dropdown (raising DropDownOpened synchronously) before tPress is stamped.
+        long tPress = 0;
+        bool WithinBox(object? source) =>
+            source is Avalonia.Visual v && (v == box || box.IsVisualAncestorOf(v));
+        topLevel.AddHandler(Avalonia.Input.InputElement.PointerPressedEvent, (_, e) =>
+        {
+            if (!WithinBox(e.Source))
+                return;
             tPress = Stopwatch.GetTimestamp();
             Console.WriteLine($"[combo-probe] watch press t=0.0ms");
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
-        box.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, e) =>
+        topLevel.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, e) =>
         {
+            if (!WithinBox(e.Source))
+                return;
             Console.WriteLine($"[combo-probe] watch release t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms");
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         box.DropDownOpened += (_, _) =>
