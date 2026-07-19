@@ -70,6 +70,14 @@
          avares:///Assets/lattice.ico. Link places the out-of-project file at a
          clean logical path; the physical file stays in docs/design/icon. -->
     <AvaloniaResource Include="../../docs/design/icon/windows/lattice.ico" Link="Assets/lattice.ico" />
+    <!-- macOS menu-bar tray template glyph (issue #108): monochrome black+alpha PNG
+         the OS tints for light/dark menu bars. Only the 36 px (@2x-resolution) master
+         is embedded: Avalonia's macOS tray path feeds a SINGLE bitmap to AppKit's
+         NSImage(initWithData:) and resizes it to ~18 pt, so the classic @1x/@2x
+         filename pair is never density-resolved there — one 36 px rep is crisp at
+         18 pt on Retina (2x backing) and downsamples cleanly on 1x. The 18 px PNG and
+         the SVG master sit alongside as provenance, un-embedded. -->
+    <AvaloniaResource Include="../../docs/design/icon/macos/tray/latticeTrayTemplate@2x.png" Link="Assets/latticeTrayTemplate@2x.png" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Lattice.Core/Lattice.Core.csproj" />
