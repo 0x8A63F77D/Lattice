@@ -11,6 +11,7 @@
   <ItemGroup>
     <Compile Include="HostConnectionState.fs" />
     <Compile Include="HostMachine.fs" />
+    <Compile Include="AttachMachine.fs" />
   </ItemGroup>
 
 </Project>
