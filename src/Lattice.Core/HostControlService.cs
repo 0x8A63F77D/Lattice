@@ -80,16 +80,22 @@ public sealed class HostControlService
         SubmitAsync(hostId, (client, token) => client.SetModeAsync(lane, mode, duration, token), ct);
 
     // Appends the op to the host's lane tail and returns the task for THIS op. The lock is
-    // held only for the map read-modify-write; RunAfterAsync suspends at its first await
-    // (the predecessor, or — for an empty lane — the op's own first I/O await), so no op
-    // body and no I/O ever runs under _laneGate.
+    // held ONLY for the map read-modify-write: the op body is launched via Task.Run, which
+    // queues it to the thread pool (TaskScheduler.Default) and returns immediately, so no op
+    // body, factory call, or I/O ever runs under _laneGate. Two reasons this must run on the
+    // pool rather than inline: (1) _laneGate is a single global gate shared across hosts, so
+    // running op work under it would let a slow client factory or a synchronously-completing
+    // op on one host block submissions for UNRELATED hosts (breaking different-host
+    // independence); (2) the lane must be independent of whatever context submitted the op —
+    // Task.Run detaches from the caller's SynchronizationContext (the UI dispatcher in the
+    // app), which an inline async body or Task.Yield would otherwise capture.
     private Task<ControlOpResult> SubmitAsync(
         Guid hostId, Func<IGuiRpcClient, CancellationToken, Task> rpc, CancellationToken ct)
     {
         lock (_laneGate)
         {
             Task previous = _lanes.TryGetValue(hostId, out Task? tail) ? tail : Task.CompletedTask;
-            Task<ControlOpResult> current = RunAfterAsync(previous, hostId, rpc, ct);
+            Task<ControlOpResult> current = Task.Run(() => RunAfterAsync(previous, hostId, rpc, ct));
             _lanes[hostId] = current;
             return current;
         }

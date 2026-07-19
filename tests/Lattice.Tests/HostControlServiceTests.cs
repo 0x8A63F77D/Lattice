@@ -316,13 +316,16 @@ public class HostControlServiceTests
         HostConfig host = Host();
         var order = new List<string>();
         var latch = new Latch();
+        int atGate = 0;
         int fakeIndex = 0;
         Func<IGuiRpcClient> factory = () =>
         {
             int index = Interlocked.Increment(ref fakeIndex);
             return new FakeGuiRpcClient
             {
-                OnConnect = (_, _) => index == 1 ? latch.Wait : Task.CompletedTask,   // op1 hangs until canceled
+                // Op1 parks mid-connect until the token cancels it. Only op1 (the FIRST op
+                // to execute, hence index 1) gates; op2/op3 connect cleanly.
+                OnConnect = async (_, _) => { if (index == 1) { Interlocked.Increment(ref atGate); await latch.Wait; } },
                 OnTaskOp = (op, _, _) => { lock (order) order.Add(op.ToString()); return Task.CompletedTask; },
             };
         };
@@ -331,6 +334,10 @@ public class HostControlServiceTests
         using var cts = new CancellationTokenSource();
 
         Task<ControlOpResult> op1 = service.PerformTaskOpAsync(host.Id, TaskOp.Suspend, "url", "t", cts.Token);
+        // Cancel ONLY once op1 is genuinely parked mid-connect (so it is index 1 and truly
+        // "mid-chain") — otherwise a cancel that lands before op1 reaches the gate would be a
+        // different scenario. op2/op3 queue behind it in submission order.
+        await Wait.UntilAsync(() => Volatile.Read(ref atGate) == 1, "op1 should be parked mid-connect");
         Task<ControlOpResult> op2 = service.PerformTaskOpAsync(host.Id, TaskOp.Resume, "url", "t");
         Task<ControlOpResult> op3 = service.PerformTaskOpAsync(host.Id, TaskOp.Abort, "url", "t");
         await cts.CancelAsync();   // op1 aborts mid-connect; op2/op3 must still run in order
@@ -366,6 +373,46 @@ public class HostControlServiceTests
 
         latch.Release();
         await Task.WhenAll(opA, opB);
+    }
+
+    [Fact]
+    public async Task Submitting_to_one_host_never_blocks_on_another_hosts_lane()
+    {
+        // The lane's swap lock is a SINGLE global gate; the op body must run entirely
+        // off it. An op that stalls in its (synchronous) client-factory call must not
+        // hold the gate, or a submission for an UNRELATED host would block behind it —
+        // breaking different-host independence. This pins that the gate is released
+        // before any op body runs.
+        HostConfig a = Host("a", "a-host");
+        HostConfig b = Host("b", "b-host");
+        using var factoryEntered = new ManualResetEventSlim(false);
+        using var releaseFactory = new ManualResetEventSlim(false);
+        Func<IGuiRpcClient> factory = () =>
+        {
+            // Host A's op parks INSIDE the synchronous factory call. If this ran under
+            // the swap lock, host B's submission below would deadlock against it.
+            if (!factoryEntered.IsSet) { factoryEntered.Set(); releaseFactory.Wait(); }
+            return new FakeGuiRpcClient();
+        };
+        var (service, manager, _) = Build(factory, a, b);
+        await using var _m = manager;
+        try
+        {
+            Task<ControlOpResult> opA = Task.Run(() => service.PerformTaskOpAsync(a.Id, TaskOp.Suspend, "url", "t"));
+            Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)), "host A's op should have started");
+
+            // Submitting for host B must return and complete without waiting on A's lane.
+            Task<ControlOpResult> opB = Task.Run(() => service.PerformTaskOpAsync(b.Id, TaskOp.Suspend, "url", "t"));
+            ControlOpResult resultB = await opB.WaitAsync(TimeSpan.FromSeconds(5));
+            Assert.Equal(ControlOpOutcome.Succeeded, resultB.Outcome);
+
+            releaseFactory.Set();
+            Assert.Equal(ControlOpOutcome.Succeeded, (await opA).Outcome);
+        }
+        finally
+        {
+            releaseFactory.Set();   // never leave a parked pool thread on failure
+        }
     }
 
     // ---- RequestRefresh nudge on success ----------------------------------------------
