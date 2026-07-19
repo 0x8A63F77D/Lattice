@@ -19,9 +19,20 @@
          :pointerover hover-keep) — it applies here because Grid carries the "lattice" class.
          No local rule needed. -->
     <!-- Progress-fill Border: accent color. Unlike Tasks, Transfers rows have
-         no suspended variant, so there is only the base rule. -->
+         no suspended variant, so there is only the base rule. The bound Width updates
+         immediately (value-first); the 200 ms easyEase width transition is cosmetic and
+         never gates the data (design card 1h / spec §11). -->
     <Style Selector="Border.progressFill">
       <Setter Property="Background" Value="{DynamicResource LatticeAccentBrush}" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Width" Duration="0:0:0.2">
+            <DoubleTransition.Easing>
+              <SplineEasing X1="0.33" Y1="0" X2="0.67" Y2="1" />
+            </DoubleTransition.Easing>
+          </DoubleTransition>
+        </Transitions>
+      </Setter>
     </Style>
     <!-- Status-cell text: SemiBold warning color while retrying. -->
     <Style Selector="TextBlock.retryingText">
@@ -123,7 +134,10 @@
               <DataTemplate x:DataType="vm:TransferRow">
                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                   <Border Width="56" Height="3" CornerRadius="2" Background="{DynamicResource LatticeStrokeBrush}">
+                    <!-- SnapOnRebind: no width animation on cell recycle (see TasksView's progress
+                         cell and Codex P2 on PR #103). -->
                     <Border Classes="progressFill" HorizontalAlignment="Left" Height="3" CornerRadius="2"
+                            views:ProgressFillBehavior.SnapOnRebind="True"
                             Width="{Binding Data.Fraction, Converter={x:Static views:FractionToWidthConverter.Instance}}" />
                   </Border>
                   <TextBlock Text="{Binding Data.ProgressText}" FontSize="12" Classes="numeric" />
