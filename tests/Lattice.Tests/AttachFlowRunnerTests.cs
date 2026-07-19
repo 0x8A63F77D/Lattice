@@ -205,6 +205,37 @@ public class AttachFlowRunnerTests
     }
 
     [Fact]
+    public async Task Attach_request_rejected_by_the_daemon_surfaces_as_AttachFailed()
+    {
+        await using var fx = new Fixture();
+        // Design 1.2: the daemon answers project_attach itself with <error> for an
+        // already-attached URL — a daemon attach rejection, not a transport fault
+        // (Codex P2 on PR #129).
+        fx.Fake.OnRequestProjectAttach = (_, _, _, _) =>
+            Task.FromException(new BoincRpcException("Already attached to project"));
+
+        AttachFlowResult result = await RunToEndAsync(fx, KeyRequest());
+
+        Assert.Equal(AttachFlowOutcome.AttachFailed, result.Outcome);
+        Assert.Equal(["Already attached to project"], result.Messages);
+        Assert.True(fx.Fake.Disposed);
+    }
+
+    [Fact]
+    public async Task Lookup_request_rejected_by_the_daemon_surfaces_as_LookupFailed()
+    {
+        await using var fx = new Fixture();
+        fx.Fake.OnRequestAccountLookup = (_, _) =>
+            Task.FromException(new BoincRpcException("lookup rejected"));
+
+        AttachFlowResult result = await RunToEndAsync(fx, EmailRequest());
+
+        Assert.Equal(AttachFlowOutcome.LookupFailed, result.Outcome);
+        Assert.Equal("lookup rejected", result.Error);
+        Assert.True(fx.Fake.Disposed);
+    }
+
+    [Fact]
     public async Task Connection_death_mid_flow_surfaces_as_Faulted()
     {
         await using var fx = new Fixture();

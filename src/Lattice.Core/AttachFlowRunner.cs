@@ -172,16 +172,33 @@ public sealed class AttachFlowRunner
                 progress?.Report(report.Item);
                 return null;
 
+            // On both send commands: an <error> reply to the stage REQUEST itself
+            // (e.g. "Already attached to project", design 1.2) is that stage's
+            // failure, not a transport fault — same rule as the poll RPCs below.
             case AttachMachine.Command.SendLookup lookup:
-                await client.RequestAccountLookupAsync(lookup.url, lookup.email, lookup.password, ct)
-                    .ConfigureAwait(false);
-                return AttachMachine.Input.EffectOk;
+                try
+                {
+                    await client.RequestAccountLookupAsync(lookup.url, lookup.email, lookup.password, ct)
+                        .ConfigureAwait(false);
+                    return AttachMachine.Input.EffectOk;
+                }
+                catch (BoincRpcException ex)
+                {
+                    return AttachMachine.Input.NewLookupReply(-1, ex.ErrorText, "");
+                }
 
             case AttachMachine.Command.SendAttach attach:
-                await client.RequestProjectAttachAsync(
-                        attach.url, attach.authenticator, attach.projectName, attach.email, ct)
-                    .ConfigureAwait(false);
-                return AttachMachine.Input.EffectOk;
+                try
+                {
+                    await client.RequestProjectAttachAsync(
+                            attach.url, attach.authenticator, attach.projectName, attach.email, ct)
+                        .ConfigureAwait(false);
+                    return AttachMachine.Input.EffectOk;
+                }
+                catch (BoincRpcException ex)
+                {
+                    return AttachMachine.Input.NewAttachReply(-1, ListModule.OfSeq([ex.ErrorText]));
+                }
 
             default:
                 if (command.IsPollLookup)

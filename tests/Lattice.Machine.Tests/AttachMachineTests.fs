@@ -101,6 +101,42 @@ let ``LookupPolling + a failure code fails the flow with LookupFailed`` code =
         { s0 with Phase = Done (Error (LookupFailed (code, "no such account"))) }, state)
     Assert.Empty commands
 
+// Send-leg short-circuit (Codex P2 on PR #129): the daemon can reject the stage
+// REQUEST itself with an <error> reply (e.g. "Already attached to project",
+// design 1.2) — the runner feeds that back as the stage's reply with errorNum -1,
+// so the send-awaiting phases accept their stage reply directly.
+
+[<Fact>]
+let ``LookupRequested + a failure reply settles as LookupFailed (send rejected)`` () =
+    let s0 = { Phase = LookupRequested; Request = Some emailReq }
+    let state, commands = step s0 (LookupReply (-1, "lookup rejected", ""))
+    Assert.Equal({ s0 with Phase = Done (Error (LookupFailed (-1, "lookup rejected"))) }, state)
+    Assert.Empty commands
+
+[<Fact>]
+let ``LookupRequested + a success reply proceeds to the attach (uniform handling)`` () =
+    let s0 = { Phase = LookupRequested; Request = Some emailReq }
+    let state, commands = step s0 (LookupReply (0, "", "AUTH"))
+    Assert.Equal({ s0 with Phase = AttachRequested }, state)
+    Assert.Equal<Command list>(
+        [ Report AttachStage; SendAttach (url, "AUTH", "Example", "user@example.org") ], commands)
+
+[<Fact>]
+let ``AttachRequested + a failure reply settles as AttachFailed (send rejected)`` () =
+    let s0 = { Phase = AttachRequested; Request = Some keyReq }
+    let state, commands = step s0 (AttachReply (-1, [ "Already attached to project" ]))
+    Assert.Equal(
+        { s0 with Phase = Done (Error (AttachFailed (-1, [ "Already attached to project" ]))) },
+        state)
+    Assert.Empty commands
+
+[<Fact>]
+let ``AttachRequested + a success reply completes (uniform handling)`` () =
+    let s0 = { Phase = AttachRequested; Request = Some keyReq }
+    let state, commands = step s0 (AttachReply (0, [ "welcome" ]))
+    Assert.Equal({ s0 with Phase = Done (Ok [ "welcome" ]) }, state)
+    Assert.Empty commands
+
 [<Fact>]
 let ``AttachRequested + EffectOk starts the settling poll from zero`` () =
     let s0 = { Phase = AttachRequested; Request = Some emailReq }
@@ -164,10 +200,10 @@ let ``unexpected (phase, input) pairs settle in FlowFaulted, never raise`` () =
           Idle, LookupReply (0, "", "AUTH")
           Idle, AttachReply (0, [])
           LookupRequested, Start emailReq
-          LookupRequested, LookupReply (0, "", "AUTH")
+          LookupRequested, AttachReply (0, [])
           LookupPolling 1, EffectOk
           LookupPolling 1, AttachReply (0, [])
-          AttachRequested, AttachReply (0, [])
+          AttachRequested, LookupReply (0, "", "AUTH")
           AttachPolling 1, LookupReply (0, "", "AUTH")
           AttachPolling 1, Start emailReq ]
     for phase, input in unexpected do

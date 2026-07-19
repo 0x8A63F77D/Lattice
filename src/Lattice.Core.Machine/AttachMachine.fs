@@ -10,9 +10,10 @@ namespace Lattice.Core
 /// Interpreter contract (mirrors HostMachine's): step is total — unexpected
 /// (phase, input) pairs settle in Done (FlowFaulted), never throw; a command
 /// batch's trailing request command produces the next Input; RPC exceptions are
-/// classified by the runner by type only (BoincRpcException on a poll = that
-/// stage's failure reply, design 1.2; BoincUnauthorizedException / connection
-/// failures -> Faulted).
+/// classified by the runner by type only (BoincRpcException on a poll OR on a
+/// stage request = that stage's failure reply with errorNum -1 — the daemon can
+/// reject the request itself, e.g. <error>Already attached to project</error>,
+/// design 1.2; BoincUnauthorizedException / connection failures -> Faulted).
 module AttachMachine =
 
     /// ERR_IN_PROGRESS (lib/error_numbers.h): the daemon's HTTP op is outstanding.
@@ -86,6 +87,38 @@ module AttachMachine =
         | EmailPassword (email, _) -> email
         | AuthenticatorKey _ -> ""
 
+    let private fail (state: State) error =
+        { state with Phase = Done (Error error) }, []
+
+    /// One lookup reply, settled uniformly whether it arrived on a poll
+    /// (LookupPolling, polls = the counter) or short-circuited the send leg
+    /// (LookupRequested, polls = 0 — the daemon rejected lookup_account itself).
+    let private lookupSettled (state: State) (polls: int)
+                              (errorNum: int) (errorMessage: string) (authenticator: string)
+                              : State * Command list =
+        if keepPolling errorNum then
+            if polls + 1 >= PollLimit then fail state (TimedOut LookupStage)
+            else { state with Phase = LookupPolling (polls + 1) }, [ PollLookup ]
+        elif errorNum = 0 then
+            match state.Request with
+            | Some request ->
+                { state with Phase = AttachRequested },
+                [ Report AttachStage
+                  SendAttach (request.ProjectUrl, authenticator,
+                              request.ProjectName, emailOf request.Credentials) ]
+            | None -> fail state (FlowFaulted "lookup completed with no request in state")
+        else fail state (LookupFailed (errorNum, errorMessage))
+
+    /// One attach reply, settled uniformly for the same two arrival paths.
+    let private attachSettled (state: State) (polls: int)
+                              (errorNum: int) (messages: string list)
+                              : State * Command list =
+        if keepPolling errorNum then
+            if polls + 1 >= PollLimit then fail state (TimedOut AttachStage)
+            else { state with Phase = AttachPolling (polls + 1) }, [ PollAttach ]
+        elif errorNum = 0 then { state with Phase = Done (Ok messages) }, []
+        else fail state (AttachFailed (errorNum, messages))
+
     /// Total transition function. Unlike HostMachine.step (whose trailing `| _, _`
     /// fallthrough is compensated by the exhaustive interleaving explorer),
     /// AttachMachine has no model-checking harness — so compiler exhaustiveness IS
@@ -95,7 +128,6 @@ module AttachMachine =
     /// An unexpected pair is an interpreter bug surfaced as a terminal FlowFaulted,
     /// never an exception.
     let step (state: State) (input: Input) : State * Command list =
-        let fail error = { state with Phase = Done (Error error) }, []
         match state.Phase, input with
         | Idle, Start request ->
             match request.Credentials with
@@ -111,36 +143,32 @@ module AttachMachine =
         | LookupRequested, EffectOk ->
             { state with Phase = LookupPolling 0 }, [ PollLookup ]
 
+        // Send-leg short-circuit: the daemon rejected lookup_account itself; the
+        // runner feeds the <error> back as this stage's reply (errorNum -1).
+        | LookupRequested, LookupReply (errorNum, errorMessage, authenticator) ->
+            lookupSettled state 0 errorNum errorMessage authenticator
+
         | LookupPolling polls, LookupReply (errorNum, errorMessage, authenticator) ->
-            if keepPolling errorNum then
-                if polls + 1 >= PollLimit then fail (TimedOut LookupStage)
-                else { state with Phase = LookupPolling (polls + 1) }, [ PollLookup ]
-            elif errorNum = 0 then
-                match state.Request with
-                | Some request ->
-                    { state with Phase = AttachRequested },
-                    [ Report AttachStage
-                      SendAttach (request.ProjectUrl, authenticator,
-                                  request.ProjectName, emailOf request.Credentials) ]
-                | None -> fail (FlowFaulted "lookup completed with no request in state")
-            else fail (LookupFailed (errorNum, errorMessage))
+            lookupSettled state polls errorNum errorMessage authenticator
 
         | AttachRequested, EffectOk ->
             { state with Phase = AttachPolling 0 }, [ PollAttach ]
 
+        // Send-leg short-circuit: e.g. <error>Already attached to project</error>
+        // in reply to project_attach itself (design 1.2) — a daemon attach
+        // rejection, not a transport fault.
+        | AttachRequested, AttachReply (errorNum, messages) ->
+            attachSettled state 0 errorNum messages
+
         | AttachPolling polls, AttachReply (errorNum, messages) ->
-            if keepPolling errorNum then
-                if polls + 1 >= PollLimit then fail (TimedOut AttachStage)
-                else { state with Phase = AttachPolling (polls + 1) }, [ PollAttach ]
-            elif errorNum = 0 then { state with Phase = Done (Ok messages) }, []
-            else fail (AttachFailed (errorNum, messages))
+            attachSettled state polls errorNum messages
 
         // Terminal absorbs every input (enumerated: the exhaustiveness tripwire
         // must fire here too when an Input case is added).
         | Done _, (Start _ | EffectOk | LookupReply _ | AttachReply _ | Faulted _) ->
             state, []
         | (Idle | LookupRequested | LookupPolling _ | AttachRequested | AttachPolling _),
-          Faulted message -> fail (FlowFaulted message)
+          Faulted message -> fail state (FlowFaulted message)
         // Safe settle for every remaining pair. The earlier rules already matched
         // the meaningful pairs, so the overlap here is dead by construction; the
         // point of the explicit enumeration is that a NEW Phase or Input case
@@ -148,4 +176,4 @@ module AttachMachine =
         // incomplete-match warning instead of silently settling.
         | (Idle | LookupRequested | LookupPolling _ | AttachRequested | AttachPolling _),
           (Start _ | EffectOk | LookupReply _ | AttachReply _) ->
-            fail (FlowFaulted "unexpected (phase, input) pair")
+            fail state (FlowFaulted "unexpected (phase, input) pair")
