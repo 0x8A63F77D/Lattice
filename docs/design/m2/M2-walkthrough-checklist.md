@@ -58,7 +58,9 @@ Run ≥2 hosts (a real Einstein@Home host + the sample fleet).
       blank pane.
 - [ ] **Event log** shows real merged messages from multiple hosts, with the **Host** column
       identifying each source.
-- [ ] **Event log** Following pauses when you scroll up, and resumes at the bottom.
+- [ ] **Event log** Following **pauses** when you scroll up; click the **Resume following** toggle
+      (the button relabels to it) to jump back to live. *Scrolling back to the bottom alone does not
+      auto-resume — the toggle is the resume path.*
 - [ ] On a **real host with 0 attached projects**, Tasks / Projects / Transfers show the
       design-correct **empty states** (not errors, not blank).
 - [ ] With the **sample fleet**: the **Tasks** grid materializes **500+ rows** and scrolls smoothly
@@ -113,8 +115,10 @@ breakpoint (1100)** — they are different widths; verify both.
 - [ ] **≥1280px:** full **260px** rail (labels visible) and **all columns** present.
 - [ ] **1100–1279px:** the rail **auto-collapses to the 48px compact** pane (icons only, always
       visible — never a hidden menu-button-only pane); columns still all present in this band.
-- [ ] **Below 1100px** (down to 1000): **Elapsed** sheds first, then **Application** (both move into
-      the overflow menu); the rail **stays 48px compact**.
+- [ ] **Below 1100px** (down to the 1000 minimum): the **Elapsed** column auto-hides into the
+      overflow menu; the rail **stays 48px compact**. *(Application's auto-hide threshold coincides
+      with the 1000px minimum window, so in the reachable range only Elapsed sheds automatically —
+      Application stays visible; you can still hide it manually via column show/hide.)*
 - [ ] **Minimum 1000×700** is enforced (the window won't shrink past it).
 - [ ] Drag a column wider, restart the app → the width **persists**.
 
