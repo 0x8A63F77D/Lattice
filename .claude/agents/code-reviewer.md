@@ -80,9 +80,9 @@ here tends to break:
 - **C# enum-switch exhaustiveness** (AGENTS.md §"C# enum switches"): a `switch` *expression* over
   a *domain enum* must have **no** `_`/`default` arm — a `_` arm defeats the **CS8509** new-named-
   case guard (same failure mode as the F# `| _ ->` above), blocking. But a no-`_` enum switch also
-  emits **CS8524** (the residual *unnamed*/out-of-range value) even when every named case is
+  emits **CS8524** (the residual *unnamed* values) even when every named case is
   covered, which CI's `-warnaserror` (`.github/workflows/ci.yml`) turns into a build failure; the
-  accepted fix is a local `#pragma warning disable CS8524` scoped to the switch, never a `_` arm.
+  accepted fix is a local `#pragma warning disable CS8524` around the switch, never a `_` arm.
   So flag either shape: a `_`/`default` arm on a domain-enum switch (defeats CS8509), or a no-`_`
   domain-enum switch missing the CS8524 suppression (won't build under `-warnaserror`). Don't
   conflate them — CS8509 = missing *named* case (keep it live); CS8524 = *unnamed* residual
