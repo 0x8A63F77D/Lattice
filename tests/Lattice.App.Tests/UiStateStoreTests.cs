@@ -108,6 +108,43 @@ public class UiStateStoreTests
     }
 
     [Fact]
+    public void Pre_92_json_without_exitOnClose_loads_as_null()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        // A pre-#92 ui-state.json has no "exitOnClose" key: it must deserialize to
+        // null (= "platform default", resolved later by TrayResidencyDefaults), never
+        // a hard-coded bool that would override the per-platform default silently.
+        File.WriteAllText(path, """{"compactDensity":false,"columnVisibility":{},"columnWidths":{}}""");
+        try
+        {
+            var state = new UiStateStore(path).Load();
+            Assert.Null(state.ExitOnClose);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ExitOnClose_round_trips_when_set()
+    {
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        try
+        {
+            var store = new UiStateStore(path);
+            store.Save(UiState.Default with { ExitOnClose = true });
+            Assert.True(store.Load().ExitOnClose);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Valid_json_round_trips()
     {
         var dir = TempDir();

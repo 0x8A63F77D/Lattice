@@ -32,8 +32,9 @@ public class ThemeSettingTests
         var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
         var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
         var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var uiStore = new UiStateStore(uiPath);
         var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(),
-            new ThemePreference(new UiStateStore(uiPath)));
+            new ThemePreference(uiStore), uiStore);
 
         var window = new Window { Width = 900, Height = 700, Content = new SettingsView { DataContext = settings } };
         window.Show();
@@ -81,7 +82,7 @@ public class ThemeSettingTests
             var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
             var registry = new HostRegistry(new LatticeConfig(5, []), path);
             var theme = new ThemePreference(uiStore);
-            var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(), theme);
+            var settings = new SettingsViewModel(registry, () => new FakeGuiRpcClient(), theme, uiStore);
             // Post-#101 the ctor no longer applies the persisted theme; the composition root
             // does, on the UI thread. Mirror that here so the startup-apply is what this exercises.
             theme.ApplyInitial();

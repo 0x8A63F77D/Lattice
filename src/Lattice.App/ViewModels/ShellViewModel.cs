@@ -62,7 +62,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
         _theme = new ThemePreference(uiState);
-        Settings = new SettingsViewModel(registry, clientFactory, _theme);
+        Settings = new SettingsViewModel(registry, clientFactory, _theme, uiState);
         // ONE DensityPreference, shared: the single owner of the global density
         // preference, so a toggle in either view reaches the other in-session
         // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a

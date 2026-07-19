@@ -130,7 +130,13 @@ public sealed record UiState(
     RailGroupingMode RailGrouping = RailGroupingMode.Auto,
     bool RailHealthyExpanded = false,
     AppTheme Theme = AppTheme.System,
-    Guid? ScopeHostId = null)
+    Guid? ScopeHostId = null,
+    // Close-to-tray preference (issue #92). null (and JSON-missing, i.e. every
+    // pre-#92 ui-state.json) means "platform default", resolved by
+    // TrayResidencyDefaults — never a hard-coded bool here, so older files load
+    // unchanged and get the right per-platform behavior with no migration.
+    // Appended LAST with a default so positional deserialization stays back-compat.
+    bool? ExitOnClose = null)
 {
     /// <summary>Factory default: standard density, all columns visible, auto widths.
     /// Fresh instance per call — the dictionaries are mutable, so a shared

@@ -46,6 +46,23 @@ public class ShellWindowTests
     }
 
     [AvaloniaFact]
+    public void Close_without_a_tray_controller_closes_normally()
+    {
+        // #92 regression: a ShellWindow with no attached TrayResidencyController (the
+        // headless / no-desktop-guard case) must fall through OnClosing to default close
+        // behavior — never intercept. Settle on the observed Closed event, not a timer.
+        var (window, _, _) = MakeShell();   // MakeShell never calls AttachTray → _tray is null
+        window.Show();
+        Layout(window);
+
+        var closed = false;
+        window.Closed += (_, _) => closed = true;
+        window.Close();
+
+        Assert.True(closed, "with no tray controller the window must close, not hide to tray");
+    }
+
+    [AvaloniaFact]
     public void Adding_a_host_swaps_first_run_for_the_shell()
     {
         var (window, shell, registry) = MakeShell();

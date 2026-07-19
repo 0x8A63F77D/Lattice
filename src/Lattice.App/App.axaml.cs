@@ -53,21 +53,33 @@ public partial class App : Application
             var shellWindow = new ShellWindow { DataContext = shell };
             desktop.MainWindow = shellWindow;
 
+            // Tray residency (#92): the controller owns the TrayIcon, hide/show/exit
+            // funnels, and switches the app to OnExplicitShutdown. Code-constructed here
+            // inside the desktop guard (never in App.axaml) so headless test runs never
+            // instantiate a platform tray. The ShellWindow routes its close attempts
+            // through the controller's policy shell.
+            var tray = new TrayResidencyController(this, desktop, shellWindow, manager, uiState);
+            shellWindow.AttachTray(tray);
+
             // Single-instance activation (#92): a secondary launch pings the primary
-            // instead of starting a second app; surface the existing window. Until
-            // PR C, "surface" is Show()+Activate(); PR C routes this through the tray
-            // controller (which also un-hides from the tray).
+            // instead of starting a second app; surface the existing window through the
+            // tray controller (which also un-hides from the tray and fires the refresh burst).
             if (ActivationGuard is { } guard)
-            {
-                guard.SetActivationCallback(() => Dispatcher.UIThread.Post(() =>
+                guard.SetActivationCallback(() => Dispatcher.UIThread.Post(tray.ShowWindow));
+
+            // macOS Dock-icon click while all windows are hidden (F10): reopen. Null-guarded
+            // via TryGetFeature — the feature is absent on Windows/Linux and headless backends.
+            // Activated is a UI-thread lifetime event, so ShowWindow can be called directly.
+            if (this.TryGetFeature<IActivatableLifetime>() is { } activatable)
+                activatable.Activated += (_, e) =>
                 {
-                    shellWindow.Show();
-                    shellWindow.Activate();
-                }));
-            }
+                    if (e.Kind == ActivationKind.Reopen)
+                        tray.ShowWindow();
+                };
 
             desktop.Exit += (_, _) =>
             {
+                tray.Dispose(); // remove the TrayIcon first, before the monitor teardown chain
                 ActivationGuard?.Dispose(); // stop accepting activations, release the lock
                 clock.Dispose();
                 shell.Dispose();

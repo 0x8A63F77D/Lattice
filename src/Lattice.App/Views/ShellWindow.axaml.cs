@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Reactive;
+using Avalonia.Threading;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
@@ -15,6 +16,10 @@ namespace Lattice.App.Views;
 public partial class ShellWindow : Window
 {
     private ShellViewModel? _shell;
+    // Close-to-tray controller (issue #92), attached by App under the desktop lifetime.
+    // Null in headless tests / when no controller exists → OnClosing falls through to
+    // default close behavior (the _tray-is-null regression path).
+    private TrayResidencyController? _tray;
     private bool _addHostInFlight;
     private bool _editHostInFlight;
     private bool _removeConfirmInFlight;
@@ -123,6 +128,40 @@ public partial class ShellWindow : Window
     {
         _grantedTransparency = granted;
         ApplyBackdrop();
+    }
+
+    /// <summary>Wire the close-to-tray controller (issue #92). Called by App once the
+    /// controller exists; without it, <see cref="OnClosing"/> keeps default close behavior.</summary>
+    internal void AttachTray(TrayResidencyController tray) => _tray = tray;
+
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_tray is not { } tray)   // headless tests / no controller: default close behavior
+            return;
+        switch (WindowClosePolicy.Decide(e.CloseReason, e.IsProgrammatic,
+                    exitOnClose: tray.ExitOnClose, exitRequested: tray.ExitRequested))
+        {
+            case CloseVerdict.HideToTray:
+                e.Cancel = true;
+                tray.HideToTray();
+                break;
+            case CloseVerdict.ExitApplication:
+                // This close arrives while we are INSIDE this window's Closing pipeline.
+                // Cancel THIS close and defer the shutdown one dispatcher turn: Shutdown()
+                // then closes the lifetime windows itself (this ShellWindow among them,
+                // reason ApplicationShutdown -> AllowClose), giving exactly ONE teardown.
+                // Requesting shutdown inline would force-close this same window while the
+                // original un-cancelled close is still unwinding -> re-entrant double dispose
+                // (Codex #106 P2). NotifyExitingViaClose flags ExitRequested first so the
+                // deferred shutdown's close short-circuits even where the reason is Undefined.
+                e.Cancel = true;
+                tray.NotifyExitingViaClose();
+                Dispatcher.UIThread.Post(tray.ExitApplication);
+                break;
+            case CloseVerdict.AllowClose:
+                break;
+        }
     }
 
     private void AttachShell()
