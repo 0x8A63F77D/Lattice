@@ -23,17 +23,20 @@
     <Style Selector="ComboBox /template/ ContentPresenter#ContentPresenter">
       <Setter Property="VerticalAlignment" Value="Center" />
     </Style>
-    <!-- Partial-results warning bar (Tasks/Projects/Transfers dock it between the command bar
-         and the grid). A CLOSED FAInfoBar collapses its template content to zero height but the
-         control itself stays visible, so its top margin kept reserving an 8px strip that read as
-         a gap between the grid header and the command bar's bottom rule (issue #107; Event Log,
-         which has no bar, was always flush). The class owns the bar's margin and collapses the
-         whole control while closed, so a closed bar contributes zero layout space. -->
+    <!-- Partial-results warning bar (Tasks/Projects/Transfers). It lives as an overlay child of
+         each view's grid Panel — floating over the grid top when open — NOT docked in the flow.
+         When the bar was docked between the command bar and the grid, closing it collapsed the
+         template content to zero height but the control stayed visible, so its 8px top margin
+         kept reserving a strip that pushed the grid down and read as a gap under the command
+         bar's bottom rule (issue #107; Event Log, which has no bar, was always flush). As an
+         overlay the bar cannot displace the grid in ANY state; this class owns its floating
+         placement so the three views cannot drift apart. Top margin 40 = the 32px column
+         header + 8px breathing room: the bar floats over the first data rows but NEVER over
+         the header, preserving the #88 invariant that the header stays visible and clickable
+         (sortable) under any overlay — a partial outage can persist for hours. -->
     <Style Selector="ui|FAInfoBar.partialBar">
-      <Setter Property="Margin" Value="16,8,16,0" />
-    </Style>
-    <Style Selector="ui|FAInfoBar.partialBar[IsOpen=False]">
-      <Setter Property="IsVisible" Value="False" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="Margin" Value="16,40,16,0" />
     </Style>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <StyleInclude Source="avares://Lattice/Theming/DataGridStyles.axaml" />

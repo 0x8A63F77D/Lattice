@@ -12,18 +12,22 @@ namespace Lattice.App.Tests.Headless;
 
 // Issue #107: the owner saw a thin gap between the data grid's column header and
 // the 1-px rule above it (the command bar's bottom border). Root cause: the three
-// snapshot views dock a partial-results FAInfoBar between the command bar and the
-// grid; a CLOSED FAInfoBar collapses its template content to zero height but the
-// control itself stays IsVisible=true, so its 8-DIP top margin kept reserving
-// layout space in the DockPanel. Event Log (no partial bar) was always flush.
+// snapshot views used to DOCK a partial-results FAInfoBar between the command bar
+// and the grid; a CLOSED FAInfoBar collapses its template content to zero height
+// but the control itself stays IsVisible=true, so its 8-DIP top margin kept
+// reserving layout space in the DockPanel. Event Log (no partial bar) was always
+// flush.
 //
-// The fix is the shared "partialBar" style class (App.axaml): it owns the bar's
-// margin and collapses IsVisible while IsOpen=false, so a closed bar contributes
-// zero layout space. These tests pin both sides of that contract:
-//   1. closed bar  -> the grid sits EXACTLY flush below the command bar (gap 0);
-//   2. open bar    -> the bar is genuinely laid out (it has height) and the grid
-//                     sits EXACTLY flush below the bar, i.e. collapsing the
-//                     closed bar did not also collapse the open one.
+// The fix is structural (owner call): the bar is an overlay child of the grid's
+// Panel wrapper, OUT of the dock flow the grid participates in, so grid geometry
+// is independent of the bar in EVERY state — open, closed, or absent. When open
+// it floats over the first data rows, below the column header (which must stay
+// visible and sortable — the #88 invariant), instead of pushing rows down.
+// These tests pin both sides:
+//   1. closed bar -> the grid sits EXACTLY flush below the command bar (gap 0);
+//   2. open bar   -> the bar is genuinely laid out (real height, floating just
+//                    below the header band) and the grid STILL sits flush — the
+//                    bar overlays, it does not displace.
 public class HeaderFrameGapTests
 {
     // Vertical gap between the command bar's bottom edge and the DataGrid's top
@@ -103,10 +107,10 @@ public class HeaderFrameGapTests
         fx.Dispose();
     }
 
-    // ---- Open partial bar: still laid out, grid flush below IT --------------
+    // ---- Open partial bar: overlays the grid, never displaces it ------------
 
     [AvaloniaFact]
-    public async Task Open_partial_bar_occupies_space_and_the_grid_sits_flush_below_it()
+    public async Task Open_partial_bar_overlays_the_grid_without_displacing_it()
     {
         var fx = new HostGraphFixture();
         var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
@@ -121,17 +125,29 @@ public class HeaderFrameGapTests
         await fx.SettleAsync(() => vm.ShowPartialBar);
         fx.Layout();
 
+        // The grid does not move for the bar: flush below the command bar even
+        // while the bar is OPEN. (Red on the old docked layout, where the open
+        // bar pushed the grid down.)
+        AssertFlush(window);
+
+        // And the bar is genuinely showing, floating over the data rows BELOW the
+        // column header band — never over the header itself, which must stay
+        // visible and clickable/sortable under any overlay (the #88 invariant; a
+        // partial outage can persist for hours).
         double WY(Visual v) => v.TranslatePoint(new Point(0, 0), window)!.Value.Y;
-        var (_, grid, bar) = MeasureGap(window);
+        var (_, grid, _) = MeasureGap(window);
         var infoBar = window.GetVisualDescendants().OfType<FAInfoBar>().Single();
         Assert.True(infoBar is { IsOpen: true, IsVisible: true } && infoBar.Bounds.Height > 20,
             $"the open partial bar must be laid out with real height; got IsOpen={infoBar.IsOpen} " +
             $"IsVisible={infoBar.IsVisible} height={infoBar.Bounds.Height}");
-        Assert.True(WY(infoBar) > WY(bar) + bar.Bounds.Height,
-            "the open partial bar must sit below the command bar (its top margin applies while open)");
-        double slack = WY(grid) - (WY(infoBar) + infoBar.Bounds.Height);
-        Assert.True(Math.Abs(slack) < 0.5,
-            $"the grid must sit flush below the OPEN partial bar; measured slack {slack}");
+        var header = grid.GetVisualDescendants()
+            .OfType<Avalonia.Controls.DataGridColumnHeader>()
+            .First(h => h.IsVisible && h.Bounds.Width > 0 && h.Bounds.Height > 0);
+        double headerBottom = WY(header) + header.Bounds.Height;
+        Assert.True(WY(infoBar) > headerBottom - 0.5,
+            $"the open partial bar must not cover the column header; barTop={WY(infoBar)}, headerBottom={headerBottom}");
+        Assert.True(WY(infoBar) < headerBottom + 16,
+            $"the open partial bar must float just below the header band; barTop={WY(infoBar)}");
 
         await fx.DisposeAsync();
     }
