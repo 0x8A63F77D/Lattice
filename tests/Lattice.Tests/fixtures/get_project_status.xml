@@ -1,0 +1,30 @@
+<boinc_gui_rpc_reply>
+<projects>
+<project>
+    <master_url>https://einsteinathome.org/</master_url>
+    <project_name>Einstein@Home</project_name>
+    <symstore></symstore>
+    <user_name>tester</user_name>
+    <team_name></team_name>
+    <cpid_time>1319856370.000000</cpid_time>
+    <user_total_credit>1234567.890000</user_total_credit>
+    <user_expavg_credit>4321.098765</user_expavg_credit>
+    <host_total_credit>234567.890000</host_total_credit>
+    <host_expavg_credit>1234.567890</host_expavg_credit>
+    <resource_share>100.000000</resource_share>
+    <sched_rpc_pending>0</sched_rpc_pending>
+</project>
+<project>
+    <master_url>https://www.worldcommunitygrid.org/</master_url>
+    <project_name>World Community Grid</project_name>
+    <user_total_credit>99999.000000</user_total_credit>
+    <user_expavg_credit>100.000000</user_expavg_credit>
+    <host_total_credit>88888.000000</host_total_credit>
+    <host_expavg_credit>90.000000</host_expavg_credit>
+    <resource_share>50.000000</resource_share>
+    <suspended_via_gui/>
+    <dont_request_more_work/>
+    <sched_rpc_pending>0</sched_rpc_pending>
+</project>
+</projects>
+</boinc_gui_rpc_reply>

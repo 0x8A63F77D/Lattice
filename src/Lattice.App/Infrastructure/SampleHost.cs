@@ -441,6 +441,9 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
     public Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default) =>
         Task.FromResult(new ProjectAttachReply(0, []));
 
+    public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
+        Task.FromResult(data.State.Projects);
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -503,6 +506,9 @@ internal sealed class SampleRoutingGuiRpcClient(
 
     public Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default) =>
         _target!.PollProjectAttachAsync(ct);
+
+    public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
+        _target!.GetProjectStatusAsync(ct);
 
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

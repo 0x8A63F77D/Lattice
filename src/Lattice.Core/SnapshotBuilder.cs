@@ -9,13 +9,20 @@ namespace Lattice.Core;
 /// </summary>
 public static class SnapshotBuilder
 {
-    /// <summary>Builds a snapshot. <paramref name="now"/> anchors deadline and retry-window checks.</summary>
+    /// <summary>
+    /// Builds a snapshot. <paramref name="now"/> anchors deadline and retry-window checks.
+    /// <paramref name="projectStatuses"/> is the tick-fresh get_project_status list — the
+    /// authoritative project source (design DI-5): it carries the same fields as
+    /// <paramref name="state"/>.Projects but reflects suspends/detaches immediately, so
+    /// project rows come from it, not from the cached state.
+    /// </summary>
     public static HostSnapshot Build(
         Guid hostId,
         string hostName,
         DateTimeOffset now,
         CcState state,
         CcStatus ccStatus,
+        IReadOnlyList<Project> projectStatuses,
         IReadOnlyList<Result> results,
         IReadOnlyList<FileTransfer> transfers)
     {
@@ -25,7 +32,12 @@ public static class SnapshotBuilder
         Dictionary<string, App> apps = [];
         foreach (App a in state.Apps)
             apps.TryAdd(a.Name, a);
+        // Name-join dictionary: fresh status entries first (they win on shared URLs),
+        // cached state entries fill any gap — a same-tick straggler result from a
+        // just-detached project must still resolve its display name.
         Dictionary<string, Project> projects = [];
+        foreach (Project p in projectStatuses)
+            projects.TryAdd(p.MasterUrl, p);
         foreach (Project p in state.Projects)
             projects.TryAdd(p.MasterUrl, p);
 
@@ -72,8 +84,8 @@ public static class SnapshotBuilder
             transferSnapshots.Add(new TransferSnapshot(t, projectName, uiState));
         }
 
-        List<ProjectSnapshot> projectSnapshots = new(state.Projects.Count);
-        foreach (Project p in state.Projects)
+        List<ProjectSnapshot> projectSnapshots = new(projectStatuses.Count);
+        foreach (Project p in projectStatuses)
             projectSnapshots.Add(new ProjectSnapshot(p, results.Count(r => r.ProjectUrl == p.MasterUrl)));
 
         return new HostSnapshot(hostId, hostName, now, ccStatus, tasks, transferSnapshots, projectSnapshots);

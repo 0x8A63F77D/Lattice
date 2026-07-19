@@ -31,6 +31,13 @@ public interface IGuiRpcClient : IAsyncDisposable
     /// <summary>Returns in-progress file uploads and downloads.</summary>
     Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the current status of all attached projects. The daemon serves the same
+    /// per-project elements as <see cref="GetStateAsync"/> but nothing else, so the reply is
+    /// small (a few KB) and cheap enough for steady-state polling.
+    /// </summary>
+    Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default);
+
     /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
     Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default);
 
