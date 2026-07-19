@@ -43,7 +43,10 @@
       <Setter Property="RenderTransform" Value="rotate(0deg)" />
       <Setter Property="Transitions">
         <Transitions>
-          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+          <!-- Chevron rotation: 100 ms (design card 1h expander split — rotation 100 ms).
+               Was 120 ms; this is the only surviving card-1h motion in C2 after the
+               row-enter fade and reduce-motion gate were cut (#32, 2026-07-19). -->
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" />
         </Transitions>
       </Setter>
     </Style>

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Avalonia;
+using Avalonia.Animation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
@@ -370,6 +371,29 @@ public class ProjectsViewTests
         holder.Data = holder.Data with { IsExpanded = true };
         fx.Layout();
         Assert.True(chevron.IsChecked, "the chevron reflects the now-expanded parent");
+        fx.Dispose();
+    }
+
+    // C2 motion (design card 1h expander split): the chevron rotation transition is 100 ms
+    // (retimed from 120 ms). Wiring/duration is machine-gated; the visual feel is a micro-tweak.
+    [AvaloniaFact]
+    public void Chevron_rotation_transition_is_100ms()
+    {
+        var (fx, window, view, vm) = MakeView();
+        window.Show();
+        vm.Rows.Add(ParentHolder(ProjectStatusKind.Active, Strings.ProjectsStatusActiveAll, showChevron: true));
+        fx.Layout();
+
+        var chevron = VisualTree.FindInVisualTree<ToggleButton>(
+            VisualTree.FindRow(view.Grid, 0), t => t.Classes.Contains("chevron"))!;
+        // The rotation transition lives on the chevron template's ContentPresenter (Style
+        // "ToggleButton.chevron /template/ ContentPresenter"); pick the presenter that carries it.
+        var rotation = chevron.GetVisualDescendants().OfType<ContentPresenter>()
+            .Where(cp => cp.Transitions is not null)
+            .SelectMany(cp => cp.Transitions!)
+            .OfType<TransformOperationsTransition>()
+            .Single();
+        Assert.Equal(TimeSpan.FromMilliseconds(100), rotation.Duration);
         fx.Dispose();
     }
 
