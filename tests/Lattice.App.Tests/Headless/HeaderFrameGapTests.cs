@@ -161,9 +161,18 @@ public class HeaderFrameGapTests
         double panelCenter = WX(panel) + panel.Bounds.Width / 2;
         Assert.True(Math.Abs(barCenter - panelCenter) < 1,
             $"the open partial bar must be horizontally centred over the grid; barCenter={barCenter}, panelCenter={panelCenter}");
-        // Overlay-surface corner radius (Fluent OverlayCornerRadius = 8), asserted on the
-        // control because the template binds it through to the card's ContentRoot border.
+        // Overlay-surface corner radius (spec radiusXLarge = 8 via LatticeSurfaceRadius),
+        // asserted on the control because the template binds it through to the card's
+        // ContentRoot border. Equality also proves the DynamicResource resolved — an
+        // unresolved token would leave FA's ControlCornerRadius default (4).
         Assert.Equal(new CornerRadius(8), infoBar.CornerRadius);
+        // Elevation: LatticeOverlayShadow must be wired onto the template's ContentRoot
+        // (an unresolved DynamicResource silently yields an empty BoxShadows). Pixel
+        // truth of the shadow is the owner's eyeball; the wiring is machine-checked.
+        var contentRoot = infoBar.GetVisualDescendants().OfType<Border>()
+            .First(b => b.Name == "ContentRoot");
+        Assert.True(contentRoot.BoxShadow.Count > 0,
+            "the open partial bar's ContentRoot must carry the LatticeOverlayShadow elevation");
 
         await fx.DisposeAsync();
     }
