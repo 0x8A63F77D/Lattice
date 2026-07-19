@@ -87,6 +87,13 @@ public partial class TasksView : UserControl
         // Tunnel handling: the DataGrid's own pointer handling marks the event
         // handled on the bubble path.
         Grid.AddHandler(PointerPressedEvent, OnGridPointerPressed, RoutingStrategies.Tunnel);
+        // And a context request that did NOT originate on a row (grid background,
+        // column header, scrollbar) must not open the menu at all: the flyout is
+        // attached to the whole DataGrid, so without this gate it would act on
+        // the OLD selection — a task the user never right-clicked (Codex R2 P2,
+        // PR #135). Cost: the keyboard menu key is suppressed too (its source is
+        // the focused grid, not a row) — acceptable for M3.
+        Grid.AddHandler(ContextRequestedEvent, OnGridContextRequested, RoutingStrategies.Tunnel);
         // Column-width persistence (#120): single-copy machinery, wired the same
         // one line in all four data views. Restores persisted widths on attach
         // and writes settled user resizes back — independent of the header-based
@@ -254,6 +261,12 @@ public partial class TasksView : UserControl
             return;
         if ((e.Source as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true) is { } row)
             Grid.SelectedItem = row.DataContext;
+    }
+
+    private void OnGridContextRequested(object? sender, ContextRequestedEventArgs e)
+    {
+        if ((e.Source as Visual)?.FindAncestorOfType<DataGridRow>(includeSelf: true) is null)
+            e.Handled = true; // no row under the request: no target, no menu
     }
 
     // The failure bar holds the LAST op failure; any close (the bar's close

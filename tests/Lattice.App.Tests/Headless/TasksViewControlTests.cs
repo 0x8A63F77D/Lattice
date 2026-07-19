@@ -1,5 +1,6 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.Infrastructure;
@@ -90,6 +91,43 @@ public class TasksViewControlTests
         int resumeAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Resume));
         int abortAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Abort));
         Assert.Contains(items.Skip(resumeAt + 1).Take(abortAt - resumeAt - 1), i => i is Separator);
+
+        fx.Dispose();
+    }
+
+    [AvaloniaFact]
+    public void Context_menu_opens_on_a_row_but_not_on_grid_chrome()
+    {
+        // Codex R2 P2 (PR #135): the flyout is attached to the whole DataGrid,
+        // so a right-click on the background/header/scrollbar would open it
+        // acting on the OLD selection — a task the user never right-clicked.
+        // Non-row context requests must be suppressed.
+        var (fx, window, view, vm) = MakeView();
+        window.Show();
+        fx.Layout();
+
+        // Hand-inject a row (unstarted manager: nothing rebuilds over it).
+        var hostId = Guid.NewGuid();
+        vm.Rows.Add(new TaskRow(new TaskRowKey(hostId, "wu_1"),
+            new TaskRowViewModel("proj", "app", "wu_1", 0.5, "50%", "1m", "2m", "—", null,
+                TaskStateKind.Running, "Running", false, false, hostId, "host-a")));
+        vm.IsEmpty = false;
+        vm.IsLoading = false;
+        fx.Layout();
+
+        var flyout = (MenuFlyout)view.Grid.ContextFlyout!;
+
+        // Chrome: request context from a column header — no menu.
+        var header = view.Grid.GetVisualDescendants()
+            .OfType<Avalonia.Controls.DataGridColumnHeader>().First(h => h.Bounds.Width > 0);
+        header.RaiseEvent(new ContextRequestedEventArgs());
+        Assert.False(flyout.IsOpen);
+
+        // A row: the menu opens.
+        var row = view.Grid.GetVisualDescendants().OfType<DataGridRow>().First();
+        row.RaiseEvent(new ContextRequestedEventArgs());
+        Assert.True(flyout.IsOpen);
+        flyout.Hide();
 
         fx.Dispose();
     }
