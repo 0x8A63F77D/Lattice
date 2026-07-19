@@ -83,14 +83,12 @@ public class TasksViewControlTests
         fx.Layout();
 
         var flyout = Assert.IsType<MenuFlyout>(view.Grid.ContextFlyout);
+        // DI-1(c) applies to the menu too (Codex R1 P3 / R3 P2, PR #135): the
+        // divider between Resume and Abort must be MenuFlyout's SUPPORTED
+        // separator form — a MenuItem with Header "-" (the docs' MenuFlyout page
+        // is explicit that a raw <Separator/> does not work in a menu flyout).
         var headers = flyout.Items.OfType<MenuItem>().Select(i => i.Header).ToArray();
-        Assert.Equal([Strings.Suspend, Strings.Resume, Strings.Abort], headers);
-        // DI-1(c) applies to the menu too (Codex P3, PR #135): a Separator must
-        // sit between Resume and Abort, same as the command bar.
-        var items = flyout.Items.ToList();
-        int resumeAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Resume));
-        int abortAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Abort));
-        Assert.Contains(items.Skip(resumeAt + 1).Take(abortAt - resumeAt - 1), i => i is Separator);
+        Assert.Equal([Strings.Suspend, Strings.Resume, "-", Strings.Abort], headers);
 
         fx.Dispose();
     }

@@ -167,8 +167,11 @@
           <MenuFlyout>
             <MenuItem Header="{x:Static loc:Strings.Suspend}" Command="{Binding SuspendSelectedCommand}" />
             <MenuItem Header="{x:Static loc:Strings.Resume}" Command="{Binding ResumeSelectedCommand}" />
-            <!-- DI-1(c) misclick distance applies here too (Codex P3, PR #135). -->
-            <Separator />
+            <!-- DI-1(c) misclick distance applies here too (Codex R1 P3). The
+                 divider is MenuFlyout's supported separator form — Header "-";
+                 a raw <Separator/> does not work in a menu flyout (Avalonia
+                 docs, MenuFlyout page; Codex R3 P2). -->
+            <MenuItem Header="-" />
             <MenuItem Header="{x:Static loc:Strings.Abort}" Command="{Binding AbortSelectedCommand}"
                       Foreground="{DynamicResource LatticeDangerFgBrush}" />
           </MenuFlyout>
