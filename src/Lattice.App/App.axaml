@@ -51,6 +51,17 @@
       <Setter Property="VerticalAlignment" Value="Top" />
       <Setter Property="HorizontalAlignment" Value="Center" />
       <Setter Property="MaxWidth" Value="720" />
+      <!-- Two framework landmines stand between "BoxShadow is set" and "a shadow renders",
+           both caught by PartialBarShadowVisualTests (the wiring assertion alone passed):
+           (1) the FAInfoBar clips to its bounds, which ContentRoot fills exactly — the
+           elevation outside them would clip to nothing; (2) FA's theme sets
+           BackgroundSizing=InnerBorderEdge, and Avalonia renders Border.BoxShadow ONLY on
+           the CenterBorder fast path (upstream AvaloniaUI/Avalonia#15602, open as of 12.1) —
+           any other sizing silently drops the shadow. CenterBorder's visual delta at a 1px
+           border is half a pixel of background reach; the closed state is unaffected either
+           way (FA hides ContentRoot entirely). -->
+      <Setter Property="ClipToBounds" Value="False" />
+      <Setter Property="BackgroundSizing" Value="CenterBorder" />
       <Setter Property="Margin" Value="16,40,16,0" />
       <!-- DynamicResource on purpose: App.axaml's Styles section parses before its
            Resources section merges Tokens.axaml, so StaticResource cannot see the token. -->
