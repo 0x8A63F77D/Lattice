@@ -229,9 +229,13 @@ module AttachMachine =
         | EmailPassword (email, _) -> email
         | AuthenticatorKey _ -> ""
 
-    /// Total transition function. The trailing catch-all mirrors HostMachine.step's
-    /// safe-settle fallthrough (the one sanctioned total-fallthrough form): an
-    /// unexpected pair is an interpreter bug surfaced as a terminal FlowFaulted,
+    /// Total transition function. Unlike HostMachine.step (whose trailing `| _, _`
+    /// fallthrough is compensated by the exhaustive interleaving explorer),
+    /// AttachMachine has no model-checking harness — so compiler exhaustiveness IS
+    /// the guard here: the safe-settle arm enumerates phases and inputs explicitly
+    /// (grouped or-patterns, no wildcard), and adding a Phase/Input case produces
+    /// an incomplete-match warning that forces an explicit transition decision.
+    /// An unexpected pair is an interpreter bug surfaced as a terminal FlowFaulted,
     /// never an exception.
     let step (state: State) (input: Input) : State * Command list =
         let fail error = { state with Phase = Done (Error error) }, []
@@ -277,7 +281,14 @@ module AttachMachine =
         | Done _, _ -> state, []            // terminal absorbs everything
         | (Idle | LookupRequested | LookupPolling _ | AttachRequested | AttachPolling _),
           Faulted message -> fail (FlowFaulted message)
-        | _, _ -> fail (FlowFaulted "unexpected (phase, input) pair")
+        // Safe settle for every remaining pair. The earlier rules already matched
+        // the meaningful pairs, so the overlap here is dead by construction; the
+        // point of the explicit enumeration is that a NEW Phase or Input case
+        // falls outside these or-patterns and triggers the compiler's
+        // incomplete-match warning instead of silently settling.
+        | (Idle | LookupRequested | LookupPolling _ | AttachRequested | AttachPolling _),
+          (Start _ | EffectOk | LookupReply _ | AttachReply _) ->
+            fail (FlowFaulted "unexpected (phase, input) pair")
 ```
 
 - [ ] **E1.2** Red-first F# tests before wiring the runner:
