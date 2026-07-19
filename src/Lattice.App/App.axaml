@@ -1,6 +1,7 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sty="using:FluentAvalonia.Styling"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
              x:Class="Lattice.App.App"
              RequestedThemeVariant="Default">
   <Application.Styles>
@@ -21,6 +22,18 @@
          moves the bias to +1px (centered), identical in light and dark. -->
     <Style Selector="ComboBox /template/ ContentPresenter#ContentPresenter">
       <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <!-- Partial-results warning bar (Tasks/Projects/Transfers dock it between the command bar
+         and the grid). A CLOSED FAInfoBar collapses its template content to zero height but the
+         control itself stays visible, so its top margin kept reserving an 8px strip that read as
+         a gap between the grid header and the command bar's bottom rule (issue #107; Event Log,
+         which has no bar, was always flush). The class owns the bar's margin and collapses the
+         whole control while closed, so a closed bar contributes zero layout space. -->
+    <Style Selector="ui|FAInfoBar.partialBar">
+      <Setter Property="Margin" Value="16,8,16,0" />
+    </Style>
+    <Style Selector="ui|FAInfoBar.partialBar[IsOpen=False]">
+      <Setter Property="IsVisible" Value="False" />
     </Style>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <StyleInclude Source="avares://Lattice/Theming/DataGridStyles.axaml" />

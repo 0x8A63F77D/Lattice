@@ -128,9 +128,9 @@
     <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
 
     <!-- Partial-results warning -->
-    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+    <ui:FAInfoBar DockPanel.Dock="Top" Classes="partialBar" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
                   Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
-                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
+                  Closed="OnPartialBarClosed">
       <ui:FAInfoBar.ActionButton>
         <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
       </ui:FAInfoBar.ActionButton>
