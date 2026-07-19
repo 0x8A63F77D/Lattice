@@ -32,6 +32,9 @@
       <SolidColorBrush x:Key="LatticeDisabledBrush" Color="#BDBDBD" />
       <SolidColorBrush x:Key="LatticeGridDividerBrush" Color="#EDEBE9" />
       <SolidColorBrush x:Key="LatticeRowHoverBrush" Color="#F5F5F5" />
+      <!-- Elevation for small floating overlays (the partial-results card): the spec's
+           shadow16 ramp (design card 1g: 0 0 2 rgba(0,0,0,.12), 0 8 16 rgba(0,0,0,.14)). -->
+      <BoxShadows x:Key="LatticeOverlayShadow">0 0 2 0 #1F000000, 0 8 16 0 #24000000</BoxShadows>
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="LatticeCanvasBrush" Color="#1F1F1F" />
@@ -62,6 +65,10 @@
            in the running app (owner visual verdict). #2D2D2D is a subtle step over the dark
            surface (#292929). Light hover (#F5F5F5) was not flagged; left as-is. -->
       <SolidColorBrush x:Key="LatticeRowHoverBrush" Color="#2D2D2D" />
+      <!-- Dark mirror of the shadow16 elevation (1f is a token-substitution mirror; the
+           Fluent dark ramp doubles the ambient/key alphas to .24/.28 — a light-ramp black
+           shadow all but vanishes on the #1F1F1F canvas, which was the flagged weak spot). -->
+      <BoxShadows x:Key="LatticeOverlayShadow">0 0 2 0 #3D000000, 0 8 16 0 #47000000</BoxShadows>
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 
