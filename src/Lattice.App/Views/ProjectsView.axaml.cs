@@ -23,13 +23,20 @@ public partial class ProjectsView : UserControl
             row.Classes.Set("projectParent", holder.Data.IsParent);
             row.Classes.Set("projectChild", !holder.Data.IsParent);
         });
+        // Column-width persistence (#120): same single-copy machinery as TasksView.
+        // The header-less chevron column carries no Tag, so it is not persisted.
+        _widthPersistence = ColumnWidthPersistence.Attach(Grid, "projects");
     }
 
     private readonly RowClassBinder<ProjectRow> _rowBinder;
+    private readonly ColumnWidthPersistence _widthPersistence;
 
     /// <summary>Test seam (InternalsVisibleTo): live row-class subscriptions.
     /// The teardown-drain regression test pins this to 0 after detach.</summary>
     internal int RowSubscriptionCount => _rowBinder.Count;
+
+    /// <summary>Test seam (InternalsVisibleTo): live column-width subscriptions.</summary>
+    internal int ColumnWidthSubscriptionCount => _widthPersistence.SubscriptionCount;
 
     // Only a close-button click is a dismissal episode (design § partial-bar
     // dismissal semantics: dismiss snapshots the CURRENT unreachable id-set).

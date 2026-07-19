@@ -62,6 +62,11 @@ public partial class App : Application
             shell.ApplyInitialTheme();
 
             var shellWindow = new ShellWindow { DataContext = shell };
+            // Provide the UI-state store to the data views for column-width
+            // persistence (#120). The views come from DataTemplates (no ctor
+            // seam), so the store rides an inherited attached property set once
+            // on the window and resolved on every descendant grid at attach.
+            ColumnWidthScope.SetStore(shellWindow, uiState);
             desktop.MainWindow = shellWindow;
 
             // Tray residency (#92): the controller owns the TrayIcon, hide/show/exit

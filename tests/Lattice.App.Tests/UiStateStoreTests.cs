@@ -331,6 +331,31 @@ public class UiStateStoreTests
     }
 
     [Fact]
+    public void Non_numeric_column_width_token_loads_defaults()
+    {
+        // Column-width persistence (#120): a hand-edited width that is not even a
+        // number is an invalid TOKEN — System.Text.Json rejects it loudly (throws
+        // JsonException), which Load's catch turns into a safe fallback to
+        // defaults rather than a startup crash. (Semantically-invalid but
+        // syntactically-valid values like -50 are a separate concern, ignored
+        // per-column at restore by ColumnWidthPolicy so they never reach here.)
+        var dir = TempDir();
+        var path = Path.Combine(dir, "ui-state.json");
+        File.WriteAllText(path,
+            """{"compactDensity":false,"columnVisibility":{},"columnWidths":{"tasks/Project":"wide"}}""");
+        try
+        {
+            var state = new UiStateStore(path).Load();
+            Assert.Empty(state.ColumnWidths);
+            Assert.False(state.CompactDensity);
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void Legacy_state_file_without_new_fields_loads_defaults()
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");

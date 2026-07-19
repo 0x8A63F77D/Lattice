@@ -20,6 +20,8 @@ public partial class TransfersView : UserControl
         // shared binder, same one-shot-in-constructor contract.
         _rowBinder = RowClassBinder<TransferRow>.Attach(Grid, static (row, holder) =>
             row.Classes.Set("retrying", holder.Data.UiState == TransferUiState.Retrying));
+        // Column-width persistence (#120): same single-copy machinery as TasksView.
+        _widthPersistence = ColumnWidthPersistence.Attach(Grid, "transfers");
     }
 
     // Only a close-button click is a dismissal episode — same rationale as
@@ -33,8 +35,12 @@ public partial class TransfersView : UserControl
     }
 
     private readonly RowClassBinder<TransferRow> _rowBinder;
+    private readonly ColumnWidthPersistence _widthPersistence;
 
     /// <summary>Test seam (InternalsVisibleTo): live row-class subscriptions.
     /// The teardown-drain regression test pins this to 0 after detach.</summary>
     internal int RowSubscriptionCount => _rowBinder.Count;
+
+    /// <summary>Test seam (InternalsVisibleTo): live column-width subscriptions.</summary>
+    internal int ColumnWidthSubscriptionCount => _widthPersistence.SubscriptionCount;
 }
