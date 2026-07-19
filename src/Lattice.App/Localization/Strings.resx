@@ -587,6 +587,9 @@
   <data name="TransfersStatusQueued" xml:space="preserve">
     <value>Queued</value>
   </data>
+  <data name="ConfirmCancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
   <data name="TransfersTitle" xml:space="preserve">
     <value>Transfers</value>
   </data>

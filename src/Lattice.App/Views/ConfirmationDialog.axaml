@@ -1,0 +1,31 @@
+<ui:FAContentDialog xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="using:FluentAvalonia.UI.Controls"
+                    xmlns:views="using:Lattice.App.Views"
+                    xmlns:loc="using:Lattice.App.Localization"
+                    x:Class="Lattice.App.Views.ConfirmationDialog"
+                    x:DataType="views:ConfirmationRequest"
+                    Title="{Binding Title}"
+                    PrimaryButtonText="{Binding PrimaryButtonText}"
+                    CloseButtonText="{x:Static loc:Strings.ConfirmCancel}">
+  <ui:FAContentDialog.Styles>
+    <!-- Danger accent for the Destructive primary button (DI-1). The presenter is
+         targeted directly (not a control-level Background setter) because FA's Button
+         theme swaps the presenter's Background to its own resources on :pointerover /
+         :pressed, which would revert a control-level brush to the neutral gray. The
+         critical fill + on-accent text pair is theme-aware in both light and dark. -->
+    <Style Selector="Button.danger /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}" />
+      <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+    </Style>
+    <Style Selector="Button.danger:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="0.9" />
+    </Style>
+    <Style Selector="Button.danger:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Opacity" Value="0.8" />
+    </Style>
+  </ui:FAContentDialog.Styles>
+  <!-- Body is pre-formatted by the caller (incl. DI-2's host enumeration); the
+       dialog renders it verbatim. -->
+  <TextBlock Text="{Binding Body}" TextWrapping="Wrap" MinWidth="360" MaxWidth="420" />
+</ui:FAContentDialog>
