@@ -43,14 +43,18 @@ public class AttachFlowRunnerTests
         public FakeTimeProvider Time { get; } = new();
         public HostRegistry Registry { get; }
         public HostMonitorManager Manager { get; }
+        public HostControlService Service { get; }
         public AttachFlowRunner Runner { get; }
 
-        public Fixture(string password = "")
+        // controlFactory serves the control LANE's side connections (the attach flow and
+        // any control op submitted to Service); by default every lane turn gets Fake.
+        public Fixture(string password = "", Func<IGuiRpcClient>? controlFactory = null)
         {
             var host = new HostConfig(HostId, "host", "127.0.0.1", 31416, password);
             Registry = new HostRegistry(new LatticeConfig(5, [host]), TempPath());
             Manager = new HostMonitorManager(Registry, () => MonitorFake, Time);
-            Runner = new AttachFlowRunner(Registry, Manager, () => Fake, Time);
+            Service = new HostControlService(Registry, Manager, controlFactory ?? (() => Fake));
+            Runner = new AttachFlowRunner(Service, Manager, Time);
         }
 
         public ValueTask DisposeAsync() => Manager.DisposeAsync();
@@ -293,6 +297,112 @@ public class AttachFlowRunnerTests
         Assert.Equal(AttachFlowOutcome.Faulted, result.Outcome);
         Assert.Equal("The host is no longer registered.", result.Error);
         Assert.Empty(fx.Fake.Calls);
+    }
+
+    // ---- Lane integration (issue #130): the attach flow holds the host's control lane.
+    // Composed invariant under test: the attach occupies the lane exclusively for its
+    // whole duration (I-AF1/I-CL1); ops submitted meanwhile run afterwards in submission
+    // order (I-CL5); and a faulted or canceled attach still releases the lane — the next
+    // op MUST run (the chain's ignore-predecessor guard is load-bearing now that lane
+    // turns can throw). Roles are pinned by factory-call index, not inferred from
+    // execution order: lane turns are FIFO and the client factory is only invoked inside
+    // a turn, so factory call 1 is deterministically the attach (submitted first and
+    // parked holding the lane) and call 2 the queued task op.
+
+    private static (Func<IGuiRpcClient> factory, FakeGuiRpcClient attachFake, FakeGuiRpcClient opFake)
+        LaneFactory()
+    {
+        var attachFake = new FakeGuiRpcClient();
+        var opFake = new FakeGuiRpcClient();
+        int calls = 0;
+        return (() => Interlocked.Increment(ref calls) == 1 ? attachFake : opFake, attachFake, opFake);
+    }
+
+    [Fact]
+    public async Task Task_op_submitted_during_a_running_attach_waits_for_the_attach()
+    {
+        var (factory, attachFake, opFake) = LaneFactory();
+        await using var fx = new Fixture(controlFactory: factory);
+        // Strict cross-connection call order, appended from the fakes' hooks.
+        var order = new List<string>();
+        void Log(string call) { lock (order) order.Add(call); }
+        var lookupGate = new TaskCompletionSource<AccountLookupReply>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        attachFake.OnPollAccountLookup = () => { Log("lookup_poll"); return lookupGate.Task; };
+        attachFake.OnRequestProjectAttach = (_, _, _, _) => { Log("attach_request"); return Task.CompletedTask; };
+        attachFake.OnPollProjectAttach = () =>
+        { Log("attach_poll"); return Task.FromResult(new ProjectAttachReply(0, ["ok"])); };
+        opFake.OnTaskOp = (_, _, _) => { Log("task_op"); return Task.CompletedTask; };
+
+        Task<AttachFlowResult> attach = fx.Runner.RunAsync(fx.HostId, EmailRequest());
+        // Park the attach inside its first lookup poll (it now holds the lane).
+        await Wait.AdvanceUntilAsync(fx.Time,
+            () => { lock (order) return order.Contains("lookup_poll"); }, TimeSpan.FromSeconds(1));
+
+        Task<ControlOpResult> op = fx.Service.PerformTaskOpAsync(fx.HostId, TaskOp.Suspend, "url", "t");
+        // The lane is held by the parked attach, so the op cannot have started or finished.
+        Assert.False(op.IsCompleted);
+        lock (order) Assert.DoesNotContain("task_op", order);
+
+        lookupGate.SetResult(new AccountLookupReply(0, "", "AUTH"));
+        await Wait.AdvanceUntilAsync(fx.Time,
+            () => attach.IsCompleted && op.IsCompleted, TimeSpan.FromSeconds(1));
+
+        Assert.Equal(AttachFlowOutcome.Attached, (await attach).Outcome);
+        Assert.Equal(ControlOpOutcome.Succeeded, (await op).Outcome);
+        // Strict order: the op ran strictly after the WHOLE attach flow, never interleaved.
+        Assert.Equal(["lookup_poll", "attach_request", "attach_poll", "task_op"], order);
+    }
+
+    [Fact]
+    public async Task A_canceled_attach_releases_the_lane_and_the_queued_op_still_runs()
+    {
+        var (factory, attachFake, opFake) = LaneFactory();
+        await using var fx = new Fixture(controlFactory: factory);
+        // Never-completing lookup poll; the runner's ct aborts it mid-poll.
+        var never = new TaskCompletionSource<AccountLookupReply>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        attachFake.OnPollAccountLookup = () => never.Task;
+        using var cts = new CancellationTokenSource();
+
+        Task<AttachFlowResult> attach = fx.Runner.RunAsync(fx.HostId, EmailRequest(), null, cts.Token);
+        await Wait.AdvanceUntilAsync(fx.Time,
+            () => attachFake.Calls.Contains("lookup_account_poll"), TimeSpan.FromSeconds(1));
+        Task<ControlOpResult> op = fx.Service.PerformTaskOpAsync(fx.HostId, TaskOp.Suspend, "url", "t");
+        Assert.False(op.IsCompleted);   // queued behind the parked attach
+
+        cts.Cancel();
+
+        Assert.Equal(AttachFlowOutcome.Canceled, (await attach).Outcome);
+        Assert.Equal(ControlOpOutcome.Succeeded, (await op).Outcome);
+        Assert.Contains("task_op:suspend:url:t", opFake.Calls);
+        Assert.True(attachFake.Disposed);
+    }
+
+    [Fact]
+    public async Task A_faulted_attach_releases_the_lane_and_the_queued_op_still_runs()
+    {
+        var (factory, attachFake, opFake) = LaneFactory();
+        await using var fx = new Fixture(controlFactory: factory);
+        // The attach parks in its connect leg, then the connection attempt dies — this
+        // faults the lane TURN itself (hook leg, not a machine-classified flow fault).
+        var connectGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        attachFake.OnConnect = (_, _) => connectGate.Task;
+
+        Task<AttachFlowResult> attach = fx.Runner.RunAsync(fx.HostId, EmailRequest());
+        await Wait.UntilAsync(() => attachFake.Calls.Contains("connect:127.0.0.1:31416"),
+            "the attach should be parked in its connect leg");
+        Task<ControlOpResult> op = fx.Service.PerformTaskOpAsync(fx.HostId, TaskOp.Suspend, "url", "t");
+        Assert.False(op.IsCompleted);   // queued behind the parked attach
+
+        connectGate.SetException(new BoincConnectionException("host died"));
+
+        AttachFlowResult attachResult = await attach;
+        Assert.Equal(AttachFlowOutcome.Faulted, attachResult.Outcome);
+        Assert.Equal("host died", attachResult.Error);
+        Assert.Equal(ControlOpOutcome.Succeeded, (await op).Outcome);
+        Assert.Contains("task_op:suspend:url:t", opFake.Calls);
+        Assert.True(attachFake.Disposed);
     }
 
     [Fact]
