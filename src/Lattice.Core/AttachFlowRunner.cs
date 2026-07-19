@@ -46,40 +46,42 @@ public sealed record AttachFlowResult(
 /// <list type="bullet">
 /// <item>(I-AF1) The whole flow — lookup request, its polls, attach, its poll —
 /// runs on ONE connection: the daemon's lookup/attach state is per-connection
-/// (grc.lookup_account_op), so a poll on a fresh connection would never settle.</item>
-/// <item>(I-AF2) The client is disposed on every path (<c>await using</c>),
-/// including cancellation and fault paths.</item>
+/// (grc.lookup_account_op), so a poll on a fresh connection would never settle.
+/// That connection is the host's control-lane connection: the flow runs as a
+/// single lane turn (<c>HostControlService.RunOnLaneAsync</c>), so it holds the
+/// lane for its whole duration — other control ops on the host queue behind it
+/// and run after it in submission order (design §2.1); read polling is a
+/// separate connection and unaffected.</item>
+/// <item>(I-AF2) The client is disposed on every path (the lane hook's
+/// <c>await using</c>), including cancellation and fault paths.</item>
 /// <item>(I-AF3) RunAsync never throws: every path returns an
-/// <see cref="AttachFlowResult"/> (cancellation included).</item>
-/// <item>(I-AF4) The host's config is read fresh from the registry at flow start;
-/// an unknown id fails fast (host removed between dialog open and submit).</item>
+/// <see cref="AttachFlowResult"/> (cancellation included). The lane hook
+/// propagates connect/auth failures and cancellation as exceptions; the mapping
+/// back to a result happens here, by exception type only.</item>
+/// <item>(I-AF4) The host's config is read fresh from the registry inside the
+/// lane turn (by the hook); an unknown id fails fast without creating a
+/// connection (host removed between dialog open and submit).</item>
 /// <item>(I-AF5) The 1 s poll cadence lives here (via <see cref="TimeProvider"/>);
 /// the poll COUNT cap lives in the machine. Exceptions are classified by type
 /// only: <see cref="BoincRpcException"/> during a poll RPC is that stage's
 /// failure reply (design 1.2), everything else non-cancellation folds to a
 /// Faulted input and the machine settles the flow.</item>
 /// </list>
-/// Lane note: control ops serialize per host on HostControlService's lane (PR D,
-/// in flight in parallel). Until both are merged this runner opens its own side
-/// connection exactly like HostMonitorManager.TestConnectionAsync; routing the
-/// flow body through the service's lane hook is the follow-up integration.
 /// </remarks>
 public sealed class AttachFlowRunner
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
 
-    private readonly HostRegistry _registry;
+    private readonly HostControlService _lane;
     private readonly HostMonitorManager _monitors;
-    private readonly Func<IGuiRpcClient> _clientFactory;
     private readonly TimeProvider _time;
 
-    /// <summary>Creates a runner over the app's registry, monitor manager, and client factory.</summary>
-    public AttachFlowRunner(HostRegistry registry, HostMonitorManager monitors,
-                            Func<IGuiRpcClient> clientFactory, TimeProvider timeProvider)
+    /// <summary>Creates a runner over the shared control-lane service and monitor manager.</summary>
+    public AttachFlowRunner(HostControlService controlService, HostMonitorManager monitors,
+                            TimeProvider timeProvider)
     {
-        _registry = registry;
+        _lane = controlService;
         _monitors = monitors;
-        _clientFactory = clientFactory;
         _time = timeProvider;
     }
 
@@ -92,19 +94,13 @@ public sealed class AttachFlowRunner
         Guid hostId, AttachMachine.AttachRequest request,
         IProgress<AttachMachine.Stage>? progress = null, CancellationToken ct = default)
     {
-        HostConfig? config = _registry.Hosts.FirstOrDefault(h => h.Id == hostId);
-        if (config is null)
-            return new(AttachFlowOutcome.Faulted, [], "The host is no longer registered.");
-
         try
         {
-            await using IGuiRpcClient client = _clientFactory();
-            await client.ConnectAsync(config.Address, config.Port, ct).ConfigureAwait(false);
-            if (config.Password.Length > 0
-                && !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
-                return new(AttachFlowOutcome.Faulted, [], "The host refused the password.");
-
-            AttachFlowResult result = await DriveAsync(client, request, progress, ct).ConfigureAwait(false);
+            // One lane turn = the whole flow: the hook connects and auths the single
+            // connection, DriveAsync holds it until the machine settles (I-AF1).
+            AttachFlowResult result = await _lane.RunOnLaneAsync(
+                hostId, (client, token) => DriveAsync(client, request, progress, token), ct)
+                .ConfigureAwait(false);
             if (result.Outcome == AttachFlowOutcome.Attached)
                 // Converge the read path within ~1 tick; no optimistic snapshot
                 // mutation — HostSnapshot stays single-writer (the monitor).
@@ -117,7 +113,8 @@ public sealed class AttachFlowRunner
         }
         catch (Exception ex)
         {
-            // Connect/auth-leg failures (the flow itself classifies inside DriveAsync).
+            // Lane-leg failures: host removed, refused password, connect/auth faults
+            // (the flow itself classifies inside DriveAsync). Message is display text.
             return new(AttachFlowOutcome.Faulted, [], ex.Message);
         }
     }
