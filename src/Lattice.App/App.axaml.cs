@@ -44,6 +44,11 @@ public partial class App : Application
             var clock = new DispatcherUiClock();
             var uiState = new UiStateStore();
             var shell = new ShellViewModel(registry, store, clock, uiState, factory);
+            // Apply the persisted theme once, here at the composition root on the UI thread
+            // (#101). ThemePreference construction is pure by design — it never touches the
+            // UI-thread-affine Application.Current.RequestedThemeVariant — so this explicit
+            // call is what themes the app on startup, before the first window renders.
+            shell.ApplyInitialTheme();
 
             var shellWindow = new ShellWindow { DataContext = shell };
             desktop.MainWindow = shellWindow;

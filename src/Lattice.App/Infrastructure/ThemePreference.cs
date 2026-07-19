@@ -1,6 +1,5 @@
 using Avalonia;
 using Avalonia.Styling;
-using Avalonia.Threading;
 
 namespace Lattice.App.Infrastructure;
 
@@ -15,10 +14,19 @@ public sealed class ThemePreference
     {
         _store = store;
         Value = store.Load().Theme;
-        Apply();
+        // Construction is PURE: it loads the persisted value but does NOT touch the
+        // UI-thread-affine Application.Current.RequestedThemeVariant (#101). A ctor that
+        // wrote global UI state raced whatever [AvaloniaFact] session owned Application.Current
+        // when a plain [Fact] built this off-thread. The composition root applies the initial
+        // theme explicitly on the UI thread via ApplyInitial(); Set() applies subsequent changes.
     }
 
     public AppTheme Value { get; private set; }
+
+    /// <summary>Applies the persisted theme to the running Application ONCE at startup.
+    /// The composition root calls this from the UI thread (App.OnFrameworkInitializationCompleted),
+    /// keeping construction free of UI-thread-affine writes (#101).</summary>
+    public void ApplyInitial() => Apply();
 
     public void Set(AppTheme value)
     {
@@ -30,15 +38,13 @@ public sealed class ThemePreference
 
     private void Apply()
     {
-        // No-op both when headless without an app (Application.Current is null — plain,
-        // non-Avalonia unit tests) AND when an Application singleton exists process-wide
-        // but the calling thread doesn't own its dispatcher: xunit's plain [Fact] tests
-        // run on threadpool threads, and once ANY AvaloniaFact test has run earlier in the
-        // same test process, Application.Current is a live, non-null singleton owned by a
-        // different (UI) thread — writing a StyledProperty on it from here would throw
-        // "calling thread cannot access this object". Real app construction always happens
-        // on the UI thread, so this guard never no-ops in production.
-        if (Application.Current is not { } app || !Dispatcher.UIThread.CheckAccess()) return;
+        // No-op when headless without an app (Application.Current is null — plain,
+        // non-Avalonia unit tests). Every real caller runs on the UI thread: ApplyInitial()
+        // from the composition root at startup, and Set() from the bound Settings ComboBox.
+        // Construction no longer applies (see ctor), so there is no off-thread caller to guard
+        // against — an off-thread misuse SHOULD throw loudly (VerifyAccess) rather than silently
+        // no-op, so the former Dispatcher.UIThread.CheckAccess() mask is deliberately gone.
+        if (Application.Current is not { } app) return;
 #pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED AppTheme left
         // unhandled) must stay a build error so the theme mapping is revisited. CS8524 is the
         // residual "unnamed enum value" case — an out-of-range cast like (AppTheme)999, unreachable
