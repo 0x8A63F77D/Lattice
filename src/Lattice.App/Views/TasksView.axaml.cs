@@ -221,15 +221,31 @@ public partial class TasksView : UserControl
 
     // Production wiring of the VM's dialog seam (design 2.5): the FA dialog is
     // constructed only here, never in VM code, so headless VM tests fake the
-    // seam. Assign-if-null keeps a test-installed fake authoritative when the
-    // view is hosted on top of a pre-wired VM.
+    // seam. The VM outlives its views (the shell recreates a TasksView per
+    // navigation), so a handler installed by an EARLIER view is stale — its
+    // closure resolves TopLevel off a detached control and would silently
+    // decline every Confirm-class op (Codex P2, PR #135). Handlers therefore
+    // carry their owning view via ViewConfirmationHandler, and wiring replaces
+    // any VIEW-installed handler (newest view wins — order-independent, no
+    // detach-time bookkeeping to race a page transition) while a fake the test
+    // installed on the VM boundary is never touched.
     private void WireConfirmationHandler()
     {
-        if (DataContext is TasksViewModel { ConfirmationHandler: null } vm)
-            vm.ConfirmationHandler = request =>
-                TopLevel.GetTopLevel(this) is { } top
-                    ? ConfirmationDialog.ConfirmAsync(top, request)
-                    : Task.FromResult(false); // not attached: fail safe, decline
+        if (DataContext is not TasksViewModel vm)
+            return;
+        if (vm.ConfirmationHandler is null
+            || vm.ConfirmationHandler.Target is ViewConfirmationHandler)
+            vm.ConfirmationHandler = new ViewConfirmationHandler(this).ConfirmAsync;
+    }
+
+    // The marker type doubles as the closure: delegate.Target identifies a
+    // view-installed handler regardless of WHICH view installed it.
+    private sealed class ViewConfirmationHandler(TasksView owner)
+    {
+        public Task<bool> ConfirmAsync(ConfirmationRequest request) =>
+            TopLevel.GetTopLevel(owner) is { } top
+                ? ConfirmationDialog.ConfirmAsync(top, request)
+                : Task.FromResult(false); // owner detached: fail safe, decline
     }
 
     private void OnGridPointerPressed(object? sender, PointerPressedEventArgs e)

@@ -84,6 +84,43 @@ public class TasksViewControlTests
         var flyout = Assert.IsType<MenuFlyout>(view.Grid.ContextFlyout);
         var headers = flyout.Items.OfType<MenuItem>().Select(i => i.Header).ToArray();
         Assert.Equal([Strings.Suspend, Strings.Resume, Strings.Abort], headers);
+        // DI-1(c) applies to the menu too (Codex P3, PR #135): a Separator must
+        // sit between Resume and Abort, same as the command bar.
+        var items = flyout.Items.ToList();
+        int resumeAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Resume));
+        int abortAt = items.FindIndex(i => i is MenuItem m && Equals(m.Header, Strings.Abort));
+        Assert.Contains(items.Skip(resumeAt + 1).Take(abortAt - resumeAt - 1), i => i is Separator);
+
+        fx.Dispose();
+    }
+
+    [AvaloniaFact]
+    public void Recreated_view_replaces_a_stale_view_installed_handler_but_never_a_fake()
+    {
+        // The shell recreates a TasksView per navigation over ONE long-lived
+        // TasksViewModel. A handler installed by an earlier view resolves its
+        // TopLevel off a detached control and silently declines every
+        // Confirm-class op (Codex P2, PR #135): re-wiring must replace any
+        // VIEW-installed handler (newest view wins) while a test-installed
+        // fake stays authoritative.
+        var fx = new HostGraphFixture();
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
+        var window = fx.Host(new TasksView { DataContext = vm });
+        window.Show();
+        fx.Layout();
+        var installedByFirstView = vm.ConfirmationHandler;
+        Assert.NotNull(installedByFirstView);
+
+        window.Content = new TasksView { DataContext = vm };
+        fx.Layout();
+        Assert.NotNull(vm.ConfirmationHandler);
+        Assert.NotSame(installedByFirstView, vm.ConfirmationHandler);
+
+        Func<ConfirmationRequest, Task<bool>> fake = _ => Task.FromResult(true);
+        vm.ConfirmationHandler = fake;
+        window.Content = new TasksView { DataContext = vm };
+        fx.Layout();
+        Assert.Same(fake, vm.ConfirmationHandler);
 
         fx.Dispose();
     }

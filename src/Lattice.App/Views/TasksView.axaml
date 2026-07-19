@@ -167,6 +167,8 @@
           <MenuFlyout>
             <MenuItem Header="{x:Static loc:Strings.Suspend}" Command="{Binding SuspendSelectedCommand}" />
             <MenuItem Header="{x:Static loc:Strings.Resume}" Command="{Binding ResumeSelectedCommand}" />
+            <!-- DI-1(c) misclick distance applies here too (Codex P3, PR #135). -->
+            <Separator />
             <MenuItem Header="{x:Static loc:Strings.Abort}" Command="{Binding AbortSelectedCommand}"
                       Foreground="{DynamicResource LatticeDangerFgBrush}" />
           </MenuFlyout>
