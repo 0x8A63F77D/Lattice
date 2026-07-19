@@ -31,6 +31,12 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public Func<TaskOp, string, string, Task> OnTaskOp { get; set; } = (_, _, _) => Task.CompletedTask;
     public Func<ProjectOp, string, Task> OnProjectOp { get; set; } = (_, _) => Task.CompletedTask;
     public Func<ModeLane, RunMode, TimeSpan, Task> OnSetMode { get; set; } = (_, _, _) => Task.CompletedTask;
+    public Func<string, string, Task> OnRequestAccountLookup { get; set; } = (_, _) => Task.CompletedTask;
+    public Func<Task<AccountLookupReply>> OnPollAccountLookup { get; set; } =
+        () => Task.FromResult(new AccountLookupReply(0, string.Empty, string.Empty));
+    public Func<string, string, string, string, Task> OnRequestProjectAttach { get; set; } = (_, _, _, _) => Task.CompletedTask;
+    public Func<Task<ProjectAttachReply>> OnPollProjectAttach { get; set; } =
+        () => Task.FromResult(new ProjectAttachReply(0, []));
     public Func<ValueTask>? OnDispose { get; set; }
 
     private void Record(string call) { lock (_gate) _calls.Add(call); }
@@ -81,6 +87,22 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
                duration.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
         await OnSetMode(lane, mode, duration).WaitAsync(ct).ConfigureAwait(false);
     }
+
+    // The password is dropped before the hook fires: the no-password rule covers
+    // scripted closures, not just the call log.
+    public async Task RequestAccountLookupAsync(string projectUrl, string email, string password, CancellationToken ct = default)
+    { Record($"lookup_account:{projectUrl}:{email}"); await OnRequestAccountLookup(projectUrl, email).WaitAsync(ct).ConfigureAwait(false); }
+
+    public async Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default)
+    { Record("lookup_account_poll"); return await OnPollAccountLookup().WaitAsync(ct).ConfigureAwait(false); }
+
+    // The authenticator is an account credential: passed to the hook for flow
+    // assertions, deliberately kept out of the call log like passwords.
+    public async Task RequestProjectAttachAsync(string projectUrl, string authenticator, string projectName, string emailAddr, CancellationToken ct = default)
+    { Record($"project_attach:{projectUrl}:{projectName}"); await OnRequestProjectAttach(projectUrl, authenticator, projectName, emailAddr).WaitAsync(ct).ConfigureAwait(false); }
+
+    public async Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default)
+    { Record("project_attach_poll"); return await OnPollProjectAttach().WaitAsync(ct).ConfigureAwait(false); }
 
     public ValueTask DisposeAsync()
     {

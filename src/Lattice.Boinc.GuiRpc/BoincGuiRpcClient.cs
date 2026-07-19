@@ -171,6 +171,24 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     }
 
     /// <summary>
+    /// Starts an account lookup (lookup_account): the daemon asks the project server for
+    /// the account key matching the credentials. Poll with <see cref="PollAccountLookupAsync"/>
+    /// on the SAME connection — the daemon tracks the pending lookup per connection.
+    /// The password never goes on the wire: the request carries MD5(password + lowercased email).
+    /// </summary>
+    public async Task RequestAccountLookupAsync(string projectUrl, string email, string password, CancellationToken ct = default)
+    {
+        string emailLower = email.ToLowerInvariant();
+        // The daemon compares MD5(password + lowercased email) — the wire contract (W4).
+        // Hashed over the RAW strings; XML escaping applies only to the serialization below.
+        string passwdHash = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(password + emailLower)));
+        string body = $"<lookup_account>\n<url>{Escape(projectUrl)}</url>\n" +
+            $"<email_addr>{Escape(emailLower)}</email_addr>\n" +
+            $"<passwd_hash>{passwdHash}</passwd_hash>\n<ldap_auth>0</ldap_auth>\n</lookup_account>";
+        await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Sets a run-mode lane. Zero duration makes the mode permanent; a positive duration is a
     /// temporary override (snooze = <see cref="RunMode.Never"/> with a duration) that the daemon
     /// reverts on its own. <see cref="RunMode.Restore"/> cancels a temporary override immediately.
@@ -204,8 +222,53 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
         await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
     }
 
-    // Caller-supplied values (URLs, task names) are interpolated into request XML;
-    // a raw '&' or '<' would emit a malformed request the daemon cannot parse.
+    /// <summary>
+    /// Polls a pending account lookup (lookup_account_poll). Keep polling while ErrorNum is
+    /// <see cref="BoincErrorCodes.InProgress"/> or <see cref="BoincErrorCodes.Retry"/>; 0 means
+    /// success. A failed lookup is returned as a reply, never thrown; loop cadence and
+    /// timeout are the caller's policy.
+    /// </summary>
+    public async Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcErrorAsDataAsync("<lookup_account_poll/>", ct).ConfigureAwait(false);
+        if (reply.Element("account_out") is { } accountOut)
+            return AccountLookupReply.Parse(accountOut);
+        if (reply.Element("error") is { } error)
+            // handle_lookup_account_poll passes the project server's raw <error> through:
+            // the LOOKUP failed, the RPC worked. -1 mirrors upstream's generic-failure
+            // return in RPC::parse_reply (lib/gui_rpc_client.cpp) — not a new code.
+            return new AccountLookupReply(-1, ((string)error).Trim(), string.Empty);
+        return AccountLookupReply.Parse(reply);
+    }
+
+    /// <summary>
+    /// Asks the daemon to attach to a project (project_attach) with an authenticator —
+    /// either from a completed account lookup or supplied directly as an account key.
+    /// Follow with one <see cref="PollProjectAttachAsync"/> on the same connection for the verdict.
+    /// </summary>
+    public async Task RequestProjectAttachAsync(string projectUrl, string authenticator, string projectName, string emailAddr, CancellationToken ct = default)
+    {
+        string body = $"<project_attach>\n<project_url>{Escape(projectUrl)}</project_url>\n" +
+            $"<authenticator>{Escape(authenticator)}</authenticator>\n" +
+            $"<project_name>{Escape(projectName)}</project_name>\n" +
+            $"<email_addr>{Escape(emailAddr)}</email_addr>\n</project_attach>";
+        await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Polls a requested project attach (project_attach_poll). The daemon attaches
+    /// synchronously, so the first poll yields the final verdict — there is no
+    /// in-progress phase (the keep-polling codes still parse, for uniformity).
+    /// </summary>
+    public async Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<project_attach_poll/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        return ProjectAttachReply.Parse(reply.Element("project_attach_reply") ?? reply);
+    }
+
+    // Caller-supplied values (URLs, task names, emails, authenticators) are interpolated
+    // into request XML; a raw '&' or '<' would emit a malformed request the daemon cannot
+    // parse. Reply parsing stays lenient (XmlSanitizer).
     private static string Escape(string value) => SecurityElement.Escape(value);
 
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
@@ -214,6 +277,25 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
         try
         {
             return await PerformRpcLockedAsync(body, throwOnUnauthorized, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Like PerformRpcAsync, but keeps a bare <error> reply as data instead of throwing
+    // (<unauthorized/> still throws). Sole use: lookup_account_poll — see RpcReplyParser.
+    private async Task<XElement> PerformRpcErrorAsDataAsync(string body, CancellationToken ct)
+    {
+        await _gate.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            if (_connection is null)
+                throw new InvalidOperationException("Not connected. Call ConnectAsync first.");
+
+            string raw = await _connection.PerformRpcAsync(body, ct).ConfigureAwait(false);
+            return RpcReplyParser.Parse(raw, throwOnUnauthorized: true, throwOnError: false);
         }
         finally
         {

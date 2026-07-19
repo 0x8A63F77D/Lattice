@@ -5,7 +5,10 @@ namespace Lattice.Boinc.GuiRpc;
 
 internal static class RpcReplyParser
 {
-    internal static XElement Parse(string raw, bool throwOnUnauthorized = true)
+    // throwOnError: false keeps a bare <error> reply as data instead of throwing.
+    // Sole use: lookup_account_poll, where the daemon passes the project server's
+    // <error> through and it means "lookup failed", not "RPC failed".
+    internal static XElement Parse(string raw, bool throwOnUnauthorized = true, bool throwOnError = true)
     {
         XElement reply;
         try
@@ -20,7 +23,7 @@ internal static class RpcReplyParser
 
         if (throwOnUnauthorized && reply.Element("unauthorized") is not null)
             throw new BoincUnauthorizedException();
-        if (reply.Element("error") is { } error)
+        if (throwOnError && reply.Element("error") is { } error)
             throw new BoincRpcException(((string)error).Trim());
 
         return reply;

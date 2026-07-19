@@ -31,3 +31,28 @@ never `<always />`). Control ops reply `<success/>`, `<error>text</error>`
 (surfaced as `BoincRpcException`; the text is display-only and never worth
 branching on — wording changes between versions), or `<unauthorized/>`
 (`BoincUnauthorizedException`).
+
+## Protocol notes: account lookup / attach flow
+
+Attaching to a project is the protocol's one asynchronous flow. All four RPCs
+must run on the **same connection** — the daemon tracks the pending lookup per
+connection.
+
+1. `RequestAccountLookupAsync(url, email, password)` sends `lookup_account`.
+   The password itself never goes on the wire: the request carries
+   `MD5(password + lowercased email)`.
+2. Poll `PollAccountLookupAsync()`. `ErrorNum` −204 (`BoincErrorCodes.InProgress`)
+   and −199 (`BoincErrorCodes.Retry`) mean poll again; `0` delivers the account
+   authenticator; any other value is the failure code. A bare `<error>` reply to
+   this poll is the project server's own failure passed through by the daemon —
+   it is returned as `ErrorNum = -1` with the text, not thrown, because it means
+   "lookup failed", not "RPC failed".
+3. `RequestProjectAttachAsync(url, authenticator, projectName, emailAddr)`
+   sends `project_attach`; users with an account key can skip straight here.
+4. One `PollProjectAttachAsync()` yields the verdict — the daemon attaches
+   synchronously, so there is no in-progress phase. `ErrorNum 0` means the
+   daemon **accepted** the attach; it does not verify the authenticator, which
+   is only checked on the daemon's first scheduler RPC.
+
+Poll cadence and timeout are deliberately not wrapped here: loop policy belongs
+to the caller (in Lattice, the Core layer's attach state machine).
