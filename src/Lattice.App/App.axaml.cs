@@ -29,6 +29,17 @@ public partial class App : Application
         // build their own object graph and must not touch config or sockets.
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+#if DEBUG
+            // Issue #95 isolation probe: LATTICE_COMBO_PROBE=bare replaces the shell
+            // with a minimal window holding one plain ComboBox — no registry, no
+            // monitors, no command bar — to separate FA popup cost from app context.
+            if (ComboOpenProbe.Mode == "bare")
+            {
+                desktop.MainWindow = ComboOpenProbe.CreateBareWindow();
+                base.OnFrameworkInitializationCompleted();
+                return;
+            }
+#endif
             HostRegistry registry = LoadRegistryWithFallback(LatticeConfig.DefaultPath);
             Func<IGuiRpcClient> factory = () => new BoincGuiRpcClient();
 #if DEBUG
