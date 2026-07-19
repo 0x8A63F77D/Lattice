@@ -249,7 +249,10 @@
       <!-- Loading overlay. dataOverlay (issue #88): inset below the column header. -->
       <Border Classes="dataOverlay" Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
-          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" />
+          <!-- IsActive MUST track IsLoading: the ring's composition animation ignores IsVisible —
+               once shown it re-registers for every frame forever, keeping the dispatcher non-idle
+               and starving pointer input to the 1 s InputStarvationTimeout ceiling (issue #95). -->
+          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" IsActive="{Binding IsLoading}" />
           <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
                      TextWrapping="Wrap" TextAlignment="Center"
                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />

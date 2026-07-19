@@ -41,6 +41,44 @@ internal static class ComboOpenProbe
 
     private static bool _attached;
 
+    /// <summary>Shared wall clock for every probe log line, so stall reports and
+    /// pointer/opened events can be correlated on one timeline.</summary>
+    private static readonly Stopwatch Clock = Stopwatch.StartNew();
+
+    private static string Now => $"+{Clock.Elapsed.TotalSeconds:F3}s";
+
+    /// <summary>
+    /// UI-thread responsiveness monitor (owner hypothesis on #95: the click is late
+    /// because the UI thread is busy with poll-update work). A background thread posts
+    /// a no-op to the UI thread at <see cref="Avalonia.Threading.DispatcherPriority.Input"/>
+    /// — the SAME priority pointer events dispatch at, so the measured completion
+    /// latency is exactly the queueing delay a click experiences at that moment.
+    /// Probes every 100 ms; logs any completion that took longer than 50 ms.
+    /// </summary>
+    private static void StartUiThreadStallMonitor()
+    {
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                var t0 = Stopwatch.GetTimestamp();
+                try
+                {
+                    await Avalonia.Threading.Dispatcher.UIThread.InvokeAsync(
+                        static () => { }, Avalonia.Threading.DispatcherPriority.Input);
+                }
+                catch (TaskCanceledException)
+                {
+                    return; // dispatcher shutting down
+                }
+                var ms = Stopwatch.GetElapsedTime(t0).TotalMilliseconds;
+                if (ms > 50)
+                    Console.WriteLine($"[combo-probe] {Now} UI-THREAD STALL: input-priority job waited {ms:F0}ms");
+                await Task.Delay(100);
+            }
+        });
+    }
+
     /// <summary>Bare-mode main window: a minimal shell-free host for one plain ComboBox.</summary>
     public static Window CreateBareWindow()
     {
@@ -49,12 +87,68 @@ internal static class ComboOpenProbe
             SelectedIndex = 0,
             ItemsSource = new[] { "All", "Running", "Waiting", "Suspended", "Uploading" },
         };
+        var panel = new StackPanel { Margin = new Avalonia.Thickness(24), Children = { box } };
+        // Diagnosis aid: LATTICE_PROBE_RING=visible|hidden adds an FAProgressRing to test
+        // whether its infinite template animation keeps the dispatcher non-idle (and whether
+        // IsVisible=false — the shell's loading-overlay state — stops it or not).
+        if (Environment.GetEnvironmentVariable("LATTICE_PROBE_RING") is { } ringMode)
+        {
+            var ring = new FluentAvalonia.UI.Controls.FAProgressRing
+            {
+                Width = 32,
+                Height = 32,
+                IsVisible = ringMode is "visible" or "toggle",
+            };
+            panel.Children.Add(ring);
+            if (ringMode == "toggle")
+                _ = Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(
+                    _ =>
+                    {
+                        ring.IsVisible = false;
+                        Console.WriteLine($"[combo-probe] {Now} ring HIDDEN (was visible from start)");
+                    },
+                    TaskScheduler.FromCurrentSynchronizationContext());
+        }
+        // Diagnosis aid: LATTICE_PROBE_TRANSITION=1 adds a Border whose Width runs a
+        // repeating 200 ms transition (the Tasks grid's progress-fill motion), to test
+        // whether ordinary UI-thread property transitions also starve input priority.
+        if (Environment.GetEnvironmentVariable("LATTICE_PROBE_TRANSITION") is not null)
+        {
+            var bar = new Avalonia.Controls.Border
+            {
+                Height = 12,
+                Width = 20,
+                HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+                Background = Avalonia.Media.Brushes.SlateBlue,
+                Transitions = new Avalonia.Animation.Transitions
+                {
+                    new Avalonia.Animation.DoubleTransition
+                    {
+                        Property = Avalonia.Layout.Layoutable.WidthProperty,
+                        Duration = TimeSpan.FromMilliseconds(200),
+                    },
+                },
+            };
+            panel.Children.Add(bar);
+            var flip = false;
+            Avalonia.Threading.DispatcherTimer.Run(() =>
+            {
+                flip = !flip;
+                bar.Width = flip ? 300 : 20;
+                return true;
+            }, TimeSpan.FromMilliseconds(250));
+        }
+        // Diagnosis aid: LATTICE_PROBE_PBAR=1 adds a stock Avalonia indeterminate
+        // ProgressBar (AddHostDialog's busy indicator) — an infinite style-driven
+        // animation, to contrast with the ring's composition-driven one.
+        if (Environment.GetEnvironmentVariable("LATTICE_PROBE_PBAR") is not null)
+            panel.Children.Add(new ProgressBar { IsIndeterminate = true, Width = 200 });
         var window = new Window
         {
             Width = 400,
             Height = 300,
             Title = "ComboOpenProbe (bare)",
-            Content = new StackPanel { Margin = new Avalonia.Thickness(24), Children = { box } },
+            Content = panel,
         };
         Attach(box, "bare");
         return window;
@@ -97,8 +191,9 @@ internal static class ComboOpenProbe
         var topLevel = TopLevel.GetTopLevel(box);
         var scaling = topLevel?.RenderScaling ?? 1.0;
         var centerPx = box.PointToScreen(new Avalonia.Point(box.Bounds.Width / 2, box.Bounds.Height / 2));
-        Console.WriteLine($"[combo-probe] watch label={label} centerPx={centerPx.X},{centerPx.Y} " +
+        Console.WriteLine($"[combo-probe] {Now} watch label={label} centerPx={centerPx.X},{centerPx.Y} " +
                           $"centerPt={centerPx.X / scaling:F0},{centerPx.Y / scaling:F0} scaling={scaling}");
+        StartUiThreadStallMonitor();
 
         if (topLevel is null)
         {
@@ -118,21 +213,21 @@ internal static class ComboOpenProbe
             if (!WithinBox(e.Source))
                 return;
             tPress = Stopwatch.GetTimestamp();
-            Console.WriteLine($"[combo-probe] watch press t=0.0ms");
+            Console.WriteLine($"[combo-probe] {Now} watch press t=0.0ms (osTimestamp={e.Timestamp})");
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         topLevel.AddHandler(Avalonia.Input.InputElement.PointerReleasedEvent, (_, e) =>
         {
             if (!WithinBox(e.Source))
                 return;
-            Console.WriteLine($"[combo-probe] watch release t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms");
+            Console.WriteLine($"[combo-probe] {Now} watch release t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms (osTimestamp={e.Timestamp})");
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel, handledEventsToo: true);
         box.DropDownOpened += (_, _) =>
         {
-            Console.WriteLine($"[combo-probe] watch opened t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms");
+            Console.WriteLine($"[combo-probe] {Now} watch opened t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms");
             var popup = box.GetVisualDescendants().OfType<Popup>().FirstOrDefault();
             var popupRoot = popup?.Child is { } child ? TopLevel.GetTopLevel(child) : null;
             popupRoot?.RequestAnimationFrame(_ =>
-                Console.WriteLine($"[combo-probe] watch firstFrame t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms"));
+                Console.WriteLine($"[combo-probe] {Now} watch firstFrame t={Stopwatch.GetElapsedTime(tPress).TotalMilliseconds:F1}ms"));
         };
     }
 
@@ -140,8 +235,9 @@ internal static class ComboOpenProbe
     {
         // Let the window finish first render + style warmup unrelated to the popup.
         await Task.Delay(TimeSpan.FromSeconds(2));
-        Console.WriteLine($"[combo-probe] start label={label} os={Environment.OSVersion.Platform} " +
+        Console.WriteLine($"[combo-probe] {Now} start label={label} os={Environment.OSVersion.Platform} " +
                           $"renderScaling={(TopLevel.GetTopLevel(box)?.RenderScaling.ToString() ?? "?")}");
+        StartUiThreadStallMonitor();
         for (var i = 1; i <= 6; i++)
         {
             var openedTcs = new TaskCompletionSource<double>(TaskCreationOptions.RunContinuationsAsynchronously);
