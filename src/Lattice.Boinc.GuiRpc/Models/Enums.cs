@@ -17,6 +17,19 @@ public enum SuspendReason
 
 public enum MessagePriority { Info = 1, UserAlert = 2, InternalError = 3 }
 
+// The three control-op enums below are request selectors, not daemon constants:
+// each member maps 1:1 to a request tag. They deliberately contain only the
+// M3-scope operations (no project_reset / nomorework / file-transfer ops).
+
+/// <summary>Control operations on one task, addressed by (project URL, result name).</summary>
+public enum TaskOp { Suspend, Resume, Abort }
+
+/// <summary>Control operations on one project attachment, addressed by master URL.</summary>
+public enum ProjectOp { Suspend, Resume, Update, Detach }
+
+/// <summary>The three run-mode lanes a BOINC client schedules independently.</summary>
+public enum ModeLane { Cpu, Gpu, Network }
+
 public enum ResultState
 {
     New = 0, FilesDownloading = 1, FilesDownloaded = 2, ComputeError = 3,

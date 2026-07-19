@@ -46,6 +46,15 @@ internal sealed class RoutingGuiRpcClient(IReadOnlyDictionary<string, FakeGuiRpc
     public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default) =>
         _target!.GetFileTransfersAsync(ct);
 
+    public Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default) =>
+        _target!.PerformTaskOpAsync(op, projectUrl, taskName, ct);
+
+    public Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default) =>
+        _target!.PerformProjectOpAsync(op, projectUrl, ct);
+
+    public Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default) =>
+        _target!.SetModeAsync(lane, mode, duration, ct);
+
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }
 

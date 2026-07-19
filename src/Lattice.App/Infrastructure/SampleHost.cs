@@ -290,7 +290,8 @@ internal static class SampleHost
 
     private static readonly CcStatus RunningStatus = new(
         RunMode.Auto, RunMode.Auto, RunMode.Auto,
-        SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended);
+        SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
+        RunMode.Auto, 0, RunMode.Auto, 0, RunMode.Auto, 0);
 
     private static Project ProjectOf(
         string url, string name, double share, bool suspended = false, bool noNewTasks = false) =>
@@ -415,6 +416,17 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
         return Task.FromResult(_transfers);
     }
 
+    // Control ops on the sample host are accepted and ignored: the canned data
+    // never changes, mirroring the read-only nature of the demo fixture.
+    public Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -456,6 +468,15 @@ internal sealed class SampleRoutingGuiRpcClient(
 
     public Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default) =>
         _target!.GetFileTransfersAsync(ct);
+
+    public Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default) =>
+        _target!.PerformTaskOpAsync(op, projectUrl, taskName, ct);
+
+    public Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default) =>
+        _target!.PerformProjectOpAsync(op, projectUrl, ct);
+
+    public Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default) =>
+        _target!.SetModeAsync(lane, mode, duration, ct);
 
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

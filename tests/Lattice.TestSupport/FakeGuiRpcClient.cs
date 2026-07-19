@@ -17,7 +17,8 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public static CcState EmptyState { get; } = new(new VersionInfo(8, 2, 0), null, [], [], [], [], []);
     public static CcStatus DefaultStatus { get; } = new(
         RunMode.Auto, RunMode.Auto, RunMode.Auto,
-        SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended);
+        SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
+        RunMode.Auto, 0, RunMode.Auto, 0, RunMode.Auto, 0);
 
     public Func<string, int, Task> OnConnect { get; set; } = (_, _) => Task.CompletedTask;
     public Func<string, Task<bool>> OnAuthorize { get; set; } = _ => Task.FromResult(true);
@@ -27,6 +28,9 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public Func<bool, Task<IReadOnlyList<Result>>> OnGetResults { get; set; } = _ => Task.FromResult<IReadOnlyList<Result>>([]);
     public Func<int, Task<IReadOnlyList<Message>>> OnGetMessages { get; set; } = _ => Task.FromResult<IReadOnlyList<Message>>([]);
     public Func<Task<IReadOnlyList<FileTransfer>>> OnGetFileTransfers { get; set; } = () => Task.FromResult<IReadOnlyList<FileTransfer>>([]);
+    public Func<TaskOp, string, string, Task> OnTaskOp { get; set; } = (_, _, _) => Task.CompletedTask;
+    public Func<ProjectOp, string, Task> OnProjectOp { get; set; } = (_, _) => Task.CompletedTask;
+    public Func<ModeLane, RunMode, TimeSpan, Task> OnSetMode { get; set; } = (_, _, _) => Task.CompletedTask;
     public Func<ValueTask>? OnDispose { get; set; }
 
     private void Record(string call) { lock (_gate) _calls.Add(call); }
@@ -58,6 +62,25 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
 
     public async Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
     { Record("get_file_transfers"); return await OnGetFileTransfers().WaitAsync(ct).ConfigureAwait(false); }
+
+    public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
+    {
+        Record($"task_op:{op.ToString().ToLowerInvariant()}:{projectUrl}:{taskName}");
+        await OnTaskOp(op, projectUrl, taskName).WaitAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default)
+    {
+        Record($"project_op:{op.ToString().ToLowerInvariant()}:{projectUrl}");
+        await OnProjectOp(op, projectUrl).WaitAsync(ct).ConfigureAwait(false);
+    }
+
+    public async Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default)
+    {
+        Record($"set_mode:{lane.ToString().ToLowerInvariant()}:{mode.ToString().ToLowerInvariant()}:" +
+               duration.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        await OnSetMode(lane, mode, duration).WaitAsync(ct).ConfigureAwait(false);
+    }
 
     public ValueTask DisposeAsync()
     {
