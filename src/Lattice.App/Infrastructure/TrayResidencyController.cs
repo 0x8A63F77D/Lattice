@@ -44,11 +44,15 @@ public sealed class TrayResidencyController : IDisposable
         // closing, which is exactly the event close-to-tray cancels.
         _desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+        // Platform → icon asset is a pure decision (issue #108): macOS gets the
+        // monochrome template glyph, Windows/Linux keep the full-color .ico.
+        var iconAsset = TrayIconAssetPolicy.Select(TrayResidencyDefaults.Current);
+
         _trayIcon = new TrayIcon
         {
             // Assembly name is `Lattice` (Lattice.App.csproj <AssemblyName>), matching every
             // existing avares://Lattice/... URI — NOT the project name Lattice.App.
-            Icon = new WindowIcon(AssetLoader.Open(new Uri("avares://Lattice/Assets/lattice.ico"))),
+            Icon = new WindowIcon(AssetLoader.Open(new Uri(iconAsset.Uri))),
             ToolTipText = Strings.TrayToolTip,
             // Windows left-click fires Command; macOS click shows the menu (F3).
             Command = new RelayCommand(ShowWindow),
@@ -66,6 +70,17 @@ public sealed class TrayResidencyController : IDisposable
                 },
             },
         };
+
+        // macOS only: mark the glyph as a TEMPLATE image so AppKit tints it for the
+        // light/dark menu bar and the menu-open highlight, instead of drawing the raw
+        // black pixels. Routes MacOSProperties.IsTemplateIcon → TrayIconImpl.
+        // SetIsTemplateIcon → NSImage.setTemplate:. TrayIcon.Impl is created in the
+        // TrayIcon constructor (not by SetIcons), so applying it here — after the Icon
+        // is set, before SetIcons — reaches the already-built NSImage. The Win32/X11
+        // impls do not implement ITrayIconWithIsTemplateImpl, so this would no-op there;
+        // the IsTemplate guard keeps it macOS-only regardless.
+        if (iconAsset.IsTemplate)
+            MacOSProperties.SetIsTemplateIcon(_trayIcon, true);
 
         TrayIcon.SetIcons(app, new TrayIcons { _trayIcon });
     }
