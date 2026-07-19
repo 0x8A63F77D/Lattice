@@ -127,15 +127,6 @@
          no non-command-bar gap can show through under Mica (Codex P2s, PR #99). -->
     <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
 
-    <!-- Partial-results warning -->
-    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
-                  Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
-                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
-      <ui:FAInfoBar.ActionButton>
-        <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
-      </ui:FAInfoBar.ActionButton>
-    </ui:FAInfoBar>
-
     <!-- Status bar -->
     <controls:StatusBarControl DockPanel.Dock="Bottom"
                                 LeftText="{Binding CountsText}"
@@ -276,6 +267,16 @@
                      IsVisible="{Binding !IsAllHostsScope}" />
         </Panel>
       </Border>
+      <!-- Partial-results warning. Overlay child, NOT docked in the flow: a closed
+           FAInfoBar keeps its margin in a dock slot and pushed the grid 8px down
+           (issue #107). Floating placement lives in the shared partialBar class. -->
+      <ui:FAInfoBar Classes="partialBar" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+                    Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
+                    Closed="OnPartialBarClosed">
+        <ui:FAInfoBar.ActionButton>
+          <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
+        </ui:FAInfoBar.ActionButton>
+      </ui:FAInfoBar>
     </Panel>
     </DockPanel>
   </DockPanel>

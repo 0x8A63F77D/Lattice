@@ -137,15 +137,6 @@
          and grid all sit on this canvas so no non-command-bar gap leaks the material (Codex P2s). -->
     <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
 
-    <!-- Partial-results warning -->
-    <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
-                  Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
-                  Margin="16,8,16,0" Closed="OnPartialBarClosed">
-      <ui:FAInfoBar.ActionButton>
-        <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
-      </ui:FAInfoBar.ActionButton>
-    </ui:FAInfoBar>
-
     <!-- Status bar -->
     <controls:StatusBarControl DockPanel.Dock="Bottom"
                                 LeftText="{Binding CountsText}"
@@ -296,6 +287,16 @@
         <TextBlock Text="{x:Static loc:Strings.ProjectsEmpty}" HorizontalAlignment="Center" VerticalAlignment="Center"
                    FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       </Border>
+      <!-- Partial-results warning. Overlay child, NOT docked in the flow: a closed
+           FAInfoBar keeps its margin in a dock slot and pushed the grid 8px down
+           (issue #107). Floating placement lives in the shared partialBar class. -->
+      <ui:FAInfoBar Classes="partialBar" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
+                    Title="{x:Static loc:Strings.PartialTitle}" Message="{Binding PartialBarText}"
+                    Closed="OnPartialBarClosed">
+        <ui:FAInfoBar.ActionButton>
+          <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
+        </ui:FAInfoBar.ActionButton>
+      </ui:FAInfoBar>
     </Panel>
     </DockPanel>
   </DockPanel>
