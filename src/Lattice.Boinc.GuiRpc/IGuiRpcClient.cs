@@ -57,7 +57,9 @@ public interface IGuiRpcClient : IAsyncDisposable
     /// Polls a pending account lookup (lookup_account_poll). Keep polling while ErrorNum is
     /// <see cref="BoincErrorCodes.InProgress"/> or <see cref="BoincErrorCodes.Retry"/>; 0 means
     /// success. A failed lookup is returned as a reply (see <see cref="AccountLookupReply"/>),
-    /// never thrown; loop cadence and timeout are the caller's policy.
+    /// never thrown; a success reply that carries no authenticator is contract-breaking
+    /// and throws <see cref="BoincProtocolException"/>. Loop cadence and timeout are the
+    /// caller's policy.
     /// </summary>
     Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default);
 

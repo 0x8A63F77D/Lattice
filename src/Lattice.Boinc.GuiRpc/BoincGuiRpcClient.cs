@@ -225,20 +225,27 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     /// <summary>
     /// Polls a pending account lookup (lookup_account_poll). Keep polling while ErrorNum is
     /// <see cref="BoincErrorCodes.InProgress"/> or <see cref="BoincErrorCodes.Retry"/>; 0 means
-    /// success. A failed lookup is returned as a reply, never thrown; loop cadence and
-    /// timeout are the caller's policy.
+    /// success. A failed lookup is returned as a reply, never thrown; a success reply that
+    /// carries no authenticator is contract-breaking and throws
+    /// <see cref="BoincProtocolException"/>. Loop cadence and timeout are the caller's policy.
     /// </summary>
     public async Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcErrorAsDataAsync("<lookup_account_poll/>", ct).ConfigureAwait(false);
-        if (reply.Element("account_out") is { } accountOut)
-            return AccountLookupReply.Parse(accountOut);
         if (reply.Element("error") is { } error)
             // handle_lookup_account_poll passes the project server's raw <error> through:
             // the LOOKUP failed, the RPC worked. -1 mirrors upstream's generic-failure
             // return in RPC::parse_reply (lib/gui_rpc_client.cpp) — not a new code.
             return new AccountLookupReply(-1, ((string)error).Trim(), string.Empty);
-        return AccountLookupReply.Parse(reply);
+
+        AccountLookupReply parsed = AccountLookupReply.Parse(reply.Element("account_out") ?? reply);
+        // Success MUST carry the account key: a zero error_num without an authenticator
+        // (e.g. an empty <account_out/> from a poll with no pending lookup) is a
+        // contract-breaking reply, not a state the caller may attach from.
+        if (parsed.ErrorNum == 0 && parsed.Authenticator.Length == 0)
+            throw new BoincProtocolException(
+                "lookup_account_poll reply reports success but carries no authenticator.", reply.ToString());
+        return parsed;
     }
 
     /// <summary>

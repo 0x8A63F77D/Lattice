@@ -125,6 +125,19 @@ public class BoincGuiRpcClientAttachFlowTests
     }
 
     [Fact]
+    public async Task PollAccountLookup_success_without_authenticator_throws_protocol_exception()
+    {
+        // A zero error_num with no authenticator is contract-breaking (e.g. an empty
+        // <account_out/> from a poll with no pending lookup): success MUST carry the
+        // account key. Same class as get_state missing <client_state>.
+        var stream = ScriptedStream.FromReplies(
+            "<boinc_gui_rpc_reply>\n<account_out/>\n</boinc_gui_rpc_reply>");
+        await using var client = ClientWith(stream);
+
+        await Assert.ThrowsAsync<BoincProtocolException>(() => client.PollAccountLookupAsync());
+    }
+
+    [Fact]
     public async Task PollAccountLookup_bare_error_reply_means_lookup_failed_not_rpc_failure()
     {
         // handle_lookup_account_poll passes the project server's raw <error> through
