@@ -14,6 +14,13 @@ out of scope — those are covered by the headless test suites and by Codex revi
 
 ## Before you start — demo builds & data
 
+> **Prerequisite for every launch & restart below (macOS, post-#92):** closing the window leaves
+> Lattice **resident in the tray**, and the single-instance guard makes a later `dotnet run` hand off
+> to that resident process and exit — so a new launch **silently ignores new `LATTICE_SAMPLE_HOSTS` /
+> `LATTICE_SAMPLE_TICK` values**, and any "restart" check is a **false green** (the app never actually
+> restarted). Before each launch or restart step, **fully quit via the tray → Exit** (or otherwise
+> confirm no Lattice process is running). Start every run from a clean process.
+
 Two data sources feed this walkthrough. Use both.
 
 ### A. Real single-host data (live daemon)
@@ -127,7 +134,8 @@ breakpoint (1100)** — they are different widths; verify both.
       with the 1000px minimum window, so in the reachable range only Elapsed sheds automatically —
       Application stays visible; you can still hide it manually via column show/hide.)*
 - [ ] **Minimum 1000×700** is enforced (the window won't shrink past it).
-- [ ] Drag a column wider, restart the app → the width **persists**.
+- [ ] Drag a column wider, **fully quit (tray → Exit — see the prerequisite above)** and relaunch →
+      the width **persists**. *(A tray-resident reopen is not a restart and would false-green this.)*
 
 *Design: card `1i` (responsive). Rail 1280 breakpoint: PR #100. Column shed at 1100: PR #28.*
 
