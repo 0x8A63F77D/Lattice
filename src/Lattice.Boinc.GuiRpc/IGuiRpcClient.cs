@@ -30,4 +30,18 @@ public interface IGuiRpcClient : IAsyncDisposable
 
     /// <summary>Returns in-progress file uploads and downloads.</summary>
     Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default);
+
+    /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
+    Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default);
+
+    /// <summary>Suspends, resumes, updates, or detaches one project. Requires authorization.</summary>
+    Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default);
+
+    /// <summary>
+    /// Sets a run-mode lane. Zero duration makes the mode permanent; a positive duration is a
+    /// temporary override (snooze = <see cref="RunMode.Never"/> with a duration) that the daemon
+    /// reverts on its own. <see cref="RunMode.Restore"/> cancels a temporary override immediately.
+    /// Requires authorization.
+    /// </summary>
+    Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default);
 }

@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Security;
 using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
@@ -132,6 +134,79 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
         XElement container = reply.Element("file_transfers") ?? reply;
         return [.. container.Elements("file_transfer").Select(FileTransfer.Parse)];
     }
+
+    /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
+    public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
+    {
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED TaskOp left unhandled)
+        // must stay a build error so its request tag is wired here. CS8524 is the residual
+        // "unnamed enum value" case, which cannot occur for values we construct ourselves.
+        string tag = op switch
+        {
+            TaskOp.Suspend => "suspend_result",
+            TaskOp.Resume => "resume_result",
+            TaskOp.Abort => "abort_result",
+        };
+#pragma warning restore CS8524
+        string body = $"<{tag}>\n<project_url>{Escape(projectUrl)}</project_url>\n<name>{Escape(taskName)}</name>\n</{tag}>";
+        await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Suspends, resumes, updates, or detaches one project. Requires authorization.</summary>
+    public async Task PerformProjectOpAsync(ProjectOp op, string projectUrl, CancellationToken ct = default)
+    {
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED ProjectOp left unhandled)
+        // must stay a build error so its request tag is wired here. CS8524 is the residual
+        // "unnamed enum value" case, which cannot occur for values we construct ourselves.
+        string tag = op switch
+        {
+            ProjectOp.Suspend => "project_suspend",
+            ProjectOp.Resume => "project_resume",
+            ProjectOp.Update => "project_update",
+            ProjectOp.Detach => "project_detach",
+        };
+#pragma warning restore CS8524
+        string body = $"<{tag}>\n<project_url>{Escape(projectUrl)}</project_url>\n</{tag}>";
+        await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Sets a run-mode lane. Zero duration makes the mode permanent; a positive duration is a
+    /// temporary override (snooze = <see cref="RunMode.Never"/> with a duration) that the daemon
+    /// reverts on its own. <see cref="RunMode.Restore"/> cancels a temporary override immediately.
+    /// Requires authorization.
+    /// </summary>
+    public async Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default)
+    {
+#pragma warning disable CS8524 // No `_` arm on purpose (both switches): CS8509 (a new NAMED member
+        // left unhandled) must stay a build error so its wire tag is wired here. CS8524 is the
+        // residual "unnamed enum value" case; RunMode preserves unknown daemon integers on the
+        // READ side, but requests only ever carry the four named modes.
+        string rpcTag = lane switch
+        {
+            ModeLane.Cpu => "set_run_mode",
+            ModeLane.Gpu => "set_gpu_mode",
+            ModeLane.Network => "set_network_mode",
+        };
+        // Self-closing with NO space before the slash: the daemon's hand-rolled
+        // parser does not recognize "<always />" (protocol landmine).
+        string modeTag = mode switch
+        {
+            RunMode.Always => "always",
+            RunMode.Auto => "auto",
+            RunMode.Never => "never",
+            RunMode.Restore => "restore",
+        };
+#pragma warning restore CS8524
+        // Invariant culture: the daemon parses a C double.
+        string seconds = duration.TotalSeconds.ToString(CultureInfo.InvariantCulture);
+        string body = $"<{rpcTag}>\n<{modeTag}/>\n<duration>{seconds}</duration>\n</{rpcTag}>";
+        await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
+    }
+
+    // Caller-supplied values (URLs, task names) are interpolated into request XML;
+    // a raw '&' or '<' would emit a malformed request the daemon cannot parse.
+    private static string Escape(string value) => SecurityElement.Escape(value);
 
     private async Task<XElement> PerformRpcAsync(string body, bool throwOnUnauthorized, CancellationToken ct)
     {
