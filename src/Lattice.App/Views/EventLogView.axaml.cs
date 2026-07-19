@@ -17,6 +17,7 @@ namespace Lattice.App.Views;
 public partial class EventLogView : UserControl
 {
     private readonly RowClassBinder<EventLogRow> _rowBinder;
+    private readonly ColumnWidthPersistence _widthPersistence;
     private EventLogViewModel? _boundVm;
     private ScrollBar? _verticalScrollBar;
 
@@ -50,11 +51,17 @@ public partial class EventLogView : UserControl
 
         Grid.TemplateApplied += OnGridTemplateApplied;
         DataContextChanged += OnDataContextChanged;
+        // Column-width persistence (#120): same single-copy machinery as TasksView.
+        // The header-less priority-icon column carries no Tag, so it is not persisted.
+        _widthPersistence = ColumnWidthPersistence.Attach(Grid, "eventlog");
     }
 
     /// <summary>Test seam (InternalsVisibleTo): live row-class subscriptions.
     /// The teardown-drain regression test pins this to 0 after detach.</summary>
     internal int RowSubscriptionCount => _rowBinder.Count;
+
+    /// <summary>Test seam (InternalsVisibleTo): live column-width subscriptions.</summary>
+    internal int ColumnWidthSubscriptionCount => _widthPersistence.SubscriptionCount;
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {

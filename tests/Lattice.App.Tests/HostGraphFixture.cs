@@ -177,6 +177,10 @@ public sealed class HostGraphFixture : IAsyncDisposable, IDisposable
     public Window Host(Control view, double width = 1280, double height = 800)
     {
         _window = new Window { Width = width, Height = height, Content = view };
+        // Production sets this on ShellWindow at the composition root; mirror it
+        // so a hosted data view can reach the fixture's UiStateStore for
+        // column-width persistence (#120) through the inherited attached property.
+        ColumnWidthScope.SetStore(_window, UiState);
         return _window;
     }
 

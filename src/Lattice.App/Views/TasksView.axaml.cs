@@ -80,6 +80,11 @@ public partial class TasksView : UserControl
             LoadColumnPreferences();
             SyncStateFilterFromViewModel();
         };
+        // Column-width persistence (#120): single-copy machinery, wired the same
+        // one line in all four data views. Restores persisted widths on attach
+        // and writes settled user resizes back — independent of the header-based
+        // visibility path above (widths key off the column Tag, not the header).
+        _widthPersistence = ColumnWidthPersistence.Attach(Grid, "tasks");
         ApplyColumnVisibility(BreakpointWidth);
 #if DEBUG
         // Issue #95 measurement instrumentation; inert unless LATTICE_COMBO_PROBE is set.
@@ -220,10 +225,14 @@ public partial class TasksView : UserControl
     }
 
     private readonly RowClassBinder<TaskRow> _rowBinder;
+    private readonly ColumnWidthPersistence _widthPersistence;
 
     /// <summary>Test seam (InternalsVisibleTo): live row-class subscriptions.
     /// The teardown-drain regression test pins this to 0 after detach.</summary>
     internal int RowSubscriptionCount => _rowBinder.Count;
+
+    /// <summary>Test seam (InternalsVisibleTo): live column-width subscriptions.</summary>
+    internal int ColumnWidthSubscriptionCount => _widthPersistence.SubscriptionCount;
 
     // Ctrl+F stays imperative on purpose: focusing a named control is a
     // view-local concern with no VM command to bind — unlike F5, which maps

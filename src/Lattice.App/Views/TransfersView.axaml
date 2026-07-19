@@ -104,7 +104,7 @@
                viewport so it can never overflow — no horizontal scroll, and drag just reshuffles
                space. Fixed columns overflow into a working h-scrollbar; the DataGridFillerColumn
                fills any trailing slack when they fit. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColFile}" Width="200" MinWidth="200"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColFile}" Tag="File" Width="200" MinWidth="200"
                                    SortMemberPath="Data.Name">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
@@ -116,15 +116,15 @@
           <!-- Text-column bindings carry an explicit DataType: the ItemsSource is RowsView (a
                non-generic DataGridCollectionView), so the compiler can no longer infer the row
                type from the collection (Projects-column idiom). -->
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}" Tag="Project"
                                Binding="{CompiledBinding Data.Project, DataType=vm:TransferRow}" Width="140" MinWidth="140" />
-          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColDirection}" Tag="Direction"
                                Binding="{CompiledBinding Data.DirectionText, DataType=vm:TransferRow}" Width="80" MinWidth="80" />
           <!-- Progress 190: 56px bar + "34.2 / 51.7 MB" text, same shape as the Tasks Progress cell. -->
           <!-- SortMemberPath on the template columns (File/Progress/Status): without an explicit
                path a template column has no sort key and stays unsortable. Point at the underlying
                comparable value (Fraction/UiState), not the display text. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="190" MinWidth="190"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Tag="Progress" Width="190" MinWidth="190"
                                    SortMemberPath="Data.Fraction">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
@@ -141,12 +141,12 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}" Tag="Speed"
                                Binding="{CompiledBinding Data.SpeedText, DataType=vm:TransferRow}" Width="90" MinWidth="90"
                                CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Width="210" MinWidth="210"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.TransfersColStatus}" Tag="Status" Width="210" MinWidth="210"
                                    SortMemberPath="Data.UiState">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
@@ -168,7 +168,7 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}" Tag="Host"
                                Binding="{CompiledBinding Data.Host, DataType=vm:TransferRow}" Width="80" MinWidth="80"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>

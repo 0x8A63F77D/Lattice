@@ -187,7 +187,7 @@
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
           <!-- Project 200 (parent: name; child: host name) -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Width="200" MinWidth="200"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProject}" Tag="Project" Width="200" MinWidth="200"
                                    SortMemberPath="ByName" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
@@ -202,12 +202,12 @@
           </DataGridTemplateColumn>
           <!-- Hidden in single-host scope (design 2a): same treatment as the Tasks
                Host column; the single-host headless test asserts it. -->
-          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColHosts}" Tag="Hosts"
                                Binding="{CompiledBinding Data.HostsText, DataType=vm:ProjectRow}"
                                Width="110" MinWidth="110" SortMemberPath="ByHostCount" CanUserSort="True"
                                IsVisible="{Binding IsAllHostsScope}" CellStyleClasses="numericCell" />
           <!-- Resource share 140: bar (when ShowShareBar) + text. Sortable by (max,min) share. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Width="140" MinWidth="140"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ProjectsColShare}" Tag="Share" Width="140" MinWidth="140"
                                    SortMemberPath="ByShare" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
@@ -226,11 +226,11 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColAvgCredit}" Tag="AvgCredit"
                                Binding="{CompiledBinding Data.AvgCreditText, DataType=vm:ProjectRow}"
                                Width="100" MinWidth="100"
                                SortMemberPath="ByAvgCredit" CanUserSort="True" CellStyleClasses="numericCell" />
-          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ProjectsColTotalCredit}" Tag="TotalCredit"
                                Binding="{CompiledBinding Data.TotalCreditText, DataType=vm:ProjectRow}"
                                Width="110" MinWidth="110"
                                SortMemberPath="ByTotalCredit" CanUserSort="True" CellStyleClasses="numericCell" />
@@ -238,7 +238,7 @@
                column — a star pins the grid total to the viewport, defeating horizontal scroll and
                drag-to-reveal (Finding A round 2). With every column fixed the grid overflows into a
                working h-scrollbar when tight and the DataGridFillerColumn fills any trailing slack. -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="300" MinWidth="300"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Tag="State" Width="300" MinWidth="300"
                                    SortMemberPath="ByStatus" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">

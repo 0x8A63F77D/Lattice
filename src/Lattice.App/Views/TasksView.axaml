@@ -151,9 +151,9 @@
           <!-- Text-column bindings carry an explicit DataType: the ItemsSource is RowsView (a
                non-generic DataGridCollectionView), so the compiler can no longer infer the row
                type from the collection (Projects-column idiom). -->
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColProject}" Tag="Project"
                                Binding="{CompiledBinding Data.Project, DataType=vm:TaskRow}" Width="108" MinWidth="108" />
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColApplication}" Tag="Application"
                                Binding="{CompiledBinding Data.Application, DataType=vm:TaskRow}" Width="118" MinWidth="118" />
           <!-- Fixed width (NOT a star column): a star (*) column makes the DataGrid fit-to-width,
                which pins the grid total to the viewport — it can never overflow, so horizontal
@@ -166,7 +166,7 @@
                key from (unlike the text columns), so it is unsortable unless given an explicit path.
                Point each at the underlying COMPARABLE property so sorting uses the real value, not
                the formatted display string (e.g. Fraction, not "34%"; Deadline, not its text). -->
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColTask}" Tag="Task"
                                    Width="230" MinWidth="230" SortMemberPath="Data.Name">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
@@ -175,7 +175,7 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Width="112" MinWidth="112"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColProgress}" Tag="Progress" Width="112" MinWidth="112"
                                    SortMemberPath="Data.Fraction">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
@@ -196,13 +196,13 @@
           </DataGridTemplateColumn>
           <!-- SortMemberPath overrides the (text) binding for sorting so these sort by the raw
                duration in seconds, not the formatted string ("10m" would sort before "9m"). -->
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColElapsed}" Tag="Elapsed"
                                Binding="{CompiledBinding Data.ElapsedText, DataType=vm:TaskRow}" Width="68" MinWidth="68"
                                CellStyleClasses="numericCell" SortMemberPath="Data.ElapsedSeconds" />
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColRemaining}" Tag="Remaining"
                                Binding="{CompiledBinding Data.RemainingText, DataType=vm:TaskRow}" Width="74" MinWidth="74"
                                CellStyleClasses="numericCell" SortMemberPath="Data.RemainingSeconds" />
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Width="100" MinWidth="100"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColDeadline}" Tag="Deadline" Width="100" MinWidth="100"
                                    SortMemberPath="Data.Deadline">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
@@ -216,7 +216,7 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Width="112" MinWidth="112"
+          <DataGridTemplateColumn Header="{x:Static loc:Strings.ColState}" Tag="State" Width="112" MinWidth="112"
                                    SortMemberPath="Data.StateKind">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
@@ -240,7 +240,7 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}"
+          <DataGridTextColumn Header="{x:Static loc:Strings.ColHost}" Tag="Host"
                                Binding="{CompiledBinding Data.Host, DataType=vm:TaskRow}" Width="76" MinWidth="76"
                                IsVisible="{Binding IsAllHostsScope}" />
         </DataGrid.Columns>

@@ -134,12 +134,15 @@ breakpoint (1100)** — they are different widths; verify both.
       with the 1000px minimum window, so in the reachable range only Elapsed sheds automatically —
       Application stays visible; you can still hide it manually via column show/hide.)*
 - [ ] **Minimum 1000×700** is enforced (the window won't shrink past it).
-- [ ] Hide a column via the overflow menu, **fully quit (tray → Exit — see the prerequisite above)**
-      and relaunch → the **show/hide choice persists**. *(M2 persists column **visibility**, not column
-      **widths** — widths reset to defaults on relaunch; don't check width persistence here. A
-      tray-resident reopen is not a restart and would false-green this.)*
+- [ ] Hide a column via the overflow menu **and drag a column border to resize it**, then **fully
+      quit (tray → Exit — see the prerequisite above)** and relaunch → **both** the column
+      **show/hide choice** and the **resized column widths persist** (widths land per view and per
+      column; issue #120). *(A tray-resident reopen is not a restart and would false-green this — you
+      must fully Exit and relaunch. Both preferences save to `ui-state.json`; a hand-corrupted width
+      there is ignored per-column, never breaking the layout.)*
 
-*Design: card `1i` (responsive). Rail 1280 breakpoint: PR #100. Column shed at 1100: PR #28.*
+*Design: card `1i` (responsive). Rail 1280 breakpoint: PR #100. Column shed at 1100: PR #28.
+Column-width persistence: PR (#120).*
 
 ---
 
