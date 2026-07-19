@@ -2,7 +2,7 @@
 
 A multi-host BOINC monitoring dashboard. Cross-platform desktop app built with Avalonia and Fluent Design.
 
-**Positioning:** open-source alternative to BOINCTasks (closed-source, Windows-centric multi-host manager). NOT another single-machine BOINC Manager replacement — that niche is filled (official Manager, Fresco). Differentiators: multi-host aggregation, data visualization (credit history, task timelines, per-project throughput), modern Fluent UI.
+**Positioning:** open-source alternative to BOINCTasks (closed-source, Windows-centric multi-host manager). NOT another single-machine BOINC Manager replacement — that niche is filled (official Manager, Fresco; each can point at a single remote host over GUI RPC but holds only one connection at a time, so neither aggregates across hosts). Differentiators: multi-host aggregation, data visualization (credit history, task timelines, per-project throughput), modern Fluent UI.
 
 Lattice is a GUI RPC *client*. It does not schedule, download, or compute anything. All real work is done by the official BOINC core client (`boinc` daemon) running on each host; Lattice connects to it over TCP and renders state.
 
