@@ -3,10 +3,15 @@
              xmlns:vm="using:Lattice.App.ViewModels"
              x:Class="Lattice.App.Views.PlaceholderView"
              x:DataType="vm:PlaceholderViewModel">
-  <StackPanel Margin="{StaticResource LatticePagePadding}" Spacing="8">
-    <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
-               Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
-    <TextBlock Text="{Binding Body}" FontSize="13"
-               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-  </StackPanel>
+  <!-- Full-bleed opaque content surface (design: content is always opaque). PageHost is transparent
+       so command bars can reveal Mica; the placeholder has none, so it paints the canvas across its
+       whole area (the centred StackPanel alone would not fill it). Fallback unchanged. -->
+  <Panel Background="{DynamicResource LatticeCanvasBrush}">
+    <StackPanel Margin="{StaticResource LatticePagePadding}" Spacing="8">
+      <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold"
+                 Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+      <TextBlock Text="{Binding Body}" FontSize="13"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+    </StackPanel>
+  </Panel>
 </UserControl>

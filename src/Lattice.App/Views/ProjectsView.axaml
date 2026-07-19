@@ -94,8 +94,8 @@
   <DockPanel>
     <!-- Command bar: title + disabled M3 placeholders (left); freshness + refresh +
          density (right, stamped from TasksView minus the filter/overflow chrome). -->
-    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
-            Background="{DynamicResource LatticeSurfaceBrush}"
+    <Border x:Name="CommandBar" DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeCommandBarSurfaceBrush}"
             BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
             BorderThickness="0,0,0,1">
       <DockPanel Margin="16,0" LastChildFill="False">
@@ -128,6 +128,11 @@
         </StackPanel>
       </DockPanel>
     </Border>
+
+    <!-- One opaque content region for EVERYTHING below the command bar (design: content is always
+         opaque) — see TasksView. Only the command bar reveals Mica; the InfoBar margins, status bar,
+         and grid all sit on this canvas so no non-command-bar gap leaks the material (Codex P2s). -->
+    <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
 
     <!-- Partial-results warning -->
     <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
@@ -289,5 +294,6 @@
                    FontSize="13" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       </Border>
     </Panel>
+    </DockPanel>
   </DockPanel>
 </UserControl>

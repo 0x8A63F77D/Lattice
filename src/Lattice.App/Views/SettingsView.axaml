@@ -7,7 +7,10 @@
              xmlns:v="using:Lattice.App.Views"
              x:Class="Lattice.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
-  <ScrollViewer>
+  <!-- Opaque content surface (design: content is always opaque). PageHost is transparent so the
+       command-bar strip can reveal Mica; Settings has no command bar, so it paints the canvas across
+       its whole area. Same canvas colour as before → fallback unchanged. -->
+  <ScrollViewer Background="{DynamicResource LatticeCanvasBrush}">
     <StackPanel Margin="{StaticResource LatticePagePadding}" Spacing="8" MaxWidth="900">
       <TextBlock Text="{x:Static loc:Strings.SettingsTitle}" FontSize="16" FontWeight="SemiBold"
                  Foreground="{DynamicResource LatticeTextPrimaryBrush}" />

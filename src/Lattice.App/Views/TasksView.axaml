@@ -53,8 +53,8 @@
 
   <DockPanel>
     <!-- Command bar -->
-    <Border DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
-            Background="{DynamicResource LatticeSurfaceBrush}"
+    <Border x:Name="CommandBar" DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeCommandBarSurfaceBrush}"
             BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
             BorderThickness="0,0,0,1">
       <DockPanel Margin="16,0" LastChildFill="False">
@@ -120,6 +120,12 @@
         </StackPanel>
       </DockPanel>
     </Border>
+
+    <!-- One opaque content region for EVERYTHING below the command bar (design: content is always
+         opaque). Only the command bar stays transparent to reveal Mica; the InfoBar (whose margins
+         would otherwise leak the material), the status bar, and the grid all sit on this canvas, so
+         no non-command-bar gap can show through under Mica (Codex P2s, PR #99). -->
+    <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
 
     <!-- Partial-results warning -->
     <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsOpen="{Binding ShowPartialBar}"
@@ -271,5 +277,6 @@
         </Panel>
       </Border>
     </Panel>
+    </DockPanel>
   </DockPanel>
 </UserControl>
