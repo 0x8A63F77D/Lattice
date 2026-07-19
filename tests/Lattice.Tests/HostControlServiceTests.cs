@@ -385,34 +385,37 @@ public class HostControlServiceTests
         // before any op body runs.
         HostConfig a = Host("a", "a-host");
         HostConfig b = Host("b", "b-host");
-        using var factoryEntered = new ManualResetEventSlim(false);
-        using var releaseFactory = new ManualResetEventSlim(false);
+        int entered = 0;
+        using var release = new ManualResetEventSlim(false);
         Func<IGuiRpcClient> factory = () =>
         {
-            // Host A's op parks INSIDE the synchronous factory call. If this ran under
-            // the swap lock, host B's submission below would deadlock against it.
-            if (!factoryEntered.IsSet) { factoryEntered.Set(); releaseFactory.Wait(); }
+            // Host A's op (the first factory call) parks INSIDE the synchronous factory call,
+            // modelling a slow client factory. If this ran under the swap lock, host B's
+            // submission below could never reach its own work. This is the simulated slowness,
+            // not a settle — release.Wait() has no timeout.
+            if (Interlocked.Increment(ref entered) == 1)
+                release.Wait();
             return new FakeGuiRpcClient();
         };
         var (service, manager, _) = Build(factory, a, b);
         await using var _m = manager;
+        Task<ControlOpResult> opA = service.PerformTaskOpAsync(a.Id, TaskOp.Suspend, "url", "t");
         try
         {
-            Task<ControlOpResult> opA = Task.Run(() => service.PerformTaskOpAsync(a.Id, TaskOp.Suspend, "url", "t"));
-            Assert.True(factoryEntered.Wait(TimeSpan.FromSeconds(5)), "host A's op should have started");
+            await Wait.UntilAsync(() => Volatile.Read(ref entered) == 1, "host A's op should be parked in the factory");
 
-            // Submitting for host B must return and complete without waiting on A's lane.
-            Task<ControlOpResult> opB = Task.Run(() => service.PerformTaskOpAsync(b.Id, TaskOp.Suspend, "url", "t"));
-            ControlOpResult resultB = await opB.WaitAsync(TimeSpan.FromSeconds(5));
-            Assert.Equal(ControlOpOutcome.Succeeded, resultB.Outcome);
-
-            releaseFactory.Set();
-            Assert.Equal(ControlOpOutcome.Succeeded, (await opA).Outcome);
+            // The swap lock must NOT be held across A's parked factory call: submitting for
+            // host B must complete independently. Settle on B's observed completion, not on
+            // elapsed time (wall-clock settles are banned).
+            Task<ControlOpResult> opB = service.PerformTaskOpAsync(b.Id, TaskOp.Suspend, "url", "t");
+            await Wait.UntilAsync(() => opB.IsCompleted, "host B's submission must not block on host A's lane");
+            Assert.Equal(ControlOpOutcome.Succeeded, (await opB).Outcome);
         }
         finally
         {
-            releaseFactory.Set();   // never leave a parked pool thread on failure
+            release.Set();   // let host A's op complete; never leave a parked pool thread
         }
+        Assert.Equal(ControlOpOutcome.Succeeded, (await opA).Outcome);
     }
 
     // ---- RequestRefresh nudge on success ----------------------------------------------
