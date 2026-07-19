@@ -5,7 +5,7 @@
 **Status: design only.** No product code ships with this document. Per the issue's own reconsideration trigger (owner YAGNI ruling, #112 comment), the recommendation section is allowed to conclude "don't build" — and does. If the owner approves a build direction, an implementation plan is a separate step.
 
 **History this design must not re-litigate:**
-- The family was cut from M2 twice: first split out of #32 PR C2 (removal side), then the enter side was cut too (C2 shipped only the chevron retime). Prototype commit `ed61223` (row-enter fade + reduce-motion gate) exists in git history but is **not on main**; its two Codex findings are salvaged as constraints C1/C2 below.
+- The family was cut from M2 twice: first split out of #32 PR C2 (removal side), then the enter side was cut too (C2 shipped only the chevron retime). A row-enter-fade + reduce-motion prototype (commit `ed61223` on the deleted C2 branch) was **never merged and is not reachable from any ref** — do not plan around recovering it. Its two Codex findings survive in the salvaged-constraints comment on issue #112 and are restated *in full* as constraints C1/C2 below; this document plus that comment are the durable record.
 - The owner rejected grid hover motion once already (#74): DataGrid row hover is deliberately instant ("applied INSTANTLY (no fade)", src/Lattice.App/Theming/DataGridStyles.axaml:153). Dense-grid strobe is a real, previously-exercised owner sensitivity, not a hypothetical.
 
 ---
@@ -33,7 +33,7 @@ Projects expansion is not a view-side filter: `ToggleExpand` → `Rebuild` → c
 | View switch 150 ms decelerateMid (fade + 8 px rise) | shipped | `FadeSlidePageTransition.cs` — includes the "motion never gates data" structural argument |
 | Progress fill 200 ms width + recycle snap | shipped | `ProgressFillBehavior.cs` (#103) — the recycle-safe row-visual precedent |
 | Projects chevron rotate 100 ms | shipped | ProjectsView.axaml:44–50 — "the only surviving card-1h motion in C2" |
-| Row-enter fade, row-remove fade, transfer fade-then-remove | **not shipped** | cut from C2; prototype `ed61223` unmerged |
+| Row-enter fade, row-remove fade, transfer fade-then-remove | **not shipped** | cut from C2; the enter-fade prototype was never merged (salvaged findings: issue #112 comment) |
 | **Reduce-motion gate** | **does not exist anywhere** | grep: only a cut-note comment in ProjectsView.axaml:48. Avalonia 12.1 exposes **no OS reduce-motion signal** (verified against the 12.1 assemblies during C2), so the trigger must be a Settings toggle persisted in UiState. |
 
 Consequence: the reduce-motion gate is a **fixed cost of entry** for any candidate that ships any row motion — the issue's acceptance shape requires it to zero the exit fade, and it does not exist to be reused.
@@ -129,7 +129,7 @@ One more honest note: enter fades still interact with the 1 s heartbeat pipeline
 
 The issue itself defines the trigger: **a real user request** (owner YAGNI ruling, #112 comment). None exists. The family has been cut twice on exactly this reasoning; nothing material has changed since, and this design exercise found no hidden cheapness — honest costing below says a disciplined build is a mid-size feature.
 
-**Honest cost of building A** (order of magnitude, at project discipline — Codex rounds, red-first, headless gates, owner visual gate): roughly 3–4 PRs. (1) reduce-motion gate re-land (prototype `ed61223` is reference material, unmerged and stale vs main); (2) `RowExits` pure module + FsCheck invariants + rebuild-reason threading; (3) row classes / recycle-snap behavior / XAML across three views; (4) the owner-eyeball visual PR (one version, no iteration). Comparable to a meaningful slice of M3 — spent on cosmetics for a surface whose only motion verdict so far was a rejection. The single-PR prototype of a *subset* of this drew two P-level findings; that is evidence about this family's review cost, not bad luck.
+**Honest cost of building A** (order of magnitude, at project discipline — Codex rounds, red-first, headless gates, owner visual gate): roughly 3–4 PRs. (1) reduce-motion gate build (from scratch — the unmerged prototype is unrecoverable, see History; the durable facts are that Avalonia 12.1 has no OS signal, so it is a Settings toggle persisted in UiState driving a root style class); (2) `RowExits` pure module + FsCheck invariants + rebuild-reason threading; (3) row classes / recycle-snap behavior / XAML across three views; (4) the owner-eyeball visual PR (one version, no iteration). Comparable to a meaningful slice of M3 — spent on cosmetics for a surface whose only motion verdict so far was a rejection. The single-PR prototype of a *subset* of this drew two P-level findings; that is evidence about this family's review cost, not bad luck.
 
 **Minimal slice if the owner wants one anyway:** Transfers-only exit fade — Candidate A wired into one VM, enter side skipped. It targets the sole motion with informational value (completed transfer vanishing without trace) on the lowest-churn, lowest-row-count grid, cutting the #74 strobe exposure. Cost floor stays ~2–3 PRs because the reduce-motion gate and the recycle-safe motion plumbing are fixed costs of any first motion; that fixed cost is the strongest argument for D.
 
