@@ -67,7 +67,10 @@
           <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220"
                    Text="{Binding FilterText, Mode=TwoWay}"
                    PlaceholderText="{x:Static loc:Strings.FilterPlaceholder}" />
-          <ComboBox x:Name="StateFilterBox" SelectedIndex="0" SelectionChanged="OnStateFilterChanged">
+          <!-- OpenOnPress: dropdown opens on mouse-down like native macOS popup buttons; stock
+               Avalonia opens on release, which reads as click latency (issue #95, measured there). -->
+          <ComboBox x:Name="StateFilterBox" SelectedIndex="0" SelectionChanged="OnStateFilterChanged"
+                    views:ComboBoxPressOpenBehavior.OpenOnPress="True">
             <ComboBoxItem Content="{x:Static loc:Strings.StateAll}" />
             <ComboBoxItem Content="{x:Static loc:Strings.TaskStateRunning}" />
             <ComboBoxItem Content="{x:Static loc:Strings.TaskStateWaiting}" />
