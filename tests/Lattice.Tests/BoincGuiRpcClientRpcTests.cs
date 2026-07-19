@@ -78,6 +78,25 @@ public class BoincGuiRpcClientRpcTests
     }
 
     [Fact]
+    public async Task GetProjectStatus_returns_typed_projects_with_presence_flags_round_tripped()
+    {
+        var stream = ScriptedStream.FromReplies(Fixture("get_project_status.xml"));
+        await using var client = ClientWith(stream);
+
+        IReadOnlyList<Project> projects = await client.GetProjectStatusAsync();
+
+        Assert.Equal(2, projects.Count);
+        Assert.Equal("Einstein@Home", projects[0].ProjectName);
+        Assert.Equal(4321.098765, projects[0].UserExpavgCredit);
+        Assert.False(projects[0].SuspendedViaGui);
+        Assert.False(projects[0].DontRequestMoreWork);
+        Assert.True(projects[1].SuspendedViaGui);
+        Assert.True(projects[1].DontRequestMoreWork);
+        string sent = Encoding.ASCII.GetString(stream.Written.ToArray());
+        Assert.Contains("<get_project_status/>", sent);
+    }
+
+    [Fact]
     public async Task Unauthorized_reply_on_any_rpc_throws()
     {
         var stream = ScriptedStream.FromReplies("<boinc_gui_rpc_reply>\n<unauthorized/>\n</boinc_gui_rpc_reply>");

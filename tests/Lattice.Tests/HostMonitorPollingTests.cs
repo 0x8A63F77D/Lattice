@@ -95,6 +95,30 @@ public class HostMonitorPollingTests
     }
 
     [Fact]
+    public async Task Tick_issues_five_rpcs_in_order_and_snapshot_projects_come_from_the_status_list()
+    {
+        // DI-5: get_project_status is the fifth RPC of every tick, and its list — not the
+        // cached get_state — feeds the snapshot's project rows. The scripted state carries
+        // the same URL unsuspended; only the status list says suspended.
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(
+                projects: [TestData.MakeProject("https://example.org/", "Example")])),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(
+                [TestData.MakeProject("https://example.org/", "Example") with { SuspendedViaGui = true }]),
+        };
+        await using var monitor = new HostMonitor(Config(), () => fake, new FakeTimeProvider(), 5);
+        monitor.Start();
+        await Wait.UntilAsync(() => monitor.Snapshot is not null);
+
+        string[] tick = [.. fake.Calls.SkipWhile(c => c != "get_cc_status")];
+        Assert.Equal(["get_cc_status", "get_results", "get_file_transfers", "get_messages:0", "get_project_status"],
+            tick.Take(5));
+        ProjectSnapshot row = Assert.Single(monitor.Snapshot!.Projects);
+        Assert.True(row.Project.SuspendedViaGui);
+    }
+
+    [Fact]
     public async Task Tick_failure_enters_retrying_then_recovers()
     {
         bool fail = false;

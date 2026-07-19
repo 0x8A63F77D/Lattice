@@ -9,12 +9,19 @@ public class SnapshotBuilderTests
     private static readonly Guid HostId = Guid.NewGuid();
     private static readonly DateTimeOffset Now = DateTimeOffset.FromUnixTimeSeconds(1_752_000_000);
 
+    // projectStatuses defaults to the state's own project list: most tests care about
+    // the join tables, not the DI-5 freshness split, and in a steady tick the two lists
+    // describe the same attachments anyway. Tests exercising the split pass both explicitly.
     private static HostSnapshot Build(
         CcState? state = null,
         IReadOnlyList<Result>? results = null,
-        IReadOnlyList<FileTransfer>? transfers = null)
-        => SnapshotBuilder.Build(HostId, "host-1", Now, state ?? TestData.MakeState(),
-            FakeGuiRpcClient.DefaultStatus, results ?? [], transfers ?? []);
+        IReadOnlyList<FileTransfer>? transfers = null,
+        IReadOnlyList<Project>? projectStatuses = null)
+    {
+        CcState ccState = state ?? TestData.MakeState();
+        return SnapshotBuilder.Build(HostId, "host-1", Now, ccState,
+            FakeGuiRpcClient.DefaultStatus, projectStatuses ?? ccState.Projects, results ?? [], transfers ?? []);
+    }
 
     [Fact]
     public void Joins_application_name_through_workunit_and_app()
@@ -173,6 +180,59 @@ public class SnapshotBuilderTests
         Assert.Equal(2, snapshot.Projects.Count);
         Assert.Equal("First", snapshot.Projects[0].Project.ProjectName);
         Assert.Equal("Second", snapshot.Projects[1].Project.ProjectName);
+    }
+
+    [Fact]
+    public void Project_rows_come_from_the_status_list_not_the_cached_state()
+    {
+        // DI-5: a suspend flipped since the last get_state must render suspended. The
+        // cached state still says active; the tick-fresh status list says suspended —
+        // the status list wins because it is the ProjectSnapshot source, not a join input.
+        CcState state = TestData.MakeState(projects: [TestData.MakeProject("https://example.org/", "Example")]);
+        HostSnapshot snapshot = Build(state,
+            projectStatuses: [TestData.MakeProject("https://example.org/", "Example") with { SuspendedViaGui = true }]);
+        ProjectSnapshot row = Assert.Single(snapshot.Projects);
+        Assert.True(row.Project.SuspendedViaGui);
+    }
+
+    [Fact]
+    public void Project_detached_since_last_state_disappears_but_still_names_its_tasks()
+    {
+        // A project missing from the fresh status list (detached) must drop its row
+        // immediately, while a same-tick straggler result still shows the cached
+        // project name — the name join reads the merged dictionary, not the row source.
+        CcState state = TestData.MakeState(projects: [TestData.MakeProject("https://example.org/", "Example")]);
+        HostSnapshot snapshot = Build(state,
+            results: [TestData.MakeResult(projectUrl: "https://example.org/")],
+            projectStatuses: []);
+        Assert.Empty(snapshot.Projects);
+        Assert.Equal("Example", snapshot.Tasks[0].ProjectName);
+    }
+
+    [Fact]
+    public void Project_attached_since_last_state_appears_and_names_its_tasks()
+    {
+        // The mirror case: a status-list project the cached state has never seen (attached
+        // externally) must both get a row and win the name join for its tasks.
+        HostSnapshot snapshot = Build(TestData.MakeState(),
+            results: [TestData.MakeResult(projectUrl: "https://new.org/")],
+            projectStatuses: [TestData.MakeProject("https://new.org/", "Fresh")]);
+        ProjectSnapshot row = Assert.Single(snapshot.Projects);
+        Assert.Equal("Fresh", row.Project.ProjectName);
+        Assert.Equal(1, row.TaskCount);
+        Assert.Equal("Fresh", snapshot.Tasks[0].ProjectName);
+    }
+
+    [Fact]
+    public void Name_join_prefers_the_fresh_status_entry_over_the_cached_state_entry()
+    {
+        // Same URL in both sources with different names (project renamed server-side):
+        // the merged dictionary must surface the FRESH name on task rows.
+        CcState state = TestData.MakeState(projects: [TestData.MakeProject("https://example.org/", "Stale")]);
+        HostSnapshot snapshot = Build(state,
+            results: [TestData.MakeResult(projectUrl: "https://example.org/")],
+            projectStatuses: [TestData.MakeProject("https://example.org/", "Renamed")]);
+        Assert.Equal("Renamed", snapshot.Tasks[0].ProjectName);
     }
 
     [Fact]

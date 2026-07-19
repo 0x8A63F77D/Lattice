@@ -354,6 +354,7 @@ public sealed class HostMonitor : IAsyncDisposable
         CcStatus? ccStatus = null;
         IReadOnlyList<Result> results = [];
         IReadOnlyList<FileTransfer> transfers = [];
+        IReadOnlyList<Project> projectStatuses = [];
         IReadOnlyList<Message> newMessages = [];
         HostSnapshot? builtSnapshot = null;
 
@@ -379,11 +380,14 @@ public sealed class HostMonitor : IAsyncDisposable
                     return null;
 
                 case HostMachine.Command.RunTickRpcs t:
-                    // The four tick RPCs in the old TickAsync order (d3950c2:581-585).
+                    // The four tick RPCs in the old TickAsync order (d3950c2:581-585),
+                    // plus the DI-5 fifth fetch: get_project_status keeps project rows
+                    // live (suspend/detach visibility) without refetching get_state.
                     ccStatus = await client!.GetCcStatusAsync(connCt).ConfigureAwait(false);
                     results = await client!.GetResultsAsync(ct: connCt).ConfigureAwait(false);
                     transfers = await client!.GetFileTransfersAsync(connCt).ConfigureAwait(false);
                     newMessages = await client!.GetMessagesAsync(t.lastSeqno, connCt).ConfigureAwait(false);
+                    projectStatuses = await client!.GetProjectStatusAsync(connCt).ConfigureAwait(false);
                     // A result naming an uncached workunit means new work arrived since
                     // the last get_state (d3950c2:616-618): route triggers the refetch.
                     HashSet<string> knownWorkunits = [.. ccState!.Workunits.Select(w => w.Name)];
@@ -445,6 +449,7 @@ public sealed class HostMonitor : IAsyncDisposable
                         ccStatus = null;
                         results = [];
                         transfers = [];
+                        projectStatuses = [];
                         newMessages = [];
                         builtSnapshot = null;
                         return HostMachine.Input.NewConfigSnapshotted(config.Password.Length > 0);
@@ -489,7 +494,7 @@ public sealed class HostMonitor : IAsyncDisposable
                         // Pure in-memory build into an attempt local (d3950c2:630-631).
                         builtSnapshot = SnapshotBuilder.Build(
                             HostId, config.DisplayName, _time.GetUtcNow(),
-                            ccState!, ccStatus!, results, transfers);
+                            ccState!, ccStatus!, projectStatuses, results, transfers);
                         return null;
                     }
 

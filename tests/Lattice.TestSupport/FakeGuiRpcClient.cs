@@ -37,6 +37,21 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public Func<string, string, string, string, Task> OnRequestProjectAttach { get; set; } = (_, _, _, _) => Task.CompletedTask;
     public Func<Task<ProjectAttachReply>> OnPollProjectAttach { get; set; } =
         () => Task.FromResult(new ProjectAttachReply(0, []));
+
+    /// <summary>
+    /// Faithful-daemon default: get_project_status reports the same attachments as the
+    /// last get_state served on this client (one writer produces both replies), WITHOUT
+    /// re-invoking <see cref="OnGetState"/> — tests that count state calls stay valid.
+    /// Tests exercising the DI-5 freshness split (status ahead of cached state)
+    /// override this hook explicitly.
+    /// </summary>
+    public Func<Task<IReadOnlyList<Project>>> OnGetProjectStatus { get; set; }
+
+    public FakeGuiRpcClient() =>
+        OnGetProjectStatus = () => Task.FromResult(_lastServedState?.Projects ?? (IReadOnlyList<Project>)[]);
+
+    private CcState? _lastServedState;
+
     public Func<ValueTask>? OnDispose { get; set; }
 
     private void Record(string call) { lock (_gate) _calls.Add(call); }
@@ -55,7 +70,12 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     { Record("exchange_versions"); return await OnExchangeVersions().WaitAsync(ct).ConfigureAwait(false); }
 
     public async Task<CcState> GetStateAsync(CancellationToken ct = default)
-    { Record("get_state"); return await OnGetState().WaitAsync(ct).ConfigureAwait(false); }
+    {
+        Record("get_state");
+        CcState state = await OnGetState().WaitAsync(ct).ConfigureAwait(false);
+        _lastServedState = state;
+        return state;
+    }
 
     public async Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default)
     { Record("get_cc_status"); return await OnGetCcStatus().WaitAsync(ct).ConfigureAwait(false); }
@@ -68,6 +88,9 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
 
     public async Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
     { Record("get_file_transfers"); return await OnGetFileTransfers().WaitAsync(ct).ConfigureAwait(false); }
+
+    public async Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default)
+    { Record("get_project_status"); return await OnGetProjectStatus().WaitAsync(ct).ConfigureAwait(false); }
 
     public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
     {

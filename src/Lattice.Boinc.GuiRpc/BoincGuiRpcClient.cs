@@ -135,6 +135,14 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
         return [.. container.Elements("file_transfer").Select(FileTransfer.Parse)];
     }
 
+    /// <summary>Returns the current status of all attached projects. Small reply; safe to poll.</summary>
+    public async Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<get_project_status/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        XElement container = reply.Element("projects") ?? reply;
+        return [.. container.Elements("project").Select(Project.Parse)];
+    }
+
     /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
     public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
     {
