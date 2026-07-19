@@ -43,6 +43,21 @@ public class RpcReplyParserTests
     }
 
     [Fact]
+    public void Error_kept_as_data_when_error_throw_suppressed()
+    {
+        var reply = RpcReplyParser.Parse(
+            "<boinc_gui_rpc_reply>\n<error>lookup failed</error>\n</boinc_gui_rpc_reply>", throwOnError: false);
+        Assert.Equal("lookup failed", ParseHelpers.GetString(reply, "error"));
+    }
+
+    [Fact]
+    public void Unauthorized_still_throws_when_error_throw_suppressed()
+    {
+        Assert.Throws<BoincUnauthorizedException>(() => RpcReplyParser.Parse(
+            "<boinc_gui_rpc_reply>\n<unauthorized/>\n</boinc_gui_rpc_reply>", throwOnError: false));
+    }
+
+    [Fact]
     public void Reply_with_unescaped_ampersand_still_parses()
     {
         var reply = RpcReplyParser.Parse("<boinc_gui_rpc_reply>\n<name>Miles & More</name>\n</boinc_gui_rpc_reply>");

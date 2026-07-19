@@ -44,4 +44,36 @@ public interface IGuiRpcClient : IAsyncDisposable
     /// Requires authorization.
     /// </summary>
     Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default);
+
+    /// <summary>
+    /// Starts an account lookup (lookup_account): the daemon asks the project server for
+    /// the account key matching the credentials. Poll with <see cref="PollAccountLookupAsync"/>
+    /// on the SAME connection — the daemon tracks the pending lookup per connection.
+    /// The password never goes on the wire: the request carries MD5(password + lowercased email).
+    /// </summary>
+    Task RequestAccountLookupAsync(string projectUrl, string email, string password, CancellationToken ct = default);
+
+    /// <summary>
+    /// Polls a pending account lookup (lookup_account_poll). Keep polling while ErrorNum is
+    /// <see cref="BoincErrorCodes.InProgress"/> or <see cref="BoincErrorCodes.Retry"/>; 0 means
+    /// success. A failed lookup is returned as a reply (see <see cref="AccountLookupReply"/>),
+    /// never thrown; a success reply that carries no authenticator is contract-breaking
+    /// and throws <see cref="BoincProtocolException"/>. Loop cadence and timeout are the
+    /// caller's policy.
+    /// </summary>
+    Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Asks the daemon to attach to a project (project_attach) with an authenticator —
+    /// either from a completed account lookup or supplied directly as an account key.
+    /// Follow with one <see cref="PollProjectAttachAsync"/> on the same connection for the verdict.
+    /// </summary>
+    Task RequestProjectAttachAsync(string projectUrl, string authenticator, string projectName, string emailAddr, CancellationToken ct = default);
+
+    /// <summary>
+    /// Polls a requested project attach (project_attach_poll). The daemon attaches
+    /// synchronously, so the first poll yields the final verdict — there is no
+    /// in-progress phase (the keep-polling codes still parse, for uniformity).
+    /// </summary>
+    Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default);
 }

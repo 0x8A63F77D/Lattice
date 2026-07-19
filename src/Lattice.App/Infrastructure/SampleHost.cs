@@ -427,6 +427,20 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
     public Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default) =>
         Task.CompletedTask;
 
+    // Attach-flow RPCs are benign no-ops on sample hosts: requests succeed and
+    // polls report success without changing the canned data.
+    public Task RequestAccountLookupAsync(string projectUrl, string email, string password, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default) =>
+        Task.FromResult(new AccountLookupReply(0, string.Empty, string.Empty));
+
+    public Task RequestProjectAttachAsync(string projectUrl, string authenticator, string projectName, string emailAddr, CancellationToken ct = default) =>
+        Task.CompletedTask;
+
+    public Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default) =>
+        Task.FromResult(new ProjectAttachReply(0, []));
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -477,6 +491,18 @@ internal sealed class SampleRoutingGuiRpcClient(
 
     public Task SetModeAsync(ModeLane lane, RunMode mode, TimeSpan duration, CancellationToken ct = default) =>
         _target!.SetModeAsync(lane, mode, duration, ct);
+
+    public Task RequestAccountLookupAsync(string projectUrl, string email, string password, CancellationToken ct = default) =>
+        _target!.RequestAccountLookupAsync(projectUrl, email, password, ct);
+
+    public Task<AccountLookupReply> PollAccountLookupAsync(CancellationToken ct = default) =>
+        _target!.PollAccountLookupAsync(ct);
+
+    public Task RequestProjectAttachAsync(string projectUrl, string authenticator, string projectName, string emailAddr, CancellationToken ct = default) =>
+        _target!.RequestProjectAttachAsync(projectUrl, authenticator, projectName, emailAddr, ct);
+
+    public Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default) =>
+        _target!.PollProjectAttachAsync(ct);
 
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }
