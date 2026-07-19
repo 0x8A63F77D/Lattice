@@ -73,17 +73,28 @@ The enter side is invariant-neutral in every candidate (an entering row is genui
 
 ### Candidate A — tombstone layer as a pure visual-target composition (two layers, one diff)
 
-**Shape.** Keep the diff as the single authority, but make its *target* the visual layer. A pure F# module (sketch: `RowExits`) owns the exit set:
+**Shape.** Keep the diff as the single authority, but make its *target* the visual layer. A pure F# module (sketch: `RowExits`) owns the exit set. Two Codex P2s on this PR (R1: the marker channel, R3: the tombstone's data source) both caught the same class of gap — a prose promise with no input carrying it — so per the repeated-finding rule the shape is now stated as the complete data-flow relation of a rebuild, from which the signature and every input follow; nothing below relies on data the relation does not name:
 
 ```
-// Pure; lives beside Reconcile in Lattice.App.Aggregation.
-// exits: Map<'Key, Exit<'Row>>   where Exit = { FrozenRow: 'Row; Deadline: DateTimeOffset }
-step : reason:RebuildReason -> now:DateTimeOffset -> fadeLength:TimeSpan
-       -> liveTarget:struct('Key * 'Row)[] -> exits:Map<'Key, Exit<'Row>>
-       -> struct('Key * 'Row)[] * Map<'Key, Exit<'Row>>   // (visualTarget, exits')
+// Today (per VM Rebuild):
+//   existing     = Rows |> project (holder -> struct(Key, Data))     // already computed for diff
+//   liveTarget   = slice |> view shaping (filter / slots)
+//   apply(diff(existing, alignToExisting(existingKeys, liveTarget)))
+//
+// Candidate A inserts one pure call between those lines:
+//   (visualTarget, exits') =
+//       RowExits.step reason now fadeLength existing liveTarget exits
+//   apply(diff(existing, alignToExisting(existingKeys, visualTarget)))
+//
+// where  exits : Map<'Key, Exit>,  Exit = { Deadline: DateTimeOffset }
+//   departed     = keys existing \ keys liveTarget \ keys exits      // newly gone this frame
+//   exits'       = (exits restricted to un-expired, minus reappeared keys)
+//                  + (departed ↦ { Deadline = now + fadeLength }, when reason arms exit motion;
+//                     ViewConfig/scope reasons flush the set instead)
+//   visualTarget = liveTarget ⊎ [ for k in exits' -> k, markExiting (rowOf existing k) ]
 ```
 
-Per rebuild, between today's steps 1 and 2: keys that just left `liveTarget` (and whose departure is a data departure per Part 2 — `ViewConfig`/scope reasons flush the exit set instead) move into `exits` with frozen row data and an absolute deadline; expired entries drop; a reappearing key leaves `exits` (its live row wins — the holder never left the collection, so identity and selection survive the round-trip). `visualTarget` = `liveTarget` ⊎ un-expired exits in their prior slots. The downstream pipeline — `alignToExisting`, `diff`, `Apply`, view-owned order — runs **unchanged on `visualTarget`**: the diff still yields its postcondition exactly; the applier and `Reconcile` are not touched at all.
+The tombstone's frozen data is `existing`'s row value for that key — the same holder→value projection `Rebuild` already builds for `diff`, so the pure boundary sees the departed row's last displayed value without any reliance on UI state (the R3 fix: `existing` is an explicit input, not an assumption). Expired entries drop out of `exits'`; a reappearing key leaves it (its live row wins — the holder never left the collection, so identity and selection survive the round-trip). The downstream pipeline — `alignToExisting`, `diff`, `Apply`, view-owned order — runs **unchanged on `visualTarget`**: the diff still yields its postcondition exactly; the applier and `Reconcile` are not touched at all.
 
 **Motion state lives in the row value, not on the holder** (adopted from a Codex P2 on this design PR): nothing in the unchanged diff/applier can set a side-channel `IsExiting` holder flag — if the frozen tombstone equals the current holder data, the departure frame's diff emits no `Update` at all, so no holder property changes and `RowClassBinder` never re-fires. The exit (and enter) marker therefore becomes a field of the per-view row record itself (`with { Motion = Exiting }` on the frozen copy): the marker change *is* a data change, so the departure frame structurally yields `Update(i, key, markedRow)` → in-place `Data` swap → `RowClassBinder` re-applies → row class → opacity transition in XAML. Reappearance clears the marker the same way; `RowHolder` needs no change at all. This is the repo's standing fix-class — the invariant moves into the data model instead of being compensated downstream (the row records are per-view types, so the field costs nothing generic; XAML binding paths and the view sort comparers read the same record and are unaffected by design — confirming that is an implementation-plan detail). Expiry needs one scheduled rebuild at the earliest pending deadline (the 1 s heartbeat alone would leave an invisible row holding a slot for up to a second — a visible late jump in a dense grid).
 
@@ -91,7 +102,7 @@ Per rebuild, between today's steps 1 and 2: keys that just left `liveTarget` (an
 
 **Breaks / bends.** One honest bend: the bound collection now renders the *visual* layer, so "the grid renders exactly what the live data says" weakens to "…what the pure composition of live data + exit set says". The invariant survives in the form that mattered (`diff`'s postcondition against its target; unique keys; no Move; identity preservation), but the #24 doc-comment contract gains a clause. Duplicate-key safety on reappearance is by construction (a key is in `liveTarget` or `exits`, never both).
 
-**Verification-lane cost.** Best of the three, and the reason this is the only build-worthy shape. Machine-checkable (F# + FsCheck over `step`, per the left-shift canon): visual = live ⊎ exits with disjoint keys; every exit expires by its deadline (no leak); reappearance cancels and preserves identity; `ViewConfig` reasons flush; steady-state fixpoint (no churn when nothing changed); the departure frame emits an `Update` carrying the exit marker (the P2 regression pinned as a property). Headless: motion-marker → row-class wiring, recycle snap (C2, #103 pattern), eventual `RemoveAt` under a fake clock, reduce-motion zeroing durations. Existing reconciler tests stand untouched. Lands on the owner's eye: fade feel/curves, dense-grid churn under real poll cadence, the opacity-0 gap before the slot collapses. That residue is irreducible for any motion — A adds no *extra* eye-only surface.
+**Verification-lane cost.** Best of the three, and the reason this is the only build-worthy shape. Machine-checkable (F# + FsCheck over `step`, per the left-shift canon): visual = live ⊎ exits with disjoint keys; every exit expires by its deadline (no leak); a tombstone's row value is the departed key's last value in `existing`, marker aside (the R3 P2 pinned as a property); reappearance cancels and preserves identity; `ViewConfig` reasons flush; steady-state fixpoint (no churn when nothing changed); the departure frame emits an `Update` carrying the exit marker (the R1 P2 pinned as a property). Headless: motion-marker → row-class wiring, recycle snap (C2, #103 pattern), eventual `RemoveAt` under a fake clock, reduce-motion zeroing durations. Existing reconciler tests stand untouched. Lands on the owner's eye: fade feel/curves, dense-grid churn under real poll cadence, the opacity-0 gap before the slot collapses. That residue is irreducible for any motion — A adds no *extra* eye-only surface.
 
 **Blast radius on the reconciler contract.** Zero code change in `Reconcile.fs` / `CollectionReconciler.cs` / `RowHolder`. One new pure module, a motion-marker field on the per-view row records, and a rebuild-reason parameter threaded through three VMs' `Rebuild` entry points. Contrast with the interception variant the issue sketched (applier suppresses `RemoveAt` and fades the holder): that one puts the visual layer *inside* the applier, desynchronizes every subsequent op index (`diff` indices assume the removal happened), and demands logical→visual index translation in `Apply` — re-opening exactly the surgery #86 closed. A exists to make that variant unnecessary; it is rejected, not proposed.
 
