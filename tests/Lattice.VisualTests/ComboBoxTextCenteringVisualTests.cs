@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
@@ -6,7 +5,6 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
 using Avalonia.Media.Imaging;
-using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -77,7 +75,7 @@ public class ComboBoxTextCenteringVisualTests
         var window = Render(variant, out var combo, out var frame);
         using (frame)
         {
-            var (px, w, h, stride) = ReadPixels(frame);
+            var buf = PixelBuffer.From(frame);
 
             var boxOrigin = combo.TranslatePoint(new Point(0, 0), window)!.Value;
             int boxTop = (int)Math.Round(boxOrigin.Y);
@@ -92,14 +90,14 @@ public class ComboBoxTextCenteringVisualTests
             int selLeft = (int)Math.Round(selOrigin.X);
             int selRight = (int)Math.Round(selOrigin.X + sel.Bounds.Width);
 
-            var bgc = Rgb(px, stride, boxInteriorLeft, boxTop + 3);
+            var bgc = buf.Rgb(boxInteriorLeft, boxTop + 3);
 
             int inkTop = -1, inkBottom = -1;
-            for (int y = selTop; y < selBottom && y < h; y++)
+            for (int y = selTop; y < selBottom && y < buf.Height; y++)
             {
-                for (int x = selLeft; x < selRight && x < w; x++)
+                for (int x = selLeft; x < selRight && x < buf.Width; x++)
                 {
-                    if (ColourDistance(Rgb(px, stride, x, y), bgc) > 90)
+                    if (ColourDistance(buf.Rgb(x, y), bgc) > 90)
                     {
                         if (inkTop < 0) inkTop = y;
                         inkBottom = y;
@@ -146,29 +144,4 @@ public class ComboBoxTextCenteringVisualTests
 
     private static int ColourDistance((int r, int g, int b) a, (int r, int g, int b) b) =>
         Math.Abs(a.r - b.r) + Math.Abs(a.g - b.g) + Math.Abs(a.b - b.b);
-
-    private static (byte[] px, int w, int h, int stride) ReadPixels(Bitmap bmp)
-    {
-        var size = bmp.PixelSize;
-        int stride = size.Width * 4;
-        var buf = new byte[stride * size.Height];
-        var handle = Marshal.AllocHGlobal(buf.Length);
-        try
-        {
-            bmp.CopyPixels(new PixelRect(0, 0, size.Width, size.Height), handle, buf.Length, stride);
-            Marshal.Copy(handle, buf, 0, buf.Length);
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(handle);
-        }
-        return (buf, size.Width, size.Height, stride);
-    }
-
-    // Headless Skia captures as Bgra8888; return (R, G, B).
-    private static (int r, int g, int b) Rgb(byte[] px, int stride, int x, int y)
-    {
-        int i = y * stride + x * 4;
-        return (px[i + 2], px[i + 1], px[i + 0]);
-    }
 }
