@@ -32,6 +32,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly HostStore _store;
     private readonly IUiClock _clock;
     private readonly UiStateStore _uiState;
+    private readonly ThemePreference _theme;
     private readonly AllHostsRailItemViewModel _allHosts = new();
     private readonly Dictionary<Guid, HostRailItemViewModel> _hostRowVms = [];
     private double _railViewportHeight;
@@ -60,7 +61,8 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         var ui = uiState.Load();
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
-        Settings = new SettingsViewModel(registry, clientFactory, new ThemePreference(uiState));
+        _theme = new ThemePreference(uiState);
+        Settings = new SettingsViewModel(registry, clientFactory, _theme);
         // ONE DensityPreference, shared: the single owner of the global density
         // preference, so a toggle in either view reaches the other in-session
         // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a
@@ -97,6 +99,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     public IReadOnlyList<NavItemViewModel> Views { get; }
     public ObservableCollection<object> RailEntries { get; } = [];
     public SettingsViewModel Settings { get; }
+
+    /// <summary>Applies the persisted theme to the running Application. The composition root
+    /// calls this once at startup, on the UI thread — <see cref="ThemePreference"/> construction
+    /// must not touch UI-thread-affine global state (#101), so the initial apply is explicit.</summary>
+    public void ApplyInitialTheme() => _theme.ApplyInitial();
 
     /// <summary>The Tasks page VM (Views[0].Page); exposed directly so the shell
     /// can push scope changes into it and mirror its row count for the nav badge.</summary>
