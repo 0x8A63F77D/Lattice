@@ -18,11 +18,16 @@ Two data sources feed this walkthrough. Use both.
 
 ### A. Real single-host data (live daemon)
 
-- Start the local **BOINC 8.2.11** daemon (it lives only while BOINC Manager is running) attached to
-  **Einstein@Home** (mac-arm64 work is available). This is the live-RPC path (#15).
-- The live daemon has **0 attached projects' worth of task volume** on its own — it will **not**
-  produce the 500-task / all-transfer-states / multi-project-aggregate states. Those come from the
-  sample fleet below.
+- Start the local **BOINC 8.2.11** daemon (it lives only while BOINC Manager is running). This is the
+  live-RPC path (#15).
+- **Two daemon configs, run the empty-state check first:**
+  1. **No project attached** (fresh daemon, before you attach anything) — this is the state that
+     drives the **empty-state** check in §1. Point Lattice at it and confirm the empty states, then
+     attach a project.
+  2. **Attached to Einstein@Home** (mac-arm64 work is available) — gives a real host with live task/
+     message data for the populated checks.
+- Even attached, the live daemon will **not** produce the 500-task / all-transfer-states /
+  multi-project-aggregate volumes — those come from the sample fleet below.
 
 ### B. DEBUG sample fleet (data-rich states)
 
@@ -61,8 +66,10 @@ Run ≥2 hosts (a real Einstein@Home host + the sample fleet).
 - [ ] **Event log** Following **pauses** when you scroll up; click the **Resume following** toggle
       (the button relabels to it) to jump back to live. *Scrolling back to the bottom alone does not
       auto-resume — the toggle is the resume path.*
-- [ ] On a **real host with 0 attached projects**, Tasks / Projects / Transfers show the
-      design-correct **empty states** (not errors, not blank).
+- [ ] **Empty states** — pointing at the **no-project daemon config (setup A.1)**, Tasks / Projects /
+      Transfers show the design-correct **empty states** (not errors, not blank). Do this before
+      attaching Einstein@Home; once a project is attached that host's Projects gains its row. (The
+      sample fleet is always project-attached, so it does not exercise the empty path.)
 - [ ] With the **sample fleet**: the **Tasks** grid materializes **500+ rows** and scrolls smoothly
       (virtualization holds — no stutter, no runaway memory).
 - [ ] Tasks toolbar: **sort**, **filter text**, **density toggle** (36px medium ↔ 28px compact), and
