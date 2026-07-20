@@ -30,7 +30,7 @@ public class ProjectsViewModelTests : IAsyncLifetime
 
     private HostConfig AddHost(string address, FakeGuiRpcClient fake) => _fx.AddHost(address, fake);
 
-    private ProjectsViewModel MakeVm() => new(_fx.Store, _fx.Clock);
+    private ProjectsViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.Control);
 
     // Projects arrive via get_state (cached once per connection), so a project
     // row needs only the project present in the state — no results required.
