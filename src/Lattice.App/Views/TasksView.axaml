@@ -61,8 +61,20 @@
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="{x:Static loc:Strings.TasksTitle}" FontSize="16" FontWeight="SemiBold"
                      Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
-          <Button Content="{x:Static loc:Strings.Suspend}" IsEnabled="False" Margin="8,0,0,0" />
-          <Button Content="{x:Static loc:Strings.Abort}" IsEnabled="False" />
+          <!-- M3 control ops on the selected row. DI-3: disabled (with a tooltip
+               that must show on the disabled control) unless the row's host is
+               Connected. DI-1(c): Abort sits behind a Separator so a suspend
+               misclick can't land on the destructive op. -->
+          <Button x:Name="SuspendButton" Content="{x:Static loc:Strings.Suspend}" Margin="8,0,0,0"
+                  Command="{Binding SuspendSelectedCommand}"
+                  ToolTip.Tip="{Binding ControlDisabledReason}" ToolTip.ShowOnDisabled="True" />
+          <Button x:Name="ResumeButton" Content="{x:Static loc:Strings.Resume}"
+                  Command="{Binding ResumeSelectedCommand}"
+                  ToolTip.Tip="{Binding ControlDisabledReason}" ToolTip.ShowOnDisabled="True" />
+          <Separator Margin="4,0" />
+          <Button x:Name="AbortButton" Content="{x:Static loc:Strings.Abort}"
+                  Command="{Binding AbortSelectedCommand}"
+                  ToolTip.Tip="{Binding ControlDisabledReason}" ToolTip.ShowOnDisabled="True" />
           <Separator Margin="8,0" />
           <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220"
                    Text="{Binding FilterText, Mode=TwoWay}"
@@ -146,7 +158,24 @@
            description subclass Projects' hierarchy needs. The source collection stays in
            reconcile-friendly order, so poll reorders never remove/reinsert a selected row. -->
       <DataGrid x:Name="Grid" x:FieldModifier="public" Classes="lattice" Classes.compact="{Binding IsCompact}"
-                ItemsSource="{Binding RowsView}" IsReadOnly="True" CanUserSortColumns="True">
+                ItemsSource="{Binding RowsView}" IsReadOnly="True" CanUserSortColumns="True"
+                SelectedItem="{Binding SelectedRow, Mode=TwoWay}">
+        <!-- Row context menu (M3): same commands as the command bar, acting on
+             the selection; the code-behind moves selection to the row under a
+             right-click first, so the menu never targets a stale row. -->
+        <DataGrid.ContextFlyout>
+          <MenuFlyout>
+            <MenuItem Header="{x:Static loc:Strings.Suspend}" Command="{Binding SuspendSelectedCommand}" />
+            <MenuItem Header="{x:Static loc:Strings.Resume}" Command="{Binding ResumeSelectedCommand}" />
+            <!-- DI-1(c) misclick distance applies here too (Codex R1 P3). The
+                 divider is MenuFlyout's supported separator form — Header "-";
+                 a raw <Separator/> does not work in a menu flyout (Avalonia
+                 docs, MenuFlyout page; Codex R3 P2). -->
+            <MenuItem Header="-" />
+            <MenuItem Header="{x:Static loc:Strings.Abort}" Command="{Binding AbortSelectedCommand}"
+                      Foreground="{DynamicResource LatticeDangerFgBrush}" />
+          </MenuFlyout>
+        </DataGrid.ContextFlyout>
         <DataGrid.Columns>
           <!-- Text-column bindings carry an explicit DataType: the ItemsSource is RowsView (a
                non-generic DataGridCollectionView), so the compiler can no longer infer the row
@@ -283,6 +312,19 @@
           <Button Content="{x:Static loc:Strings.RetryNow}" Command="{Binding RefreshCommand}" />
         </ui:FAInfoBar.ActionButton>
       </ui:FAInfoBar>
+      <!-- Control-op failure surface (M3 PR F): the last ControlOpResult failure,
+           dismissible, newer replaces older. Overlay child like the partial bar —
+           NOT docked — but anchored BOTTOM so the two bars can never overlap
+           (partial coverage floats at the top). IsVisible rides IsOpen so the
+           CLOSED bar reserves zero layout space, margin included (issue #107:
+           a closed docked FAInfoBar kept an 8px strip; geometry-pinned in
+           TasksViewControlTests). -->
+      <ui:FAInfoBar x:Name="ControlFailureBar" Classes="controlFailureBar" Severity="Error"
+                    IsOpen="{Binding ControlFailure.IsOpen}"
+                    IsVisible="{Binding ControlFailure.IsOpen}"
+                    Title="{Binding ControlFailure.Title}"
+                    Message="{Binding ControlFailure.Message}"
+                    Closed="OnControlFailureClosed" />
     </Panel>
     </DockPanel>
   </DockPanel>

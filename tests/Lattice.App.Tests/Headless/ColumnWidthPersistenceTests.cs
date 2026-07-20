@@ -26,7 +26,7 @@ public class ColumnWidthPersistenceTests
     public async Task Resized_tasks_column_persists_the_settled_width()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         var window = fx.Host(view);
         window.Show();
@@ -50,7 +50,7 @@ public class ColumnWidthPersistenceTests
         // Seed a persisted width as if a previous session had saved it.
         fx.UiState.Save(UiState.Default with { ColumnWidths = new() { ["tasks/Project"] = 260 } });
 
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         var window = fx.Host(view);
         window.Show();
@@ -71,7 +71,7 @@ public class ColumnWidthPersistenceTests
             ColumnWidths = new() { ["tasks/Project"] = -50, ["tasks/Task"] = 300 },
         });
 
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         var window = fx.Host(view);
         window.Show();
@@ -110,7 +110,7 @@ public class ColumnWidthPersistenceTests
     public async Task Detaching_the_view_drains_the_column_width_subscriptions()
     {
         var fx = new HostGraphFixture();
-        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density);
+        var vm = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control);
         var view = new TasksView { DataContext = vm };
         var window = fx.Host(view);
         window.Show();

@@ -38,6 +38,16 @@
       <Setter Property="VerticalAlignment" Value="Top" />
       <Setter Property="Margin" Value="16,40,16,0" />
     </Style>
+    <!-- Control-op failure bar (M3, Tasks first — Projects/Transfers adopt it with
+         their own ops). Same overlay-not-docked reasoning as partialBar, but anchored
+         BOTTOM so the coverage warning (top) and an op failure can both be open
+         without overlapping. Each view additionally binds IsVisible to the bar's
+         IsOpen so the closed bar reserves zero layout space, margin included
+         (issue #107). This class owns the floating placement so views can't drift. -->
+    <Style Selector="ui|FAInfoBar.controlFailureBar">
+      <Setter Property="VerticalAlignment" Value="Bottom" />
+      <Setter Property="Margin" Value="16,0,16,8" />
+    </Style>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
     <StyleInclude Source="avares://Lattice/Theming/DataGridStyles.axaml" />
   </Application.Styles>

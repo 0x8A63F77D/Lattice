@@ -548,7 +548,7 @@ public class TransfersViewModelTests : IAsyncLifetime
         _fx.Start();
         await _fx.SettleAsync(() => !vm.IsLoading);
 
-        using var tasksVm = new TasksViewModel(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density);
+        using var tasksVm = new TasksViewModel(_fx.Store, _fx.Clock, _fx.UiState, _fx.Density, _fx.Control);
         tasksVm.SetColumnPreference("Elapsed", false);
 
         // Transfers only ever touches CompactDensity (via the shared

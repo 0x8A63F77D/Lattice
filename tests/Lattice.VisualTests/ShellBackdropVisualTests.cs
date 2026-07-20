@@ -97,7 +97,8 @@ public class ShellBackdropVisualTests
         var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), TimeProvider.System);
         var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
         var uiState = new UiStateStore(Path.Combine(Path.GetTempPath(), $"lt-vis-{Guid.NewGuid():N}-ui.json"));
-        var vm = new TasksViewModel(store, new NoTickClock(), uiState, new DensityPreference(uiState));
+        var vm = new TasksViewModel(store, new NoTickClock(), uiState, new DensityPreference(uiState),
+            new HostControlService(registry, manager, () => new FakeGuiRpcClient()));
 
         var window = new Window
         {

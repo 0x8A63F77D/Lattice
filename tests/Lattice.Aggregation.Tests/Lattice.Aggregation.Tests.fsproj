@@ -12,6 +12,7 @@
     <Compile Include="ScopeMachineTests.fs" />
     <Compile Include="ProjectRowsTests.fs" />
     <Compile Include="MessageLogTests.fs" />
+    <Compile Include="ControlConfirmationTests.fs" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
