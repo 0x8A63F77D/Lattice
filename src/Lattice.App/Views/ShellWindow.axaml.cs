@@ -23,6 +23,7 @@ public partial class ShellWindow : Window
     private bool _addHostInFlight;
     private bool _editHostInFlight;
     private bool _removeConfirmInFlight;
+    private bool _addProjectInFlight;
     // Same-row reentrancy guard only: two Tests on the SAME host racing would both
     // write row.TestResultText. Different rows testing concurrently is fine, so this
     // is per-host rather than the single bool Edit/Remove use.
@@ -173,6 +174,7 @@ public partial class ShellWindow : Window
             _shell.EditHostRequested -= OnEditHostRequested;
             _shell.TestHostRequested -= OnTestHostRequested;
             _shell.RemoveHostRequested -= OnRemoveHostRequested;
+            _shell.Projects.AddProjectRequested -= OnAddProjectRequested;
             _navBoundsSubscription?.Dispose();
             _navBoundsSubscription = null;
             _navPaneSubscription?.Dispose();
@@ -186,6 +188,7 @@ public partial class ShellWindow : Window
             _shell.EditHostRequested += OnEditHostRequested;
             _shell.TestHostRequested += OnTestHostRequested;
             _shell.RemoveHostRequested += OnRemoveHostRequested;
+            _shell.Projects.AddProjectRequested += OnAddProjectRequested;
             // Feed the measured pane height so the core re-evaluates the flat↔grouped fit
             // boundary on every layout/resize (design 3a; decisions §3). The shell derives
             // AvailableHeight = paneContentHeight − ReservedRailChrome from this.
@@ -225,6 +228,32 @@ public partial class ShellWindow : Window
         {
             _addHostInFlight = false;
         }
+    }
+
+    // Opens the attach dialog (M3 PR I) over the ready-built view model the
+    // Projects VM raises. The FA dialog is constructed only here, never in VM
+    // code. Success is driven by the VM (CloseRequested → Hide); any close path
+    // aborts a running flow via the VM's token (the dialog's own Closed handler).
+    private async void OnAddProjectRequested(object? sender, AttachProjectViewModel vm)
+    {
+        // Single-flight: a double-raise before the first dialog resolves would
+        // stack a second overlay (mirrors OnAddHostRequested).
+        if (_addProjectInFlight)
+            return;
+        _addProjectInFlight = true;
+        try
+        {
+            var dialog = new AttachProjectDialog { DataContext = vm };
+            void OnClose(object? _, EventArgs __) => dialog.Hide(FAContentDialogResult.Primary);
+            vm.CloseRequested += OnClose;
+            try
+            {
+                if (TopLevel.GetTopLevel(this) is { } top)
+                    await dialog.ShowAsync(top);
+            }
+            finally { vm.CloseRequested -= OnClose; }
+        }
+        finally { _addProjectInFlight = false; }
     }
 
     private async void OnEditHostRequested(object? sender, Guid id) =>

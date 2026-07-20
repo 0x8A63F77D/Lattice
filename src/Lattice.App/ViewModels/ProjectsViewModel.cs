@@ -28,6 +28,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     private readonly HostStore _store;
     private readonly IUiClock _clock;
     private readonly HostControlService _control;
+    // The attach-flow seam + UI dispatcher for the "Add project…" dialog (M3 PR I).
+    // Null when the shell did not wire them (the pre-attach test call sites): the
+    // AddProject command then stays permanently disabled — never a NRE.
+    private readonly AttachFlowRun? _attachRun;
+    private readonly IUiDispatcher? _ui;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // The last Rebuild's groups, reused by the control ops to resolve a selected
@@ -52,11 +57,14 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // holds the instance.
     private readonly PartialBarState _partialBar = new();
 
-    public ProjectsViewModel(HostStore store, IUiClock clock, HostControlService control)
+    public ProjectsViewModel(HostStore store, IUiClock clock, HostControlService control,
+        AttachFlowRun? attachRun = null, IUiDispatcher? ui = null)
     {
         _store = store;
         _clock = clock;
         _control = control;
+        _attachRun = attachRun;
+        _ui = ui;
         RowsView = new DataGridCollectionView(Rows);
         // Install the always-on default order BEFORE the first Rebuild, so the
         // grid (which binds RowsView, not Rows) is never unsorted for a frame.
@@ -105,6 +113,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isEmpty;
     [ObservableProperty] private string _loadingText = "";
+
+    /// <summary>Why "Add project…" is disabled (DI-3 tooltip on the disabled
+    /// button), or null when it is enabled. Only set when the attach flow is wired
+    /// (production): the scope has no Connected host to attach on.</summary>
+    [ObservableProperty] private string? _addProjectDisabledReason;
 
     // --- M3 control ops (design 2.5; DI-1/DI-2/DI-3). A parent row acts on ALL
     //     of its attachment hosts; a child row on its one host. Flow per command:
@@ -271,6 +284,13 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         ControlDisabledReason = _selectedHostIds.Count > 0 && !CanControlSelected()
             ? Strings.ControlHostNotConnected
             : null;
+
+        // "Add project…" enablement (DI-3): a Connected host must exist in scope;
+        // when attach is wired but none is, surface the reason as a tooltip.
+        AddProjectCommand.NotifyCanExecuteChanged();
+        AddProjectDisabledReason = _attachRun is not null && !ConnectableHosts().Any()
+            ? Strings.ProjectsAddProjectDisabledReason
+            : null;
     }
 
     // Hosts a command on the selected row would act on, for ENABLEMENT. A child
@@ -290,6 +310,40 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 
     private sealed record ControlTarget(
         string ProjectUrl, string ProjectName, IReadOnlyList<ProjectAttachment> Hosts);
+
+    // --- M3 PR I: "Add project…" entry. The dialog itself is opened by the shell
+    //     window (FA dialog constructed only in the view layer); this raises a
+    //     ready-built dialog VM with the scope-resolved host options. ---
+
+    /// <summary>Raised when "Add project…" is clicked, carrying a ready-built
+    /// dialog view model (host options + locked scope resolved here).</summary>
+    public event EventHandler<AttachProjectViewModel>? AddProjectRequested;
+
+    // DI-3: attach targets a Connected host only. All-hosts scope offers every
+    // Connected host; a single-host scope offers just that host (locked below).
+    private IEnumerable<HostEntry> ConnectableHosts() =>
+        (Scope.IsAllHosts ? _store.Hosts : _store.Hosts.Where(h => h.Config.Id == Scope.HostId))
+            .Where(h => IsHostConnected(h.Config.Id));
+
+    private bool CanAddProject() => _attachRun is not null && _ui is not null && ConnectableHosts().Any();
+
+    [RelayCommand(CanExecute = nameof(CanAddProject))]
+    private void AddProject()
+    {
+        if (_attachRun is null || _ui is null)
+            return;
+        // Materialize ONCE: CanExecute already checked ConnectableHosts, but a host
+        // can drop between that check and this body (background poll). Bail rather
+        // than open an empty, unsubmittable dialog.
+        var connectable = ConnectableHosts().ToList();
+        if (connectable.Count == 0)
+            return;
+        var options = connectable
+            .Select(h => new AttachHostOption(h.Config.Id, h.Config.DisplayName)).ToList();
+        // A single-host scope locks the picker to itself; All-hosts leaves it open.
+        Guid? locked = Scope.IsAllHosts ? null : Scope.HostId;
+        AddProjectRequested?.Invoke(this, new AttachProjectViewModel(_attachRun, options, locked, _ui));
+    }
 
     [RelayCommand]
     private void Refresh() => _store.RequestRefresh(Scope.HostId);
