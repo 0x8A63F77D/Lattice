@@ -117,11 +117,12 @@ public class RunModeControlTests : IAsyncLifetime
         var vm = new HostRailItemViewModel(_fx.Store.Hosts[0], _fx.Clock, _fx.Control);
 
         // The deadline is snapshot.Timestamp (the monitor's frozen TimeProvider
-        // instant) + the CPU mode_delay, formatted in local wall-clock time.
+        // instant) + the CPU mode_delay, resolved to local wall-clock AT the deadline
+        // (add-then-convert, so a DST-spanning snooze stays correct — Codex R1 P2).
         DateTimeOffset stamp = _fx.Store.Hosts[0].Snapshot!.Timestamp;
         string expected = string.Format(
             Strings.RailSnoozedUntilFmt,
-            stamp.ToLocalTime().AddSeconds(900).ToString("HH:mm", CultureInfo.InvariantCulture));
+            stamp.AddSeconds(900).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture));
 
         Assert.True(vm.IsSnoozed);
         Assert.Equal(expected, vm.SnoozedUntilText);

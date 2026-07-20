@@ -162,15 +162,18 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             SnoozedUntilText = "";
             return;
         }
-        // Convert the UTC snapshot instant to local so the "hh:mm" reads in the
-        // user's wall-clock time; the delay is seconds remaining as of that poll.
-        DateTimeOffset localNow = snapshot.Timestamp.ToLocalTime();
-        var until = RunModePolicy.temporaryUntil(localNow, snapshot.CcStatus.TaskModeDelaySeconds);
+        // Add the delay to the UTC snapshot INSTANT first, then convert the resulting
+        // deadline to local for display — so the local offset is resolved AT the
+        // deadline. Converting to local first and then adding would keep the snapshot's
+        // offset (DateTimeOffset.AddSeconds preserves it), so a snooze spanning a DST
+        // transition would render an hour off (Codex R1 P2).
+        var until = RunModePolicy.temporaryUntil(snapshot.Timestamp, snapshot.CcStatus.TaskModeDelaySeconds);
         if (until is not null)
         {
             IsSnoozed = true;
             SnoozedUntilText = string.Format(
-                Strings.RailSnoozedUntilFmt, until.Value.ToString("HH:mm", CultureInfo.InvariantCulture));
+                Strings.RailSnoozedUntilFmt,
+                until.Value.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture));
         }
         else
         {
