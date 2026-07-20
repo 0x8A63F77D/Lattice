@@ -103,6 +103,22 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
     /// </summary>
     public DataGridCollectionView RowsView { get; }
 
+    /// <summary>
+    /// The scoped host's run-mode surface (M3 PR H, DI-4), pushed by ShellViewModel
+    /// alongside <see cref="Scope"/>: non-null only when a single host is scoped. The
+    /// command bar's "Computing" dropdown binds its items to this VM's
+    /// <see cref="HostRailItemViewModel.SetRunModeCommand"/> and its visibility to
+    /// <see cref="HasScopedHost"/>. Held here (not reached via a XAML window-ancestor
+    /// lookup) so the dropdown's MenuFlyout — a separate popup tree — resolves its
+    /// bindings through the inherited view-model DataContext.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasScopedHost))]
+    private HostRailItemViewModel? _scopedHost;
+
+    /// <summary>Whether the "Computing" command-bar dropdown shows (a single host is scoped).</summary>
+    public bool HasScopedHost => ScopedHost is not null;
+
     /// <summary>Pushed by ShellViewModel whenever the global rail scope changes.</summary>
     public ScopeSelection Scope
     {

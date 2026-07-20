@@ -269,6 +269,52 @@
   <data name="HostMenuRemove" xml:space="preserve">
     <value>Remove host…</value>
   </data>
+  <!-- ===== Run modes / snooze (M3 PR H — DI-4 host run-mode surface) ===== -->
+  <data name="ComputingMenu" xml:space="preserve">
+    <value>Computing</value>
+  </data>
+  <data name="HostMenuRunModes" xml:space="preserve">
+    <value>Run modes</value>
+  </data>
+  <data name="HostMenuLaneCpu" xml:space="preserve">
+    <value>CPU</value>
+  </data>
+  <data name="HostMenuLaneGpu" xml:space="preserve">
+    <value>GPU</value>
+  </data>
+  <data name="HostMenuLaneNetwork" xml:space="preserve">
+    <value>Network</value>
+  </data>
+  <data name="RunModeAlways" xml:space="preserve">
+    <value>Always</value>
+  </data>
+  <data name="RunModeAuto" xml:space="preserve">
+    <value>Auto</value>
+  </data>
+  <data name="RunModeNever" xml:space="preserve">
+    <value>Never</value>
+  </data>
+  <data name="HostMenuSnooze" xml:space="preserve">
+    <value>Snooze</value>
+  </data>
+  <data name="SnoozeFifteenMinutes" xml:space="preserve">
+    <value>15 minutes</value>
+  </data>
+  <data name="SnoozeOneHour" xml:space="preserve">
+    <value>1 hour</value>
+  </data>
+  <data name="SnoozeFourHours" xml:space="preserve">
+    <value>4 hours</value>
+  </data>
+  <data name="HostMenuResume" xml:space="preserve">
+    <value>Resume computing</value>
+  </data>
+  <data name="RailSnoozedUntilFmt" xml:space="preserve">
+    <value>Snoozed until {0}</value>
+  </data>
+  <data name="RunModeFailedFmt" xml:space="preserve">
+    <value>Run mode failed: {0}</value>
+  </data>
   <data name="HostRemoveConfirmTitleFmt" xml:space="preserve">
     <value>Remove {0}?</value>
   </data>

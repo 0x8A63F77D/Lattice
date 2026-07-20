@@ -76,6 +76,57 @@
                   Command="{Binding AbortSelectedCommand}"
                   ToolTip.Tip="{Binding ControlDisabledReason}" ToolTip.ShowOnDisabled="True" />
           <Separator Margin="8,0" />
+          <!-- "Computing" run-mode dropdown (M3 PR H, DI-4): host-level run modes /
+               snooze for the SINGLE scoped host. Absent in All-hosts scope
+               (HasScopedHost false → no fleet-wide run modes in M3). The MenuFlyout
+               items bind to the scoped host row VM's SetRunModeCommand, reached via
+               the pushed ScopedHost property so the popup tree resolves through the
+               inherited view-model DataContext. -->
+          <Button x:Name="ComputingButton" Content="{x:Static loc:Strings.ComputingMenu}"
+                  IsVisible="{Binding HasScopedHost}">
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
+                  <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:always" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:auto" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:never" />
+                  </MenuItem>
+                  <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:always" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:auto" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:never" />
+                  </MenuItem>
+                  <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:always" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:auto" />
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                              Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:never" />
+                  </MenuItem>
+                </MenuItem>
+                <MenuItem Header="{x:Static loc:Strings.HostMenuSnooze}">
+                  <MenuItem Header="{x:Static loc:Strings.SnoozeFifteenMinutes}"
+                            Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="snooze:15" />
+                  <MenuItem Header="{x:Static loc:Strings.SnoozeOneHour}"
+                            Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="snooze:60" />
+                  <MenuItem Header="{x:Static loc:Strings.SnoozeFourHours}"
+                            Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="snooze:240" />
+                </MenuItem>
+                <MenuItem Header="{x:Static loc:Strings.HostMenuResume}"
+                          IsVisible="{Binding ScopedHost.IsSnoozed}"
+                          Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="resume" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+          <Separator Margin="8,0" />
           <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220"
                    Text="{Binding FilterText, Mode=TwoWay}"
                    PlaceholderText="{x:Static loc:Strings.FilterPlaceholder}" />

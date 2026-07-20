@@ -198,6 +198,13 @@
                        group headers never get one (design 3b). Commands live on ShellViewModel;
                        the window does the dialog/test/confirm work. -->
                   <DockPanel.ContextFlyout>
+                    <!-- Run-mode / snooze items (M3 PR H, DI-4) bind to the ROW VM's
+                         own SetRunModeCommand: the ContextFlyout inherits the host
+                         row's DataContext, so no $parent hop is needed (unlike the
+                         Edit/Test/Remove items, whose commands live on the shell).
+                         DI-3: the command's CanExecute gates each item on Connected.
+                         Separators are MenuItem Header="-" — a raw <Separator/> silently
+                         no-ops in a MenuFlyout (avalonia-menu-context-facts). -->
                     <MenuFlyout>
                       <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
@@ -205,6 +212,45 @@
                       <MenuItem Header="{x:Static loc:Strings.HostMenuTest}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
                                 CommandParameter="{Binding HostId}" />
+                      <MenuItem Header="-" />
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
+                        <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="cpu:always" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="cpu:auto" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="cpu:never" />
+                        </MenuItem>
+                        <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="gpu:always" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="gpu:auto" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="gpu:never" />
+                        </MenuItem>
+                        <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="net:always" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="net:auto" />
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                                    Command="{Binding SetRunModeCommand}" CommandParameter="net:never" />
+                        </MenuItem>
+                      </MenuItem>
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuSnooze}">
+                        <MenuItem Header="{x:Static loc:Strings.SnoozeFifteenMinutes}"
+                                  Command="{Binding SetRunModeCommand}" CommandParameter="snooze:15" />
+                        <MenuItem Header="{x:Static loc:Strings.SnoozeOneHour}"
+                                  Command="{Binding SetRunModeCommand}" CommandParameter="snooze:60" />
+                        <MenuItem Header="{x:Static loc:Strings.SnoozeFourHours}"
+                                  Command="{Binding SetRunModeCommand}" CommandParameter="snooze:240" />
+                      </MenuItem>
+                      <MenuItem Header="{x:Static loc:Strings.HostMenuResume}"
+                                IsVisible="{Binding IsSnoozed}"
+                                Command="{Binding SetRunModeCommand}" CommandParameter="resume" />
+                      <MenuItem Header="-" />
                       <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
                                 CommandParameter="{Binding HostId}"
@@ -228,6 +274,27 @@
                               Data="{StaticResource IconKeyRegular}"
                               Foreground="{DynamicResource LatticeDangerFgBrush}" />
                   </Panel>
+                  <!-- Snooze chip (M3 PR H, H2): right-docked pill shown only while a
+                       temporary CPU override is active, and only when the pane is open
+                       (the 48px compact rail shows the state icon only). -->
+                  <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                          Padding="6,1" CornerRadius="{StaticResource LatticeControlRadius}"
+                          Background="{DynamicResource LatticeWarningTintBrush}"
+                          BorderBrush="{DynamicResource LatticeWarningInfoBarBorderBrush}" BorderThickness="1">
+                    <Border.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="IsSnoozed" />
+                        <Binding Path="#Nav.IsPaneOpen" />
+                      </MultiBinding>
+                    </Border.IsVisible>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <PathIcon Width="10" Height="10" VerticalAlignment="Center"
+                                Data="{StaticResource IconPauseRegular}"
+                                Foreground="{DynamicResource LatticeWarningFgBrush}" />
+                      <TextBlock Text="{Binding SnoozedUntilText}" FontSize="10" VerticalAlignment="Center"
+                                 Foreground="{DynamicResource LatticeWarningFgBrush}" />
+                    </StackPanel>
+                  </Border>
                   <StackPanel x:Name="HostText" VerticalAlignment="Center" Margin="4,0,0,0"
                               IsVisible="{Binding #Nav.IsPaneOpen}">
                     <TextBlock Text="{Binding Name}" FontSize="13"
