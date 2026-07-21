@@ -5,15 +5,15 @@ name: NuGet Publish (Lattice.Boinc.GuiRpc)
 # (app releases ship on 'v*' via release.yml). A tag like 'guirpc-v0.9.0'
 # packs version 0.9.0 and pushes it (plus its .snupkg symbols) to nuget.org.
 #
-# The push step is guarded on the tag ref, so any other trigger only packs
-# (a dry run) and never publishes. The temporary branch-push line below is
-# the repo's pre-merge verification trick (see release.yml history, commits
-# e3543b2 / ac052fe): it exercises the whole pack path in real CI without a
-# tag, and is removed before merge so the live workflow stays tag-only.
+# The push step is guarded on the tag ref, so even if some other trigger runs
+# the job it only packs (a dry run) and never publishes. Before merge this
+# workflow carried a temporary branch-push trigger — the repo's pre-merge
+# verification trick (see release.yml history, commits e3543b2 / ac052fe) —
+# which exercised the whole pack path in real CI without a tag; it was removed
+# once CI confirmed the pack path is green, so the live workflow is tag-only.
 on:
   push:
     tags: ['guirpc-v*']
-    branches: ['claude/festive-solomon-a4cf07']  # TEMP: verify pre-merge; removed before merge
 
 concurrency:
   group: nuget-publish-${{ github.ref }}
