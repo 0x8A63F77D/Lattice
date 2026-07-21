@@ -179,12 +179,16 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
             ClearSnooze();
             return;
         }
-        // Add the delay to the UTC snapshot INSTANT first, then convert the resulting
-        // deadline to local for display — so the local offset is resolved AT the
-        // deadline. Converting to local first and then adding would keep the snapshot's
-        // offset (DateTimeOffset.AddSeconds preserves it), so a snooze spanning a DST
-        // transition would render an hour off (Codex R1 P2).
-        var until = RunModePolicy.temporaryUntil(snapshot.Timestamp, snapshot.CcStatus.TaskModeDelaySeconds);
+        // The policy owns the snooze invariant (design 1.4): a snooze is a temporary CPU
+        // *Never* override, so it needs both the current CPU mode being Never AND a
+        // positive delay — a temporary Always/Auto override (another client) is not a
+        // snooze. Add the delay to the UTC snapshot INSTANT first, then convert the
+        // deadline to local for display, so the local offset is resolved AT the deadline
+        // (converting first then adding keeps the snapshot's offset and renders a
+        // DST-spanning snooze an hour off — Codex R1 P2).
+        CcStatus status = snapshot.CcStatus;
+        var until = RunModePolicy.snoozeUntil(
+            snapshot.Timestamp, status.TaskMode == RunMode.Never, status.TaskModeDelaySeconds);
         // Compared as instants (offset-aware), so an already-past deadline carried by a
         // stale snapshot does not resurface the chip.
         if (until is not null && _clock.Now < until.Value)

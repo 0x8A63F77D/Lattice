@@ -101,8 +101,8 @@ public class RunModeControlTests : IAsyncLifetime
 
     // --- "Snoozed until hh:mm" chip derivation (frozen TimeProvider) ---
 
-    private static CcStatus StatusWithCpuDelay(double delaySeconds) => new(
-        RunMode.Never, RunMode.Auto, RunMode.Auto,
+    private static CcStatus StatusWithCpuDelay(double delaySeconds, RunMode taskMode = RunMode.Never) => new(
+        taskMode, RunMode.Auto, RunMode.Auto,
         SuspendReason.UserRequest, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
         RunMode.Auto, delaySeconds, RunMode.Auto, 0, RunMode.Auto, 0);
 
@@ -161,6 +161,25 @@ public class RunModeControlTests : IAsyncLifetime
     {
         // Default status: every mode_delay is 0 → no temporary override.
         var (vm, _) = await ConnectedRailVmAsync();
+
+        Assert.False(vm.IsSnoozed);
+        Assert.Equal("", vm.SnoozedUntilText);
+    }
+
+    [Fact]
+    public async Task Snooze_chip_is_absent_for_a_non_never_temporary_override()
+    {
+        // A temporary CPU *Always* override (another client / boinccmd) carries a
+        // positive delay too, but it is not a snooze — computing is not paused.
+        _fx.MonitorTime.SetUtcNow(_fx.Clock.Now);
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetCcStatus = () => Task.FromResult(StatusWithCpuDelay(900, RunMode.Always)),
+        };
+        _fx.AddHost("host-a", fake);
+        _fx.Start();
+        await _fx.SettleAsync(() => _fx.Store.Hosts[0].Snapshot is { CcStatus.TaskModeDelaySeconds: 900 });
+        var vm = new HostRailItemViewModel(_fx.Store.Hosts[0], _fx.Clock, _fx.Control);
 
         Assert.False(vm.IsSnoozed);
         Assert.Equal("", vm.SnoozedUntilText);

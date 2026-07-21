@@ -83,7 +83,12 @@ module RunModePolicy =
         | Snooze duration -> CpuLane, WireNever, duration
         | CancelTemporary lane -> lane, WireRestore, TimeSpan.Zero
 
-    /// "Snoozed until" derivation from cc_status's *_mode_delay (design 1.4):
-    /// Some deadline while a temporary override is active, else None.
-    let temporaryUntil (now: DateTimeOffset) (modeDelaySeconds: float) : DateTimeOffset option =
-        if modeDelaySeconds > 0.0 then Some (now.AddSeconds modeDelaySeconds) else None
+    /// "Snoozed until" deadline from cc_status (design 1.4). A snooze is specifically a
+    /// temporary CPU *Never* override, so BOTH the current CPU mode being Never AND a
+    /// positive remaining delay are required — a temporary Always/Auto override (which
+    /// another client or boinccmd can set, carrying a positive delay too) is NOT a snooze.
+    /// The invariant lives here (not split across the caller) so the mode condition can
+    /// never be forgotten: the signature forces the caller to supply it. Some deadline
+    /// while a snooze is active, else None.
+    let snoozeUntil (now: DateTimeOffset) (isCpuNever: bool) (modeDelaySeconds: float) : DateTimeOffset option =
+        if isCpuNever && modeDelaySeconds > 0.0 then Some (now.AddSeconds modeDelaySeconds) else None
