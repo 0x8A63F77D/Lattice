@@ -147,19 +147,28 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     {
         if (State == RailState.Retrying)
             RefreshLiveState();
+        // Retire an expired snooze on the 1 s UI clock — the same tick-driven treatment
+        // the Retrying countdown gets — so the chip and Resume item disappear at the
+        // deadline instead of lingering (showing a past time) until the next
+        // get_cc_status poll, which can be 30–60 s away (Codex R2 P3).
+        ExpireSnoozeIfPast();
     }
 
-    // "Snoozed until" is an absolute wall-clock deadline, so it is derived from the
-    // last snapshot only (never per clock tick — an absolute time does not drift):
-    // snapshot.Timestamp (the monitor's TimeProvider instant, testable) + the CPU
-    // lane's mode_delay. A disconnected host's stale snapshot never shows a snooze.
+    // The derived snooze deadline (the daemon's temp-override end, as an instant) held so
+    // OnTick can retire an expired chip between polls. Null when not snoozed.
+    private DateTimeOffset? _snoozeDeadline;
+
+    // "Snoozed until" is derived from the last snapshot (never re-derived per tick — an
+    // absolute time does not drift): snapshot.Timestamp (the monitor's TimeProvider
+    // instant, testable) + the CPU lane's mode_delay. The UI clock only RETIRES it once
+    // the deadline passes (ExpireSnoozeIfPast). A disconnected host's stale snapshot never
+    // shows a snooze.
     private void RefreshSnooze()
     {
         HostSnapshot? snapshot = _entry.Snapshot;
         if (State != RailState.Connected || snapshot is null)
         {
-            IsSnoozed = false;
-            SnoozedUntilText = "";
+            ClearSnooze();
             return;
         }
         // Add the delay to the UTC snapshot INSTANT first, then convert the resulting
@@ -168,8 +177,11 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         // offset (DateTimeOffset.AddSeconds preserves it), so a snooze spanning a DST
         // transition would render an hour off (Codex R1 P2).
         var until = RunModePolicy.temporaryUntil(snapshot.Timestamp, snapshot.CcStatus.TaskModeDelaySeconds);
-        if (until is not null)
+        // Compared as instants (offset-aware), so an already-past deadline carried by a
+        // stale snapshot does not resurface the chip.
+        if (until is not null && _clock.Now < until.Value)
         {
+            _snoozeDeadline = until.Value;
             IsSnoozed = true;
             SnoozedUntilText = string.Format(
                 Strings.RailSnoozedUntilFmt,
@@ -177,9 +189,21 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         }
         else
         {
-            IsSnoozed = false;
-            SnoozedUntilText = "";
+            ClearSnooze();
         }
+    }
+
+    private void ClearSnooze()
+    {
+        _snoozeDeadline = null;
+        IsSnoozed = false;
+        SnoozedUntilText = "";
+    }
+
+    private void ExpireSnoozeIfPast()
+    {
+        if (IsSnoozed && _snoozeDeadline is { } deadline && _clock.Now >= deadline)
+            ClearSnooze();
     }
 
     // DI-3: enabled only while the host is Connected. The token identifies which

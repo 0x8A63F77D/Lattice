@@ -109,6 +109,10 @@ public class RunModeControlTests : IAsyncLifetime
     [Fact]
     public async Task Snooze_chip_shows_the_local_deadline_while_a_cpu_override_is_active()
     {
+        // Align the monitor clock to the UI clock's default instant so the derived
+        // deadline (stamp + 15 min) is still in the UI clock's future — the chip only
+        // shows while the override is live (it retires on the UI clock past the deadline).
+        _fx.MonitorTime.SetUtcNow(_fx.Clock.Now);
         var fake = new FakeGuiRpcClient { OnGetCcStatus = () => Task.FromResult(StatusWithCpuDelay(900)) };
         _fx.AddHost("host-a", fake);
         _fx.Start();
@@ -126,6 +130,25 @@ public class RunModeControlTests : IAsyncLifetime
 
         Assert.True(vm.IsSnoozed);
         Assert.Equal(expected, vm.SnoozedUntilText);
+    }
+
+    [Fact]
+    public async Task Snooze_chip_retires_on_the_ui_clock_when_the_deadline_passes()
+    {
+        _fx.MonitorTime.SetUtcNow(_fx.Clock.Now);
+        var fake = new FakeGuiRpcClient { OnGetCcStatus = () => Task.FromResult(StatusWithCpuDelay(900)) };
+        _fx.AddHost("host-a", fake);
+        _fx.Start();
+        await _fx.SettleAsync(() => _fx.Store.Hosts[0].Snapshot is { CcStatus.TaskModeDelaySeconds: 900 });
+        var vm = new HostRailItemViewModel(_fx.Store.Hosts[0], _fx.Clock, _fx.Control);
+        Assert.True(vm.IsSnoozed);
+
+        // Advance the UI clock past the 15-minute deadline: the tick retires the chip
+        // even though no fresh poll (reporting delay 0) has arrived yet.
+        _fx.Clock.Advance(TimeSpan.FromMinutes(16));
+
+        Assert.False(vm.IsSnoozed);
+        Assert.Equal("", vm.SnoozedUntilText);
     }
 
     [Fact]
