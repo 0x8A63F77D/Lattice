@@ -152,6 +152,31 @@ public class HeaderFrameGapTests
         Assert.True(WY(infoBar) < headerBottom + 16,
             $"the open partial bar must float just below the header band; barTop={WY(infoBar)}");
 
+        // Card geometry (issue #119 design pass): the bar is a content-hugging card
+        // capped at 720 px, horizontally centred over the grid — never a full-width
+        // banner band (a stretched bar reads as part of the grid and maximizes row
+        // occlusion; the width cap bounds occlusion to the card's own footprint).
+        Assert.True(infoBar.Bounds.Width <= 720 + 0.5,
+            $"the open partial bar must cap at 720px, not stretch across the grid; width={infoBar.Bounds.Width}");
+        double WX(Visual v) => v.TranslatePoint(new Point(0, 0), window)!.Value.X;
+        var panel = (Visual)infoBar.GetVisualParent()!;
+        double barCenter = WX(infoBar) + infoBar.Bounds.Width / 2;
+        double panelCenter = WX(panel) + panel.Bounds.Width / 2;
+        Assert.True(Math.Abs(barCenter - panelCenter) < 1,
+            $"the open partial bar must be horizontally centred over the grid; barCenter={barCenter}, panelCenter={panelCenter}");
+        // Overlay-surface corner radius (spec radiusXLarge = 8 via LatticeSurfaceRadius),
+        // asserted on the control because the template binds it through to the card's
+        // ContentRoot border. Equality also proves the DynamicResource resolved — an
+        // unresolved token would leave FA's ControlCornerRadius default (4).
+        Assert.Equal(new CornerRadius(8), infoBar.CornerRadius);
+        // Elevation: LatticeOverlayShadow must be wired onto the template's ContentRoot
+        // (an unresolved DynamicResource silently yields an empty BoxShadows). Pixel
+        // truth of the shadow is the owner's eyeball; the wiring is machine-checked.
+        var contentRoot = infoBar.GetVisualDescendants().OfType<Border>()
+            .First(b => b.Name == "ContentRoot");
+        Assert.True(contentRoot.BoxShadow.Count > 0,
+            "the open partial bar's ContentRoot must carry the LatticeOverlayShadow elevation");
+
         await fx.DisposeAsync();
     }
 }
