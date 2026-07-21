@@ -1,0 +1,59 @@
+<ui:FAContentDialog xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:ui="using:FluentAvalonia.UI.Controls"
+                    xmlns:vm="using:Lattice.App.ViewModels"
+                    xmlns:loc="using:Lattice.App.Localization"
+                    x:Class="Lattice.App.Views.AttachProjectDialog"
+                    x:DataType="vm:AttachProjectViewModel"
+                    Title="{Binding DialogTitle}"
+                    PrimaryButtonText="{Binding PrimaryButtonText}"
+                    CloseButtonText="{x:Static loc:Strings.AttachCloseButton}"
+                    DefaultButton="Primary"
+                    IsPrimaryButtonEnabled="{Binding CanAddNow}">
+  <StackPanel Spacing="8" MinWidth="380">
+    <ui:FAInfoBar Severity="Error" IsOpen="{Binding HasFailure}" IsClosable="False"
+                  Title="{x:Static loc:Strings.AttachErrorTitle}" Message="{Binding FailureText}" />
+
+    <!-- Host picker (DI-3: Connected hosts only; locked to the scoped host). -->
+    <TextBlock Text="{x:Static loc:Strings.AttachHostLabel}" FontSize="12"
+               Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+    <ComboBox ItemsSource="{Binding Hosts}" SelectedItem="{Binding SelectedHost, Mode=TwoWay}"
+              IsEnabled="{Binding !IsHostPickerLocked}" HorizontalAlignment="Stretch">
+      <ComboBox.ItemTemplate>
+        <DataTemplate x:DataType="vm:AttachHostOption">
+          <TextBlock Text="{Binding DisplayName}" />
+        </DataTemplate>
+      </ComboBox.ItemTemplate>
+    </ComboBox>
+
+    <TextBox Text="{Binding ProjectUrl, Mode=TwoWay}"
+             PlaceholderText="{x:Static loc:Strings.AttachFieldUrlPlaceholder}" />
+
+    <!-- Credential mode toggle: OFF = email & password (lookup leg), ON = raw account key. -->
+    <ToggleSwitch IsChecked="{Binding UseAccountKey, Mode=TwoWay}"
+                  OffContent="{x:Static loc:Strings.AttachCredEmailOption}"
+                  OnContent="{x:Static loc:Strings.AttachCredKeyOption}" />
+
+    <StackPanel x:Name="EmailFields" Spacing="8" IsVisible="{Binding !UseAccountKey}">
+      <TextBox Text="{Binding Email, Mode=TwoWay}"
+               PlaceholderText="{x:Static loc:Strings.AttachFieldEmailPlaceholder}" />
+      <!-- PasswordChar masks rendering only; the automation peer still exposes raw
+           Text (platform limitation, accepted + ledger-tracked — see AddHostDialog). -->
+      <TextBox x:Name="PasswordBox" Text="{Binding Password, Mode=TwoWay}" PasswordChar="●"
+               PlaceholderText="{x:Static loc:Strings.AttachFieldPasswordPlaceholder}" />
+    </StackPanel>
+
+    <TextBox x:Name="AccountKeyBox" Text="{Binding AccountKey, Mode=TwoWay}" IsVisible="{Binding UseAccountKey}"
+             PlaceholderText="{x:Static loc:Strings.AttachFieldKeyPlaceholder}" />
+
+    <ui:FAInfoBar Severity="Informational" IsOpen="True" IsClosable="False"
+                  Message="{x:Static loc:Strings.AttachInfo}" />
+
+    <!-- Progress: rendered from the flow's Stage reports (never re-implemented here). -->
+    <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsInProgress}">
+      <ProgressBar IsIndeterminate="True" Width="120" VerticalAlignment="Center" />
+      <TextBlock Text="{Binding ProgressText}" FontSize="12" VerticalAlignment="Center"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+    </StackPanel>
+  </StackPanel>
+</ui:FAContentDialog>
