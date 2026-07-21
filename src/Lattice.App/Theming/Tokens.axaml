@@ -24,8 +24,6 @@
       <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#107C10" />
       <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#BC4B09" />
       <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#FFF9F5" />
-      <SolidColorBrush x:Key="LatticeWarningInfoBarBgBrush" Color="#FFF9F5" />
-      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#FDCFB4" />
       <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#C50F1F" />
       <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#FDF3F4" />
       <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#616161" />
@@ -54,8 +52,6 @@
       <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#9FD89F" />
       <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#FAA06B" />
       <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#3A2A1E" />
-      <SolidColorBrush x:Key="LatticeWarningInfoBarBgBrush" Color="#411200" />
-      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#714224" />
       <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#E37D80" />
       <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#3A1E20" />
       <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#ADADAD" />
