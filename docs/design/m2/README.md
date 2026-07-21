@@ -84,7 +84,16 @@ single source of truth; this README intentionally does not duplicate the numbers
 - **Global scope**: the Hosts selection in the rail is an independent, persistent global filter applied to
   every view (separate from NavigationView's view selection — both selected states render at once).
 - **Partial results**: when scope = All hosts and ≥1 host is unreachable, show a dismissable `InfoBar`
-  (severity Warning) with a "Retry now" link above the grid.
+  (severity Warning) with a "Retry now" link. **Floating-card placement (issues #107/#119 — supersedes
+  the docked strip drawn in card `1c`):** the bar is an overlay child of the view's grid Panel, never
+  docked in the layout flow — grid geometry is independent of the bar in every state (open, closed,
+  absent). It floats at the grid top, **below the column header** (top margin 40 = 32px header + 8px
+  gap; the header stays visible and sortable under any overlay — an outage can persist for hours),
+  as a **content-hugging centred card**, max width 720px, radius 8 (radiusXLarge), elevation shadow16
+  (theme-tuned dark mirror), never a full-width band. It is persistent while the outage lasts and
+  dismissable in one click; there is no auto-collapse. Any view that grows a partial bar inherits all
+  of this by opting into the shared `partialBar` style class — placement, chrome and motion live in
+  the class only, never per view.
 - **Host states** (icon + text, never color alone; canonical set is the `1e` matrix): **Connected** (`checkmark_circle`,
   success `#107C10`) · **Connecting…** (`arrow_sync` rotating / ProgressRing, brand `#0F6CBD` — first connect / full
   fetch) · **Retrying in Ns (attempt N)** (`arrow_clockwise`, warning `#B85C00`, countdown ticks every second) ·
@@ -100,7 +109,8 @@ single source of truth; this README intentionally does not duplicate the numbers
 - **Motion** (see `1h`): 100–300ms, enter decelerate / exit accelerate, no bounce, no infinite loops
   (spinners excepted), animation never blocks data updates. View switch 150ms decelerateMid (opacity +
   8px translateY); row enter 100ms (opacity only, no height animation); row remove 150ms accelerateMid;
-  progress bar 200ms easeEase; dialog scrim 200ms in / 150ms out; expander chevron 100ms + height 200ms.
+  progress bar 200ms easeEase; dialog scrim 200ms in / 150ms out; expander chevron 100ms + height 200ms;
+  partial-results card enter 150ms decelerateMid (opacity + 4px translateY drop, #119) — exit instant.
 - **Responsive** (see `1i`): min window 1000×700. ≥1280 full 260px rail + all columns; 1100–1279 rail
   auto-collapses to 48px; below 1100 shed Elapsed first, then Application (visibility in the overflow menu);
   Host column hidden in single-host scope. Only the grid body scrolls.

@@ -30,13 +30,65 @@
          kept reserving a strip that pushed the grid down and read as a gap under the command
          bar's bottom rule (issue #107; Event Log, which has no bar, was always flush). As an
          overlay the bar cannot displace the grid in ANY state; this class owns its floating
-         placement so the three views cannot drift apart. Top margin 40 = the 32px column
-         header + 8px breathing room: the bar floats over the first data rows but NEVER over
-         the header, preserving the #88 invariant that the header stays visible and clickable
-         (sortable) under any overlay — a partial outage can persist for hours. -->
+         placement, chrome and motion so views cannot drift apart (any view that grows a
+         partial bar opts in with this class only — issue #119's consistency rule). Top margin
+         40 = the 32px column header + 8px breathing room: the bar floats over the first data
+         rows but NEVER over the header, preserving the #88 invariant that the header stays
+         visible and clickable (sortable) under any overlay — a partial outage can persist
+         for hours.
+
+         Design pass (#119): the bar is a content-hugging CARD, centred, capped at 720px —
+         never a full-width banner band (a stretched bar reads as another grid band and
+         maximizes row occlusion). Radius = LatticeSurfaceRadius (spec radiusXLarge, floating
+         surfaces); elevation = LatticeOverlayShadow (spec shadow16, theme-tuned) on the
+         template's ContentRoot so the card separates from same-tinted rows beneath — the
+         shadow renders only while open (a closed bar hides ContentRoot entirely) and, being
+         render-only, can never reserve layout space. Enter motion: 150ms decelerateMid fade
+         + 4px drop from under the header, same curve/duration family as the view switch
+         (design card 1h); exit is instant by FA's design — IsOpen=false hides the template
+         content immediately, so no exit animation is possible or attempted. -->
     <Style Selector="ui|FAInfoBar.partialBar">
       <Setter Property="VerticalAlignment" Value="Top" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="MaxWidth" Value="720" />
+      <!-- Two framework landmines stand between "BoxShadow is set" and "a shadow renders",
+           both caught by PartialBarShadowVisualTests (the wiring assertion alone passed):
+           (1) the FAInfoBar clips to its bounds, which ContentRoot fills exactly — the
+           elevation outside them would clip to nothing; (2) FA's theme sets
+           BackgroundSizing=InnerBorderEdge, and Avalonia renders Border.BoxShadow ONLY on
+           the CenterBorder fast path (upstream AvaloniaUI/Avalonia#15602, open as of 12.1) —
+           any other sizing silently drops the shadow. CenterBorder's visual delta at a 1px
+           border is half a pixel of background reach; the closed state is unaffected either
+           way (FA hides ContentRoot entirely). -->
+      <Setter Property="ClipToBounds" Value="False" />
+      <Setter Property="BackgroundSizing" Value="CenterBorder" />
       <Setter Property="Margin" Value="16,40,16,0" />
+      <!-- DynamicResource on purpose: App.axaml's Styles section parses before its
+           Resources section merges Tokens.axaml, so StaticResource cannot see the token. -->
+      <Setter Property="CornerRadius" Value="{DynamicResource LatticeSurfaceRadius}" />
+      <Setter Property="Opacity" Value="0" />
+      <Setter Property="RenderTransform" Value="translateY(-4px)" />
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Opacity" Duration="0:0:0.15">
+            <DoubleTransition.Easing>
+              <SplineEasing X1="0" Y1="0" X2="0" Y2="1" />
+            </DoubleTransition.Easing>
+          </DoubleTransition>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15">
+            <TransformOperationsTransition.Easing>
+              <SplineEasing X1="0" Y1="0" X2="0" Y2="1" />
+            </TransformOperationsTransition.Easing>
+          </TransformOperationsTransition>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ui|FAInfoBar.partialBar[IsOpen=True]">
+      <Setter Property="Opacity" Value="1" />
+      <Setter Property="RenderTransform" Value="translateY(0px)" />
+    </Style>
+    <Style Selector="ui|FAInfoBar.partialBar /template/ Border#ContentRoot">
+      <Setter Property="BoxShadow" Value="{DynamicResource LatticeOverlayShadow}" />
     </Style>
     <!-- Control-op failure bar (M3, Tasks first — Projects/Transfers adopt it with
          their own ops). Same overlay-not-docked reasoning as partialBar, but anchored

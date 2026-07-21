@@ -651,6 +651,24 @@
   <data name="ControlHostNotConnected" xml:space="preserve">
     <value>Host is not connected</value>
   </data>
+  <data name="Detach" xml:space="preserve">
+    <value>Detach</value>
+  </data>
+  <data name="ProjectMultiHostConfirmTitleFmt" xml:space="preserve">
+    <value>{0} on {1} hosts?</value>
+  </data>
+  <data name="ProjectMultiHostConfirmBodyFmt" xml:space="preserve">
+    <value>{0} "{1}" on {2} hosts: {3}.</value>
+  </data>
+  <data name="ProjectDetachConfirmTitle" xml:space="preserve">
+    <value>Detach project?</value>
+  </data>
+  <data name="ProjectDetachConfirmBodyFmt" xml:space="preserve">
+    <value>Detach "{0}" from {1}? Its in-progress tasks on that host will be lost and must be re-downloaded to re-attach.</value>
+  </data>
+  <data name="ProjectDetachConfirmMultiBodyFmt" xml:space="preserve">
+    <value>Detach "{0}" from {1} hosts: {2}? In-progress tasks on those hosts will be lost and must be re-downloaded to re-attach.</value>
+  </data>
   <data name="TransfersTitle" xml:space="preserve">
     <value>Transfers</value>
   </data>

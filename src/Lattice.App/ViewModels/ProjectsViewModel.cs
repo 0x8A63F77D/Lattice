@@ -5,7 +5,13 @@ using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
+using Lattice.App.Views;
+using Lattice.Core;
 using Microsoft.FSharp.Collections;
+// The F# policy DUs deliberately duplicate the GuiRpc enums (Aggregation is
+// GuiRpc-free by module rule); alias both so neither is ever named bare.
+using AggProjectOp = Lattice.App.Aggregation.ProjectOp;
+using GuiProjectOp = Lattice.Boinc.GuiRpc.ProjectOp;
 
 namespace Lattice.App.ViewModels;
 
@@ -21,7 +27,14 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 {
     private readonly HostStore _store;
     private readonly IUiClock _clock;
+    private readonly HostControlService _control;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
+
+    // The last Rebuild's groups, reused by the control ops to resolve a selected
+    // row's blast radius (parent = every attachment host; child = its one host).
+    // Rebuild runs on every store change / tick, so this stays fresh between
+    // rebuilds — a selection change reads it without recomputing the aggregation.
+    private ProjectGroup[] _groups = [];
 
     // Expansion is per project URL, session-local (not persisted — a monitoring
     // dashboard reopens collapsed; revisit only if users ask).
@@ -39,10 +52,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     // holds the instance.
     private readonly PartialBarState _partialBar = new();
 
-    public ProjectsViewModel(HostStore store, IUiClock clock)
+    public ProjectsViewModel(HostStore store, IUiClock clock, HostControlService control)
     {
         _store = store;
         _clock = clock;
+        _control = control;
         RowsView = new DataGridCollectionView(Rows);
         // Install the always-on default order BEFORE the first Rebuild, so the
         // grid (which binds RowsView, not Rows) is never unsorted for a frame.
@@ -91,6 +105,191 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private bool _isLoading;
     [ObservableProperty] private bool _isEmpty;
     [ObservableProperty] private string _loadingText = "";
+
+    // --- M3 control ops (design 2.5; DI-1/DI-2/DI-3). A parent row acts on ALL
+    //     of its attachment hosts; a child row on its one host. Flow per command:
+    //     build the F# ControlIntent (carrying the blast-radius host count) →
+    //     ConfirmationPolicy.classify → Instant executes, Confirm consults the
+    //     dialog seam first with a body that enumerates the hosts (the DI-2
+    //     receipt). Fan-out is sequential; failures aggregate into one surface
+    //     message naming the failed hosts. The dialog is never constructed here:
+    //     ProjectsView assigns ConfirmationHandler (headless tests fake it). ---
+
+    /// <summary>Failure surface behind the view's dismissible InfoBar: last
+    /// control-op failure only; any all-succeeded op clears it.</summary>
+    public ControlFailureSurface ControlFailure { get; } = new();
+
+    /// <summary>
+    /// The dialog seam: shows a confirmation and resolves to the user's choice.
+    /// Assigned by ProjectsView (production: <see cref="ConfirmationDialog.ConfirmAsync(Avalonia.Controls.TopLevel, ConfirmationRequest)"/>);
+    /// null (nothing wired yet) fails SAFE — Confirm-class ops decline.
+    /// </summary>
+    public Func<ConfirmationRequest, Task<bool>>? ConfirmationHandler { get; set; }
+
+    /// <summary>The grid's selected row holder (TwoWay-bound to DataGrid.SelectedItem).
+    /// Typed object: the grid hands back the RowHolder-derived ProjectRow.</summary>
+    [ObservableProperty] private object? _selectedRow;
+
+    /// <summary>Why the control commands are disabled (DI-3 tooltip), or null when
+    /// they are enabled or nothing is selected.</summary>
+    [ObservableProperty] private string? _controlDisabledReason;
+
+    private ProjectRowViewModel? SelectedProjectRow =>
+        (SelectedRow as RowHolder<ProjectRowKey, ProjectRowViewModel>)?.Data;
+
+    // The host ids a command on the current selection would act on — enablement
+    // only; recomputed on selection change and every Rebuild so a host dropping
+    // out flips enablement live. Execution re-resolves via ResolveTarget.
+    private IReadOnlyList<Guid> _selectedHostIds = [];
+
+    partial void OnSelectedRowChanged(object? value) => RefreshControlState();
+
+    // DI-3 / G2: enabled only while EVERY covered host is Connected — never
+    // queued, and no partial fan-out to a reachable subset (the receipt must match
+    // reality). A parent's covered set is its group's current attachments; a child
+    // its own host.
+    private bool CanControlSelected() =>
+        _selectedHostIds.Count > 0 && _selectedHostIds.All(IsHostConnected);
+
+    private bool IsHostConnected(Guid hostId) =>
+        _store.Hosts.FirstOrDefault(h => h.Config.Id == hostId)?.Status.State
+            == HostConnectionState.Connected;
+
+    [RelayCommand(CanExecute = nameof(CanControlSelected))]
+    private Task UpdateSelectedAsync() =>
+        RunProjectOpAsync(AggProjectOp.ProjectUpdate, GuiProjectOp.Update, Strings.ProjectsUpdate);
+
+    [RelayCommand(CanExecute = nameof(CanControlSelected))]
+    private Task SuspendSelectedAsync() =>
+        RunProjectOpAsync(AggProjectOp.ProjectSuspend, GuiProjectOp.Suspend, Strings.Suspend);
+
+    [RelayCommand(CanExecute = nameof(CanControlSelected))]
+    private Task ResumeSelectedAsync() =>
+        RunProjectOpAsync(AggProjectOp.ProjectResume, GuiProjectOp.Resume, Strings.Resume);
+
+    [RelayCommand(CanExecute = nameof(CanControlSelected))]
+    private Task DetachSelectedAsync() =>
+        RunProjectOpAsync(AggProjectOp.ProjectDetach, GuiProjectOp.Detach, Strings.Detach);
+
+    private async Task RunProjectOpAsync(AggProjectOp intentOp, GuiProjectOp wireOp, string opLabel)
+    {
+        if (SelectedProjectRow is not { } row || ResolveTarget(row) is not { } target)
+            return;
+
+        var intent = ControlIntent.NewOfProject(intentOp, target.Hosts.Count);
+        if (ConfirmationPolicy.classify(intent) is ConfirmationClass.Confirm confirm)
+        {
+            var request = BuildConfirmation(intentOp, opLabel, confirm.Item, target);
+            if (ConfirmationHandler is not { } confirmationHandler || !await confirmationHandler(request))
+                return;
+        }
+
+        // Sequential fan-out across the target hosts (they are user-initiated and
+        // rare; the per-host control lane serializes each anyway). Aggregate the
+        // failures into one surface message so a two-host partial failure is one
+        // InfoBar naming the host that failed, not two racing reports.
+        var failures = new List<(string HostName, string Error)>();
+        foreach (var attachment in target.Hosts)
+        {
+            var result = await _control.PerformProjectOpAsync(attachment.HostId, wireOp, target.ProjectUrl);
+            if (result.Outcome != ControlOpOutcome.Succeeded)
+                failures.Add((attachment.HostName, result.Error ?? ""));
+        }
+
+        if (failures.Count == 0)
+            ControlFailure.Clear();
+        else
+            ControlFailure.Report(
+                string.Format(Strings.ControlOpFailedTitleFmt, opLabel),
+                FormatFailures(failures, target.Hosts.Count));
+        // Success needs no optimistic mutation: each op nudged its monitor, so the
+        // grid converges on the next poll tick (~1 s — project status is live in
+        // the tick since PR C / DI-5, #127).
+    }
+
+    // Single-host target: the bare error (matches the Tasks surface). Multi-host:
+    // prefix each failure with its host name so the receipt says which host failed.
+    private static string FormatFailures(
+        IReadOnlyList<(string HostName, string Error)> failures, int targetCount) =>
+        targetCount == 1
+            ? failures[0].Error
+            : string.Join("; ", failures.Select(f => $"{f.HostName}: {f.Error}"));
+
+    // The dialog CONTENT (DI-2's host enumeration) is the view layer's job — this
+    // is where it lives for Projects. Detach is Destructive at any host count and
+    // states the in-progress-task loss; a reversible multi-host op is Caution and
+    // is purely the blast-radius receipt.
+    private static ConfirmationRequest BuildConfirmation(
+        AggProjectOp intentOp, string opLabel, ConfirmSeverity severity, ControlTarget target)
+    {
+        var hostList = string.Join(", ", target.Hosts.Select(a => a.HostName));
+        var count = target.Hosts.Count;
+        if (intentOp.IsProjectDetach)
+        {
+            var body = count > 1
+                ? string.Format(Strings.ProjectDetachConfirmMultiBodyFmt, target.ProjectName, count, hostList)
+                : string.Format(Strings.ProjectDetachConfirmBodyFmt, target.ProjectName, target.Hosts[0].HostName);
+            return new ConfirmationRequest(Strings.ProjectDetachConfirmTitle, body, opLabel, severity);
+        }
+        // classify only returns Caution here for count > 1 (single-host reversible
+        // ops are Instant and never reach this method).
+        return new ConfirmationRequest(
+            string.Format(Strings.ProjectMultiHostConfirmTitleFmt, opLabel, count),
+            string.Format(Strings.ProjectMultiHostConfirmBodyFmt, opLabel, target.ProjectName, count, hostList),
+            opLabel, severity);
+    }
+
+    // The blast radius of a selected row: its project + the hosts to act on. A
+    // parent row (HostId == null) spans every attachment in its group; a child row
+    // its one host. Resolved off the last Rebuild's groups (fresh — store-change
+    // driven), so it tracks hosts dropping in/out of the row-source set.
+    private ControlTarget? ResolveTarget(ProjectRowViewModel row)
+    {
+        var group = _groups.FirstOrDefault(g => g.MasterUrl == row.MasterUrl);
+        if (group is null)
+            return null;
+        var hosts = row.HostId is { } hostId
+            ? group.Attachments.Where(a => a.HostId == hostId).ToArray()
+            : group.Attachments;
+        return hosts.Length == 0 ? null : new ControlTarget(group.MasterUrl, group.DisplayName, hosts);
+    }
+
+    private void RefreshControlState()
+    {
+        var row = SelectedProjectRow;
+        _selectedHostIds = TargetHostIds(row);
+        UpdateSelectedCommand.NotifyCanExecuteChanged();
+        SuspendSelectedCommand.NotifyCanExecuteChanged();
+        ResumeSelectedCommand.NotifyCanExecuteChanged();
+        DetachSelectedCommand.NotifyCanExecuteChanged();
+        // A disabled command with nothing (still) selectable is self-explanatory
+        // (reason null); a live selection whose host went offline gets the tooltip.
+        // Only a CHILD reaches this: a parent's covered set is its group's current
+        // attachments, which are Connected by construction (offline hosts have
+        // already dropped from the aggregate) — so a parent is either enabled or
+        // its group is gone (reason null), never disabled-with-reason.
+        ControlDisabledReason = _selectedHostIds.Count > 0 && !CanControlSelected()
+            ? Strings.ControlHostNotConnected
+            : null;
+    }
+
+    // Hosts a command on the selected row would act on, for ENABLEMENT. A child
+    // resolves to its own host directly (so a stale selection still evaluates
+    // after the host leaves the grid); a parent to its group's current
+    // attachments (the receipt-matches-reality set — offline hosts have already
+    // dropped out). Execution re-resolves via ResolveTarget for url / names.
+    private IReadOnlyList<Guid> TargetHostIds(ProjectRowViewModel? row)
+    {
+        if (row is null)
+            return [];
+        if (row.HostId is { } childHostId)
+            return [childHostId];
+        var group = _groups.FirstOrDefault(g => g.MasterUrl == row.MasterUrl);
+        return group is null ? [] : group.Attachments.Select(a => a.HostId).ToArray();
+    }
+
+    private sealed record ControlTarget(
+        string ProjectUrl, string ProjectName, IReadOnlyList<ProjectAttachment> Hosts);
 
     [RelayCommand]
     private void Refresh() => _store.RequestRefresh(Scope.HostId);
@@ -149,15 +348,12 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 
         // Facts projection (incl. the inScope && isRowSource gate) lives once
         // in ViewSliceProjection (w2a2) — this callback only shapes rows.
-        var slice = ViewSliceProjection.Compute(_store.Hosts, Scope,
-            h => h.Snapshot!.Projects.Select(p => new ProjectAttachment(
-                p.Project.MasterUrl, p.Project.ProjectName,
-                h.Config.Id, h.Config.DisplayName, p.TaskCount,
-                p.Project.ResourceShare,
-                p.Project.HostExpavgCredit, p.Project.HostTotalCredit,
-                p.Project.SuspendedViaGui, p.Project.DontRequestMoreWork)).ToArray());
+        var slice = ViewSliceProjection.Compute(_store.Hosts, Scope, AttachmentsOf);
 
         var groups = ProjectRows.compute(slice.AllRows);
+        // Cache for the control ops' blast-radius resolution (parent = every
+        // attachment host); refreshed here on every store change / tick.
+        _groups = groups;
 
         // Canonical display order is decided by the pure core (orderedRows): only
         // the parent aggregate sorts, children follow their parent. The grid's
@@ -221,7 +417,21 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         LoadingText = IsLoading
             ? string.Format(Strings.LoadingFromFmt, string.Join(", ", scoped.Select(h => h.Config.DisplayName)))
             : "";
+
+        // Connection states / the row-source set may have changed (Rebuild runs on
+        // every store change / tick): re-derive the DI-3 enablement and its tooltip.
+        RefreshControlState();
     }
+
+    // The per-host attachment projection ViewSlice feeds to ProjectRows.compute;
+    // shared by Rebuild and (via _groups) the control ops' target resolution.
+    private static ProjectAttachment[] AttachmentsOf(HostEntry h) =>
+        h.Snapshot!.Projects.Select(p => new ProjectAttachment(
+            p.Project.MasterUrl, p.Project.ProjectName,
+            h.Config.Id, h.Config.DisplayName, p.TaskCount,
+            p.Project.ResourceShare,
+            p.Project.HostExpavgCredit, p.Project.HostTotalCredit,
+            p.Project.SuspendedViaGui, p.Project.DontRequestMoreWork)).ToArray();
 
     public void Dispose()
     {

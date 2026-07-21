@@ -17,6 +17,7 @@ public sealed class ProjectRow(ProjectRowKey key, ProjectRowViewModel data)
 public sealed record ProjectRowViewModel(
     ProjectRowKey Key,
     string MasterUrl,          // group URL on both levels (chevron CommandParameter)
+    Guid? HostId,              // child rows: their one host; parent rows: null (span N)
     bool IsParent,
     bool IsExpanded,
     bool ShowChevron,
@@ -44,6 +45,7 @@ public sealed record ProjectRowViewModel(
         return new(
             Key: ProjectRowKey.NewParentKey(g.MasterUrl),
             MasterUrl: g.MasterUrl,
+            HostId: null, // parent spans all attachments (resolved fresh at op time)
             IsParent: true,
             IsExpanded: false, // set by the VM after expansion lookup
             ShowChevron: isAllHostsScope && g.Attachments.Length > 0,
@@ -67,6 +69,7 @@ public sealed record ProjectRowViewModel(
         return new(
             Key: ProjectRowKey.NewChildKey(g.MasterUrl, a.HostId),
             MasterUrl: g.MasterUrl,
+            HostId: a.HostId,
             IsParent: false,
             IsExpanded: false,
             ShowChevron: false,

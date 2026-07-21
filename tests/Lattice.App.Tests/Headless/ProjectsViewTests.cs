@@ -45,7 +45,7 @@ public class ProjectsViewTests
         var fx = new HostGraphFixture();
         for (var i = 0; i < hostCount; i++)
             fx.AddHost($"host-{i}");
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         return (fx, window, view, vm);
@@ -99,7 +99,7 @@ public class ProjectsViewTests
         url ??= Url;
         var data = new ProjectRowViewModel(
             Key: ProjectRowKey.NewParentKey(url),
-            MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
+            MasterUrl: url, HostId: null, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: "P", HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
             StatusKind: statusKind, StatusText: statusText, SortKey: ParentSortKey(url));
@@ -111,7 +111,7 @@ public class ProjectsViewTests
         var hostId = Guid.NewGuid();
         var data = new ProjectRowViewModel(
             Key: ProjectRowKey.NewChildKey(Url, hostId),
-            MasterUrl: Url, IsParent: false, IsExpanded: false, ShowChevron: false,
+            MasterUrl: Url, HostId: hostId, IsParent: false, IsExpanded: false, ShowChevron: false,
             Name: hostName, HostsText: "", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: string.Format(Strings.ProjectsTaskCountFmt, 3),
             StatusKind: ProjectStatusKind.Active, StatusText: Strings.ProjectsStatusActive,
@@ -147,7 +147,7 @@ public class ProjectsViewTests
             RowLevel.ParentRow);
         var data = new ProjectRowViewModel(
             Key: ProjectRowKey.NewParentKey(url),
-            MasterUrl: url, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
+            MasterUrl: url, HostId: null, IsParent: true, IsExpanded: isExpanded, ShowChevron: showChevron,
             Name: name, HostsText: "1", ShareText: "100", ShowShareBar: true, ShareFraction: 1.0,
             AvgCreditText: "10", TotalCreditText: "20", TasksText: "",
             StatusKind: ProjectStatusKind.Active, StatusText: "s", SortKey: sortKey);

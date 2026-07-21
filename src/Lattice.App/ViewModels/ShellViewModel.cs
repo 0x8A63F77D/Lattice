@@ -75,7 +75,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // collaborators (DensityPreference, ThemePreference).
         _control = new HostControlService(registry, store.Manager, clientFactory);
         Tasks = new TasksViewModel(store, clock, uiState, density, _control);
-        Projects = new ProjectsViewModel(store, clock);
+        Projects = new ProjectsViewModel(store, clock, _control);
         Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);
         Views =
