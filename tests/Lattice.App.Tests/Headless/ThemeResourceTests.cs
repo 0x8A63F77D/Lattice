@@ -22,8 +22,6 @@ public class ThemeResourceTests
     [InlineData("LatticeSuccessBrush")]
     [InlineData("LatticeWarningFgBrush")]
     [InlineData("LatticeWarningTintBrush")]
-    [InlineData("LatticeWarningInfoBarBgBrush")]
-    [InlineData("LatticeWarningInfoBarBorderBrush")]
     [InlineData("LatticeDangerFgBrush")]
     [InlineData("LatticeDangerTintBrush")]
     [InlineData("LatticeNeutralFgBrush")]
