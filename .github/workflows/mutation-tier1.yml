@@ -11,6 +11,8 @@ on:
     branches: [main]
     paths:
       - 'src/Lattice.Core/SnapshotBuilder.cs'
+      - 'src/Lattice.Core/HostControlService.cs'
+      - 'src/Lattice.Core/ControlOpResult.cs'
       - 'tests/Lattice.Tests/**'
       - '.config/dotnet-tools.json'
       - '.github/workflows/mutation-tier1.yml'
