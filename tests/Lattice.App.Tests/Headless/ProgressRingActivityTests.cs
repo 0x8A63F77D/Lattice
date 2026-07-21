@@ -51,7 +51,7 @@ public class ProgressRingActivityTests
     public async Task Projects_loading_ring_stops_when_loading_ends()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         fx.AddHost("host-a", new FakeGuiRpcClient());

@@ -69,7 +69,7 @@ public class HeaderFrameGapTests
     public void Projects_grid_sits_flush_below_the_command_bar()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
         var window = fx.Host(new ProjectsView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         window.Show();

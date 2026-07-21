@@ -90,7 +90,7 @@ public class SampleHostTests : IAsyncLifetime
     public async Task Projects_grid_shows_a_varies_share_and_a_mixed_status_aggregate()
     {
         SeedFleet();
-        var vm = new ProjectsViewModel(_fx.Store, _fx.Clock);
+        var vm = new ProjectsViewModel(_fx.Store, _fx.Clock, _fx.Control);
         _fx.Start();
 
         // Three distinct master URLs → three parent aggregates in All-hosts scope.
