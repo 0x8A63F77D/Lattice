@@ -4,15 +4,34 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>Lattice.Boinc.GuiRpc</RootNamespace>
+
+    <!-- NuGet package metadata. The library versions independently of the
+         Lattice app (app releases ship on 'v*' tags; this package on
+         'guirpc-v*' tags — see .github/workflows/nuget-publish.yml). 0.9.0
+         signals feature-complete for its milestone with an API that is still
+         explicitly 0.x/unstable — 1.0.0 is reserved for a SemVer-committed
+         surface. The publish workflow overrides Version from the tag. -->
     <PackageId>Lattice.Boinc.GuiRpc</PackageId>
-    <Version>0.2.0</Version>
-    <Description>Async .NET client for the BOINC GUI RPC protocol. Single-host semantics: connect, authenticate, and read client state over TCP.</Description>
+    <Version>0.9.0</Version>
+    <Authors>0x8A63F77D</Authors>
+    <Description>Async .NET client for the BOINC GUI RPC protocol. Single-host semantics: connect, authenticate, and read client state over TCP. Strongly-typed models, fixture-tested, no UI dependencies.</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageProjectUrl>https://github.com/0x8A63F77D/Lattice</PackageProjectUrl>
+    <PackageTags>boinc;gui-rpc;rpc;boinc-manager;distributed-computing;tcp;async</PackageTags>
     <RepositoryUrl>https://github.com/0x8A63F77D/Lattice</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Reproducible build + debugging symbols. ContinuousIntegrationBuild
+         normalizes embedded paths; it is set only under CI so local builds
+         don't require every source to be committed. Symbols ship as a
+         separate .snupkg (the modern symbol-server format). -->
+    <ContinuousIntegrationBuild Condition="'$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
   <ItemGroup>
     <None Include="README.md" Pack="true" PackagePath="/" />

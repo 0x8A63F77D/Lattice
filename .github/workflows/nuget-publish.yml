@@ -1,0 +1,93 @@
+name: NuGet Publish (Lattice.Boinc.GuiRpc)
+
+# Publishes the protocol-layer package to nuget.org. Runs ONLY on a
+# 'guirpc-v*' tag push — the library versions independently of the app
+# (app releases ship on 'v*' via release.yml). A tag like 'guirpc-v0.9.0'
+# packs version 0.9.0 and pushes it (plus its .snupkg symbols) to nuget.org.
+#
+# The push step is guarded on the tag ref, so any other trigger only packs
+# (a dry run) and never publishes. The temporary branch-push line below is
+# the repo's pre-merge verification trick (see release.yml history, commits
+# e3543b2 / ac052fe): it exercises the whole pack path in real CI without a
+# tag, and is removed before merge so the live workflow stays tag-only.
+on:
+  push:
+    tags: ['guirpc-v*']
+    branches: ['claude/festive-solomon-a4cf07']  # TEMP: verify pre-merge; removed before merge
+
+concurrency:
+  group: nuget-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: pack and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Full history so SourceLink can resolve the commit for the package.
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      # Version comes from the tag ('guirpc-v0.9.0' -> '0.9.0'). Any non-tag
+      # trigger (the pre-merge branch push) is a dry run stamped with a
+      # sentinel and never published. The tag name is passed via env (never
+      # spliced into the script body) and SemVer-validated on the whole
+      # string — GitHub's script-injection guidance, mirroring release.yml.
+      - name: Resolve version
+        shell: bash
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            VERSION="${REF_NAME#guirpc-v}"
+          else
+            VERSION="0.0.0-ci"   # dry-run sentinel for the pre-merge branch push
+          fi
+          if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
+             || ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::Invalid version '$VERSION' (expected e.g. 0.9.0 from tag guirpc-v0.9.0)"
+            exit 1
+          fi
+          echo "GUIRPC_VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      # Pack must succeed warning-free; -warnaserror promotes any pack/analyzer
+      # or SourceLink warning to a failure. Produces the .nupkg and its .snupkg.
+      - name: Pack
+        run: >
+          dotnet pack src/Lattice.Boinc.GuiRpc/Lattice.Boinc.GuiRpc.csproj
+          -c Release
+          -warnaserror
+          -p:Version=${{ env.GUIRPC_VERSION }}
+          -o "$RUNNER_TEMP/nupkg"
+
+      - name: List package contents
+        shell: bash
+        run: |
+          echo "Packed for version $GUIRPC_VERSION:"
+          ls -lh "$RUNNER_TEMP/nupkg"
+
+      # Publish only on a real 'guirpc-v*' tag push. On the pre-merge branch
+      # push this step is skipped, so the run verifies packing without ever
+      # touching nuget.org. NUGET_API_KEY is an owner-created repository secret.
+      # The co-located .snupkg is pushed to nuget.org's symbol server
+      # automatically alongside the matching .nupkg.
+      - name: Push to nuget.org
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/guirpc-v')
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "::error::NUGET_API_KEY secret is not set — add it in repo settings before tagging."
+            exit 1
+          fi
+          dotnet nuget push "$RUNNER_TEMP/nupkg/*.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
