@@ -2,6 +2,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
@@ -145,8 +146,13 @@ public class RunModeMenuTests
             .Items.OfType<MenuItem>().First()      // CPU
             .Items.OfType<MenuItem>().Last();      // Never
         Assert.NotNull(never.Command);
-        never.Command!.Execute(never.CommandParameter);
-        await HeadlessSync.WaitUntilAsync(() => fake.Calls.Contains("set_mode:cpu:never:0"));
+        // Deterministic: await the command's OWN task rather than a wall-clock settle
+        // (AGENTS.md bans wall-clock settles; HeadlessSync's 5 s ceiling false-fails on
+        // contended runners — PR #69). The op runs on the control lane, so awaiting
+        // ExecuteAsync waits for the lane turn — and thus the fake's SetMode call — to
+        // complete; RunJobs then flushes the success-path RequestRefresh post.
+        await ((IAsyncRelayCommand)never.Command!).ExecuteAsync(never.CommandParameter);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.Contains("set_mode:cpu:never:0", fake.Calls);
         flyout.Hide();
