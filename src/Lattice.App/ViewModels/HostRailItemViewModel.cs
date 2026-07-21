@@ -137,11 +137,19 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     // The compact rail shows the state icon only, so the tooltip must identify the
     // host in every state (design §Responsive: name/subtext/countdown live here);
     // error states append the underlying error.
-    private string BuildTooltip() =>
-        (State is RailState.Retrying or RailState.Unreachable)
-        && _entry.Status.LastError is { Length: > 0 } error
-            ? $"{Name} — {StateText}\n{error}"
-            : $"{Name} — {StateText}";
+    private string BuildTooltip()
+    {
+        string text =
+            (State is RailState.Retrying or RailState.Unreachable)
+            && _entry.Status.LastError is { Length: > 0 } error
+                ? $"{Name} — {StateText}\n{error}"
+                : $"{Name} — {StateText}";
+        // The compact 48px rail hides the snooze chip (icon-only), so the snooze state
+        // must also reach the tooltip, or a snoozed host is indistinguishable from a
+        // plain connected one below the rail breakpoint (Codex R3 P3 — same principle
+        // as the every-state tooltip rule above).
+        return IsSnoozed ? $"{text}\n{SnoozedUntilText}" : text;
+    }
 
     private void OnTick(object? sender, EventArgs e)
     {
@@ -203,7 +211,13 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     private void ExpireSnoozeIfPast()
     {
         if (IsSnoozed && _snoozeDeadline is { } deadline && _clock.Now >= deadline)
+        {
             ClearSnooze();
+            // Drop the now-stale snooze line from the compact tooltip too (unless a
+            // transient action result is currently overriding it).
+            if (TestResultText is not { Length: > 0 })
+                Tooltip = BuildTooltip();
+        }
     }
 
     // DI-3: enabled only while the host is Connected. The token identifies which

@@ -130,6 +130,8 @@ public class RunModeControlTests : IAsyncLifetime
 
         Assert.True(vm.IsSnoozed);
         Assert.Equal(expected, vm.SnoozedUntilText);
+        // The compact rail hides the chip, so the snooze state must reach the tooltip too.
+        Assert.Contains(vm.SnoozedUntilText, vm.Tooltip);
     }
 
     [Fact]
@@ -142,6 +144,7 @@ public class RunModeControlTests : IAsyncLifetime
         await _fx.SettleAsync(() => _fx.Store.Hosts[0].Snapshot is { CcStatus.TaskModeDelaySeconds: 900 });
         var vm = new HostRailItemViewModel(_fx.Store.Hosts[0], _fx.Clock, _fx.Control);
         Assert.True(vm.IsSnoozed);
+        string snoozeLine = vm.SnoozedUntilText;
 
         // Advance the UI clock past the 15-minute deadline: the tick retires the chip
         // even though no fresh poll (reporting delay 0) has arrived yet.
@@ -149,6 +152,8 @@ public class RunModeControlTests : IAsyncLifetime
 
         Assert.False(vm.IsSnoozed);
         Assert.Equal("", vm.SnoozedUntilText);
+        // The tooltip's snooze line is dropped too, not left stale.
+        Assert.DoesNotContain(snoozeLine, vm.Tooltip);
     }
 
     [Fact]
