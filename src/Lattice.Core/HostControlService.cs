@@ -93,9 +93,11 @@ public sealed class HostControlService
         try
         {
             // The hook is generic over a body payload; an op RPC has none.
+            // Stryker disable Boolean: equivalent — the two ConfigureAwait(false) flags in this multi-line call only select the resume context, unobservable to tests (xUnit runs without a SynchronizationContext); false is kept as library convention. (Block form: a per-line "disable once" cannot reach the outer chained ConfigureAwait on a continuation line.)
             await RunOnLaneAsync<object?>(hostId,
                 async (client, token) => { await rpc(client, token).ConfigureAwait(false); return null; },
                 ct).ConfigureAwait(false);
+            // Stryker restore Boolean
         }
         catch (HostRemovedException) { return new ControlOpResult(ControlOpOutcome.Unreachable, HostRemovedMessage); }
         catch (PasswordRefusedException) { return new ControlOpResult(ControlOpOutcome.AuthFailed, PasswordRefusedMessage); }
@@ -150,6 +152,7 @@ public sealed class HostControlService
     private async Task<T> RunAfterAsync<T>(
         Task previous, Guid hostId, Func<IGuiRpcClient, CancellationToken, Task<T>> body, CancellationToken ct)
     {
+        // Stryker disable once Boolean: equivalent — ConfigureAwait's flag only selects the resume context, unobservable to tests (xUnit runs without a SynchronizationContext); false is kept as library convention.
         try { await previous.ConfigureAwait(false); }
         catch { /* predecessor outcome intentionally ignored — the chain must not break */ }
 
@@ -160,11 +163,20 @@ public sealed class HostControlService
 
         // I-CL4: await using disposes the connection on every exit path.
         await using IGuiRpcClient client = _clientFactory();
+        // Stryker disable once Boolean: equivalent — ConfigureAwait's flag only selects the resume context, unobservable to tests (xUnit runs without a SynchronizationContext); false is kept as library convention.
         await client.ConnectAsync(config.Address, config.Port, ct).ConfigureAwait(false);
-        if (config.Password.Length > 0
-            && !await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false))
-            throw new PasswordRefusedException();
+        if (config.Password.Length > 0)
+        {
+            // Isolated from the `> 0` guard so the equivalent ConfigureAwait(false) mutant
+            // can be excluded on its own line without also masking the (genuinely killed)
+            // Equality/LogicalNot mutants that a shared-line directive would sweep up.
+            // Stryker disable once Boolean: equivalent — ConfigureAwait's flag only selects the resume context, unobservable to tests (xUnit runs without a SynchronizationContext); false is kept as library convention.
+            bool authorized = await client.AuthorizeAsync(config.Password, ct).ConfigureAwait(false);
+            if (!authorized)
+                throw new PasswordRefusedException();
+        }
 
+        // Stryker disable once Boolean: equivalent — ConfigureAwait's flag only selects the resume context, unobservable to tests (xUnit runs without a SynchronizationContext); false is kept as library convention.
         return await body(client, ct).ConfigureAwait(false);
     }
 
@@ -182,6 +194,7 @@ public sealed class HostControlService
             if (monitor.HostId == hostId)
             {
                 monitor.RequestRefresh();
+                // Stryker disable once Statement: equivalent — _monitors is keyed by unique host id, so the loop can never match a second monitor; this early return is a micro-optimization, not load-bearing.
                 return;
             }
     }
