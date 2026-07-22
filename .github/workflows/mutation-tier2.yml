@@ -25,9 +25,13 @@ jobs:
         with:
           dotnet-version: 10.0.x
       - run: dotnet tool restore
+      # --test-runner mtp is REQUIRED (see mutation-tier1.yml for the full rationale):
+      # Lattice.Tests is on xunit v3 (issue #16), which Stryker's default VSTest runner
+      # cannot execute (score collapses to ~0%, stryker-mutator/stryker-net#3117). The
+      # MTP runner (Stryker >= 4.13) runs them correctly; fallback = xunit v2 (option B).
       - name: Stryker (full scoped run)
         working-directory: tests/Lattice.Tests
-        run: dotnet dotnet-stryker
+        run: dotnet dotnet-stryker --test-runner mtp
       - name: Post score to tracking issue
         if: always()
         env:
