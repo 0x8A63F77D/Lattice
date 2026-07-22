@@ -46,6 +46,16 @@ public class TransferRowViewModelTests
     }
 
     [Fact]
+    public void Slow_active_transfer_shows_adaptive_kilobyte_speed()
+    {
+        // The reported bug: a sub-MB rate rendered as "0.1 MB/s" under the old
+        // fixed-MB formatter. Adaptive units render it in KB/s instead.
+        var row = TransferRowViewModel.From(
+            Snap(speed: 200 * 1024, state: TransferUiState.Active), Guid.NewGuid(), "host-a", Now);
+        Assert.Equal("200 KB/s", row.SpeedText);
+    }
+
+    [Fact]
     public void Retrying_counts_down_from_next_request_time()
     {
         var row = TransferRowViewModel.From(

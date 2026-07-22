@@ -655,9 +655,6 @@
   <data name="TransfersRetryNow" xml:space="preserve">
     <value>立即重试</value>
   </data>
-  <data name="TransfersSpeedFmt" xml:space="preserve">
-    <value>{0} MB/s</value>
-  </data>
   <data name="TransfersStatusActive" xml:space="preserve">
     <value>传输中</value>
   </data>

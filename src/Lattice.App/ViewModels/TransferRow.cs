@@ -68,7 +68,7 @@ public sealed record TransferRowViewModel(
             ProgressText: string.Format(CultureInfo.InvariantCulture, Strings.TransfersProgressFmt, Mb(t.BytesXferred), Mb(t.Nbytes)),
             Fraction: fraction,
             SpeedText: snap.UiState == TransferUiState.Active && t.XferSpeed > 0
-                ? string.Format(CultureInfo.InvariantCulture, Strings.TransfersSpeedFmt, Mb(t.XferSpeed))
+                ? ByteRateFormat.Format(t.XferSpeed)
                 : "—",
             UiState: snap.UiState,
             StatusText: statusText,
