@@ -192,8 +192,10 @@ right-click menu, and a "Computing" dropdown in the Tasks command bar when a sin
 Right-click the real host's row in the left **rail**.
 
 - [ ] The context menu **opens to the RIGHT of the row**, into the content area (not over the pane).
-- [ ] It contains (below the Edit/Test/Remove host items): **Run modes**, **Snooze**, and — only while
-      a snooze is active — **Resume computing**.
+- [ ] The menu order is: **Edit host** and **Test connection** at the top, a divider, then **Run
+      modes**, **Snooze**, and — only while a snooze is active — **Resume computing**, a divider, and
+      **Remove host** at the bottom. (The run-mode block sits between the Edit/Test pair and Remove,
+      not after all three.)
 - [ ] **Run modes** expands to **CPU**, **GPU**, **Network**, each with **Always / Auto / Never** as
       **radio items**. The **currently-selected mode shows only as the radio checkmark** — there is no
       right-aligned mode text in the menu. The checkmark reflects the host's **permanent** mode.
