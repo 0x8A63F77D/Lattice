@@ -115,4 +115,25 @@ public class SettingsViewModelTests : IAsyncLifetime
             RestoreConfigPath();
         }
     }
+
+    [Fact]
+    public void App_version_is_a_non_empty_string_for_the_about_surface()
+    {
+        // The About section quotes this verbatim in bug reports, so it must always
+        // resolve to something a tester can read back — never blank.
+        Assert.False(string.IsNullOrWhiteSpace(SettingsViewModel.AppVersion));
+    }
+
+    [Theory]
+    [InlineData("0.2.0-alpha.1", "0.2.0-alpha.1")]           // clean SemVer passes through
+    [InlineData("0.2.0-alpha.1+abc1234", "0.2.0-alpha.1")]   // build metadata (+commit) is trimmed
+    [InlineData("1.0.0+deadbeef", "1.0.0")]
+    [InlineData("  1.2.3  ", "1.2.3")]                        // whitespace is trimmed
+    [InlineData(null, "unknown")]
+    [InlineData("", "unknown")]
+    [InlineData("   ", "unknown")]
+    public void FormatVersion_strips_build_metadata_and_falls_back_when_absent(string? raw, string expected)
+    {
+        Assert.Equal(expected, SettingsViewModel.FormatVersion(raw));
+    }
 }

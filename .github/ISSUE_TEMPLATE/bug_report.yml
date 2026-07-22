@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in Lattice is broken or behaves unexpectedly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the Lattice alpha! Keep it short — a few lines is plenty.
+  - type: input
+    id: lattice-version
+    attributes:
+      label: Lattice version
+      description: Shown in **Settings → About**, or the release tag you downloaded.
+      placeholder: "0.2.0-alpha.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple Silicon)
+        - macOS (Intel)
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: "macOS 15.5 / Ubuntu 24.04 / Windows 11 23H2"
+    validations:
+      required: false
+  - type: input
+    id: boinc-version
+    attributes:
+      label: BOINC client version
+      description: The core client Lattice connects to (`boinccmd --version`, or BOINC Manager → About).
+      placeholder: "8.2.11"
+    validations:
+      required: false
+  - type: dropdown
+    id: host-kind
+    attributes:
+      label: Host type
+      description: Was the affected host local, remote, or both?
+      options:
+        - Local (localhost) host
+        - Remote host
+        - Both / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs (optional)
+      description: Any error text or output. Paste as text — please don't include RPC passwords or other secrets.
+      render: text
+    validations:
+      required: false

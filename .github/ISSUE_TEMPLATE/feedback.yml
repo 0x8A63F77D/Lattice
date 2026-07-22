@@ -1,0 +1,24 @@
+name: Feedback / idea
+description: Share a suggestion, a rough edge, or a general impression
+title: "[Feedback]: "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Not a bug? Tell us what you think — what worked, what felt off, what you wish Lattice did.
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Your feedback
+      description: One or two lines is fine.
+    validations:
+      required: true
+  - type: input
+    id: lattice-version
+    attributes:
+      label: Lattice version (optional)
+      description: Shown in **Settings → About**.
+      placeholder: "0.2.0-alpha.1"
+    validations:
+      required: false

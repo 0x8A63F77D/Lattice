@@ -121,8 +121,12 @@ first launch:
   hand-assembled bundle has no sealed `_CodeSignature`, so a downloaded
   (quarantined) copy is rejected as **"damaged" — which right-click-Open cannot
   bypass.** With it, a quarantined copy reads as the ordinary "unidentified
-  developer," so **right-clicking the app → Open** (then confirm) works. Or drop
-  the quarantine attribute outright:
+  developer" and can be opened past the prompt. The bypass gesture differs by OS
+  version: on **macOS 14 and earlier**, right-click the app → **Open**; on
+  **macOS 15 (Sequoia) and later** Apple removed that shortcut, so it's
+  **System Settings → Privacy & Security → Open Anyway** after the first blocked
+  launch. Either way, dropping the quarantine attribute outright also works on any
+  version:
   ```sh
   xattr -dr com.apple.quarantine /Applications/Lattice.app
   ```

@@ -18,19 +18,26 @@ PLIST="$REPO_ROOT/packaging/macos/Info.plist"
 OUT_DIR="$REPO_ROOT/artifacts/macos/$RID"
 APP="$OUT_DIR/Lattice.app"
 
-echo "==> Publishing Lattice ($RID)"
+# One version source for both the assembly and the Info.plist. Override with
+# LATTICE_VERSION=1.2.3 (the release workflow passes it through).
+VERSION="${LATTICE_VERSION:-0.0.0}"
+
+echo "==> Publishing Lattice ($RID, version $VERSION)"
 PUBLISH_DIR="$OUT_DIR/publish"
 rm -rf "$APP" "$PUBLISH_DIR"
+# -p:Version stamps the managed assembly's version too, so the app's own
+# Settings -> About surface (which reads AssemblyInformationalVersion) shows the
+# real build number and not the 1.0.0 SDK default — matching the Windows/Linux
+# scripts, which already pass it.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -o "$PUBLISH_DIR"
+    -p:PublishSingleFile=false -p:Version="$VERSION" -o "$PUBLISH_DIR"
 
 echo "==> Assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp -R "$PUBLISH_DIR/." "$APP/Contents/MacOS/"
 # Stamp the bundle version so every .app carries a real value rather than the
-# template default. Override with LATTICE_VERSION=1.2.3; sed-on-copy keeps this
-# portable across BSD/GNU sed (no in-place -i).
-VERSION="${LATTICE_VERSION:-0.0.0}"
+# template default. sed-on-copy keeps this portable across BSD/GNU sed (no
+# in-place -i).
 sed "s#<string>0.0.0</string>#<string>${VERSION}</string>#g" "$PLIST" > "$APP/Contents/Info.plist"
 cp "$ICNS" "$APP/Contents/Resources/lattice.icns"
 echo "    bundle version: $VERSION"
