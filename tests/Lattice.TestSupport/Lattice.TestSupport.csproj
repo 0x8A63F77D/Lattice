@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
-  <!-- xunit-free shared test doubles. Namespace stays Lattice.Tests deliberately: these types
-       predate the split and both xunit v2 (Lattice.Tests) and v3 (Lattice.App.Tests) consumers
-       keep their callsites unchanged. -->
+  <!-- xunit-free shared test doubles, reused across every C# test project (Lattice.Tests,
+       Lattice.App.Tests, Lattice.VisualTests). Staying xunit-free keeps this library
+       framework-agnostic; the namespace stays Lattice.Tests deliberately so callsites that
+       predate the extraction are unchanged. (These consumers are all xunit v3 as of #16.) -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
