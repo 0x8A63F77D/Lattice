@@ -56,6 +56,37 @@ public class TransferRowViewModelTests
     }
 
     [Fact]
+    public void Speed_sort_key_carries_raw_rate_so_adaptive_units_do_not_invert_order()
+    {
+        // Rates in ascending order; their adaptive strings sort differently.
+        var slow = TransferRowViewModel.From(Snap(speed: 900 * 1024, state: TransferUiState.Active), Guid.NewGuid(), "h", Now);
+        var mid = TransferRowViewModel.From(Snap(speed: 1024 * 1024, state: TransferUiState.Active), Guid.NewGuid(), "h", Now);
+        var fast = TransferRowViewModel.From(Snap(speed: 10 * 1024 * 1024, state: TransferUiState.Active), Guid.NewGuid(), "h", Now);
+
+        Assert.Equal("900 KB/s", slow.SpeedText);
+        Assert.Equal("1 MB/s", mid.SpeedText);
+        Assert.Equal("10 MB/s", fast.SpeedText);
+
+        // The numeric key is monotonic in the true rate order …
+        Assert.True(slow.SpeedBytesPerSec < mid.SpeedBytesPerSec);
+        Assert.True(mid.SpeedBytesPerSec < fast.SpeedBytesPerSec);
+        // … whereas an ordinal sort of the display strings puts the SLOWEST row last
+        // ("900 KB/s" > "1 MB/s" and > "10 MB/s"), the exact inversion the key avoids.
+        Assert.True(string.CompareOrdinal(slow.SpeedText, mid.SpeedText) > 0);
+        Assert.True(string.CompareOrdinal(slow.SpeedText, fast.SpeedText) > 0);
+    }
+
+    [Fact]
+    public void Inactive_row_speed_sort_key_is_zero()
+    {
+        // Rows that render "—" (no active transfer) sort as the slowest — key 0,
+        // consistent with how the Fraction column keys non-progressing rows.
+        var queued = TransferRowViewModel.From(Snap(state: TransferUiState.Queued), Guid.NewGuid(), "h", Now);
+        Assert.Equal("—", queued.SpeedText);
+        Assert.Equal(0, queued.SpeedBytesPerSec);
+    }
+
+    [Fact]
     public void Retrying_counts_down_from_next_request_time()
     {
         var row = TransferRowViewModel.From(

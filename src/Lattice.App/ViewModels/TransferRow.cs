@@ -38,7 +38,14 @@ public sealed record TransferRowViewModel(
     TransferUiState UiState,
     string StatusText,
     Guid HostId,
-    string Host)
+    string Host,
+    // Raw transfer rate (bytes/sec) backing the Speed column's header sort. The
+    // Speed column binds the adaptive SpeedText for display but sorts on THIS —
+    // sorting the formatted string orders "10 MB/s" < "1 MB/s" < "900 KB/s"
+    // (lexicographic), inverting the true rate. Zero for rows that render "—",
+    // so they sort as the slowest (mirrors the Fraction column's non-progressing
+    // rows). Optional/defaulted so hand-built test rows need not set it.
+    double SpeedBytesPerSec = 0)
 {
     /// <summary>Convenience predicate for XAML/bounded lookups that only care about the retry state.</summary>
     public bool IsRetrying => UiState == TransferUiState.Retrying;
@@ -60,6 +67,8 @@ public sealed record TransferRowViewModel(
             _ => throw new InvalidOperationException("unreachable: closed enum"),
         };
 
+        var hasActiveSpeed = snap.UiState == TransferUiState.Active && t.XferSpeed > 0;
+
         return new(
             Key: new TransferRowKey(hostId, t.ProjectUrl, t.Name, t.IsUpload),
             Name: t.Name,
@@ -67,13 +76,12 @@ public sealed record TransferRowViewModel(
             DirectionText: t.IsUpload ? Strings.TransfersUpload : Strings.TransfersDownload,
             ProgressText: string.Format(CultureInfo.InvariantCulture, Strings.TransfersProgressFmt, Mb(t.BytesXferred), Mb(t.Nbytes)),
             Fraction: fraction,
-            SpeedText: snap.UiState == TransferUiState.Active && t.XferSpeed > 0
-                ? ByteRateFormat.Format(t.XferSpeed)
-                : "—",
+            SpeedText: hasActiveSpeed ? ByteRateFormat.Format(t.XferSpeed) : "—",
             UiState: snap.UiState,
             StatusText: statusText,
             HostId: hostId,
-            Host: host);
+            Host: host,
+            SpeedBytesPerSec: hasActiveSpeed ? t.XferSpeed : 0);
     }
 
     private static string RetryText(DateTimeOffset? nextRequest, int attempt, DateTimeOffset now)

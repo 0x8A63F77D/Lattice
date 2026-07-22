@@ -58,7 +58,8 @@ public class TransfersViewTests
             .ToArray();
 
     private static TransferRowViewModel MakeRow(
-        TransferUiState uiState, string statusText, string name = "file.dat", bool isUpload = false, Guid? hostId = null)
+        TransferUiState uiState, string statusText, string name = "file.dat", bool isUpload = false, Guid? hostId = null,
+        string speedText = "1.0 MB/s", double speedBytesPerSec = 0)
     {
         // Single hostId source: Key.HostId and Data.HostId must agree — the
         // invariant TransferRowViewModel.From establishes in production.
@@ -66,8 +67,9 @@ public class TransfersViewTests
         return new(
             Key: new TransferRowKey(id, "https://project.example/", name, isUpload),
             Name: name, Project: "p", DirectionText: isUpload ? Strings.TransfersUpload : Strings.TransfersDownload,
-            ProgressText: "1.0 / 2.0 MB", Fraction: 0.5, SpeedText: "1.0 MB/s",
-            UiState: uiState, StatusText: statusText, HostId: id, Host: "host-a");
+            ProgressText: "1.0 / 2.0 MB", Fraction: 0.5, SpeedText: speedText,
+            UiState: uiState, StatusText: statusText, HostId: id, Host: "host-a",
+            SpeedBytesPerSec: speedBytesPerSec);
     }
 
     // Paired header-count/host-column pattern, mirrored from TasksViewTests
@@ -336,4 +338,44 @@ public class TransfersViewTests
         Assert.Contains(tb.FontFeatures!, f => f.Tag == "tnum" && f.Value == 1);
         fx.Dispose();
     }
+
+    // The Speed column is a bound text column, so without SortMemberPath the DataGrid
+    // derives its sort key from the display string. Once units adapt, that string sorts
+    // lexicographically — "10 MB/s" < "1 MB/s" < "900 KB/s" — inverting the true rate
+    // order (the same class of bug the Tasks template columns had, owner-reported).
+    // SortMemberPath now points the column at the raw rate; assert it reports CanUserSort
+    // and that a real header sort orders by the VALUE, not the formatted text.
+    [AvaloniaFact]
+    public void Speed_column_sorts_by_underlying_rate_not_formatted_text()
+    {
+        var (fx, window, view, vm) = MakeView();
+        window.Show();
+        // Names chosen so a lexicographic sort of SpeedText would give a different
+        // order than the numeric rate — the test can't pass by accident.
+        vm.Rows.Add(Holder(MakeRow(TransferUiState.Active, "Transferring", name: "mid",
+            speedText: "1 MB/s", speedBytesPerSec: 1024.0 * 1024.0)));
+        vm.Rows.Add(Holder(MakeRow(TransferUiState.Active, "Transferring", name: "fast",
+            speedText: "10 MB/s", speedBytesPerSec: 10.0 * 1024.0 * 1024.0)));
+        vm.Rows.Add(Holder(MakeRow(TransferUiState.Active, "Transferring", name: "slow",
+            speedText: "900 KB/s", speedBytesPerSec: 900.0 * 1024.0)));
+        fx.Layout();
+
+        var grid = window.GetVisualDescendants().OfType<DataGrid>().Single();
+        Assert.True(grid.Columns[4].CanUserSort, "Speed column should be sortable");
+
+        // Ascending by RATE: slow(900 KB/s) < mid(1 MB/s) < fast(10 MB/s). A
+        // lexicographic sort of the strings would give fast < mid < slow instead.
+        grid.Columns[4].Sort(System.ComponentModel.ListSortDirection.Ascending);
+        fx.Layout();
+        Assert.Equal(new[] { "slow", "mid", "fast" },
+            DisplayedHolders(view).Select(h => h.Data.Name));
+
+        grid.Columns[4].Sort(System.ComponentModel.ListSortDirection.Descending);
+        fx.Layout();
+        Assert.Equal(new[] { "fast", "mid", "slow" },
+            DisplayedHolders(view).Select(h => h.Data.Name));
+        fx.Dispose();
+    }
+
+    private static TransferRow Holder(TransferRowViewModel data) => new(data.Key, data);
 }

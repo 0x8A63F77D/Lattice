@@ -141,8 +141,13 @@
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
+          <!-- SortMemberPath points the header sort at the raw rate, not the adaptive
+               SpeedText: sorting the formatted string orders "10 MB/s" < "1 MB/s" <
+               "900 KB/s" (lexicographic), inverting the true rate — same rule as the
+               Progress/Status columns above ("not the display text"). -->
           <DataGridTextColumn Header="{x:Static loc:Strings.TransfersColSpeed}" Tag="Speed"
                                Binding="{CompiledBinding Data.SpeedText, DataType=vm:TransferRow}" Width="90" MinWidth="90"
+                               SortMemberPath="Data.SpeedBytesPerSec"
                                CellStyleClasses="numericCell" />
           <!-- Status 210: state icon (exactly one of active/retrying/queued visible) + text,
                semibold warning color while retrying. -->
