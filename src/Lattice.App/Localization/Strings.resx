@@ -448,7 +448,7 @@
     <value>{0} projects · {1} hosts</value>
   </data>
   <data name="ProjectsEmpty" xml:space="preserve">
-    <value>No projects attached — attach via the BOINC client on the host.</value>
+    <value>No projects attached yet — use “Add project…” to attach one.</value>
   </data>
   <data name="ProjectsNoNewTasks" xml:space="preserve">
     <value>No new tasks</value>
@@ -674,5 +674,59 @@
   </data>
   <data name="TransfersUpload" xml:space="preserve">
     <value>Upload</value>
+  </data>
+  <data name="ProjectsAddProject" xml:space="preserve">
+    <value>Add project…</value>
+  </data>
+  <data name="ProjectsAddProjectDisabledReason" xml:space="preserve">
+    <value>No connected host to attach a project on</value>
+  </data>
+  <data name="AttachDialogTitle" xml:space="preserve">
+    <value>Add project</value>
+  </data>
+  <data name="AttachPrimaryButton" xml:space="preserve">
+    <value>Attach</value>
+  </data>
+  <data name="AttachCloseButton" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="AttachHostLabel" xml:space="preserve">
+    <value>Host</value>
+  </data>
+  <data name="AttachFieldUrlPlaceholder" xml:space="preserve">
+    <value>Project URL (e.g. https://einstein.phys.uwm.edu/)</value>
+  </data>
+  <data name="AttachCredEmailOption" xml:space="preserve">
+    <value>Email &amp; password</value>
+  </data>
+  <data name="AttachCredKeyOption" xml:space="preserve">
+    <value>Account key</value>
+  </data>
+  <data name="AttachFieldEmailPlaceholder" xml:space="preserve">
+    <value>Account email</value>
+  </data>
+  <data name="AttachFieldPasswordPlaceholder" xml:space="preserve">
+    <value>Account password</value>
+  </data>
+  <data name="AttachFieldKeyPlaceholder" xml:space="preserve">
+    <value>Account key (weak/no-email accounts)</value>
+  </data>
+  <data name="AttachStarting" xml:space="preserve">
+    <value>Starting…</value>
+  </data>
+  <data name="AttachProgressLookup" xml:space="preserve">
+    <value>Contacting project…</value>
+  </data>
+  <data name="AttachProgressAttach" xml:space="preserve">
+    <value>Attaching…</value>
+  </data>
+  <data name="AttachErrorTitle" xml:space="preserve">
+    <value>Attach failed</value>
+  </data>
+  <data name="AttachFailedGeneric" xml:space="preserve">
+    <value>The attach did not complete.</value>
+  </data>
+  <data name="AttachInfo" xml:space="preserve">
+    <value>The project is attached once accepted; a bad account key surfaces later in the event log (the daemon checks it on its first scheduler request).</value>
   </data>
 </root>

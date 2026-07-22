@@ -7,7 +7,38 @@ Part of [Lattice](https://github.com/0x8A63F77D/Lattice), a multi-host BOINC
 dashboard. This package is single-host: one client, one connection, typed
 models. Polling, reconnect, and multi-host aggregation live upstream.
 
+It has no UI dependencies and is tested against canned XML fixtures (no live
+daemon required). The package versions independently of the Lattice app.
+
 API is 0.x and unstable.
+
+## Quick start
+
+Connect, authenticate, and read the full client state:
+
+```csharp
+using Lattice.Boinc.GuiRpc;
+
+await using var client = new BoincGuiRpcClient();
+
+// The daemon listens on TCP 31416; default is localhost.
+await client.ConnectAsync("localhost");
+
+// Password lives in gui_rpc_auth.cfg in the BOINC data directory.
+if (!await client.AuthorizeAsync("your-gui-rpc-password"))
+    throw new InvalidOperationException("daemon rejected the password");
+
+// Full snapshot — several MB on busy hosts, so call it once per connection
+// and then poll cheap deltas (GetCcStatusAsync / GetResultsAsync / GetMessagesAsync).
+CcState state = await client.GetStateAsync();
+
+foreach (Project project in state.Projects)
+    Console.WriteLine($"{project.ProjectName}: {project.UserTotalCredit:F0} credit");
+```
+
+Wire quirks the client handles for you: 0x03 message framing, the MD5
+challenge-response handshake, the daemon's hand-rolled (non-conformant) XML
+parser, and lenient parsing of unescaped characters in message bodies.
 
 ## Protocol notes: control operations
 

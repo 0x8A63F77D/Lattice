@@ -109,7 +109,12 @@
         <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
           <TextBlock Text="{x:Static loc:Strings.ProjectsTitle}" FontSize="16" FontWeight="SemiBold"
                      Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
-          <Button x:Name="UpdateButton" Content="{x:Static loc:Strings.ProjectsUpdate}" Margin="8,0,0,0"
+          <!-- Add project… (M3 PR I): opens the attach dialog; disabled (DI-3) until the
+               current scope has a Connected host to attach on. -->
+          <Button Content="{x:Static loc:Strings.ProjectsAddProject}" Command="{Binding AddProjectCommand}"
+                  Margin="8,0,0,0"
+                  ToolTip.Tip="{Binding AddProjectDisabledReason}" ToolTip.ShowOnDisabled="True" />
+          <Button x:Name="UpdateButton" Content="{x:Static loc:Strings.ProjectsUpdate}"
                   Command="{Binding UpdateSelectedCommand}"
                   ToolTip.Tip="{Binding ControlDisabledReason}" ToolTip.ShowOnDisabled="True" />
           <Button x:Name="SuspendButton" Content="{x:Static loc:Strings.Suspend}"

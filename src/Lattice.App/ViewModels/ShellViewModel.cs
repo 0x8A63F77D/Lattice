@@ -74,8 +74,12 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // snapshots feed the grids. Constructed here like the other VM-layer
         // collaborators (DensityPreference, ThemePreference).
         _control = new HostControlService(registry, store.Manager, clientFactory);
+        // The attach flow (M3 PR I) rides the SAME control lane so a lookup→attach
+        // holds the host's lane for its whole duration; TimeProvider.System drives
+        // its real 1 s poll cadence (tests use the runner's own fake-time seam).
+        var attachRunner = new AttachFlowRunner(_control, store.Manager, TimeProvider.System);
         Tasks = new TasksViewModel(store, clock, uiState, density, _control);
-        Projects = new ProjectsViewModel(store, clock, _control);
+        Projects = new ProjectsViewModel(store, clock, _control, attachRunner.RunAsync, AvaloniaUiDispatcher.Instance);
         Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);
         Views =
