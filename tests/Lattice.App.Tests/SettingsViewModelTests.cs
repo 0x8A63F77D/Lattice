@@ -22,7 +22,7 @@ public class SettingsViewModelTests : IAsyncLifetime
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         _uiStore = new UiStateStore(_uiPath);
-        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), _uiStore);
+        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), new LanguagePreference(_uiStore), _uiStore);
         return ValueTask.CompletedTask;
     }
 
@@ -114,6 +114,31 @@ public class SettingsViewModelTests : IAsyncLifetime
         {
             RestoreConfigPath();
         }
+    }
+
+    [Fact]
+    public void Language_defaults_to_system_with_no_restart_hint()
+    {
+        Assert.Equal(AppLanguage.System, _settings.SelectedLanguage);
+        Assert.False(_settings.ShowLanguageRestartHint);
+        Assert.Equal([AppLanguage.System, AppLanguage.English, AppLanguage.Chinese], SettingsViewModel.AllLanguages);
+    }
+
+    [Fact]
+    public void Selecting_a_language_persists_it_and_surfaces_the_restart_hint()
+    {
+        _settings.SelectedLanguage = AppLanguage.Chinese;
+
+        Assert.Equal(AppLanguage.Chinese, _settings.SelectedLanguage);
+        Assert.Equal(AppLanguage.Chinese, _uiStore.Load().Language);   // persisted (applies on restart)
+        Assert.True(_settings.ShowLanguageRestartHint);                // restart hint latched on
+    }
+
+    [Fact]
+    public void Reselecting_the_current_language_is_a_no_op_and_shows_no_hint()
+    {
+        _settings.SelectedLanguage = AppLanguage.System;   // already System
+        Assert.False(_settings.ShowLanguageRestartHint);
     }
 
     [Fact]

@@ -49,6 +49,26 @@
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
 
+      <TextBlock Text="{x:Static loc:Strings.SettingsLanguageSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="LanguageExpander"
+                             Header="{x:Static loc:Strings.SettingsLanguageHeader}"
+                             Description="{x:Static loc:Strings.SettingsLanguageDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllLanguages}"
+                    SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="infra:AppLanguage">
+                <TextBlock Text="{Binding Converter={x:Static v:LanguageLabelConverter.Instance}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+      <TextBlock Text="{x:Static loc:Strings.SettingsLanguageRestartHint}" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding ShowLanguageRestartHint}"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+
       <TextBlock Text="{x:Static loc:Strings.SettingsTraySection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       <ui:FASettingsExpander x:Name="CloseToTrayExpander"

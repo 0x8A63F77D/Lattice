@@ -63,7 +63,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _grouping = ui.RailGrouping;
         _healthyExpanded = ui.RailHealthyExpanded;
         _theme = new ThemePreference(uiState);
-        Settings = new SettingsViewModel(registry, clientFactory, _theme, uiState);
+        // Language is persist-only here (applied at startup by the composition root before
+        // any UI is built, #147); the Settings picker just records the choice + shows a
+        // restart hint. Single owner, same shape as ThemePreference.
+        var language = new LanguagePreference(uiState);
+        Settings = new SettingsViewModel(registry, clientFactory, _theme, language, uiState);
         // ONE DensityPreference, shared: the single owner of the global density
         // preference, so a toggle in either view reaches the other in-session
         // (Codex round-3 P2, PR #45). Projects has no density toggle (design 2a

@@ -129,37 +129,37 @@
   -->
   <!-- ===== AddHost ===== -->
   <data name="AddHostCloseButton" xml:space="preserve">
-    <value>Cancel</value>
+    <value>取消</value>
   </data>
   <data name="AddHostDialogTitle" xml:space="preserve">
-    <value>Add host</value>
+    <value>添加主机</value>
   </data>
   <data name="AddHostErrorTitle" xml:space="preserve">
-    <value>Could not connect</value>
+    <value>无法连接</value>
   </data>
   <data name="AddHostFieldAddressPlaceholder" xml:space="preserve">
-    <value>Address (required)</value>
+    <value>地址（必填）</value>
   </data>
   <data name="AddHostFieldNamePlaceholder" xml:space="preserve">
-    <value>Name — defaults to the address</value>
+    <value>名称 — 默认使用地址</value>
   </data>
   <data name="AddHostFieldPasswordPlaceholder" xml:space="preserve">
-    <value>From gui_rpc_auth.cfg</value>
+    <value>来自 gui_rpc_auth.cfg</value>
   </data>
   <data name="AddHostFieldPortPlaceholder" xml:space="preserve">
-    <value>Port</value>
+    <value>端口</value>
   </data>
   <data name="AddHostPrimaryButton" xml:space="preserve">
-    <value>Add</value>
+    <value>添加</value>
   </data>
   <data name="AddHostRemoteAccessInfo" xml:space="preserve">
-    <value>Remote access must be allowed on the host — add this machine's IP to remote_hosts.cfg.</value>
+    <value>主机必须允许远程访问 — 请将本机的 IP 添加到 remote_hosts.cfg。</value>
   </data>
   <data name="AddHostSaveFailedFmt" xml:space="preserve">
-    <value>Connected, but saving the host list failed: {0}</value>
+    <value>已连接，但保存主机列表失败：{0}</value>
   </data>
   <data name="AddHostTimeoutError" xml:space="preserve">
-    <value>Connection timed out.</value>
+    <value>连接超时。</value>
   </data>
   <!-- ===== App ===== -->
   <data name="AppTitle" xml:space="preserve">
@@ -167,114 +167,114 @@
   </data>
   <!-- ===== EditHost ===== -->
   <data name="EditHostDialogTitle" xml:space="preserve">
-    <value>Edit host</value>
+    <value>编辑主机</value>
   </data>
   <data name="EditHostPasswordError" xml:space="preserve">
-    <value>The host refused this password. Check gui_rpc_auth.cfg on {0}.</value>
+    <value>主机拒绝了此密码。请检查 {0} 上的 gui_rpc_auth.cfg。</value>
   </data>
   <data name="EditHostPrimaryButton" xml:space="preserve">
-    <value>Save</value>
+    <value>保存</value>
   </data>
   <data name="EditHostSaveFailedFmt" xml:space="preserve">
-    <value>Couldn’t save changes: {0}</value>
+    <value>无法保存更改：{0}</value>
   </data>
   <!-- ===== EventLog ===== -->
   <data name="EventLogColMessage" xml:space="preserve">
-    <value>Message</value>
+    <value>消息</value>
   </data>
   <data name="EventLogColTime" xml:space="preserve">
-    <value>Time</value>
+    <value>时间</value>
   </data>
   <data name="EventLogCountsFmt" xml:space="preserve">
-    <value>{0} messages · {1} reachable hosts</value>
+    <value>{0} 条消息 · {1} 台可访问主机</value>
   </data>
   <data name="EventLogTitle" xml:space="preserve">
-    <value>Event log</value>
+    <value>事件日志</value>
   </data>
   <data name="EventLogSubtitleAll" xml:space="preserve">
-    <value>All hosts · merged stream</value>
+    <value>所有主机 · 合并的消息流</value>
   </data>
   <data name="EventLogPillInfo" xml:space="preserve">
-    <value>Info</value>
+    <value>信息</value>
   </data>
   <data name="EventLogPillWarning" xml:space="preserve">
-    <value>Warning</value>
+    <value>警告</value>
   </data>
   <data name="EventLogPillError" xml:space="preserve">
-    <value>Error</value>
+    <value>错误</value>
   </data>
   <data name="EventLogFollowing" xml:space="preserve">
-    <value>Following</value>
+    <value>跟随中</value>
   </data>
   <data name="EventLogResumeFollowing" xml:space="preserve">
-    <value>Resume following</value>
+    <value>继续跟随</value>
   </data>
   <data name="EventLogCopy" xml:space="preserve">
-    <value>Copy</value>
+    <value>复制</value>
   </data>
   <data name="EventLogFollowingLive" xml:space="preserve">
-    <value>Following live</value>
+    <value>实时跟随中</value>
   </data>
   <data name="EventLogEmpty" xml:space="preserve">
-    <value>No messages yet.</value>
+    <value>暂无消息。</value>
   </data>
   <!-- ===== FirstRun ===== -->
   <data name="FirstRunAddHost" xml:space="preserve">
-    <value>Add a host</value>
+    <value>添加主机</value>
   </data>
   <data name="FirstRunCaption" xml:space="preserve">
-    <value>Lattice monitors BOINC clients over GUI RPC (port 31416).</value>
+    <value>Lattice 通过 GUI RPC（端口 31416）监视 BOINC 客户端。</value>
   </data>
   <data name="FirstRunTitle" xml:space="preserve">
-    <value>Connect your first host</value>
+    <value>连接你的第一台主机</value>
   </data>
   <!-- ===== Nav ===== -->
   <data name="AllHosts" xml:space="preserve">
-    <value>All hosts</value>
+    <value>所有主机</value>
   </data>
   <data name="AllHostsCountFmt" xml:space="preserve">
-    <value>{0} hosts</value>
+    <value>{0} 台主机</value>
   </data>
   <data name="AllHostsPartialFmt" xml:space="preserve">
-    <value>{0} of {1} connected</value>
+    <value>已连接 {0}/{1}</value>
   </data>
   <data name="HostsAddTooltip" xml:space="preserve">
-    <value>Add a host</value>
+    <value>添加主机</value>
   </data>
   <data name="HostsHeader" xml:space="preserve">
-    <value>Hosts</value>
+    <value>主机</value>
   </data>
   <data name="NavEventLog" xml:space="preserve">
-    <value>Event log</value>
+    <value>事件日志</value>
   </data>
   <data name="NavProjects" xml:space="preserve">
-    <value>Projects</value>
+    <value>项目</value>
   </data>
   <data name="NavSettings" xml:space="preserve">
-    <value>Settings</value>
+    <value>设置</value>
   </data>
   <data name="NavTasks" xml:space="preserve">
-    <value>Tasks</value>
+    <value>任务</value>
   </data>
   <data name="NavTransfers" xml:space="preserve">
-    <value>Transfers</value>
+    <value>传输</value>
   </data>
   <!-- ===== HostMenu (rail host-row context menu + remove-confirm) ===== -->
   <data name="HostMenuEdit" xml:space="preserve">
-    <value>Edit host…</value>
+    <value>编辑主机…</value>
   </data>
   <data name="HostMenuTest" xml:space="preserve">
-    <value>Test connection</value>
+    <value>测试连接</value>
   </data>
   <data name="HostMenuRemove" xml:space="preserve">
-    <value>Remove host…</value>
+    <value>移除主机…</value>
   </data>
   <!-- ===== Run modes / snooze (M3 PR H — DI-4 host run-mode surface) ===== -->
   <data name="ComputingMenu" xml:space="preserve">
-    <value>Computing</value>
+    <value>计算</value>
   </data>
   <data name="HostMenuRunModes" xml:space="preserve">
-    <value>Run modes</value>
+    <value>运行模式</value>
   </data>
   <data name="HostMenuLaneCpu" xml:space="preserve">
     <value>CPU</value>
@@ -283,175 +283,175 @@
     <value>GPU</value>
   </data>
   <data name="HostMenuLaneNetwork" xml:space="preserve">
-    <value>Network</value>
+    <value>网络</value>
   </data>
   <data name="RunModeAlways" xml:space="preserve">
-    <value>Always</value>
+    <value>总是</value>
   </data>
   <data name="RunModeAuto" xml:space="preserve">
-    <value>Auto</value>
+    <value>自动</value>
   </data>
   <data name="RunModeNever" xml:space="preserve">
-    <value>Never</value>
+    <value>从不</value>
   </data>
   <data name="HostMenuSnooze" xml:space="preserve">
-    <value>Snooze</value>
+    <value>休息一下</value>
   </data>
   <data name="SnoozeFifteenMinutes" xml:space="preserve">
-    <value>15 minutes</value>
+    <value>15 分钟</value>
   </data>
   <data name="SnoozeOneHour" xml:space="preserve">
-    <value>1 hour</value>
+    <value>1 小时</value>
   </data>
   <data name="SnoozeFourHours" xml:space="preserve">
-    <value>4 hours</value>
+    <value>4 小时</value>
   </data>
   <data name="HostMenuResume" xml:space="preserve">
-    <value>Resume computing</value>
+    <value>继续计算</value>
   </data>
   <data name="RailSnoozedUntilFmt" xml:space="preserve">
-    <value>Snoozed until {0}</value>
+    <value>休息至 {0}</value>
   </data>
   <data name="RunModeFailedFmt" xml:space="preserve">
-    <value>Run mode failed: {0}</value>
+    <value>运行模式设置失败：{0}</value>
   </data>
   <data name="HostRemoveConfirmTitleFmt" xml:space="preserve">
-    <value>Remove {0}?</value>
+    <value>移除 {0}？</value>
   </data>
   <data name="HostRemoveConfirmBody" xml:space="preserve">
-    <value>Lattice stops monitoring this host. The BOINC client on the host is not affected.</value>
+    <value>Lattice 将停止监视此主机。主机上的 BOINC 客户端不受影响。</value>
   </data>
   <data name="HostRemoveConfirmPrimary" xml:space="preserve">
-    <value>Remove</value>
+    <value>移除</value>
   </data>
   <data name="HostRemoveConfirmCancel" xml:space="preserve">
-    <value>Cancel</value>
+    <value>取消</value>
   </data>
   <data name="HostRemoveFailedFmt" xml:space="preserve">
-    <value>Couldn’t remove host: {0}</value>
+    <value>无法移除主机：{0}</value>
   </data>
   <!-- ===== Rail ===== -->
   <data name="RailAuthFailed" xml:space="preserve">
-    <value>Wrong password</value>
+    <value>密码错误</value>
   </data>
   <data name="RailGroupToggleTooltip" xml:space="preserve">
-    <value>Toggle list / grouped view</value>
+    <value>切换列表 / 分组视图</value>
   </data>
   <data name="RailConnectedFmt" xml:space="preserve">
-    <value>Connected · {0} tasks</value>
+    <value>已连接 · {0} 个任务</value>
   </data>
   <data name="RailConnecting" xml:space="preserve">
-    <value>Connecting…</value>
+    <value>连接中…</value>
   </data>
   <data name="RailGroupAttentionFmt" xml:space="preserve">
-    <value>Attention · {0}</value>
+    <value>需要关注 · {0}</value>
   </data>
   <data name="RailGroupHealthyFmt" xml:space="preserve">
-    <value>Healthy · {0}</value>
+    <value>正常 · {0}</value>
   </data>
   <data name="RailRetrying" xml:space="preserve">
-    <value>Retrying…</value>
+    <value>重试中…</value>
   </data>
   <data name="RailRetryingFmt" xml:space="preserve">
-    <value>Retrying in {0}s (attempt {1})</value>
+    <value>{0} 秒后重试（第 {1} 次尝试）</value>
   </data>
   <data name="RailUnreachable" xml:space="preserve">
-    <value>Unreachable</value>
+    <value>无法访问</value>
   </data>
   <!-- ===== Settings ===== -->
   <data name="SettingsAboutSection" xml:space="preserve">
-    <value>About</value>
+    <value>关于</value>
   </data>
   <data name="SettingsVersionLabel" xml:space="preserve">
-    <value>Version</value>
+    <value>版本</value>
   </data>
   <data name="SettingsHostsPointer" xml:space="preserve">
-    <value>Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.</value>
+    <value>主机在侧边栏中管理 — 使用“+”添加，右键点击主机以编辑或移除。</value>
   </data>
   <data name="SettingsIntervalSaveFailedFmt" xml:space="preserve">
-    <value>Saving the polling interval failed: {0}</value>
+    <value>保存轮询间隔失败：{0}</value>
   </data>
   <data name="SettingsPollingDescription" xml:space="preserve">
-    <value>How often each host is polled for status and tasks</value>
+    <value>每台主机轮询状态和任务的频率</value>
   </data>
   <data name="SettingsPollingHeader" xml:space="preserve">
-    <value>Polling interval</value>
+    <value>轮询间隔</value>
   </data>
   <data name="SettingsPollingSection" xml:space="preserve">
-    <value>Polling</value>
+    <value>轮询</value>
   </data>
   <data name="SettingsTestConnectionBusy" xml:space="preserve">
-    <value>Testing…</value>
+    <value>测试中…</value>
   </data>
   <data name="SettingsTestConnectionButton" xml:space="preserve">
-    <value>Test connection</value>
+    <value>测试连接</value>
   </data>
   <data name="SettingsTestConnectionSuccess" xml:space="preserve">
-    <value>Connected — BOINC {0}.{1}.{2}</value>
+    <value>已连接 — BOINC {0}.{1}.{2}</value>
   </data>
   <data name="SettingsTestConnectionTimeout" xml:space="preserve">
-    <value>Connection timed out.</value>
+    <value>连接超时。</value>
   </data>
   <data name="SettingsTitle" xml:space="preserve">
-    <value>Settings</value>
+    <value>设置</value>
   </data>
   <data name="SettingsThemeSection" xml:space="preserve">
-    <value>Theme</value>
+    <value>主题</value>
   </data>
   <data name="SettingsThemeHeader" xml:space="preserve">
-    <value>Theme</value>
+    <value>主题</value>
   </data>
   <data name="SettingsThemeDescription" xml:space="preserve">
-    <value>How Lattice follows light or dark mode</value>
+    <value>Lattice 如何跟随浅色或深色模式</value>
   </data>
   <data name="SettingsLanguageSection" xml:space="preserve">
-    <value>Language</value>
+    <value>语言</value>
   </data>
   <data name="SettingsLanguageHeader" xml:space="preserve">
-    <value>Language</value>
+    <value>语言</value>
   </data>
   <data name="SettingsLanguageDescription" xml:space="preserve">
-    <value>The language Lattice's interface uses</value>
+    <value>Lattice 界面使用的语言</value>
   </data>
   <data name="SettingsLanguageRestartHint" xml:space="preserve">
-    <value>Restart Lattice to apply the new language.</value>
+    <value>重启 Lattice 以应用新语言。</value>
   </data>
   <data name="SettingsTraySection" xml:space="preserve">
-    <value>Tray</value>
+    <value>托盘</value>
   </data>
   <data name="SettingsCloseToTrayLabel" xml:space="preserve">
-    <value>Closing the window keeps Lattice running in the tray</value>
+    <value>关闭窗口后 Lattice 继续在托盘中运行</value>
   </data>
   <data name="SettingsCloseToTrayDescription" xml:space="preserve">
-    <value>When on, the close button hides Lattice to the menu bar / notification area and polling continues in the background. On Linux this needs a StatusNotifierItem/AppIndicator-capable desktop.</value>
+    <value>开启后，关闭按钮会将 Lattice 隐藏到菜单栏 / 通知区域，轮询在后台继续。在 Linux 上，这需要支持 StatusNotifierItem/AppIndicator 的桌面环境。</value>
   </data>
   <data name="SettingsFullSpeedHiddenLabel" xml:space="preserve">
-    <value>Full-speed polling while in the tray</value>
+    <value>在托盘中时全速轮询</value>
   </data>
   <data name="SettingsFullSpeedHiddenDescription" xml:space="preserve">
-    <value>When off, hidden-window polling is floored at 30 seconds to save battery.</value>
+    <value>关闭时，隐藏窗口的轮询间隔最低为 30 秒以节省电量。</value>
   </data>
   <data name="TrayShowWindow" xml:space="preserve">
-    <value>Show window</value>
+    <value>显示窗口</value>
   </data>
   <data name="TrayExit" xml:space="preserve">
-    <value>Exit</value>
+    <value>退出</value>
   </data>
   <data name="TrayToolTip" xml:space="preserve">
     <value>Lattice</value>
   </data>
   <data name="ThemeLight" xml:space="preserve">
-    <value>Light</value>
+    <value>浅色</value>
   </data>
   <data name="ThemeDark" xml:space="preserve">
-    <value>Dark</value>
+    <value>深色</value>
   </data>
   <data name="ThemeSystem" xml:space="preserve">
-    <value>System</value>
+    <value>跟随系统</value>
   </data>
   <!-- ===== Language (Settings language picker labels; endonyms are identical across locales) ===== -->
   <data name="LanguageSystemDefault" xml:space="preserve">
-    <value>System default</value>
+    <value>跟随系统</value>
   </data>
   <data name="LanguageEnglish" xml:space="preserve">
     <value>English</value>
@@ -461,300 +461,300 @@
   </data>
   <!-- ===== Projects ===== -->
   <data name="ProjectsColAvgCredit" xml:space="preserve">
-    <value>Avg credit</value>
+    <value>日均积分</value>
   </data>
   <data name="ProjectsColHosts" xml:space="preserve">
-    <value>Hosts</value>
+    <value>主机</value>
   </data>
   <data name="ProjectsColShare" xml:space="preserve">
-    <value>Resource share</value>
+    <value>资源分享</value>
   </data>
   <data name="ProjectsColTotalCredit" xml:space="preserve">
-    <value>Total credit</value>
+    <value>总积分</value>
   </data>
   <data name="ProjectsCountsFmt" xml:space="preserve">
-    <value>{0} projects · {1} hosts</value>
+    <value>{0} 个项目 · {1} 台主机</value>
   </data>
   <data name="ProjectsEmpty" xml:space="preserve">
-    <value>No projects attached yet — use “Add project…” to attach one.</value>
+    <value>尚未添加任何项目 — 使用“添加项目…”来添加。</value>
   </data>
   <data name="ProjectsNoNewTasks" xml:space="preserve">
-    <value>No new tasks</value>
+    <value>禁止下载新任务</value>
   </data>
   <data name="ProjectsPartialFmt" xml:space="preserve">
-    <value>{0} of {1} hosts aren't reachable — projects below cover {2} hosts.</value>
+    <value>{1} 台主机中有 {0} 台无法访问 — 下方项目涵盖 {2} 台主机。</value>
   </data>
   <data name="ProjectsTaskCountFmt" xml:space="preserve">
-    <value>{0} tasks</value>
+    <value>{0} 个任务</value>
   </data>
   <data name="ProjectsShareVariesFmt" xml:space="preserve">
-    <value>Varies · {0}–{1}</value>
+    <value>不一 · {0}–{1}</value>
   </data>
   <data name="ProjectsStatusActive" xml:space="preserve">
-    <value>Active</value>
+    <value>活动中</value>
   </data>
   <data name="ProjectsStatusSuspended" xml:space="preserve">
-    <value>Suspended</value>
+    <value>已暂停</value>
   </data>
   <data name="ProjectsStatusNoNewTasks" xml:space="preserve">
-    <value>No new tasks</value>
+    <value>禁止下载新任务</value>
   </data>
   <data name="ProjectsStatusActiveAll" xml:space="preserve">
-    <value>Active on all hosts</value>
+    <value>所有主机均活动中</value>
   </data>
   <data name="ProjectsStatusAllFmt" xml:space="preserve">
-    <value>{0} on all hosts</value>
+    <value>所有主机均{0}</value>
   </data>
   <data name="ProjectsStatusDeviationFmt" xml:space="preserve">
-    <value>{0} · {1}/{2} hosts</value>
+    <value>{0} · {1}/{2} 台主机</value>
   </data>
   <data name="ProjectsStatusMixedFmt" xml:space="preserve">
-    <value>Mixed · {0} suspended · {1} no new tasks</value>
+    <value>混合 · {0} 台已暂停 · {1} 台禁止下载新任务</value>
   </data>
   <data name="ProjectsTitle" xml:space="preserve">
-    <value>Projects</value>
+    <value>项目</value>
   </data>
   <data name="ProjectsUpdate" xml:space="preserve">
-    <value>Update</value>
+    <value>更新</value>
   </data>
   <!-- ===== Tasks ===== -->
   <data name="Abort" xml:space="preserve">
-    <value>Abort</value>
+    <value>中止</value>
   </data>
   <data name="AtRiskFmt" xml:space="preserve">
-    <value>⚠ {0} deadline at risk</value>
+    <value>⚠ {0} 个任务上报期限告急</value>
   </data>
   <data name="ColApplication" xml:space="preserve">
-    <value>Application</value>
+    <value>计算程序</value>
   </data>
   <data name="ColDeadline" xml:space="preserve">
-    <value>Deadline</value>
+    <value>上报期限</value>
   </data>
   <data name="ColElapsed" xml:space="preserve">
-    <value>Elapsed</value>
+    <value>已用时间</value>
   </data>
   <data name="ColHost" xml:space="preserve">
-    <value>Host</value>
+    <value>主机</value>
   </data>
   <data name="ColProgress" xml:space="preserve">
-    <value>Progress</value>
+    <value>进度</value>
   </data>
   <data name="ColProject" xml:space="preserve">
-    <value>Project</value>
+    <value>项目</value>
   </data>
   <data name="ColRemaining" xml:space="preserve">
-    <value>Remaining</value>
+    <value>剩余时间</value>
   </data>
   <data name="ColState" xml:space="preserve">
-    <value>State</value>
+    <value>状态</value>
   </data>
   <data name="ColTask" xml:space="preserve">
-    <value>Task</value>
+    <value>任务</value>
   </data>
   <data name="CountsFmt" xml:space="preserve">
-    <value>{0} tasks · {1} running · {2} uploading · {3} suspended</value>
+    <value>{0} 个任务 · {1} 个运行中 · {2} 个上传中 · {3} 个已暂停</value>
   </data>
   <data name="FilterPlaceholder" xml:space="preserve">
-    <value>Filter by name or project</value>
+    <value>按名称或项目筛选</value>
   </data>
   <data name="LoadingFromFmt" xml:space="preserve">
-    <value>Fetching state from {0}…</value>
+    <value>正在从 {0} 获取状态…</value>
   </data>
   <data name="PartialFmt" xml:space="preserve">
-    <value>{0} of {1} hosts aren't reachable — tasks below cover {2} hosts.</value>
+    <value>{1} 台主机中有 {0} 台无法访问 — 下方任务涵盖 {2} 台主机。</value>
   </data>
   <data name="PartialTitle" xml:space="preserve">
-    <value>Partial results.</value>
+    <value>部分结果。</value>
   </data>
   <data name="PollingFmt" xml:space="preserve">
-    <value>Polling every {0}s</value>
+    <value>每 {0} 秒轮询一次</value>
   </data>
   <data name="RetryNow" xml:space="preserve">
-    <value>Retry now</value>
+    <value>立即重试</value>
   </data>
   <data name="StateAll" xml:space="preserve">
-    <value>State: All</value>
+    <value>状态：全部</value>
   </data>
   <data name="Suspend" xml:space="preserve">
-    <value>Suspend</value>
+    <value>暂停</value>
   </data>
   <data name="TaskStateAborted" xml:space="preserve">
-    <value>Aborted</value>
+    <value>已中止</value>
   </data>
   <data name="TaskStateError" xml:space="preserve">
-    <value>Error</value>
+    <value>错误</value>
   </data>
   <data name="TaskStateRunning" xml:space="preserve">
-    <value>Running</value>
+    <value>运行中</value>
   </data>
   <data name="TaskStateSuspended" xml:space="preserve">
-    <value>Suspended</value>
+    <value>已暂停</value>
   </data>
   <data name="TaskStateUploading" xml:space="preserve">
-    <value>Uploading</value>
+    <value>上传中</value>
   </data>
   <data name="TaskStateWaiting" xml:space="preserve">
-    <value>Waiting</value>
+    <value>等待中</value>
   </data>
   <data name="TasksEmpty" xml:space="preserve">
-    <value>No tasks on this host.</value>
+    <value>此主机上没有任务。</value>
   </data>
   <data name="TasksEmptyAll" xml:space="preserve">
-    <value>No tasks on any reachable host.</value>
+    <value>所有可访问主机上都没有任务。</value>
   </data>
   <data name="TasksTitle" xml:space="preserve">
-    <value>Tasks</value>
+    <value>任务</value>
   </data>
   <!-- ===== Time ===== -->
   <data name="UpdatedHoursFmt" xml:space="preserve">
-    <value>Updated {0}h ago</value>
+    <value>{0} 小时前更新</value>
   </data>
   <data name="UpdatedMinutesFmt" xml:space="preserve">
-    <value>Updated {0}m ago</value>
+    <value>{0} 分钟前更新</value>
   </data>
   <data name="UpdatedSecondsFmt" xml:space="preserve">
-    <value>Updated {0}s ago</value>
+    <value>{0} 秒前更新</value>
   </data>
   <!-- ===== Transfers ===== -->
   <data name="TransfersColDirection" xml:space="preserve">
-    <value>Direction</value>
+    <value>方向</value>
   </data>
   <data name="TransfersColFile" xml:space="preserve">
-    <value>File</value>
+    <value>文件</value>
   </data>
   <data name="TransfersColSpeed" xml:space="preserve">
-    <value>Speed</value>
+    <value>速度</value>
   </data>
   <data name="TransfersColStatus" xml:space="preserve">
-    <value>Status</value>
+    <value>状态</value>
   </data>
   <data name="TransfersCountsFmt" xml:space="preserve">
-    <value>{0} transfers · {1} up · {2} down</value>
+    <value>{0} 个传输 · {1} 个上传 · {2} 个下载</value>
   </data>
   <data name="TransfersDownload" xml:space="preserve">
-    <value>Download</value>
+    <value>下载</value>
   </data>
   <data name="TransfersEmpty" xml:space="preserve">
-    <value>No active transfers</value>
+    <value>没有进行中的传输</value>
   </data>
   <data name="TransfersEmptyCaption" xml:space="preserve">
-    <value>Uploads and downloads will appear here while in progress.</value>
+    <value>上传和下载进行时将显示在此处。</value>
   </data>
   <data name="TransfersPartialFmt" xml:space="preserve">
-    <value>{0} of {1} hosts aren't reachable — transfers below cover {2} hosts.</value>
+    <value>{1} 台主机中有 {0} 台无法访问 — 下方传输涵盖 {2} 台主机。</value>
   </data>
   <data name="TransfersProgressFmt" xml:space="preserve">
     <value>{0} / {1} MB</value>
   </data>
   <data name="TransfersRetryFmt" xml:space="preserve">
-    <value>Retry in {0} (attempt {1})</value>
+    <value>{0} 后重试（第 {1} 次尝试）</value>
   </data>
   <data name="TransfersRetryNow" xml:space="preserve">
-    <value>Retry now</value>
+    <value>立即重试</value>
   </data>
   <data name="TransfersSpeedFmt" xml:space="preserve">
     <value>{0} MB/s</value>
   </data>
   <data name="TransfersStatusActive" xml:space="preserve">
-    <value>Transferring</value>
+    <value>传输中</value>
   </data>
   <data name="TransfersStatusQueued" xml:space="preserve">
-    <value>Queued</value>
+    <value>排队中</value>
   </data>
   <data name="ConfirmCancel" xml:space="preserve">
-    <value>Cancel</value>
+    <value>取消</value>
   </data>
   <data name="Resume" xml:space="preserve">
-    <value>Resume</value>
+    <value>继续</value>
   </data>
   <data name="AbortConfirmTitle" xml:space="preserve">
-    <value>Abort task?</value>
+    <value>中止任务？</value>
   </data>
   <data name="AbortConfirmBodyFmt" xml:space="preserve">
-    <value>Abort "{0}" on {1}? The task's computed work will be permanently lost.</value>
+    <value>中止 {1} 上的“{0}”？该任务已计算的成果将永久丢失。</value>
   </data>
   <data name="ControlOpFailedTitleFmt" xml:space="preserve">
-    <value>{0} failed</value>
+    <value>{0}失败</value>
   </data>
   <data name="ControlHostNotConnected" xml:space="preserve">
-    <value>Host is not connected</value>
+    <value>主机未连接</value>
   </data>
   <data name="Detach" xml:space="preserve">
-    <value>Detach</value>
+    <value>分离</value>
   </data>
   <data name="ProjectMultiHostConfirmTitleFmt" xml:space="preserve">
-    <value>{0} on {1} hosts?</value>
+    <value>在 {1} 台主机上{0}？</value>
   </data>
   <data name="ProjectMultiHostConfirmBodyFmt" xml:space="preserve">
-    <value>{0} "{1}" on {2} hosts: {3}.</value>
+    <value>在 {2} 台主机上{0}“{1}”：{3}。</value>
   </data>
   <data name="ProjectDetachConfirmTitle" xml:space="preserve">
-    <value>Detach project?</value>
+    <value>分离项目？</value>
   </data>
   <data name="ProjectDetachConfirmBodyFmt" xml:space="preserve">
-    <value>Detach "{0}" from {1}? Its in-progress tasks on that host will be lost and must be re-downloaded to re-attach.</value>
+    <value>从 {1} 分离“{0}”？该主机上正在进行的任务将丢失，重新添加时必须重新下载。</value>
   </data>
   <data name="ProjectDetachConfirmMultiBodyFmt" xml:space="preserve">
-    <value>Detach "{0}" from {1} hosts: {2}? In-progress tasks on those hosts will be lost and must be re-downloaded to re-attach.</value>
+    <value>从 {1} 台主机分离“{0}”：{2}？这些主机上正在进行的任务将丢失，重新添加时必须重新下载。</value>
   </data>
   <data name="TransfersTitle" xml:space="preserve">
-    <value>Transfers</value>
+    <value>传输</value>
   </data>
   <data name="TransfersUpload" xml:space="preserve">
-    <value>Upload</value>
+    <value>上传</value>
   </data>
   <data name="ProjectsAddProject" xml:space="preserve">
-    <value>Add project…</value>
+    <value>添加项目…</value>
   </data>
   <data name="ProjectsAddProjectDisabledReason" xml:space="preserve">
-    <value>No connected host to attach a project on</value>
+    <value>没有可添加项目的已连接主机</value>
   </data>
   <data name="AttachDialogTitle" xml:space="preserve">
-    <value>Add project</value>
+    <value>添加项目</value>
   </data>
   <data name="AttachPrimaryButton" xml:space="preserve">
-    <value>Attach</value>
+    <value>添加</value>
   </data>
   <data name="AttachCloseButton" xml:space="preserve">
-    <value>Cancel</value>
+    <value>取消</value>
   </data>
   <data name="AttachHostLabel" xml:space="preserve">
-    <value>Host</value>
+    <value>主机</value>
   </data>
   <data name="AttachFieldUrlPlaceholder" xml:space="preserve">
-    <value>Project URL (e.g. https://einstein.phys.uwm.edu/)</value>
+    <value>项目网址（例如 https://einstein.phys.uwm.edu/）</value>
   </data>
   <data name="AttachCredEmailOption" xml:space="preserve">
-    <value>Email &amp; password</value>
+    <value>邮箱和密码</value>
   </data>
   <data name="AttachCredKeyOption" xml:space="preserve">
-    <value>Account key</value>
+    <value>账户密钥</value>
   </data>
   <data name="AttachFieldEmailPlaceholder" xml:space="preserve">
-    <value>Account email</value>
+    <value>账户邮箱</value>
   </data>
   <data name="AttachFieldPasswordPlaceholder" xml:space="preserve">
-    <value>Account password</value>
+    <value>账户密码</value>
   </data>
   <data name="AttachFieldKeyPlaceholder" xml:space="preserve">
-    <value>Account key (weak/no-email accounts)</value>
+    <value>账户密钥（弱密码/无邮箱账户）</value>
   </data>
   <data name="AttachStarting" xml:space="preserve">
-    <value>Starting…</value>
+    <value>开始中…</value>
   </data>
   <data name="AttachProgressLookup" xml:space="preserve">
-    <value>Contacting project…</value>
+    <value>正在联系项目…</value>
   </data>
   <data name="AttachProgressAttach" xml:space="preserve">
-    <value>Attaching…</value>
+    <value>添加中…</value>
   </data>
   <data name="AttachErrorTitle" xml:space="preserve">
-    <value>Attach failed</value>
+    <value>添加失败</value>
   </data>
   <data name="AttachFailedGeneric" xml:space="preserve">
-    <value>The attach did not complete.</value>
+    <value>添加未完成。</value>
   </data>
   <data name="AttachInfo" xml:space="preserve">
-    <value>The project is attached once accepted; a bad account key surfaces later in the event log (the daemon checks it on its first scheduler request).</value>
+    <value>项目一旦被接受即完成添加；错误的账户密钥会稍后显示在事件日志中（守护进程在首次调度请求时进行检查）。</value>
   </data>
 </root>

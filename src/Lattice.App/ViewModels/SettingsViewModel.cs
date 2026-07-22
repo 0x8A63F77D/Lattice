@@ -12,13 +12,15 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly HostRegistry _registry;
     private readonly Func<IGuiRpcClient> _clientFactory;
     private readonly ThemePreference _theme;
+    private readonly LanguagePreference _language;
     private readonly UiStateStore _uiState;
 
-    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, UiStateStore uiState)
+    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, LanguagePreference language, UiStateStore uiState)
     {
         _registry = registry;
         _clientFactory = clientFactory;
         _theme = theme;
+        _language = language;
         _uiState = uiState;
     }
 
@@ -55,6 +57,29 @@ public sealed partial class SettingsViewModel : ObservableObject
     {
         get => _theme.Value;
         set { _theme.Set(value); OnPropertyChanged(); }
+    }
+
+    public static IReadOnlyList<AppLanguage> AllLanguages { get; } =
+        [AppLanguage.System, AppLanguage.English, AppLanguage.Chinese];
+
+    /// <summary>Shown once the language selection changes: x:Static resource lookups are
+    /// read at load, so a new language only takes effect on restart (#147). Latches true on
+    /// the first real change and stays visible — a persisted choice the user hasn't acted on.</summary>
+    [ObservableProperty] private bool _showLanguageRestartHint;
+
+    /// <summary>Mirrors the shared <see cref="LanguagePreference"/> for XAML binding; setting
+    /// it routes through the single owner (persist only — language applies on next launch) and
+    /// surfaces the restart hint. Same shape as <see cref="SelectedTheme"/>.</summary>
+    public AppLanguage SelectedLanguage
+    {
+        get => _language.Value;
+        set
+        {
+            if (value == _language.Value) return;
+            _language.Set(value);
+            ShowLanguageRestartHint = true;
+            OnPropertyChanged();
+        }
     }
 
     /// <summary>Inline error under the polling expander when persisting the interval fails.</summary>

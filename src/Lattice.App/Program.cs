@@ -42,6 +42,13 @@ public static class Program
                 break;
         }
 
+        // Apply the persisted UI language BEFORE Avalonia builds any UI (#147). x:Static
+        // resource lookups read CurrentUICulture once at load, so the culture must be set
+        // now — the calling thread becomes the UI thread under the classic desktop lifetime.
+        // Only UI culture is touched; number/date formatting stays as-is (InvariantCulture in
+        // code). A broken/missing ui-state.json loads as System (follow the OS) and is a no-op.
+        LanguageCulture.ApplyAtStartup(new UiStateStore().Load().Language);
+
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
