@@ -195,10 +195,12 @@
             <MenuItem Header="{x:Static loc:Strings.ProjectsUpdate}" Command="{Binding UpdateSelectedCommand}" />
             <MenuItem Header="{x:Static loc:Strings.Suspend}" Command="{Binding SuspendSelectedCommand}" />
             <MenuItem Header="{x:Static loc:Strings.Resume}" Command="{Binding ResumeSelectedCommand}" />
-            <!-- DI-1(c) misclick distance. The divider is MenuFlyout's supported
-                 separator form — Header "-"; a raw <Separator/> does not render in
-                 a menu flyout (Avalonia docs, MenuFlyout/Separator; PR #135 R3 P2). -->
-            <MenuItem Header="-" />
+            <!-- DI-1(c) misclick distance. The divider is a raw <Separator/> — the
+                 first-class MenuFlyout separator (FA 3.0.1 themes {x:Type Separator}
+                 with its own thin metrics). The old Header="-" pseudo-item kept a full
+                 MenuItem's MinHeight and inflated the gap around the line (#155); a
+                 Separator is not a MenuItem so it collapses to the correct ~1px rule. -->
+            <Separator />
             <MenuItem Header="{x:Static loc:Strings.Detach}" Command="{Binding DetachSelectedCommand}"
                       Foreground="{DynamicResource LatticeDangerFgBrush}" />
           </MenuFlyout>
