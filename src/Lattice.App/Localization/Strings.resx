@@ -584,9 +584,6 @@
   <data name="TaskStateAborted" xml:space="preserve">
     <value>Aborted</value>
   </data>
-  <data name="TaskStateError" xml:space="preserve">
-    <value>Error</value>
-  </data>
   <data name="TaskStateRunning" xml:space="preserve">
     <value>Running</value>
   </data>
@@ -598,6 +595,161 @@
   </data>
   <data name="TaskStateWaiting" xml:space="preserve">
     <value>Waiting</value>
+  </data>
+  <!-- Fine-grained task status (TaskStatusPolicy): the specific "why" behind the
+       coarse TaskState* bucket, mirroring the official BOINC Manager's
+       result_description() (clientgui/MainDocument.cpp). The State column shows
+       these; the State filter still buckets on the coarse TaskState* above.
+       Running / Uploading / Aborted (generic) reuse the coarse keys. -->
+  <data name="TaskStatusAbortedByProject" xml:space="preserve">
+    <value>Aborted by project</value>
+  </data>
+  <data name="TaskStatusAbortedByUser" xml:space="preserve">
+    <value>Aborted by user</value>
+  </data>
+  <data name="TaskStatusAbortedDiskLimit" xml:space="preserve">
+    <value>Aborted: task disk limit exceeded</value>
+  </data>
+  <data name="TaskStatusAbortedMemLimit" xml:space="preserve">
+    <value>Aborted: memory limit exceeded</value>
+  </data>
+  <data name="TaskStatusAbortedNotStarted" xml:space="preserve">
+    <value>Aborted: not started by deadline</value>
+  </data>
+  <data name="TaskStatusAbortedTimeLimit" xml:space="preserve">
+    <value>Aborted: run time limit exceeded</value>
+  </data>
+  <data name="TaskStatusAcknowledged" xml:space="preserve">
+    <value>Acknowledged</value>
+  </data>
+  <data name="TaskStatusComputationError" xml:space="preserve">
+    <value>Computation error</value>
+  </data>
+  <data name="TaskStatusDownloadFailed" xml:space="preserve">
+    <value>Download failed</value>
+  </data>
+  <data name="TaskStatusDownloading" xml:space="preserve">
+    <value>Downloading</value>
+  </data>
+  <data name="TaskStatusDownloadingSuspendedFmt" xml:space="preserve">
+    <value>Downloading (suspended - {0})</value>
+  </data>
+  <data name="TaskStatusGpuSuspendedReasonFmt" xml:space="preserve">
+    <value>GPU suspended - {0}</value>
+  </data>
+  <data name="TaskStatusInvalidStateFmt" xml:space="preserve">
+    <value>Error: invalid state '{0}'</value>
+  </data>
+  <data name="TaskStatusNew" xml:space="preserve">
+    <value>New</value>
+  </data>
+  <data name="TaskStatusPostponed" xml:space="preserve">
+    <value>Postponed</value>
+  </data>
+  <data name="TaskStatusPostponedReasonFmt" xml:space="preserve">
+    <value>Postponed: {0}</value>
+  </data>
+  <data name="TaskStatusProjectSuspended" xml:space="preserve">
+    <value>Project suspended by user</value>
+  </data>
+  <data name="TaskStatusReadyToReport" xml:space="preserve">
+    <value>Ready to report</value>
+  </data>
+  <data name="TaskStatusReadyToStart" xml:space="preserve">
+    <value>Ready to start</value>
+  </data>
+  <data name="TaskStatusSuspendedReasonFmt" xml:space="preserve">
+    <value>Suspended - {0}</value>
+  </data>
+  <data name="TaskStatusTaskSuspended" xml:space="preserve">
+    <value>Task suspended by user</value>
+  </data>
+  <data name="TaskStatusUploadFailed" xml:space="preserve">
+    <value>Upload failed</value>
+  </data>
+  <data name="TaskStatusUploadingSuspendedFmt" xml:space="preserve">
+    <value>Uploading (suspended - {0})</value>
+  </data>
+  <data name="TaskStatusWaitingForMemory" xml:space="preserve">
+    <value>Waiting for memory</value>
+  </data>
+  <data name="TaskStatusWaitingForNetwork" xml:space="preserve">
+    <value>Waiting for network</value>
+  </data>
+  <data name="TaskStatusWaitingForNetworkAccess" xml:space="preserve">
+    <value>Waiting for network access</value>
+  </data>
+  <data name="TaskStatusWaitingForSharedMemory" xml:space="preserve">
+    <value>Waiting for shared memory</value>
+  </data>
+  <data name="TaskStatusWaitingForSwap" xml:space="preserve">
+    <value>Waiting for swap space</value>
+  </data>
+  <data name="TaskStatusWaitingToRun" xml:space="preserve">
+    <value>Waiting to run</value>
+  </data>
+  <!-- Suspend reasons (lib/str_util.cpp suspend_reason_string), composed into the
+       *SuspendedReasonFmt strings above. Unknown/unmapped reasons fall to
+       TaskSuspendReasonUnknown, mirroring BOINC's default arm. -->
+  <data name="TaskSuspendReasonBatteries" xml:space="preserve">
+    <value>on batteries</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryCharging" xml:space="preserve">
+    <value>battery low</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryOverheated" xml:space="preserve">
+    <value>battery thermal protection</value>
+  </data>
+  <data name="TaskSuspendReasonBenchmarks" xml:space="preserve">
+    <value>CPU benchmarks in progress</value>
+  </data>
+  <data name="TaskSuspendReasonCpuUsage" xml:space="preserve">
+    <value>CPU is busy</value>
+  </data>
+  <data name="TaskSuspendReasonDiskSize" xml:space="preserve">
+    <value>need disk space - check preferences</value>
+  </data>
+  <data name="TaskSuspendReasonExclusiveApp" xml:space="preserve">
+    <value>an exclusive app is running</value>
+  </data>
+  <data name="TaskSuspendReasonInitialDelay" xml:space="preserve">
+    <value>initial delay</value>
+  </data>
+  <data name="TaskSuspendReasonNetworkQuota" xml:space="preserve">
+    <value>network transfer limit exceeded</value>
+  </data>
+  <data name="TaskSuspendReasonNoGuiKeepalive" xml:space="preserve">
+    <value>GUI not active</value>
+  </data>
+  <data name="TaskSuspendReasonNoRecentInput" xml:space="preserve">
+    <value>no recent user activity</value>
+  </data>
+  <data name="TaskSuspendReasonOs" xml:space="preserve">
+    <value>requested by operating system</value>
+  </data>
+  <data name="TaskSuspendReasonPodmanInit" xml:space="preserve">
+    <value>Podman initializing</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryChargeWait" xml:space="preserve">
+    <value>battery charge wait</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryHeatWait" xml:space="preserve">
+    <value>battery heat wait</value>
+  </data>
+  <data name="TaskSuspendReasonTimeOfDay" xml:space="preserve">
+    <value>time of day</value>
+  </data>
+  <data name="TaskSuspendReasonUnknown" xml:space="preserve">
+    <value>unknown reason</value>
+  </data>
+  <data name="TaskSuspendReasonUserActive" xml:space="preserve">
+    <value>computer is in use</value>
+  </data>
+  <data name="TaskSuspendReasonUserRequest" xml:space="preserve">
+    <value>user request</value>
+  </data>
+  <data name="TaskSuspendReasonWifiState" xml:space="preserve">
+    <value>not connected to WiFi network</value>
   </data>
   <data name="TasksEmpty" xml:space="preserve">
     <value>No tasks on this host.</value>

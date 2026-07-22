@@ -46,6 +46,11 @@ public class LocalizationTests
             Assert.Equal("暂停", Strings.Suspend);
             Assert.Equal("设置", Strings.SettingsTitle);
             Assert.Equal("上报期限", Strings.ColDeadline);
+            // #154 headline: the policy-suspend reason follows the official BOINC
+            // zh_CN locale, so a "computer is in use" suspension reads in Chinese.
+            Assert.Equal("正在使用计算机", Strings.TaskSuspendReasonUserActive);
+            Assert.Equal("已暂停 - 正在使用计算机",
+                string.Format(Strings.TaskStatusSuspendedReasonFmt, Strings.TaskSuspendReasonUserActive));
             // Proper names/units stay unchanged across cultures.
             Assert.Equal("Lattice", Strings.AppTitle);
         }

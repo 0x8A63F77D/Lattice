@@ -38,13 +38,24 @@ public sealed record TaskRowViewModel(
 {
     public TaskRowKey Key => new(HostId, Name);
 
+    // Default ambient status for hand-built test rows that don't pass a cc_status:
+    // nothing suspended, so the policy sees no policy-suspend reasons. The single
+    // production caller always passes the host's live cc_status.
+    private static readonly CcStatus NoAmbientSuspension = new(
+        RunMode.Auto, RunMode.Auto, RunMode.Auto,
+        SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
+        RunMode.Auto, 0, RunMode.Auto, 0, RunMode.Auto, 0);
+
     /// <summary>
     /// Project a TaskSnapshot into a row suitable for binding to the DataGrid.
-    /// Pure: all values computed from snapshot and host name, no I/O, no side effects.
+    /// Pure: all values computed from snapshot, host name, and the host's cc_status
+    /// (needed for the fine-grained State text — policy-suspend reasons live there),
+    /// no I/O, no side effects.
     /// </summary>
-    public static TaskRowViewModel From(TaskSnapshot snap, Guid hostId, string host)
+    public static TaskRowViewModel From(TaskSnapshot snap, Guid hostId, string host, CcStatus? ccStatus = null)
     {
         var r = snap.Result;
+        var cc = ccStatus ?? NoAmbientSuspension;
 
         var stateKind = TaskStateMapping.From(r);
         var fraction = ComputeFraction(r);
@@ -77,7 +88,7 @@ public sealed record TaskRowViewModel(
             DeadlineText: deadlineText,
             Deadline: r.ReportDeadline,
             StateKind: stateKind,
-            StateText: TaskStateMapping.Text(stateKind, r),
+            StateText: TaskStatusPolicy.Text(r, cc),
             IsDeadlineAtRisk: snap.IsDeadlineAtRisk,
             IsSuspended: stateKind == TaskStateKind.Suspended,
             HostId: hostId,

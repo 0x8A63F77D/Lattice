@@ -315,7 +315,9 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
         // one implementation. rowsOf runs only for inScope && isRowSource hosts,
         // so Snapshot is non-null inside it.
         var slice = ViewSliceProjection.Compute(_store.Hosts, Scope,
-            h => h.Snapshot!.Tasks.Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName)).ToArray());
+            h => h.Snapshot!.Tasks
+                .Select(t => TaskRowViewModel.From(t, h.Config.Id, h.Config.DisplayName, h.Snapshot!.CcStatus))
+                .ToArray());
         var allRows = slice.AllRows;
 
         // No OrderBy here: display order is view-owned (issue #86) — the default

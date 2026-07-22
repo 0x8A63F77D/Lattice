@@ -20,7 +20,10 @@ public class TaskRowViewModelTests
         var hostId = Guid.NewGuid();
         var r = TestData.MakeResult() with
         {
-            ActiveTask = new ActiveTask(1, 0.42, 10, 90),
+            // Fine "Running" is driven by scheduler_state==SCHEDULED (as the real
+            // daemon sets it alongside EXECUTING); the coarse Running bucket keys
+            // off active_task_state==1.
+            ActiveTask = new ActiveTask(1, 0.42, 10, 90, SchedulerState.Scheduled),
             SuspendedViaGui = false,
         };
         var row = TaskRowViewModel.From(Snap(r), hostId, "office-pc");
@@ -72,16 +75,20 @@ public class TaskRowViewModelTests
         Assert.True(row.IsDeadlineAtRisk);
     }
 
+    // All three are the coarse "Waiting" bucket, but the State column now shows the
+    // fine-grained status (issue #154). Exhaustive per-outcome coverage lives in
+    // TaskStatusPolicyTests; this pins that the row wires the fine text through and
+    // that the coarse bucket is unchanged.
     public static TheoryData<ResultState, string> WaitingFamilyText => new()
     {
-        { ResultState.ComputeError, Strings.TaskStateError },
+        { ResultState.ComputeError, Strings.TaskStatusComputationError },
         { ResultState.Aborted, Strings.TaskStateAborted },
-        { ResultState.FilesDownloaded, Strings.TaskStateWaiting },
+        { ResultState.FilesDownloaded, Strings.TaskStatusReadyToStart },
     };
 
     [Theory]
     [MemberData(nameof(WaitingFamilyText))]
-    public void Waiting_family_text_reflects_underlying_state(ResultState state, string expected)
+    public void Waiting_bucket_shows_fine_status_text(ResultState state, string expected)
     {
         var hostId = Guid.NewGuid();
         var r = TestData.MakeResult() with { ActiveTask = null, State = state };
