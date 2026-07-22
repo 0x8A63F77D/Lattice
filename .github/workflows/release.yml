@@ -40,18 +40,28 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # Validate the version, and for a dry run pin it. A real tag PUSH derives the
-      # version from the pushed tag via MinVer (v1.2.3 -> 1.2.3), stamping both the
-      # assembly and every artifact filename — so nothing is set here. But we still
-      # FAIL FAST if the tag is not a version MinVer will honour (e.g. `vnext` or
-      # `v0.2`): otherwise MinVer would silently fall back to an older height-based
-      # version while the release job still publishes a Release named after that
-      # tag, so the artifacts wouldn't match the tag. A workflow_dispatch DRY RUN
-      # has no tag, so its input pins the version via MinVer's override env var —
-      # honoured identically by the assembly build and by packaging/version.sh, so
-      # filename == stamped version. The free-form values are read via env (never
-      # spliced into the script body) so a value like $(...) can't be evaluated —
-      # GitHub's script-injection guidance.
+      # Resolve the version, and fail fast if a tag push can't produce a Release
+      # whose artifacts match the tag.
+      #
+      # Tag PUSH: MinVer derives the version from the pushed tag and stamps both the
+      # assembly and every artifact filename. The one hazard is a `v*` tag that
+      # MinVer does NOT accept as a SemVer 2.0 version (e.g. `vnext`, `v0.2`,
+      # `v01.2.3`, `v1.2.3-01`): MinVer then silently falls back to an older
+      # height-based version, yet the release job still publishes a Release named
+      # after the tag — so its artifacts wouldn't match. Rather than approximate
+      # MinVer's SemVer rules with a regex (which keeps drifting from the real
+      # parser — two review rounds proved that), we ask MinVer itself for the
+      # version it will stamp and require it to EQUAL the tag. Exact by construction:
+      # if MinVer honoured the tag they match; if it ignored the tag the fallback
+      # won't, and we stop before publishing.
+      #
+      # DRY RUN (workflow_dispatch): no tag, nothing published. The input pins the
+      # version via MinVer's override env var, which BOTH the assembly build and
+      # packaging/version.sh read — one source, so filename == stamped version and a
+      # mismatch is structurally impossible here. A light sanity check just gives an
+      # early, readable error. The free-form input is read via env (never spliced
+      # into the script body) so a value like $(...) can't be evaluated — GitHub's
+      # script-injection guidance.
       - name: Resolve and validate version
         shell: bash
         env:
@@ -59,24 +69,21 @@ jobs:
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="$DISPATCH_VERSION"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          # Require a full SemVer core (major.minor.patch) + optional -prerelease,
-          # matching what MinVer accepts as a version tag — so a tag that passes
-          # here is exactly one MinVer will honour, closing the fall-back gap above.
-          # `+build` metadata is rejected on purpose: the release job's pre-release
-          # test keys off a bare '-'. The [[ =~ ]] whole-string match (^…$, no
-          # multiline) plus the >1-line guard also stop an embedded newline from
-          # injecting extra $GITHUB_ENV entries.
-          if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
-             || ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
-            exit 1
-          fi
-          # Only a dry run overrides MinVer; a tag push lets MinVer read the tag.
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
+               || ! [[ "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+              echo "::error::Invalid dry-run version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
+              exit 1
+            fi
+            # Honoured identically by the assembly build and packaging/version.sh.
             echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
+          else
+            EXPECTED="${GITHUB_REF_NAME#v}"
+            # The one authority on whether the tag is a usable version is MinVer.
+            ACTUAL="$(dotnet msbuild src/Lattice.App/Lattice.App.csproj -t:MinVer -getProperty:Version -restore -nologo)"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "::error::Tag '$GITHUB_REF_NAME' is not a valid SemVer 2.0 version tag: MinVer resolved '$ACTUAL', not '$EXPECTED', so it would fall back and the Release artifacts would not match the tag. Push a tag like v1.2.3 or v1.2.3-alpha.1."
+              exit 1
+            fi
           fi
 
       - name: Package (Windows)
