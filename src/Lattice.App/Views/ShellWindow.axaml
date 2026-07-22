@@ -204,8 +204,12 @@
                          Edit/Test/Remove items, whose commands live on the shell).
                          DI-3: the command's CanExecute gates each item on Connected.
                          Separators are MenuItem Header="-" — a raw <Separator/> silently
-                         no-ops in a MenuFlyout (avalonia-menu-context-facts). -->
-                    <MenuFlyout>
+                         no-ops in a MenuFlyout (avalonia-menu-context-facts).
+                         Placement RightEdgeAlignedTop: the rail sits at the left edge, so
+                         the menu opens from the host row's RIGHT into the content area
+                         (owner call) instead of over the pane. ContextFlyout shows via
+                         ShowAt(row) on right-click, so this placement anchors it to the row. -->
+                    <MenuFlyout Placement="RightEdgeAlignedTop">
                       <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
                                 CommandParameter="{Binding HostId}">
