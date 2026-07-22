@@ -13,6 +13,7 @@ public sealed partial class GroupHeaderRailItemViewModel : ObservableObject
     public GroupHeaderRailItemViewModel(RailTier tier, int count, bool expanded)
     {
         Tier = tier;
+        Count = count;
         _expanded = expanded;
         // Exhaustive over the RailTier DU (decisions §2). The `_ => throw` is a SANCTIONED
         // guard, NOT a silent catch-all: it mirrors RailStateProjection.From so that adding
@@ -29,6 +30,12 @@ public sealed partial class GroupHeaderRailItemViewModel : ObservableObject
     }
 
     public RailTier Tier { get; }
+
+    /// <summary>The host count this header summarizes — held so the rail reconciler can
+    /// reuse an unchanged header in place across a poll rebuild (value identity: same
+    /// tier + count + expanded ⇒ same header), rather than replacing its container.</summary>
+    public int Count { get; }
+
     public string Text { get; }
 
     /// <summary>Attention is pinned open (decisions spec §2); only the others show a chevron.</summary>

@@ -224,6 +224,113 @@ public class HostRailMenuTests
     }
 
     [AvaloniaFact]
+    public void Host_context_flyout_stays_open_when_a_store_refresh_rebuilds_the_rail()
+    {
+        // Regression for #153: a background poll refresh raises HostStore.Changed →
+        // ShellViewModel.ReconcileHosts → RebuildRail. If the rebuild tears down the
+        // row container hosting an OPEN context flyout, the flyout light-dismisses
+        // mid-interaction. Drive the exact rebuild path deterministically (a registry
+        // update funnels into the SAME RebuildRail as a poll snapshot) and assert the
+        // open flyout survives it.
+        var (window, shell, registry) = MakeShell();
+        window.Show();
+        var cfg = TestData.MakeHostConfig(name: "mini-01");
+        registry.AddHost(cfg);
+        Layout(window);
+
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(li => li.DataContext is HostRailItemViewModel);
+        var rowVm = Assert.IsType<HostRailItemViewModel>(hostRow.DataContext);
+        var root = hostRow.GetVisualDescendants().OfType<DockPanel>().First();
+        var flyout = Assert.IsType<MenuFlyout>(root.ContextFlyout);
+        flyout.ShowAt(root);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(flyout.IsOpen);   // sanity: it opened
+
+        // A background refresh lands and rebuilds the rail while the menu is open.
+        registry.UpdateHost(cfg);     // → HostStore.Changed → ReconcileHosts → RebuildRail
+        Dispatcher.UIThread.RunJobs();
+        Layout(window);
+
+        Assert.True(flyout.IsOpen);   // must NOT auto-dismiss on the rebuild
+        // The rebuild reused the SAME row VM (identity preserved), so the menu keeps
+        // binding to the LIVE host state — the fix does not freeze the menu's data
+        // (issue #153, verification-bar item: state changes still reflect on next open).
+        Assert.Same(rowVm, shell.RailEntries.OfType<HostRailItemViewModel>().Single());
+        flyout.Hide();
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public async Task Host_context_flyout_survives_a_real_poll_and_the_menu_reflects_the_new_perm_mode()
+    {
+        // The faithful #153 trigger: a STARTED monitor polls on its background thread and
+        // marshals each snapshot through the store, which rebuilds the rail. A
+        // QueueUiDispatcher delivers those posts on THIS thread at an explicit drain
+        // (HostGraphFixture discipline), so "a poll lands while the menu is open" is
+        // deterministic rather than racy. A frozen FakeTimeProvider means the rail never
+        // rebuilds except on the immediate first poll and our explicit RequestRefresh.
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json");
+        var registry = new HostRegistry(new LatticeConfig(5, []), path);
+        var fake = new FakeGuiRpcClient();
+        var manager = new HostMonitorManager(registry, () => fake, new FakeTimeProvider());
+        var dispatcher = new QueueUiDispatcher();
+        var store = new HostStore(registry, manager, dispatcher);
+        var uiPath = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}-ui.json");
+        var shell = new ShellViewModel(registry, store, new ManualUiClock(), new UiStateStore(uiPath), () => new FakeGuiRpcClient());
+        var window = new ShellWindow { DataContext = shell, Width = 1280, Height = 800 };
+        window.Show();
+        registry.AddHost(TestData.MakeHostConfig(name: "mini-01"));
+        manager.Start();
+
+        // Drain-to-end-state settle: deliver queued monitor posts here, pump the UI, then
+        // check the EXPECTED state. No wall-clock settle — the ceiling is a hang diagnostic.
+        async Task Settle(Func<bool> done, string reason)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            while (true)
+            {
+                dispatcher.Drain();
+                Dispatcher.UIThread.RunJobs();
+                dispatcher.Drain();
+                if (done()) return;
+                if (sw.Elapsed > TimeSpan.FromSeconds(30))
+                    throw new TimeoutException($"end state unreachable: {reason}");
+                await Task.Delay(10);
+            }
+        }
+
+        var row = shell.RailEntries.OfType<HostRailItemViewModel>().Single();
+        await Settle(() => row.IsConnected, "host never connected");
+        Layout(window);
+
+        var hostRow = window.HostList.GetVisualDescendants().OfType<ListBoxItem>()
+            .Single(li => li.DataContext is HostRailItemViewModel);
+        var root = hostRow.GetVisualDescendants().OfType<DockPanel>().First();
+        var flyout = Assert.IsType<MenuFlyout>(root.ContextFlyout);
+        flyout.ShowAt(root);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(flyout.IsOpen);
+        Assert.Equal(RunMode.Auto, row.CpuMode);   // baseline permanent CPU mode
+
+        // The daemon's PERMANENT CPU mode changes from another source; the next poll
+        // carries it. Nudge the monitor to poll now and deliver the snapshot.
+        fake.OnGetCcStatus = () => Task.FromResult(FakeGuiRpcClient.DefaultStatus with { TaskModePerm = RunMode.Never });
+        store.RequestRefresh();
+        await Settle(() => row.CpuMode == RunMode.Never, "poll never delivered the new perm mode");
+
+        Assert.True(flyout.IsOpen);                 // #153: the poll rebuild must not dismiss it
+        Assert.Equal(RunMode.Never, row.CpuMode);   // point 4: the menu's data is live, not frozen
+
+        flyout.Hide();
+        window.Close();
+        store.Dispose();
+        await manager.DisposeAsync();
+        File.Delete(path);
+        File.Delete(uiPath);
+    }
+
+    [AvaloniaFact]
     public void Group_header_rows_have_no_menu_flyout()
     {
         var (window, shell, registry) = MakeShell();
