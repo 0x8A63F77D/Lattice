@@ -124,7 +124,7 @@ public partial class App : Application
     /// </summary>
     private static void RestartApp(IClassicDesktopStyleApplicationLifetime desktop)
     {
-        var exe = Environment.ProcessPath;
+        var exe = RelaunchTarget(Environment.GetEnvironmentVariable("APPIMAGE"), Environment.ProcessPath);
         if (exe is null) return; // unknown host path (never on a normal apphost launch) — no-op
 
         ActivationGuard?.Dispose();
@@ -143,6 +143,17 @@ public partial class App : Application
 
         desktop.Shutdown();
     }
+
+    /// <summary>The executable a language-restart should relaunch. Prefers <c>$APPIMAGE</c> — the
+    /// AppImage runtime's path to the outer <c>.AppImage</c> — over <see cref="Environment.ProcessPath"/>,
+    /// which inside a running AppImage is the in-mount <c>/tmp/.mount_*/usr/bin/Lattice</c> apphost.
+    /// Relaunching that mounted path directly bypasses the AppImage runtime, so when this instance
+    /// exits the FUSE mount can be torn out from under the child mid-load; relaunching the
+    /// <c>.AppImage</c> gets a fresh mount (Codex P2, #149). Non-AppImage launches (Windows exe,
+    /// macOS/Linux-tarball apphost) have no <c>$APPIMAGE</c> and fall back to the process path.
+    /// Internal + pure for a transition-table test.</summary>
+    internal static string? RelaunchTarget(string? appImagePath, string? processPath)
+        => appImagePath ?? processPath;
 
     /// <summary>
     /// A broken config must not brick a monitoring app: quarantine the file and
