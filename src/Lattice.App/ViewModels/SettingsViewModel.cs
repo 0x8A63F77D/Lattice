@@ -1,3 +1,4 @@
+using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
@@ -26,6 +27,24 @@ public sealed partial class SettingsViewModel : ObservableObject
     public Func<IGuiRpcClient> ClientFactory => _clientFactory;
 
     public static IReadOnlyList<int> AllowedPollingIntervals => LatticeConfig.AllowedPollingIntervals;
+
+    /// <summary>The running build's version, shown in the About section so a tester can quote
+    /// exactly what they are running in a bug report. Sourced from the assembly's informational
+    /// version — the release scripts stamp it via <c>-p:Version</c> (<c>LATTICE_VERSION</c>);
+    /// an un-stamped local <c>dotnet run</c> shows the SDK default.</summary>
+    public static string AppVersion { get; } = FormatVersion(
+        typeof(SettingsViewModel).Assembly
+            .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
+
+    /// <summary>Trim the build-metadata suffix (<c>+&lt;commit&gt;</c>) that .NET appends to the
+    /// informational version by default, leaving the plain SemVer a tester can read back.</summary>
+    internal static string FormatVersion(string? informationalVersion)
+    {
+        if (string.IsNullOrWhiteSpace(informationalVersion))
+            return "unknown";
+        var plus = informationalVersion.IndexOf('+');
+        return (plus >= 0 ? informationalVersion[..plus] : informationalVersion).Trim();
+    }
 
     public static IReadOnlyList<AppTheme> AllThemes { get; } = [AppTheme.Light, AppTheme.Dark, AppTheme.System];
 

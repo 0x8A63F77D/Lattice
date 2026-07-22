@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Install & setup help
+    url: https://github.com/0x8A63F77D/Lattice#try-the-alpha
+    about: First-launch OS prompts (Gatekeeper / SmartScreen) and connecting Lattice to a BOINC host are covered in the README.

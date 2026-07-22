@@ -38,7 +38,8 @@ on each host; Lattice connects over TCP and renders the state it reads back.
 
 - [What makes it different](#what-makes-it-different)
 - [Status & roadmap](#status--roadmap)
-- [Download & install](#download--install)
+- [Try the alpha](#try-the-alpha)
+- [Known limitations](#known-limitations)
 - [Build from source](#build-from-source)
 - [Solution structure](#solution-structure)
 - [Tech stack](#tech-stack)
@@ -59,40 +60,59 @@ Lattice is under active development. Milestones track on GitHub:
 | Milestone | Scope | Status |
 | --------- | ----- | ------ |
 | **M1 — Protocol layer** | `Lattice.Boinc.GuiRpc`: connect, frame, auth, `get_state` / `get_cc_status` / `get_results` / `get_messages`, typed models. NuGet-publishable. | ✅ Done |
-| **[M2 — Read-only dashboard](https://github.com/0x8A63F77D/Lattice/milestone/1)** | NavigationView shell, per-host state machines, and the read-only views: Tasks (Wave 1), plus Projects / Transfers / Event log (Wave 2). | 🚧 In progress |
-| **[M3 — Control operations](https://github.com/0x8A63F77D/Lattice/milestone/2)** | Suspend/resume, task abort, project update/attach/detach, snooze, with confirmation UX. | ⏳ Planned |
+| **[M2 — Read-only dashboard](https://github.com/0x8A63F77D/Lattice/milestone/1)** | NavigationView shell, per-host state machines, and the read-only views: Tasks (Wave 1), plus Projects / Transfers / Event log (Wave 2). | ✅ Functionally complete |
+| **[M3 — Control operations](https://github.com/0x8A63F77D/Lattice/milestone/2)** | Suspend/resume, task abort, project update/attach/detach, run modes, snooze, with confirmation UX. | ✅ Functionally complete |
 | **[M4 — Differentiators](https://github.com/0x8A63F77D/Lattice/milestone/3)** | Charts, SSH tunnel manager, host groups, notification surface. | ⏳ Planned |
 
-The current release is **read-only monitoring** (M2); control operations such as
-suspend/resume and task abort arrive in M3.
+This alpha covers read-only monitoring (M2) **and** control operations (M3):
+suspend/resume, task abort, per-host run modes, snooze, and project
+attach/detach/update — all with confirmation prompts on the destructive ones. The
+M4 differentiators (charts, a built-in SSH tunnel manager, host groups, desktop
+notifications) are **not built yet** — see [Known limitations](#known-limitations).
 
-## Download & install
+## Try the alpha
 
-> **Pre-release beta.** The latest build is an early beta
-> ([`v0.1.0-beta.3`](https://github.com/0x8A63F77D/Lattice/releases)) — expect
-> rough edges. Grab it from the
+> **Public alpha.** This is an early build for external testers — expect rough
+> edges and missing polish. Please
+> [report anything that breaks or feels off](https://github.com/0x8A63F77D/Lattice/issues/new/choose).
+> Download the latest build from the
 > **[Releases page](https://github.com/0x8A63F77D/Lattice/releases)**.
 
 Every artifact is a **self-contained** build with the .NET runtime bundled in, so
-there is nothing to install first — download, unpack, and run.
+there is nothing to install first — download, unpack, and run. The version you are
+running is shown in **Settings → About** — quote it when you file a report.
 
 The builds are **unsigned** (no paid code-signing certificates yet), so each OS
-shows a one-time trust prompt on first launch:
+shows a one-time trust prompt on first launch. Here's how to get past each:
 
-**Windows** — `Lattice-win-x64.zip`
+### Windows — `Lattice-win-x64.zip`
+
 Portable: unzip and run `Lattice.exe`. SmartScreen shows *"Windows protected your
 PC"* — click **More info → Run anyway**.
 
-**macOS** — `Lattice-osx-arm64.dmg` (Apple Silicon) or `Lattice-osx-x64.dmg` (Intel)
-Open the `.dmg` and drag **Lattice** to Applications. The app is ad-hoc signed but
-not notarized, so Gatekeeper blocks a direct double-click. **Right-click the app →
-Open**, then confirm. Alternatively, clear the quarantine attribute:
-```sh
-xattr -dr com.apple.quarantine /Applications/Lattice.app
-```
+### macOS — `Lattice-osx-arm64.dmg` (Apple Silicon) or `Lattice-osx-x64.dmg` (Intel)
 
-**Linux** — `Lattice-x86_64.AppImage` (primary) or `Lattice-<version>-linux-x64.tar.gz`
-Mark the AppImage executable and run it — no root, no install:
+Open the `.dmg` and drag **Lattice** to Applications. The app is ad-hoc signed but
+not notarized, so Gatekeeper blocks a plain double-click on first launch. Get past
+it once, one of these ways:
+
+- **macOS 15 (Sequoia) and later:** double-click Lattice, dismiss the warning,
+  then open **System Settings → Privacy & Security**, scroll down and click
+  **Open Anyway** (Apple removed the old right-click shortcut on Sequoia).
+- **macOS 14 and earlier:** **right-click (Control-click) the app → Open**, then
+  confirm in the dialog.
+- **Any version, from Terminal:** clear the quarantine flag outright, then launch
+  normally:
+  ```sh
+  xattr -dr com.apple.quarantine /Applications/Lattice.app
+  ```
+
+Full notarization would remove the prompt entirely, but needs a paid Apple
+Developer account — deferred past the alpha.
+
+### Linux — `Lattice-x86_64.AppImage` (primary) or `Lattice-<version>-linux-x64.tar.gz`
+
+No signing gate. Mark the AppImage executable and run it — no root, no install:
 ```sh
 chmod +x Lattice-x86_64.AppImage
 ./Lattice-x86_64.AppImage
@@ -101,7 +121,75 @@ The AppImage needs FUSE on the host; on a FUSE-less system run it with
 `./Lattice-x86_64.AppImage --appimage-extract-and-run`. The tarball is an
 unpack-and-`./Lattice` alternative.
 
-Once running, [point Lattice at a BOINC daemon](#pointing-lattice-at-a-boinc-daemon).
+### Connect Lattice to a BOINC host
+
+Lattice reads state from a running BOINC **core client** (the `boinc` daemon) — it
+schedules and computes nothing itself, so you need BOINC installed and running on
+at least one machine.
+
+1. **Add a local host.** Click **＋** in the sidebar and point a host at
+   `localhost`, port **31416** (the BOINC default). The RPC password lives in
+   `gui_rpc_auth.cfg` in your BOINC data directory — paste it into the dialog.
+   Lattice authenticates over the standard challenge-response handshake and starts
+   polling.
+2. **Watch it populate.** The Tasks, Projects, Transfers, and Event log views fill
+   in as Lattice polls. Add more hosts to aggregate several machines in one window.
+3. **Control it.** Select a task and use **Suspend / Resume / Abort** in the Tasks
+   command bar; the **Computing** dropdown (and the host's right-click menu in the
+   sidebar) sets per-host run modes and snooze; right-click a project to update or
+   detach, or attach a new one. Destructive actions ask for confirmation first.
+
+### Remote hosts
+
+By default a BOINC daemon only accepts GUI RPC connections from `localhost`. To
+manage a host across the network, on **that host** either list the connecting
+machine's IP in `remote_hosts.cfg` or set `<allow_remote_gui_rpc>1</allow_remote_gui_rpc>`
+in `cc_config.xml`, and make sure its `gui_rpc_auth.cfg` password is set (you enter
+it in Lattice's add-host dialog).
+
+> ⚠️ **The GUI RPC protocol has no transport encryption.** The challenge-response
+> handshake protects only the password — the session itself (task names, project
+> URLs, control commands) travels in the clear. **Do not expose port 31416 to an
+> untrusted network.** For anything beyond a trusted LAN, tunnel it:
+>
+> - **SSH tunnel** — forward the remote port to your machine, then add a host
+>   pointing at `localhost:31416`:
+>   ```sh
+>   ssh -L 31416:localhost:31416 user@remote-host
+>   ```
+> - **Private overlay network** — a VPN or a mesh like
+>   [Tailscale](https://tailscale.com/) puts the host on a private address you can
+>   reach directly.
+>
+> A built-in SSH tunnel manager is planned for M4; until then, set up the tunnel
+> or overlay yourself.
+
+## Known limitations
+
+This is an alpha. Known gaps and unverified surfaces a tester is likely to hit:
+
+- **No charts or data visualization yet.** Credit history, task timelines, and
+  per-project throughput are the M4 differentiators — not built yet.
+- **No built-in SSH tunnel manager yet (M4).** Remote hosts over an untrusted
+  network need your own SSH tunnel or VPN/overlay (see [Remote hosts](#remote-hosts)).
+- **No host groups or desktop/tray notifications yet (M4).**
+- **Windows & Linux tray residency is not hardware-verified**
+  ([#116](https://github.com/0x8A63F77D/Lattice/issues/116)). "Close keeps Lattice
+  in the tray" and the tray icon's click behaviour were verified on macOS only; the
+  Windows and Linux legs are code-complete but untested on real hardware. On Linux,
+  close-to-tray is **off by default** and needs a StatusNotifierItem/AppIndicator
+  desktop, plus opt-in via **Settings → Tray**.
+- **Windows 11 Mica material is unverified on real hardware**
+  ([#11](https://github.com/0x8A63F77D/Lattice/issues/11)). Lattice requests Mica on
+  Windows 11 and falls back to a solid window colour everywhere else; the Mica path
+  itself has only been exercised on macOS/Linux fallbacks, so on Windows 11 it may
+  render differently or fall back.
+- **Unsigned builds** trip the first-launch OS trust prompts described under
+  [Try the alpha](#try-the-alpha).
+
+Found something not listed here? A
+[bug report or feedback note](https://github.com/0x8A63F77D/Lattice/issues/new/choose)
+is exactly what this alpha is for.
 
 ## Build from source
 
@@ -114,27 +202,9 @@ dotnet run --project src/Lattice.App   # launch the desktop app
 ```
 
 Packaging the per-platform release artifacts (portable zip, `.dmg`, AppImage,
-tarball) is documented in [`packaging/README.md`](packaging/README.md).
-
-### Pointing Lattice at a BOINC daemon
-
-Lattice talks to a running BOINC core client over the GUI RPC protocol:
-
-- Default endpoint is TCP port **31416**.
-- The RPC password is generated per host in `gui_rpc_auth.cfg`, found in the
-  BOINC data directory. Lattice authenticates with it via the standard
-  challenge-response handshake.
-
-### Remote hosts
-
-By default a BOINC daemon only accepts GUI RPC connections from `localhost`. To
-manage a host across the network you must either list the client IP in
-`remote_hosts.cfg` or set `allow_remote_gui_rpc` in `cc_config.xml`.
-
-> ⚠️ **The GUI RPC protocol has no transport encryption.** The challenge-response
-> handshake protects only the password, not the session. For cross-network
-> management, tunnel the connection over SSH. A built-in tunnel manager is
-> planned for M4.
+tarball) is documented in [`packaging/README.md`](packaging/README.md). Connecting
+Lattice to a BOINC daemon (local or remote) is covered under
+[Try the alpha](#connect-lattice-to-a-boinc-host).
 
 ## Solution structure
 

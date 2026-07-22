@@ -65,6 +65,15 @@
           <ToggleSwitch IsChecked="{Binding FullSpeedHiddenPolling, Mode=TwoWay}" />
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
+
+      <TextBlock Text="{x:Static loc:Strings.SettingsAboutSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="{x:Static loc:Strings.SettingsVersionLabel}" FontSize="12"
+                   Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+        <TextBlock Text="{x:Static vm:SettingsViewModel.AppVersion}" FontSize="12"
+                   Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+      </StackPanel>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

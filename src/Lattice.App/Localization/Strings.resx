@@ -359,6 +359,12 @@
     <value>Unreachable</value>
   </data>
   <!-- ===== Settings ===== -->
+  <data name="SettingsAboutSection" xml:space="preserve">
+    <value>About</value>
+  </data>
+  <data name="SettingsVersionLabel" xml:space="preserve">
+    <value>Version</value>
+  </data>
   <data name="SettingsHostsPointer" xml:space="preserve">
     <value>Hosts are managed from the sidebar — use “+” to add, right-click a host to edit or remove.</value>
   </data>
