@@ -655,9 +655,6 @@
   <data name="TransfersRetryNow" xml:space="preserve">
     <value>Retry now</value>
   </data>
-  <data name="TransfersSpeedFmt" xml:space="preserve">
-    <value>{0} MB/s</value>
-  </data>
   <data name="TransfersStatusActive" xml:space="preserve">
     <value>Transferring</value>
   </data>
