@@ -485,13 +485,51 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // rematerializes the rows and derives the highlight from ScopeMachine.highlightOf.
         // SelectedRailEntry is a pure highlight with no scope side effect (explicit scope rides the
         // click gesture → SelectHostScope / SelectAllHostsScope), so no _rebuilding guard is needed.
-        foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
-            g.ToggleRequested -= OnGroupToggleRequested;
-        RailEntries.Clear();
-        foreach (RailRow row in layout.Rows)
-            RailEntries.Add(MaterializeRow(row));
+        ReconcileRailEntries(layout.Rows);
 
         SelectedRailEntry = ResolveHighlight();
+    }
+
+    /// <summary>
+    /// Reconcile <see cref="RailEntries"/> to the target row sequence IN PLACE, preserving the
+    /// identity — and therefore the realized ListBox container — of every row unchanged from the
+    /// previous rail. A background poll refresh rebuilds the rail on EVERY tick (via
+    /// <see cref="ReconcileHosts"/>); the previous wholesale <c>Clear()</c>+<c>Add()</c> raised a
+    /// collection Reset that tore down all containers, so a host row's OPEN context flyout — anchored
+    /// to that row's DockPanel — light-dismissed the instant a poll landed (issue #153). Index-aligned
+    /// reuse means an UNCHANGED rail (the common poll case) raises no collection change at all, so an
+    /// open flyout survives the tick; only genuinely changed slots churn. Host-row VMs
+    /// (<see cref="_hostRowVms"/>) and the All-hosts sentinel already have stable identity; a group
+    /// header is reused when its tier/count/expanded are unchanged (see <see cref="MaterializeRow"/>).
+    /// </summary>
+    private void ReconcileRailEntries(IEnumerable<RailRow> rows)
+    {
+        var i = 0;
+        foreach (RailRow row in rows)
+        {
+            object? existing = i < RailEntries.Count ? RailEntries[i] : null;
+            object materialized = MaterializeRow(row, existing);
+            if (existing is null)
+                RailEntries.Add(materialized);
+            else if (!ReferenceEquals(existing, materialized))
+            {
+                DetachGroupHeader(existing);   // no-op unless a replaced header is being discarded
+                RailEntries[i] = materialized;
+            }
+            i++;
+        }
+        // Trailing rows the new layout dropped: unsubscribe any discarded header, then remove.
+        for (var j = RailEntries.Count - 1; j >= i; j--)
+        {
+            DetachGroupHeader(RailEntries[j]);
+            RailEntries.RemoveAt(j);
+        }
+    }
+
+    private void DetachGroupHeader(object entry)
+    {
+        if (entry is GroupHeaderRailItemViewModel g)
+            g.ToggleRequested -= OnGroupToggleRequested;
     }
 
     /// <summary>Highlight = the pure ScopeMachine.highlightOf(scope, soleHost, visibleHostIds) —
@@ -516,11 +554,19 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         return highlight.IsHighlightAllHostsRow ? _allHosts : null;   // else NoHighlight (hidden scoped host)
     }
 
-    private object MaterializeRow(RailRow row)
+    /// <summary>Materialize one target row, REUSING <paramref name="existing"/> (the entry already at
+    /// this slot) when it is value-identical, so the reconcile leaves an unchanged row's container —
+    /// and any open flyout on it — untouched. Host-row VMs and the All-hosts sentinel are singletons
+    /// (reference-stable already); a group header is rebuilt only when its tier/count/expanded differ,
+    /// in which case a fresh VM is created and subscribed (the old one is unsubscribed by the caller).</summary>
+    private object MaterializeRow(RailRow row, object? existing)
     {
         if (row.IsAllHostsRow) return _allHosts;
         if (row is RailRow.HostRow hr) return _hostRowVms[hr.Item];
         var gh = (RailRow.GroupHeaderRow)row;
+        if (existing is GroupHeaderRailItemViewModel g
+            && g.Tier.Equals(gh.tier) && g.Count == gh.count && g.Expanded == gh.expanded)
+            return existing;   // unchanged header: keep the instance (and its ToggleRequested wiring)
         var vm = new GroupHeaderRailItemViewModel(gh.tier, gh.count, gh.expanded);
         vm.ToggleRequested += OnGroupToggleRequested;
         return vm;
