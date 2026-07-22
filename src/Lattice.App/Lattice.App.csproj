@@ -18,6 +18,8 @@
          finalized design package (docs/design/icon), referenced in place rather
          than copied so the generated artifacts stay single-source. -->
     <ApplicationIcon>../../docs/design/icon/windows/lattice.ico</ApplicationIcon>
+    <!-- Release tags are v-prefixed (v0.2.0-alpha.1); MinVer strips the prefix. -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
   </PropertyGroup>
   <!-- Release-publish knobs (issue #56). Guarded on RuntimeIdentifier so a
        RID-less `dotnet build` / `dotnet test` (what CI runs) is completely
@@ -64,6 +66,17 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.0.1" />
     <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1" PrivateAssets="all" />
+    <!-- Derive the version from git so an un-stamped local build self-identifies in
+         Settings -> About instead of showing the SDK's 1.0.0 default (issue #151):
+         a tagged commit -> the tag (v0.2.0-alpha.1 -> 0.2.0-alpha.1); an untagged
+         commit -> the latest tag + commit height + short sha (0.2.0-alpha.1.5+abc1234).
+         Tag prefix is 'v'. This is also the SINGLE version source for release
+         packaging: the scripts derive the .app/.zip/.dmg/.AppImage filename + the
+         Info.plist stamp from the same MinVer computation (via minver-cli), so no
+         script passes -p:Version anymore. A dry run overrides both the assembly and
+         the CLI at once through the MinVerVersionOverride env var. Build-time only
+         (PrivateAssets=all): MinVer never flows to consumers of this app. -->
+    <PackageReference Include="MinVer" Version="7.0.0" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
     <!-- Embed the .ico as an Avalonia asset so Window.Icon can load it at

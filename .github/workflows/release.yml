@@ -28,43 +28,68 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # MinVer computes the version from git tags + commit height, so the
+          # packaging scripts (packaging/version.sh) and the assembly build need
+          # the FULL history — a shallow clone would misreport the version and,
+          # under -warnaserror elsewhere, warn. fetch-depth: 0 fetches all history
+          # and tags.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      # Version comes from the tag (v1.2.3 -> 1.2.3) or the dispatch input.
-      # The free-form dispatch input is passed via env (never spliced into the
-      # script body) so a value like $(...) can't be evaluated — GitHub's
-      # script-injection guidance. Both sources are then SemVer-validated.
-      - name: Resolve version
+      # Resolve the version, and fail fast if a tag push can't produce a Release
+      # whose artifacts match the tag.
+      #
+      # Tag PUSH: MinVer derives the version from the pushed tag and stamps both the
+      # assembly and every artifact filename. The one hazard is a `v*` tag that
+      # MinVer does NOT accept as a SemVer 2.0 version (e.g. `vnext`, `v0.2`,
+      # `v01.2.3`, `v1.2.3-01`): MinVer then silently falls back to an older
+      # height-based version, yet the release job still publishes a Release named
+      # after the tag — so its artifacts wouldn't match. Rather than approximate
+      # MinVer's SemVer rules with a regex (which keeps drifting from the real
+      # parser — two review rounds proved that), we ask MinVer itself for the
+      # version it will stamp and require it to EQUAL the tag. Exact by construction:
+      # if MinVer honoured the tag they match; if it ignored the tag the fallback
+      # won't, and we stop before publishing.
+      #
+      # DRY RUN (workflow_dispatch): no tag, nothing published. The input pins the
+      # version via MinVer's override env var, which BOTH the assembly build and
+      # packaging/version.sh read — one source, so filename == stamped version and a
+      # mismatch is structurally impossible here. A light sanity check just gives an
+      # early, readable error. The free-form input is read via env (never spliced
+      # into the script body) so a value like $(...) can't be evaluated — GitHub's
+      # script-injection guidance.
+      - name: Resolve and validate version
         shell: bash
         env:
           DISPATCH_VERSION: ${{ github.event.inputs.version }}
-          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
             VERSION="$DISPATCH_VERSION"
+            if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
+               || ! [[ "$VERSION" =~ ^[0-9A-Za-z][0-9A-Za-z.-]*$ ]]; then
+              echo "::error::Invalid dry-run version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
+              exit 1
+            fi
+            # Honoured identically by the assembly build and packaging/version.sh.
+            echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
+          else
+            EXPECTED="${GITHUB_REF_NAME#v}"
+            # The one authority on whether the tag is a usable version is MinVer.
+            ACTUAL="$(dotnet msbuild src/Lattice.App/Lattice.App.csproj -t:MinVer -getProperty:Version -restore -nologo)"
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "::error::Tag '$GITHUB_REF_NAME' is not a valid SemVer 2.0 version tag: MinVer resolved '$ACTUAL', not '$EXPECTED', so it would fall back and the Release artifacts would not match the tag. Push a tag like v1.2.3 or v1.2.3-alpha.1."
+              exit 1
+            fi
           fi
-          # Whole-string validation with bash [[ =~ ]] (NOT line-oriented grep):
-          # digits.dots + optional -prerelease, e.g. 1.2.3 or 0.0.0-dev. Because
-          # [[ =~ ]] anchors ^…$ to the whole string with no multiline mode, an
-          # embedded newline can't sneak extra lines through — which matters
-          # because the value is written to $GITHUB_ENV (each line = an env
-          # entry). Belt-and-suspenders: reject any value spanning >1 line too.
-          if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
-             || ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
-            echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
-            exit 1
-          fi
-          echo "LATTICE_VERSION=$VERSION" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./packaging/windows/build-zip.ps1 -Rid win-x64 -Version $env:LATTICE_VERSION
+        run: ./packaging/windows/build-zip.ps1 -Rid win-x64
 
       - name: Package (macOS)
         if: runner.os == 'macOS'

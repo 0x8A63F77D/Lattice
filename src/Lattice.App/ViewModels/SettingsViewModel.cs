@@ -38,8 +38,10 @@ public sealed partial class SettingsViewModel : ObservableObject
 
     /// <summary>The running build's version, shown in the About section so a tester can quote
     /// exactly what they are running in a bug report. Sourced from the assembly's informational
-    /// version — the release scripts stamp it via <c>-p:Version</c> (<c>LATTICE_VERSION</c>);
-    /// an un-stamped local <c>dotnet run</c> shows the SDK default.</summary>
+    /// version, which MinVer derives from git (issue #151): a tagged commit shows the tag
+    /// (e.g. <c>0.2.0-alpha.1</c>); an un-stamped local build shows the latest tag + commit
+    /// height (e.g. <c>0.2.0-alpha.1.5</c>), so it still self-identifies instead of the SDK
+    /// <c>1.0.0</c> default.</summary>
     public static string AppVersion { get; } = FormatVersion(
         typeof(SettingsViewModel).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);

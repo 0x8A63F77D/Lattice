@@ -7,11 +7,11 @@
 # icon assets and launcher are the #53 artifacts, referenced in place.
 #
 # Usage: packaging/linux/build-appimage.sh [runtime-id]   (default: linux-x64)
-#   LATTICE_VERSION stamps the assembly + AppImage filename (default 0.0.0).
+#   Version is derived from git by MinVer (packaging/version.sh); override a dry
+#   run / local one-off with MinVerVersionOverride=1.2.3.
 set -euo pipefail
 
 RID="${1:-linux-x64}"
-VERSION="${LATTICE_VERSION:-0.0.0}"
 
 # AppImage uses uname-style arch names, not .NET RIDs.
 case "$RID" in
@@ -26,15 +26,20 @@ HICOLOR_SRC="$REPO_ROOT/docs/design/icon/linux/hicolor"
 DESKTOP_SRC="$REPO_ROOT/packaging/linux/lattice.desktop"
 OUT_DIR="$REPO_ROOT/artifacts/linux/$RID"
 APPDIR="$OUT_DIR/Lattice.AppDir"
-OUTPUT="$OUT_DIR/Lattice-$ARCH.AppImage"
+
+# Version the AppImage filename (Lattice-<version>-<arch>.AppImage) from the same
+# MinVer source that stamps the assembly during publish below.
+source "$REPO_ROOT/packaging/version.sh"
+VERSION="$(lattice_resolve_version "$REPO_ROOT")"
+OUTPUT="$OUT_DIR/Lattice-$VERSION-$ARCH.AppImage"
 
 echo "==> Publishing Lattice ($RID, version $VERSION)"
 rm -rf "$APPDIR" "$OUTPUT"
 # Directory publish (not single-file): the AppDir IS the bundle, so a plain
 # apphost + assemblies under usr/bin is the natural layout — no redundant
-# self-extract to /tmp at every launch.
+# self-extract to /tmp at every launch. MinVer stamps the assembly version.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -p:Version="$VERSION" \
+    -p:PublishSingleFile=false \
     -o "$APPDIR/usr/bin"
 
 echo "==> Assembling AppDir"

@@ -12,14 +12,21 @@
 # right-click-Open caveat users will hit.
 #
 # Usage: packaging/macos/make-dmg.sh [runtime-id]   (default: osx-arm64)
-#   LATTICE_VERSION flows through to bundle.sh's CFBundle*Version stamping.
+#   The version is derived from git by MinVer (packaging/version.sh); it names the
+#   .dmg here and bundle.sh stamps the same value into the assembly + Info.plist.
 set -euo pipefail
 
 RID="${1:-osx-arm64}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT_DIR="$REPO_ROOT/artifacts/macos/$RID"
 APP="$OUT_DIR/Lattice.app"
-DMG="$OUT_DIR/Lattice-$RID.dmg"
+
+# Version the .dmg filename (issue #151 rider) the same way as the Linux tarball:
+# Lattice-<version>-<rid>.dmg. Single source is MinVer (packaging/version.sh);
+# bundle.sh resolves it identically for the assembly + Info.plist.
+source "$REPO_ROOT/packaging/version.sh"
+VERSION="$(lattice_resolve_version "$REPO_ROOT")"
+DMG="$OUT_DIR/Lattice-$VERSION-$RID.dmg"
 
 # Evict a stale zipped-.app from a prior build: this script no longer produces
 # one, but the release workflow's Stage step globs *.zip out of artifacts/, so a

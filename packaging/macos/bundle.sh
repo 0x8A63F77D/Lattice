@@ -18,19 +18,22 @@ PLIST="$REPO_ROOT/packaging/macos/Info.plist"
 OUT_DIR="$REPO_ROOT/artifacts/macos/$RID"
 APP="$OUT_DIR/Lattice.app"
 
-# One version source for both the assembly and the Info.plist. Override with
-# LATTICE_VERSION=1.2.3 (the release workflow passes it through).
-VERSION="${LATTICE_VERSION:-0.0.0}"
+# One version source for the assembly and the Info.plist: MinVer, derived from
+# git (see packaging/version.sh). The publish below stamps the managed assembly
+# via MinVer directly — no -p:Version — and this query returns the identical
+# string for the Info.plist, so the two can't diverge. Pin a specific value for a
+# dry run / local one-off with MinVerVersionOverride=1.2.3.
+source "$REPO_ROOT/packaging/version.sh"
+VERSION="$(lattice_resolve_version "$REPO_ROOT")"
 
 echo "==> Publishing Lattice ($RID, version $VERSION)"
 PUBLISH_DIR="$OUT_DIR/publish"
 rm -rf "$APP" "$PUBLISH_DIR"
-# -p:Version stamps the managed assembly's version too, so the app's own
-# Settings -> About surface (which reads AssemblyInformationalVersion) shows the
-# real build number and not the 1.0.0 SDK default — matching the Windows/Linux
-# scripts, which already pass it.
+# MinVer stamps the managed assembly's version, so the app's own Settings -> About
+# surface (which reads AssemblyInformationalVersion) shows the real build number
+# and not the 1.0.0 SDK default.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -p:Version="$VERSION" -o "$PUBLISH_DIR"
+    -p:PublishSingleFile=false -o "$PUBLISH_DIR"
 
 echo "==> Assembling $APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

@@ -172,6 +172,9 @@ public class SettingsViewModelTests : IAsyncLifetime
     [Theory]
     [InlineData("0.2.0-alpha.1", "0.2.0-alpha.1")]           // clean SemVer passes through
     [InlineData("0.2.0-alpha.1+abc1234", "0.2.0-alpha.1")]   // build metadata (+commit) is trimmed
+    // MinVer's untagged/dev shape (latest tag + commit height + short sha, issue #151):
+    // the height stays (it's part of the pre-release identifiers), only +sha is trimmed.
+    [InlineData("0.2.0-alpha.1.5+abc1234def", "0.2.0-alpha.1.5")]
     [InlineData("1.0.0+deadbeef", "1.0.0")]
     [InlineData("  1.2.3  ", "1.2.3")]                        // whitespace is trimmed
     [InlineData(null, "unknown")]
