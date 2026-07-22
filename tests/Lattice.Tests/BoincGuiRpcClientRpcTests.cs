@@ -97,6 +97,44 @@ public class BoincGuiRpcClientRpcTests
     }
 
     [Fact]
+    public async Task GetStatistics_sends_request_and_returns_typed_history()
+    {
+        var stream = ScriptedStream.FromReplies(Fixture("get_statistics.xml"));
+        await using var client = ClientWith(stream);
+
+        IReadOnlyList<ProjectStatistics> stats = await client.GetStatisticsAsync();
+
+        Assert.Equal(2, stats.Count);
+        Assert.Equal("https://einsteinathome.org/", stats[0].MasterUrl);
+        Assert.Equal(3, stats[0].Daily.Count);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(1750982400), stats[0].Daily[0].Day);
+        Assert.Equal(1200.25, stats[0].Daily[0].HostExpavgCredit);
+        string sent = Encoding.ASCII.GetString(stream.Written.ToArray());
+        Assert.Contains("<get_statistics/>", sent);
+    }
+
+    [Fact]
+    public async Task GetStatistics_sanitizes_noncompliant_reply()
+    {
+        // BOINC's hand-rolled writer does not escape master_url, so a URL with a query
+        // string reaches us with a bare '&'. The client's sanitizer must repair it into
+        // valid XML rather than throwing on the strict parser.
+        const string raw =
+            "<boinc_gui_rpc_reply>\n<statistics>\n<project_statistics>\n" +
+            "<master_url>https://example.org/boinc/?a=1&b=2</master_url>\n" +
+            "<daily_statistics>\n<day>1750982400.000000</day>\n" +
+            "<user_total_credit>10.000000</user_total_credit>\n" +
+            "</daily_statistics>\n</project_statistics>\n</statistics>\n</boinc_gui_rpc_reply>";
+        var stream = ScriptedStream.FromReplies(raw);
+        await using var client = ClientWith(stream);
+
+        ProjectStatistics project = Assert.Single(await client.GetStatisticsAsync());
+
+        Assert.Equal("https://example.org/boinc/?a=1&b=2", project.MasterUrl);
+        Assert.Equal(10.0, Assert.Single(project.Daily).UserTotalCredit);
+    }
+
+    [Fact]
     public async Task Unauthorized_reply_on_any_rpc_throws()
     {
         var stream = ScriptedStream.FromReplies("<boinc_gui_rpc_reply>\n<unauthorized/>\n</boinc_gui_rpc_reply>");

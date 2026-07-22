@@ -38,6 +38,14 @@ public interface IGuiRpcClient : IAsyncDisposable
     /// </summary>
     Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns the per-project daily credit history the daemon keeps on disk
+    /// (get_statistics). The data changes at most once per day, so fetch on connect and
+    /// refresh at a low cadence — not per poll tick. Like the other read RPCs this is an
+    /// unauthenticated localhost op; a remote daemon may still answer &lt;unauthorized/&gt;.
+    /// </summary>
+    Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default);
+
     /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
     Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default);
 
