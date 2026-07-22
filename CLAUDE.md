@@ -2,7 +2,7 @@
 
 A multi-host BOINC monitoring dashboard. Cross-platform desktop app built with Avalonia and Fluent Design.
 
-**Positioning:** open-source alternative to BOINCTasks (closed-source, Windows-centric multi-host manager). NOT another single-machine BOINC Manager replacement — that niche is filled (official Manager, Fresco; each can point at a single remote host over GUI RPC but holds only one connection at a time, so neither aggregates across hosts). Differentiators: multi-host aggregation, data visualization (credit history, task timelines, per-project throughput), modern Fluent UI.
+**Positioning:** a modern, native, cross-platform multi-host BOINC manager. The established tool in this niche is BOINCTasks (efmer — GPL, actively maintained): a mature Windows-native classic plus a cross-platform Electron rewrite (boinctasks-js) not yet at the classic's feature parity. Lattice's differentiators are a modern native Fluent UI, first-class data visualization (credit history, task timelines, per-project throughput), and multi-host aggregation in a native desktop app rather than an Electron port. NOT another single-machine BOINC Manager replacement — that niche is filled (official Manager, Fresco; each can point at a single remote host over GUI RPC but holds only one connection at a time, so neither aggregates across hosts).
 
 Lattice is a GUI RPC *client*. It does not schedule, download, or compute anything. All real work is done by the official BOINC core client (`boinc` daemon) running on each host; Lattice connects to it over TCP and renders state.
 
@@ -28,7 +28,7 @@ Boundary discipline:
 - Avalonia 12.x
 - FluentAvaloniaUI 3.x (NuGet `FluentAvaloniaUI`, requires Avalonia >= 12) — Fluent 2 theming + WinUI-ported controls (NavigationView, TabView, InfoBar, InfoBadge, NumberBox, TaskDialog)
 - MVVM via CommunityToolkit.Mvvm (source-generated `[ObservableProperty]`, `[RelayCommand]`)
-- Charting: evaluate LiveCharts2 vs ScottPlot vs OxyPlot when M4 starts; do not commit early
+- Charting: **LiveCharts2** (`LiveChartsCore.SkiaSharpView.Avalonia`, `2.1.0-dev` line) — adopted for M4 (ruling on #148). Two-layer verification gate: chart content pixel-gated via `InMemorySkiaSharpChart` PNG snapshots (machine gate); the Avalonia-hosted layer masked in visual tests + owner eyeball. Flip-back trigger to ScottPlot recorded on #148.
 - Testing: xUnit. Protocol layer must be testable against canned XML fixtures without a live daemon.
 
 ## BOINC GUI RPC protocol — established facts
@@ -65,7 +65,7 @@ Remote hosts:
 
 ## Avalonia coding rules
 
-- **Avalonia is not WPF.** This is the #1 hallucination risk. Always consult the Avalonia Build MCP server (`avalonia-docs`) for API usage before writing XAML or framework-touching C#. When in doubt between a WPF-ism and an Avalonia-ism, look it up.
+- **Avalonia is not WPF.** This is the #1 hallucination risk. Consult the Avalonia Build MCP server (`avalonia-docs`) for API usage before writing XAML or framework-touching C#.
 - Known dialect traps: `StyledProperty<T>` / `DirectProperty` (not `DependencyProperty`); Avalonia selectors in `<Style Selector="...">` (not WPF triggers); `.axaml` files; `x:DataType` + `{CompiledBinding}` preferred everywhere — enable compiled bindings project-wide and treat binding errors as build failures.
 - Use FluentAvalonia controls (`FluentAvalonia.UI.Controls`) over hand-rolled equivalents: NavigationView for the shell, TabView, InfoBar/InfoBadge for status surfaces.
 - Window materials: request Mica via `TransparencyLevelHint` on Windows 11, with solid-color fallback on macOS/Linux/Win10. Never let a feature depend on the material being present.
