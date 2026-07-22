@@ -9,6 +9,12 @@ public enum RailGroupingMode { Auto, Flat, Grouped }
 /// <summary>Persisted app theme (design 2d/1f). System follows the OS.</summary>
 public enum AppTheme { Light, Dark, System }
 
+/// <summary>Persisted UI language (#147). System follows the OS UI language;
+/// English/Chinese force that language on next launch. Applied at startup only
+/// (x:Static resource lookups are read once at load), so a change takes effect
+/// on restart. English and Chinese are shown by their endonyms in every locale.</summary>
+public enum AppLanguage { System, English, Chinese }
+
 /// <summary>
 /// Persists per-user UI preferences (density, column visibility/widths) in JSON.
 /// Defaults and disposal on error: safe fallback for UI state (unlike the host registry).
@@ -24,8 +30,9 @@ public sealed class UiStateStore
         // "railGrouping":999) must fail deserialization rather than materialize an
         // out-of-range enum value. Load's catch below then falls back to defaults.
         // Out-of-range values would otherwise reach the exhaustive switches in
-        // ShellViewModel.MapOverride / ThemePreference.Apply / ThemeLabelConverter
-        // and throw SwitchExpressionException at startup (Codex P2).
+        // ShellViewModel.MapOverride / ThemePreference.Apply / ThemeLabelConverter /
+        // LanguageCulture.Resolve / LanguageLabelConverter and throw
+        // SwitchExpressionException at startup (Codex P2).
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false) },
     };
 
@@ -136,7 +143,10 @@ public sealed record UiState(
     // TrayResidencyDefaults — never a hard-coded bool here, so older files load
     // unchanged and get the right per-platform behavior with no migration.
     // Appended LAST with a default so positional deserialization stays back-compat.
-    bool? ExitOnClose = null)
+    bool? ExitOnClose = null,
+    // UI language (#147). Appended LAST with a default: a pre-#147 ui-state.json
+    // (JSON-missing "language") loads as System — follow the OS — with no migration.
+    AppLanguage Language = AppLanguage.System)
 {
     /// <summary>Factory default: standard density, all columns visible, auto widths.
     /// Fresh instance per call — the dictionaries are mutable, so a shared

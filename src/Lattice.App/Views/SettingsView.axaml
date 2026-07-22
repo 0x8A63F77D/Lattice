@@ -49,6 +49,31 @@
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
 
+      <TextBlock Text="{x:Static loc:Strings.SettingsLanguageSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="LanguageExpander"
+                             Header="{x:Static loc:Strings.SettingsLanguageHeader}"
+                             Description="{x:Static loc:Strings.SettingsLanguageDescription}">
+        <ui:FASettingsExpander.Footer>
+          <ComboBox ItemsSource="{x:Static vm:SettingsViewModel.AllLanguages}"
+                    SelectedItem="{Binding SelectedLanguage, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="infra:AppLanguage">
+                <TextBlock Text="{Binding Converter={x:Static v:LanguageLabelConverter.Instance}}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+      <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center"
+                  IsVisible="{Binding ShowLanguageRestartHint}">
+        <TextBlock Text="{x:Static loc:Strings.SettingsLanguageRestartHint}" FontSize="12" TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+        <Button Content="{x:Static loc:Strings.SettingsLanguageRestartButton}"
+                Command="{Binding RestartNowCommand}" />
+      </StackPanel>
+
       <TextBlock Text="{x:Static loc:Strings.SettingsTraySection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       <ui:FASettingsExpander x:Name="CloseToTrayExpander"
@@ -68,12 +93,15 @@
 
       <TextBlock Text="{x:Static loc:Strings.SettingsAboutSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-      <StackPanel Orientation="Horizontal" Spacing="6">
-        <TextBlock Text="{x:Static loc:Strings.SettingsVersionLabel}" FontSize="12"
-                   Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
-        <TextBlock Text="{x:Static vm:SettingsViewModel.AppVersion}" FontSize="12"
-                   Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
-      </StackPanel>
+      <!-- Label + version share ONE TextBlock (inline Runs) so they sit on a single text
+           baseline. Two side-by-side TextBlocks in a horizontal StackPanel have different
+           line-box heights when the label is CJK ("版本") and the value is Latin ("1.0.0"),
+           which rendered the version visibly low under zh-CN (#147 owner report). -->
+      <TextBlock FontSize="12">
+        <Run Text="{x:Static loc:Strings.SettingsVersionLabel}" Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+        <Run Text=" " />
+        <Run Text="{x:Static vm:SettingsViewModel.AppVersion}" Foreground="{DynamicResource LatticeTextPrimaryBrush}" />
+      </TextBlock>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

@@ -73,6 +73,33 @@ public sealed class ThemeLabelConverter : IValueConverter
         throw new NotSupportedException();
 }
 
+/// <summary>Settings language-picker label: maps <see cref="AppLanguage"/> to its display
+/// label. System is localized ("System default"); English and Chinese show their endonyms
+/// ("English" / "中文"), which are identical in every locale so the picker reads the same
+/// regardless of the current UI language (#147). Mirrors <see cref="ThemeLabelConverter"/>.</summary>
+public sealed class LanguageLabelConverter : IValueConverter
+{
+    public static readonly LanguageLabelConverter Instance = new();
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        value is AppLanguage language ? Label(language) : string.Empty;
+
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED AppLanguage left
+    // unhandled) must stay a build error so this label mapping is revisited. CS8524 is the
+    // residual "unnamed enum value" case (an out-of-range cast, unreachable for a well-formed
+    // value) and is suppressed here. Same pattern as ThemeLabelConverter.
+    private static string Label(AppLanguage language) => language switch
+    {
+        AppLanguage.System => Strings.LanguageSystemDefault,
+        AppLanguage.English => Strings.LanguageEnglish,
+        AppLanguage.Chinese => Strings.LanguageChinese,
+    };
+#pragma warning restore CS8524
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
+        throw new NotSupportedException();
+}
+
 /// <summary>
 /// Named funcs consumed via <c>{x:Static v:TaskGridConverters.Member}</c> in XAML.
 /// Despite the file/class name (historically Tasks-DataGrid-only), this file also holds a
