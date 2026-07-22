@@ -33,6 +33,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     private readonly IUiClock _clock;
     private readonly UiStateStore _uiState;
     private readonly ThemePreference _theme;
+    private readonly HostControlService _control;
     private readonly AllHostsRailItemViewModel _allHosts = new();
     private readonly Dictionary<Guid, HostRailItemViewModel> _hostRowVms = [];
     private double _railViewportHeight;
@@ -72,13 +73,13 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         // listens to, so an op success nudges exactly the monitors whose
         // snapshots feed the grids. Constructed here like the other VM-layer
         // collaborators (DensityPreference, ThemePreference).
-        var control = new HostControlService(registry, store.Manager, clientFactory);
+        _control = new HostControlService(registry, store.Manager, clientFactory);
         // The attach flow (M3 PR I) rides the SAME control lane so a lookup→attach
         // holds the host's lane for its whole duration; TimeProvider.System drives
         // its real 1 s poll cadence (tests use the runner's own fake-time seam).
-        var attachRunner = new AttachFlowRunner(control, store.Manager, TimeProvider.System);
-        Tasks = new TasksViewModel(store, clock, uiState, density, control);
-        Projects = new ProjectsViewModel(store, clock, control, attachRunner.RunAsync, AvaloniaUiDispatcher.Instance);
+        var attachRunner = new AttachFlowRunner(_control, store.Manager, TimeProvider.System);
+        Tasks = new TasksViewModel(store, clock, uiState, density, _control);
+        Projects = new ProjectsViewModel(store, clock, _control, attachRunner.RunAsync, AvaloniaUiDispatcher.Instance);
         Transfers = new TransfersViewModel(store, clock, density);
         EventLog = new EventLogViewModel(store);
         Views =
@@ -135,6 +136,16 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     [ObservableProperty] private object _currentPage;
     [ObservableProperty] private ScopeSelection _scope = ScopeSelection.AllHosts;
     [ObservableProperty] private bool _hasHosts;
+
+    /// <summary>
+    /// The run-mode surface (M3 PR H, DI-4): the rail row VM of the single scoped
+    /// host, or null in All-hosts scope. The Tasks command bar's "Computing"
+    /// dropdown binds its items to this VM's <see cref="HostRailItemViewModel.SetRunModeCommand"/>;
+    /// <see cref="HasScopedHost"/> gates the dropdown's visibility — absent in
+    /// All-hosts scope (no fleet-wide run modes in M3, DI-4).
+    /// </summary>
+    [ObservableProperty] private HostRailItemViewModel? _scopedHostRow;
+    [ObservableProperty] private bool _hasScopedHost;
 
     private object? _selectedRailEntry;
 
@@ -240,6 +251,22 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Projects.Scope = value;
         Transfers.Scope = value;
         EventLog.Scope = value;
+        RefreshScopedHost();
+    }
+
+    /// <summary>Re-derives the scoped-host run-mode surface (DI-4). Called on scope
+    /// change and after a host reconcile (the scoped row VM may have just been
+    /// created / removed). The Tasks command-bar dropdown reaches the surface through
+    /// <see cref="TasksViewModel.ScopedHost"/>, pushed here alongside the shell's own
+    /// <see cref="ScopedHostRow"/> so both stay in lockstep.</summary>
+    private void RefreshScopedHost()
+    {
+        HostRailItemViewModel? row = Scope.IsAllHosts
+            ? null
+            : (_hostRowVms.TryGetValue(Scope.HostId!.Value, out HostRailItemViewModel? vm) ? vm : null);
+        ScopedHostRow = row;
+        HasScopedHost = row is not null;
+        Tasks.ScopedHost = row;
     }
 
     private void OnTasksRowsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
@@ -313,7 +340,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
             HostEntry entry = _store.Hosts[i];
             seen.Add(entry.Config.Id);
             if (!_hostRowVms.TryGetValue(entry.Config.Id, out HostRailItemViewModel? vm))
-                _hostRowVms[entry.Config.Id] = new HostRailItemViewModel(entry, _clock);
+                _hostRowVms[entry.Config.Id] = new HostRailItemViewModel(entry, _clock, _control);
             else
                 vm.Refresh();
         }
@@ -330,6 +357,9 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         _allHosts.Update(connected, _store.Hosts.Count);
         HasHosts = _store.Hosts.Count > 0;
         RebuildRail();
+        // The scoped host's row VM may have just been created (first reconcile after
+        // scope restore) or removed; re-derive the run-mode surface off the fresh map.
+        RefreshScopedHost();
     }
 
     /// <summary>The view feeds the measured footer height; the core re-evaluates the

@@ -22,6 +22,9 @@ public class ThemeResourceTests
     [InlineData("LatticeSuccessBrush")]
     [InlineData("LatticeWarningFgBrush")]
     [InlineData("LatticeWarningTintBrush")]
+    // Restored with the M3 PR H snooze-pill border (see Tokens.axaml note); machine guard
+    // that the reintroduced token stays present and theme-distinct.
+    [InlineData("LatticeWarningInfoBarBorderBrush")]
     [InlineData("LatticeDangerFgBrush")]
     [InlineData("LatticeDangerTintBrush")]
     [InlineData("LatticeNeutralFgBrush")]

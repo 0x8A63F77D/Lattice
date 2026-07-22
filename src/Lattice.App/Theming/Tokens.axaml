@@ -24,6 +24,11 @@
       <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#107C10" />
       <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#BC4B09" />
       <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#FFF9F5" />
+      <!-- Restored for the M3 PR H snooze pill's border (design contract S1). #140 removed
+           this as dead once its old consumer went; it is a live consumer again here, so it
+           is reintroduced with the pill border in the same commit. (LatticeWarningInfoBarBgBrush
+           stays removed — the pill uses LatticeWarningTintBrush for its fill.) -->
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#FDCFB4" />
       <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#C50F1F" />
       <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#FDF3F4" />
       <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#616161" />
@@ -52,6 +57,7 @@
       <SolidColorBrush x:Key="LatticeSuccessBrush" Color="#9FD89F" />
       <SolidColorBrush x:Key="LatticeWarningFgBrush" Color="#FAA06B" />
       <SolidColorBrush x:Key="LatticeWarningTintBrush" Color="#3A2A1E" />
+      <SolidColorBrush x:Key="LatticeWarningInfoBarBorderBrush" Color="#714224" />
       <SolidColorBrush x:Key="LatticeDangerFgBrush" Color="#E37D80" />
       <SolidColorBrush x:Key="LatticeDangerTintBrush" Color="#3A1E20" />
       <SolidColorBrush x:Key="LatticeNeutralFgBrush" Color="#ADADAD" />

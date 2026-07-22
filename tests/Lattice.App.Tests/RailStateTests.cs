@@ -2,8 +2,10 @@ using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
+using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Lattice.Tests;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -40,7 +42,7 @@ public class RailStateTests
     {
         var entry = MakeEntry(Status(HostConnectionState.Connected));
         entry.Snapshot = SnapshotWithTasks(entry.Config.Id, taskCount: 3);
-        var vm = new HostRailItemViewModel(entry, new ManualUiClock());
+        var vm = Rail(entry, new ManualUiClock());
         vm.Refresh();
         Assert.Equal(string.Format(Strings.RailConnectedFmt, 3), vm.StateText);
     }
@@ -51,7 +53,7 @@ public class RailStateTests
         var clock = new ManualUiClock();
         var entry = MakeEntry(Status(
             HostConnectionState.Retrying, attempt: 3, nextAt: clock.Now.AddSeconds(12), error: "boom"));
-        var vm = new HostRailItemViewModel(entry, clock);
+        var vm = Rail(entry, clock);
         vm.Refresh();
         Assert.Equal(string.Format(Strings.RailRetryingFmt, 12, 3), vm.StateText);
         Assert.Equal($"office-pc — {string.Format(Strings.RailRetryingFmt, 12, 3)}\nboom", vm.Tooltip);
@@ -69,7 +71,7 @@ public class RailStateTests
         var clock = new ManualUiClock();
         var entry = MakeEntry(Status(
             HostConnectionState.Retrying, attempt: 3, nextAt: clock.Now.AddSeconds(12), error: "boom"));
-        var vm = new HostRailItemViewModel(entry, clock);
+        var vm = Rail(entry, clock);
         vm.Refresh();
 
         vm.TestResultText = "Connected · BOINC 8.2.0";
@@ -92,21 +94,21 @@ public class RailStateTests
     {
         var connected = MakeEntry(Status(HostConnectionState.Connected));
         connected.Snapshot = SnapshotWithTasks(connected.Config.Id, taskCount: 3);
-        var connectedVm = new HostRailItemViewModel(connected, new ManualUiClock());
+        var connectedVm = Rail(connected, new ManualUiClock());
         connectedVm.Refresh();
         Assert.Equal($"office-pc — {string.Format(Strings.RailConnectedFmt, 3)}", connectedVm.Tooltip);
 
-        var connecting = new HostRailItemViewModel(
+        var connecting = Rail(
             MakeEntry(Status(HostConnectionState.Connecting)), new ManualUiClock());
         connecting.Refresh();
         Assert.Equal($"office-pc — {Strings.RailConnecting}", connecting.Tooltip);
 
-        var authFailed = new HostRailItemViewModel(
+        var authFailed = Rail(
             MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         authFailed.Refresh();
         Assert.Equal($"office-pc — {Strings.RailAuthFailed}", authFailed.Tooltip);
 
-        var unreachable = new HostRailItemViewModel(
+        var unreachable = Rail(
             MakeEntry(Status(HostConnectionState.Retrying, attempt: 5, error: "no route")), new ManualUiClock());
         unreachable.Refresh();
         Assert.Equal($"office-pc — {Strings.RailUnreachable}\nno route", unreachable.Tooltip);
@@ -115,10 +117,24 @@ public class RailStateTests
     [Fact]
     public void AuthFailed_item_says_wrong_password()
     {
-        var vm = new HostRailItemViewModel(MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
+        var vm = Rail(MakeEntry(Status(HostConnectionState.AuthFailed, 1)), new ManualUiClock());
         vm.Refresh();
         Assert.Equal(RailState.AuthFailed, vm.State);
         Assert.Equal(Strings.RailAuthFailed, vm.StateText);
+    }
+
+    // These facts never drive a run-mode op, so the control service is an inert
+    // collaborator — an unstarted manager over a throwaway registry (no background
+    // loops, nothing to dispose). Only the ctor needs a non-null instance.
+    private static HostRailItemViewModel Rail(HostEntry entry, IUiClock clock) =>
+        new(entry, clock, StubControl());
+
+    private static HostControlService StubControl()
+    {
+        var registry = new HostRegistry(
+            new LatticeConfig(5, []), Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}.json"));
+        var manager = new HostMonitorManager(registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
+        return new HostControlService(registry, manager, () => new FakeGuiRpcClient());
     }
 
     private static HostEntry MakeEntry(ConnectionStatus status) =>

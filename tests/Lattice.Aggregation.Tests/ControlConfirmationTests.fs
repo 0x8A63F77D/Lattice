@@ -85,15 +85,22 @@ let ``CancelTemporary maps to a permanent restore on its lane`` () =
         Assert.Equal((lane, RunModePolicy.WireRestore, TimeSpan.Zero),
                      RunModePolicy.toWireArgs (CancelTemporary lane))
 
-// --- RunModePolicy.temporaryUntil: the "Snoozed until" derivation (design 1.4) ---
+// --- RunModePolicy.snoozeUntil: the "Snoozed until" derivation (design 1.4) ---
 
 [<Fact>]
-let ``temporaryUntil is None at zero and negative delays`` () =
+let ``snoozeUntil is None at zero and negative delays`` () =
     let now = DateTimeOffset(2026, 7, 19, 12, 0, 0, TimeSpan.Zero)
-    Assert.Equal(None, RunModePolicy.temporaryUntil now 0.0)
-    Assert.Equal(None, RunModePolicy.temporaryUntil now -1.0)
+    Assert.Equal(None, RunModePolicy.snoozeUntil now true 0.0)
+    Assert.Equal(None, RunModePolicy.snoozeUntil now true -1.0)
 
 [<Fact>]
-let ``temporaryUntil adds a positive delay to now`` () =
+let ``snoozeUntil adds a positive delay to now when the CPU mode is Never`` () =
     let now = DateTimeOffset(2026, 7, 19, 12, 0, 0, TimeSpan.Zero)
-    Assert.Equal(Some(now.AddSeconds 900.0), RunModePolicy.temporaryUntil now 900.0)
+    Assert.Equal(Some(now.AddSeconds 900.0), RunModePolicy.snoozeUntil now true 900.0)
+
+[<Fact>]
+let ``snoozeUntil is None for a positive-delay override that is not Never`` () =
+    // A temporary Always/Auto override (another client) carries a positive delay too,
+    // but it is not a snooze — computing is not paused.
+    let now = DateTimeOffset(2026, 7, 19, 12, 0, 0, TimeSpan.Zero)
+    Assert.Equal(None, RunModePolicy.snoozeUntil now false 900.0)
