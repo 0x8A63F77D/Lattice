@@ -355,7 +355,18 @@
                               Foreground="{DynamicResource LatticeAccentBrush}"
                               IsVisible="{Binding Data.StateKind, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Uploading}" />
                   </Panel>
-                  <TextBlock Text="{Binding Data.StateText}" FontSize="12" />
+                  <!-- The fine-grained status (issue #154) can exceed the 112px column
+                       (e.g. "Suspended - computer is in use"); the cell clips it and the
+                       ToolTip reveals the full text on hover — the ToolTip.Tip affordance
+                       the Task column already uses (text-only, no new chrome). NOTE: no
+                       TextTrimming here — this TextBlock sits in a horizontal StackPanel
+                       beside the status icon, which measures children with unconstrained
+                       width, so TextTrimming would never see the column width and cannot
+                       render an ellipsis (Codex R2 P3). A real trailing ellipsis needs a
+                       constrained cell layout (icon + star text) — deferred to the design
+                       queue as a visual change (owner is the visual gate). -->
+                  <TextBlock Text="{Binding Data.StateText}" FontSize="12"
+                             ToolTip.Tip="{Binding Data.StateText}" />
                 </StackPanel>
               </DataTemplate>
             </DataGridTemplateColumn.CellTemplate>

@@ -1,5 +1,9 @@
 #if DEBUG
+using System;
+using System.Linq;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
+using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Xunit;
 
@@ -55,6 +59,18 @@ public class SampleHostTickTests
 
         var idle = Task(active: null);
         Assert.Same(idle, SampleHost.AdvanceResult(idle));
+    }
+
+    // The canned "Running" rows must render the fine "Running" status, not "Ready to
+    // start": TaskStatusPolicy keys that off scheduler_state, so the sample data has to
+    // report SCHEDULED (as a real daemon does) — regression pin for Codex R3 P3.
+    [Fact]
+    public void Sample_running_tasks_render_running_status()
+    {
+        var alpha = SampleHost.BuildHosts(DateTimeOffset.UnixEpoch)[0];
+        var running = alpha.Results.First(r => r.ActiveTask?.ActiveTaskState == 1);
+        Assert.Equal(SchedulerState.Scheduled, running.ActiveTask!.SchedulerState);
+        Assert.Equal(Strings.TaskStateRunning, TaskStatusPolicy.Text(running, alpha.Status));
     }
 
     // Default (no LATTICE_SAMPLE_TICK) is unchanged from PR F: the live client replays the canned

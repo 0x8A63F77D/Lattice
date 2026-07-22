@@ -329,14 +329,17 @@ internal static class SampleHost
 
         return (i % 5) switch
         {
-            // Running, early.
+            // Running, early. SchedulerState.Scheduled mirrors what a real daemon
+            // reports alongside an EXECUTING task — TaskStatusPolicy keys the fine
+            // "Running" text off scheduler_state, so the canned running rows would
+            // otherwise read "Ready to start" (Codex R3 P3).
             0 => Base(ResultState.FilesDownloaded, deadline,
                      estRemaining: atRiskRemaining > 0 ? atRiskRemaining : 5_400,
-                     active: new ActiveTask(1, ((i % 9) + 1) / 10.0, 1_200, 1_500)),
+                     active: new ActiveTask(1, ((i % 9) + 1) / 10.0, 1_200, 1_500, SchedulerState.Scheduled)),
             // Running, mid.
             1 => Base(ResultState.FilesDownloaded, deadline,
                      estRemaining: atRiskRemaining > 0 ? atRiskRemaining : 3_600,
-                     active: new ActiveTask(1, 0.55, 3_000, 3_600)),
+                     active: new ActiveTask(1, 0.55, 3_000, 3_600, SchedulerState.Scheduled)),
             // Ready to run (downloaded, not yet scheduled).
             2 => Base(ResultState.FilesDownloaded, deadline, estRemaining: 9_000, active: null),
             // Suspended by the user.

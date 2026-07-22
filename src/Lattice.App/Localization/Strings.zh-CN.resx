@@ -584,9 +584,6 @@
   <data name="TaskStateAborted" xml:space="preserve">
     <value>已中止</value>
   </data>
-  <data name="TaskStateError" xml:space="preserve">
-    <value>错误</value>
-  </data>
   <data name="TaskStateRunning" xml:space="preserve">
     <value>运行中</value>
   </data>
@@ -598,6 +595,156 @@
   </data>
   <data name="TaskStateWaiting" xml:space="preserve">
     <value>等待中</value>
+  </data>
+  <!-- 细分任务状态（TaskStatusPolicy）：对应官方 BOINC Manager 的 result_description()。
+       译文取自官方 zh_CN 词表（BOINC-Manager.po），个别未收录的按词表风格补译。 -->
+  <data name="TaskStatusAbortedByProject" xml:space="preserve">
+    <value>已被项目中止</value>
+  </data>
+  <data name="TaskStatusAbortedByUser" xml:space="preserve">
+    <value>已被用户中止</value>
+  </data>
+  <data name="TaskStatusAbortedDiskLimit" xml:space="preserve">
+    <value>已中止：任务磁盘使用超出限制</value>
+  </data>
+  <data name="TaskStatusAbortedMemLimit" xml:space="preserve">
+    <value>已中止：内存使用超出限制</value>
+  </data>
+  <data name="TaskStatusAbortedNotStarted" xml:space="preserve">
+    <value>已中止：未在截止日期前开始计算</value>
+  </data>
+  <data name="TaskStatusAbortedTimeLimit" xml:space="preserve">
+    <value>已中止：运行时间超出限制</value>
+  </data>
+  <data name="TaskStatusAcknowledged" xml:space="preserve">
+    <value>已被确认</value>
+  </data>
+  <data name="TaskStatusComputationError" xml:space="preserve">
+    <value>计算错误</value>
+  </data>
+  <data name="TaskStatusDownloadFailed" xml:space="preserve">
+    <value>下载失败</value>
+  </data>
+  <data name="TaskStatusDownloading" xml:space="preserve">
+    <value>正在下载</value>
+  </data>
+  <data name="TaskStatusDownloadingSuspendedFmt" xml:space="preserve">
+    <value>正在下载（已暂停 - {0}）</value>
+  </data>
+  <data name="TaskStatusGpuSuspendedReasonFmt" xml:space="preserve">
+    <value>GPU 已暂停 - {0}</value>
+  </data>
+  <data name="TaskStatusInvalidStateFmt" xml:space="preserve">
+    <value>错误：无效状态 '{0}'</value>
+  </data>
+  <data name="TaskStatusNew" xml:space="preserve">
+    <value>新任务</value>
+  </data>
+  <data name="TaskStatusPostponed" xml:space="preserve">
+    <value>已推迟</value>
+  </data>
+  <data name="TaskStatusPostponedReasonFmt" xml:space="preserve">
+    <value>推迟：{0}</value>
+  </data>
+  <data name="TaskStatusProjectSuspended" xml:space="preserve">
+    <value>项目已被用户暂停</value>
+  </data>
+  <data name="TaskStatusReadyToReport" xml:space="preserve">
+    <value>等待上报</value>
+  </data>
+  <data name="TaskStatusReadyToStart" xml:space="preserve">
+    <value>准备运行</value>
+  </data>
+  <data name="TaskStatusSuspendedReasonFmt" xml:space="preserve">
+    <value>已暂停 - {0}</value>
+  </data>
+  <data name="TaskStatusTaskSuspended" xml:space="preserve">
+    <value>任务已被用户暂停</value>
+  </data>
+  <data name="TaskStatusUploadFailed" xml:space="preserve">
+    <value>上传失败</value>
+  </data>
+  <data name="TaskStatusUploadingSuspendedFmt" xml:space="preserve">
+    <value>正在上传（已暂停 - {0}）</value>
+  </data>
+  <data name="TaskStatusWaitingForMemory" xml:space="preserve">
+    <value>等待足够的内存</value>
+  </data>
+  <data name="TaskStatusWaitingForNetwork" xml:space="preserve">
+    <value>等待网络</value>
+  </data>
+  <data name="TaskStatusWaitingForNetworkAccess" xml:space="preserve">
+    <value>正在等待访问网络</value>
+  </data>
+  <data name="TaskStatusWaitingForSharedMemory" xml:space="preserve">
+    <value>等待足够的共享内存</value>
+  </data>
+  <data name="TaskStatusWaitingForSwap" xml:space="preserve">
+    <value>等待足够的交换空间</value>
+  </data>
+  <data name="TaskStatusWaitingToRun" xml:space="preserve">
+    <value>等待运行</value>
+  </data>
+  <!-- 暂停原因（lib/str_util.cpp suspend_reason_string），拼入上面的 *SuspendedReasonFmt。 -->
+  <data name="TaskSuspendReasonBatteries" xml:space="preserve">
+    <value>电池供电</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryCharging" xml:space="preserve">
+    <value>电池电量低</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryOverheated" xml:space="preserve">
+    <value>电池过热保护</value>
+  </data>
+  <data name="TaskSuspendReasonBenchmarks" xml:space="preserve">
+    <value>正在进行 CPU 基准测试</value>
+  </data>
+  <data name="TaskSuspendReasonCpuUsage" xml:space="preserve">
+    <value>CPU 忙碌中</value>
+  </data>
+  <data name="TaskSuspendReasonDiskSize" xml:space="preserve">
+    <value>磁盘空间不足 - 请检查参数设置</value>
+  </data>
+  <data name="TaskSuspendReasonExclusiveApp" xml:space="preserve">
+    <value>有互斥的应用程序在运行</value>
+  </data>
+  <data name="TaskSuspendReasonInitialDelay" xml:space="preserve">
+    <value>初始延迟</value>
+  </data>
+  <data name="TaskSuspendReasonNetworkQuota" xml:space="preserve">
+    <value>网络传输量超出限制</value>
+  </data>
+  <data name="TaskSuspendReasonNoGuiKeepalive" xml:space="preserve">
+    <value>图形界面未激活</value>
+  </data>
+  <data name="TaskSuspendReasonNoRecentInput" xml:space="preserve">
+    <value>无最近用户活动</value>
+  </data>
+  <data name="TaskSuspendReasonOs" xml:space="preserve">
+    <value>操作系统请求</value>
+  </data>
+  <data name="TaskSuspendReasonPodmanInit" xml:space="preserve">
+    <value>Podman 正在初始化</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryChargeWait" xml:space="preserve">
+    <value>等待电池充电</value>
+  </data>
+  <data name="TaskSuspendReasonBatteryHeatWait" xml:space="preserve">
+    <value>等待电池散热</value>
+  </data>
+  <data name="TaskSuspendReasonTimeOfDay" xml:space="preserve">
+    <value>每日时间段</value>
+  </data>
+  <data name="TaskSuspendReasonUnknown" xml:space="preserve">
+    <value>未知原因</value>
+  </data>
+  <data name="TaskSuspendReasonUserActive" xml:space="preserve">
+    <value>正在使用计算机</value>
+  </data>
+  <data name="TaskSuspendReasonUserRequest" xml:space="preserve">
+    <value>用户请求</value>
+  </data>
+  <data name="TaskSuspendReasonWifiState" xml:space="preserve">
+    <value>未连接到 WiFi 网络</value>
   </data>
   <data name="TasksEmpty" xml:space="preserve">
     <value>此主机上没有任务。</value>

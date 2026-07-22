@@ -6,6 +6,12 @@ namespace Lattice.Boinc.GuiRpc;
 
 public enum RunMode { Always = 1, Auto = 2, Never = 3, Restore = 4 }
 
+// ACTIVE_TASK::scheduler_state (lib/common_defs.h SCHEDULER_STATE). "Scheduled"
+// does NOT mean actually running — a scheduled task is still idle while tasks are
+// suspended or CPU-throttled; the task-status mapping reads it only inside the
+// FILES_DOWNLOADED branch to tell "Running" from "Waiting to run" (preempted).
+public enum SchedulerState { Uninitialized = 0, Preempted = 1, Scheduled = 2 }
+
 public enum SuspendReason
 {
     NotSuspended = 0, Batteries = 1, UserActive = 2, UserRequest = 4, TimeOfDay = 8,
@@ -13,6 +19,7 @@ public enum SuspendReason
     InitialDelay = 256, ExclusiveAppRunning = 512, CpuUsage = 1024,
     NetworkQuotaExceeded = 2048, Os = 4096, WifiState = 4097,
     BatteryCharging = 4098, BatteryOverheated = 4099, NoGuiKeepalive = 4100,
+    PodmanInit = 4101, BatteryChargeWait = 4102, BatteryHeatWait = 4103,
 }
 
 public enum MessagePriority { Info = 1, UserAlert = 2, InternalError = 3 }

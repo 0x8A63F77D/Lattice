@@ -31,6 +31,72 @@ public class ResultTests
         Assert.NotNull(r.ActiveTask);
         Assert.Equal(0.421, r.ActiveTask!.FractionDone, precision: 6);
         Assert.Equal(3800.0, r.ActiveTask.ElapsedTime);
+        // <scheduler_state>2</scheduler_state> in the fixture → Scheduled; the
+        // wait flags are absent, so they default false.
+        Assert.Equal(SchedulerState.Scheduled, r.ActiveTask.SchedulerState);
+        Assert.False(r.ActiveTask.WssTooLarge);
+        Assert.False(r.ActiveTask.SwapTooLarge);
+        Assert.False(r.ActiveTask.NeedsShmem);
+        Assert.False(r.ActiveTask.WantNetwork);
+        // Result-level status flags absent in the fixture → defaults.
+        Assert.False(r.ProjectSuspendedViaGui);
+        Assert.False(r.GotServerAck);
+        Assert.False(r.SchedulerWait);
+        Assert.Equal("", r.SchedulerWaitReason);
+        Assert.False(r.NetworkWait);
+        Assert.Equal("", r.Resources);
+    }
+
+    [Fact]
+    public void Parses_active_task_status_flags_including_legacy_too_large_tag()
+    {
+        // The daemon writes the RSS-limit flag under the legacy tag <too_large/>
+        // (client/app.cpp), NOT <wss_too_large/> — the parser must read that name.
+        var e = XElement.Parse("""
+            <result>
+                <name>mem_waiting</name>
+                <state>2</state>
+                <active_task>
+                    <active_task_state>9</active_task_state>
+                    <scheduler_state>1</scheduler_state>
+                    <too_large/>
+                    <swap_too_large>1</swap_too_large>
+                    <needs_shmem/>
+                    <want_network/>
+                </active_task>
+            </result>
+            """);
+        Result r = Result.Parse(e);
+        Assert.Equal(SchedulerState.Preempted, r.ActiveTask!.SchedulerState);
+        Assert.True(r.ActiveTask.WssTooLarge);
+        Assert.True(r.ActiveTask.SwapTooLarge);
+        Assert.True(r.ActiveTask.NeedsShmem);
+        Assert.True(r.ActiveTask.WantNetwork);
+    }
+
+    [Fact]
+    public void Parses_result_level_status_flags()
+    {
+        var e = XElement.Parse("""
+            <result>
+                <name>postponed_gpu</name>
+                <state>2</state>
+                <project_suspended_via_gui/>
+                <got_server_ack/>
+                <scheduler_wait/>
+                <scheduler_wait_reason>project backoff</scheduler_wait_reason>
+                <network_wait/>
+                <resources>0.5 CPUs + 1 NVIDIA GPU (device 0)</resources>
+            </result>
+            """);
+        Result r = Result.Parse(e);
+        Assert.True(r.ProjectSuspendedViaGui);
+        Assert.True(r.GotServerAck);
+        Assert.True(r.SchedulerWait);
+        Assert.Equal("project backoff", r.SchedulerWaitReason);
+        Assert.True(r.NetworkWait);
+        Assert.Equal("0.5 CPUs + 1 NVIDIA GPU (device 0)", r.Resources);
+        Assert.Null(r.ActiveTask);
     }
 
     [Fact]
