@@ -143,6 +143,14 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
         return [.. container.Elements("project").Select(Project.Parse)];
     }
 
+    /// <summary>Returns per-project daily credit history. Changes ~daily; refresh at a low cadence.</summary>
+    public async Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default)
+    {
+        XElement reply = await PerformRpcAsync("<get_statistics/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
+        XElement container = reply.Element("statistics") ?? reply;
+        return [.. container.Elements("project_statistics").Select(ProjectStatistics.Parse)];
+    }
+
     /// <summary>Suspends, resumes, or aborts one task. Requires authorization.</summary>
     public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
     {

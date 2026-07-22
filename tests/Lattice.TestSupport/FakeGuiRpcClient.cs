@@ -92,6 +92,12 @@ public sealed class FakeGuiRpcClient : IGuiRpcClient
     public async Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default)
     { Record("get_project_status"); return await OnGetProjectStatus().WaitAsync(ct).ConfigureAwait(false); }
 
+    public Func<Task<IReadOnlyList<ProjectStatistics>>> OnGetStatistics { get; set; } =
+        () => Task.FromResult<IReadOnlyList<ProjectStatistics>>([]);
+
+    public async Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default)
+    { Record("get_statistics"); return await OnGetStatistics().WaitAsync(ct).ConfigureAwait(false); }
+
     public async Task PerformTaskOpAsync(TaskOp op, string projectUrl, string taskName, CancellationToken ct = default)
     {
         Record($"task_op:{op.ToString().ToLowerInvariant()}:{projectUrl}:{taskName}");

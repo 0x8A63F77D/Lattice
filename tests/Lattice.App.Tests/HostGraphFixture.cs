@@ -70,6 +70,9 @@ internal sealed class RoutingGuiRpcClient(IReadOnlyDictionary<string, FakeGuiRpc
     public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
         _target!.GetProjectStatusAsync(ct);
 
+    public Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default) =>
+        _target!.GetStatisticsAsync(ct);
+
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }
 

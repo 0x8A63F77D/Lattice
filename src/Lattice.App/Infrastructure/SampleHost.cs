@@ -444,6 +444,10 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
     public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
         Task.FromResult(data.State.Projects);
 
+    // Sample hosts carry no credit history yet; charts wiring lands with M4 Core plumbing.
+    public Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<ProjectStatistics>>([]);
+
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }
 
@@ -509,6 +513,9 @@ internal sealed class SampleRoutingGuiRpcClient(
 
     public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
         _target!.GetProjectStatusAsync(ct);
+
+    public Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default) =>
+        _target!.GetStatisticsAsync(ct);
 
     public ValueTask DisposeAsync() => _target?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

@@ -81,6 +81,20 @@ try
         Console.WriteLine($"  {t.Name,-50} {direction,-4} {t.BytesXferred / 1048576.0:F1}/{t.Nbytes / 1048576.0:F1} MB  {xferState}");
     }
 
+    IReadOnlyList<ProjectStatistics> statistics = await client.GetStatisticsAsync();
+    Console.WriteLine($"Statistics ({statistics.Count} projects with credit history):");
+    foreach (ProjectStatistics ps in statistics)
+    {
+        Console.WriteLine($"  {ps.MasterUrl,-45} {ps.Daily.Count} days");
+        if (ps.Daily.Count > 0)
+        {
+            DailyStatistics latest = ps.Daily[^1];
+            Console.WriteLine($"    latest {latest.Day:yyyy-MM-dd}: " +
+                $"user total={latest.UserTotalCredit:F0} RAC={latest.UserExpavgCredit:F1}; " +
+                $"host total={latest.HostTotalCredit:F0} RAC={latest.HostExpavgCredit:F1}");
+        }
+    }
+
     Console.WriteLine("SMOKE TEST PASSED");
     return 0;
 }
