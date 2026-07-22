@@ -40,33 +40,44 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # A real tag PUSH needs no version plumbing: MinVer reads the pushed tag
-      # directly (v1.2.3 -> 1.2.3) and stamps both the managed assembly and every
-      # artifact filename from it. A workflow_dispatch DRY RUN has no tag, so pin
-      # the version via MinVer's override env var — honoured identically by the
-      # assembly build and by packaging/version.sh, so filename == stamped version.
-      # The free-form input is passed via env (never spliced into the script body)
-      # so a value like $(...) can't be evaluated — GitHub's script-injection
-      # guidance — then SemVer-validated before it reaches $GITHUB_ENV.
-      - name: Set dry-run version override
-        if: github.event_name == 'workflow_dispatch'
+      # Validate the version, and for a dry run pin it. A real tag PUSH derives the
+      # version from the pushed tag via MinVer (v1.2.3 -> 1.2.3), stamping both the
+      # assembly and every artifact filename — so nothing is set here. But we still
+      # FAIL FAST if the tag is not a version MinVer will honour (e.g. `vnext` or
+      # `v0.2`): otherwise MinVer would silently fall back to an older height-based
+      # version while the release job still publishes a Release named after that
+      # tag, so the artifacts wouldn't match the tag. A workflow_dispatch DRY RUN
+      # has no tag, so its input pins the version via MinVer's override env var —
+      # honoured identically by the assembly build and by packaging/version.sh, so
+      # filename == stamped version. The free-form values are read via env (never
+      # spliced into the script body) so a value like $(...) can't be evaluated —
+      # GitHub's script-injection guidance.
+      - name: Resolve and validate version
         shell: bash
         env:
           DISPATCH_VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="$DISPATCH_VERSION"
-          # Whole-string validation with bash [[ =~ ]] (NOT line-oriented grep):
-          # digits.dots + optional -prerelease, e.g. 1.2.3 or 0.0.0-dev. Because
-          # [[ =~ ]] anchors ^…$ to the whole string with no multiline mode, an
-          # embedded newline can't sneak extra lines through — which matters
-          # because the value is written to $GITHUB_ENV (each line = an env
-          # entry). Belt-and-suspenders: reject any value spanning >1 line too.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            VERSION="$DISPATCH_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          # Require a full SemVer core (major.minor.patch) + optional -prerelease,
+          # matching what MinVer accepts as a version tag — so a tag that passes
+          # here is exactly one MinVer will honour, closing the fall-back gap above.
+          # `+build` metadata is rejected on purpose: the release job's pre-release
+          # test keys off a bare '-'. The [[ =~ ]] whole-string match (^…$, no
+          # multiline) plus the >1-line guard also stop an embedded newline from
+          # injecting extra $GITHUB_ENV entries.
           if [ "$(printf '%s' "$VERSION" | wc -l)" -ne 0 ] \
-             || ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*(-[0-9A-Za-z.]+)?$ ]]; then
+             || ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
             echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
             exit 1
           fi
-          echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
+          # Only a dry run overrides MinVer; a tag push lets MinVer read the tag.
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
+          fi
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
