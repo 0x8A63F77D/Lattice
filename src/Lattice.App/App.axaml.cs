@@ -124,15 +124,22 @@ public partial class App : Application
     /// </summary>
     private static void RestartApp(IClassicDesktopStyleApplicationLifetime desktop)
     {
-        var exe = RelaunchTarget(Environment.GetEnvironmentVariable("APPIMAGE"), Environment.ProcessPath);
-        if (exe is null) return; // unknown host path (never on a normal apphost launch) — no-op
+        if (PlanRelaunch(Environment.GetEnvironmentVariable("APPIMAGE"), Environment.ProcessPath) is not { } plan)
+            return; // unknown host path (never on a normal apphost launch) — no-op
 
         ActivationGuard?.Dispose();
         ActivationGuard = null; // the desktop.Exit handler also disposes it; null avoids double-dispose
 
         try
         {
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false });
+            var psi = new ProcessStartInfo(plan.Exe) { UseShellExecute = false };
+            if (plan.ExtractAndRun)
+                // Force extract-and-run for the relaunched AppImage: it then self-extracts to a temp
+                // dir and runs independent of BOTH FUSE availability (users may have launched us with
+                // --appimage-extract-and-run on FUSE-less systems — Codex P2) and this instance's own
+                // mount (which unmounts on exit — Codex P2). Works on FUSE and non-FUSE hosts alike.
+                psi.Environment["APPIMAGE_EXTRACT_AND_RUN"] = "1";
+            Process.Start(psi);
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
@@ -144,16 +151,21 @@ public partial class App : Application
         desktop.Shutdown();
     }
 
-    /// <summary>The executable a language-restart should relaunch. Prefers <c>$APPIMAGE</c> — the
-    /// AppImage runtime's path to the outer <c>.AppImage</c> — over <see cref="Environment.ProcessPath"/>,
-    /// which inside a running AppImage is the in-mount <c>/tmp/.mount_*/usr/bin/Lattice</c> apphost.
-    /// Relaunching that mounted path directly bypasses the AppImage runtime, so when this instance
-    /// exits the FUSE mount can be torn out from under the child mid-load; relaunching the
-    /// <c>.AppImage</c> gets a fresh mount (Codex P2, #149). Non-AppImage launches (Windows exe,
-    /// macOS/Linux-tarball apphost) have no <c>$APPIMAGE</c> and fall back to the process path.
-    /// Internal + pure for a transition-table test.</summary>
-    internal static string? RelaunchTarget(string? appImagePath, string? processPath)
-        => appImagePath ?? processPath;
+    /// <summary>How a language-restart should relaunch the app: the executable to start, and whether
+    /// to force AppImage extract-and-run on it.</summary>
+    internal readonly record struct RelaunchPlan(string Exe, bool ExtractAndRun);
+
+    /// <summary>Pure relaunch decision (#147). Prefers <c>$APPIMAGE</c> — the AppImage runtime's path
+    /// to the outer <c>.AppImage</c> — over <see cref="Environment.ProcessPath"/>, which inside a
+    /// running AppImage is the in-mount <c>/tmp/.mount_*/usr/bin/Lattice</c> apphost. When relaunching
+    /// the <c>.AppImage</c> the child MUST extract-and-run (see <see cref="RestartApp"/>) so it starts
+    /// on FUSE-less hosts and outlives this instance's mount. Non-AppImage launches (Windows exe,
+    /// macOS/Linux-tarball apphost) fall back to the process path with no extract-and-run. Returns
+    /// <c>null</c> when neither path is known (caller no-ops). Internal + pure for a table test.</summary>
+    internal static RelaunchPlan? PlanRelaunch(string? appImagePath, string? processPath) =>
+        appImagePath is { } ai ? new RelaunchPlan(ai, ExtractAndRun: true)
+        : processPath is { } pp ? new RelaunchPlan(pp, ExtractAndRun: false)
+        : null;
 
     /// <summary>
     /// A broken config must not brick a monitoring app: quarantine the file and
