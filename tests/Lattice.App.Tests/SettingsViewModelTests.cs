@@ -142,6 +142,26 @@ public class SettingsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public void RestartNow_invokes_the_injected_restart_callback()
+    {
+        var calls = 0;
+        var settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(),
+            new ThemePreference(_uiStore), new LanguagePreference(_uiStore), _uiStore, restart: () => calls++);
+
+        Assert.True(settings.RestartNowCommand.CanExecute(null));
+        settings.RestartNowCommand.Execute(null);
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public void RestartNow_is_disabled_when_no_restart_callback_is_wired()
+    {
+        // The fixture builds _settings without a restart callback (headless has no desktop path).
+        Assert.False(_settings.CanRestart);
+        Assert.False(_settings.RestartNowCommand.CanExecute(null));
+    }
+
+    [Fact]
     public void App_version_is_a_non_empty_string_for_the_about_surface()
     {
         // The About section quotes this verbatim in bug reports, so it must always

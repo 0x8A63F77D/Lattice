@@ -1,5 +1,6 @@
 using System.Reflection;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
@@ -14,14 +15,19 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly ThemePreference _theme;
     private readonly LanguagePreference _language;
     private readonly UiStateStore _uiState;
+    private readonly Action? _restart;
 
-    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, LanguagePreference language, UiStateStore uiState)
+    /// <param name="restart">Composition-root callback that relaunches the app (App.axaml.cs owns
+    /// the process/single-instance-guard dance). Null off the desktop path (headless tests), which
+    /// disables <see cref="RestartNowCommand"/>.</param>
+    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, LanguagePreference language, UiStateStore uiState, Action? restart = null)
     {
         _registry = registry;
         _clientFactory = clientFactory;
         _theme = theme;
         _language = language;
         _uiState = uiState;
+        _restart = restart;
     }
 
     /// <summary>Exposed for the Add-host dialog, which registers into the same registry/factory.</summary>
@@ -66,6 +72,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     /// read at load, so a new language only takes effect on restart (#147). Latches true on
     /// the first real change and stays visible — a persisted choice the user hasn't acted on.</summary>
     [ObservableProperty] private bool _showLanguageRestartHint;
+
+    /// <summary>True when the composition root wired a restart callback (the desktop app);
+    /// gates <see cref="RestartNowCommand"/> so the button no-ops off the desktop path.</summary>
+    public bool CanRestart => _restart is not null;
+
+    /// <summary>Relaunches the app to apply the new language. The actual process relaunch +
+    /// single-instance-guard handoff lives at the composition root (App.axaml.cs); this only
+    /// invokes it. Disabled when no restart callback is wired (headless).</summary>
+    [RelayCommand(CanExecute = nameof(CanRestart))]
+    private void RestartNow() => _restart?.Invoke();
 
     /// <summary>Mirrors the shared <see cref="LanguagePreference"/> for XAML binding; setting
     /// it routes through the single owner (persist only — language applies on next launch) and

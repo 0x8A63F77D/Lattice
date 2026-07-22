@@ -64,16 +64,21 @@ public class SettingsViewTests
             .Single(c => ReferenceEquals(c.ItemsSource, SettingsViewModel.AllLanguages));
         Assert.Equal(AppLanguage.System, combo.SelectedItem);
 
-        // The restart hint is hidden until a change, then latches visible.
+        // The restart hint + button are hidden (parent panel collapsed) until a change,
+        // then latch visible. IsEffectivelyVisible accounts for the collapsed ancestor.
         var hint = window.GetVisualDescendants().OfType<TextBlock>()
             .Single(t => t.Text == Strings.SettingsLanguageRestartHint);
-        Assert.False(hint.IsVisible);
+        var restartButton = window.GetVisualDescendants().OfType<Button>()
+            .Single(b => Equals(b.Content, Strings.SettingsLanguageRestartButton));
+        Assert.False(hint.IsEffectivelyVisible);
+        Assert.False(restartButton.IsEffectivelyVisible);
 
         settings.SelectedLanguage = AppLanguage.Chinese;
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(AppLanguage.Chinese, combo.SelectedItem);
-        Assert.True(hint.IsVisible);
+        Assert.True(hint.IsEffectivelyVisible);
+        Assert.True(restartButton.IsEffectivelyVisible);
         window.Close();
     }
 }

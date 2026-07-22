@@ -416,6 +416,9 @@
   <data name="SettingsLanguageRestartHint" xml:space="preserve">
     <value>Restart Lattice to apply the new language.</value>
   </data>
+  <data name="SettingsLanguageRestartButton" xml:space="preserve">
+    <value>Restart now</value>
+  </data>
   <data name="SettingsTraySection" xml:space="preserve">
     <value>Tray</value>
   </data>

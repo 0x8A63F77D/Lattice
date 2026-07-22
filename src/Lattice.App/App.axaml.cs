@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -54,7 +55,7 @@ public partial class App : Application
             var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
             var clock = new DispatcherUiClock();
             var uiState = new UiStateStore();
-            var shell = new ShellViewModel(registry, store, clock, uiState, factory);
+            var shell = new ShellViewModel(registry, store, clock, uiState, factory, () => RestartApp(desktop));
             // Apply the persisted theme once, here at the composition root on the UI thread
             // (#101). ThemePreference construction is pure by design — it never touches the
             // UI-thread-affine Application.Current.RequestedThemeVariant — so this explicit
@@ -111,6 +112,36 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Relaunches the app to apply a new UI language (#147). The culture is read once at startup
+    /// (x:Static resource lookups), so a running instance cannot switch live. The single-instance
+    /// guard makes a naive relaunch fail: a child that starts while we still hold the lock would
+    /// ping us (we'd surface the window) and exit. So release the guard FIRST — freeing the lock so
+    /// the child acquires it and becomes primary — then spawn the replacement, then shut down. The
+    /// child reads the new language from the already-persisted ui-state.json.
+    /// </summary>
+    private static void RestartApp(IClassicDesktopStyleApplicationLifetime desktop)
+    {
+        var exe = Environment.ProcessPath;
+        if (exe is null) return; // unknown host path (never on a normal apphost launch) — no-op
+
+        ActivationGuard?.Dispose();
+        ActivationGuard = null; // the desktop.Exit handler also disposes it; null avoids double-dispose
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false });
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            // Couldn't relaunch — leave this instance running (now guard-less) rather than shutting
+            // down into nothing; the user can retry or relaunch manually.
+            return;
+        }
+
+        desktop.Shutdown();
     }
 
     /// <summary>
