@@ -82,14 +82,30 @@
                items bind to the scoped host row VM's SetRunModeCommand, reached via
                the pushed ScopedHost property so the popup tree resolves through the
                inherited view-model DataContext. -->
-          <Button x:Name="ComputingButton" Content="{x:Static loc:Strings.ComputingMenu}"
-                  IsVisible="{Binding HasScopedHost}">
+          <!-- Computing button (design PR H, S3): play_settings icon + label + chevron,
+               32px tall centered in the 52px bar. -->
+          <Button x:Name="ComputingButton" IsVisible="{Binding HasScopedHost}"
+                  Height="32" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <PathIcon Data="{StaticResource IconPlaySettingsRegular}" Width="16" Height="16"
+                        VerticalAlignment="Center" />
+              <TextBlock Text="{x:Static loc:Strings.ComputingMenu}" FontSize="13" FontWeight="SemiBold"
+                         VerticalAlignment="Center" />
+              <PathIcon Data="{StaticResource IconChevronDownRegular}" Width="12" Height="12"
+                        VerticalAlignment="Center" />
+            </StackPanel>
             <Button.Flyout>
               <MenuFlyout>
                 <!-- Radios reflect the scoped host's PERMANENT mode (design PR H, S2/S3 —
                      identical to the rail menu, one spec two hosts). -->
                 <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource IconPlaySettingsRegular}" Width="16" Height="16" />
+                  </MenuItem.Icon>
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource IconDeveloperBoardRegular}" Width="16" Height="16" />
+                    </MenuItem.Icon>
                     <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeCpu"
                               IsChecked="{Binding ScopedHost.CpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:always" />
@@ -101,6 +117,9 @@
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:never" />
                   </MenuItem>
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource IconDeveloperBoardLightningRegular}" Width="16" Height="16" />
+                    </MenuItem.Icon>
                     <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeGpu"
                               IsChecked="{Binding ScopedHost.GpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:always" />
@@ -112,6 +131,9 @@
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:never" />
                   </MenuItem>
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
+                    <MenuItem.Icon>
+                      <PathIcon Data="{StaticResource IconGlobeRegular}" Width="16" Height="16" />
+                    </MenuItem.Icon>
                     <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeNet"
                               IsChecked="{Binding ScopedHost.NetworkMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:always" />
@@ -124,6 +146,9 @@
                   </MenuItem>
                 </MenuItem>
                 <MenuItem Header="{x:Static loc:Strings.HostMenuSnooze}">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource IconSnoozeRegular}" Width="16" Height="16" />
+                  </MenuItem.Icon>
                   <MenuItem Header="{x:Static loc:Strings.SnoozeFifteenMinutes}"
                             Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="snooze:15" />
                   <MenuItem Header="{x:Static loc:Strings.SnoozeOneHour}"
@@ -133,7 +158,11 @@
                 </MenuItem>
                 <MenuItem Header="{x:Static loc:Strings.HostMenuResume}"
                           IsVisible="{Binding ScopedHost.IsSnoozed}"
-                          Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="resume" />
+                          Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="resume">
+                  <MenuItem.Icon>
+                    <PathIcon Data="{StaticResource IconPlayRegular}" Width="16" Height="16" />
+                  </MenuItem.Icon>
+                </MenuItem>
               </MenuFlyout>
             </Button.Flyout>
           </Button>

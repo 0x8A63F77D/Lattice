@@ -208,10 +208,18 @@
                     <MenuFlyout>
                       <MenuItem Header="{x:Static loc:Strings.HostMenuEdit}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).EditHostCommand}"
-                                CommandParameter="{Binding HostId}" />
+                                CommandParameter="{Binding HostId}">
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconEditRegular}" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
                       <MenuItem Header="{x:Static loc:Strings.HostMenuTest}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
-                                CommandParameter="{Binding HostId}" />
+                                CommandParameter="{Binding HostId}">
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconPlugConnectedRegular}" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
                       <MenuItem Header="-" />
                       <!-- Mode leaves are radios (design PR H, S2): GroupName per lane,
                            IsChecked reflects the host's PERMANENT mode (OneWay — the daemon
@@ -219,7 +227,13 @@
                            re-checks). EnumMatchConverter matches the RunMode against the
                            parameter name. -->
                       <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconPlaySettingsRegular}" Width="16" Height="16" />
+                        </MenuItem.Icon>
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
+                          <MenuItem.Icon>
+                            <PathIcon Data="{StaticResource IconDeveloperBoardRegular}" Width="16" Height="16" />
+                          </MenuItem.Icon>
                           <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeCpu"
                                     IsChecked="{Binding CpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="cpu:always" />
@@ -231,6 +245,9 @@
                                     Command="{Binding SetRunModeCommand}" CommandParameter="cpu:never" />
                         </MenuItem>
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
+                          <MenuItem.Icon>
+                            <PathIcon Data="{StaticResource IconDeveloperBoardLightningRegular}" Width="16" Height="16" />
+                          </MenuItem.Icon>
                           <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeGpu"
                                     IsChecked="{Binding GpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="gpu:always" />
@@ -242,6 +259,9 @@
                                     Command="{Binding SetRunModeCommand}" CommandParameter="gpu:never" />
                         </MenuItem>
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
+                          <MenuItem.Icon>
+                            <PathIcon Data="{StaticResource IconGlobeRegular}" Width="16" Height="16" />
+                          </MenuItem.Icon>
                           <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeNet"
                                     IsChecked="{Binding NetworkMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="net:always" />
@@ -254,6 +274,9 @@
                         </MenuItem>
                       </MenuItem>
                       <MenuItem Header="{x:Static loc:Strings.HostMenuSnooze}">
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconSnoozeRegular}" Width="16" Height="16" />
+                        </MenuItem.Icon>
                         <MenuItem Header="{x:Static loc:Strings.SnoozeFifteenMinutes}"
                                   Command="{Binding SetRunModeCommand}" CommandParameter="snooze:15" />
                         <MenuItem Header="{x:Static loc:Strings.SnoozeOneHour}"
@@ -263,12 +286,23 @@
                       </MenuItem>
                       <MenuItem Header="{x:Static loc:Strings.HostMenuResume}"
                                 IsVisible="{Binding IsSnoozed}"
-                                Command="{Binding SetRunModeCommand}" CommandParameter="resume" />
+                                Command="{Binding SetRunModeCommand}" CommandParameter="resume">
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconPlayRegular}" Width="16" Height="16" />
+                        </MenuItem.Icon>
+                      </MenuItem>
                       <MenuItem Header="-" />
                       <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
                                 CommandParameter="{Binding HostId}"
-                                Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                                Foreground="{DynamicResource LatticeDangerFgBrush}">
+                        <!-- Danger fg on the icon too (contract S2): the item Foreground is
+                             inherited, but PathIcon.Foreground is set explicitly to be sure. -->
+                        <MenuItem.Icon>
+                          <PathIcon Data="{StaticResource IconDeleteRegular}" Width="16" Height="16"
+                                    Foreground="{DynamicResource LatticeDangerFgBrush}" />
+                        </MenuItem.Icon>
+                      </MenuItem>
                     </MenuFlyout>
                   </DockPanel.ContextFlyout>
                   <Panel DockPanel.Dock="Left" Width="24" VerticalAlignment="Center">

@@ -128,8 +128,10 @@ public class RunModeMenuTests
         // Scope to the single host: the "Computing" dropdown becomes visible.
         shell.SelectHostScope(cfg.Id);
         Layout(window);
+        // Found by name — the button's Content is now an icon+label+chevron panel (S3),
+        // not a plain string.
         var button = Assert.Single(window.GetVisualDescendants().OfType<Button>()
-            .Where(b => Equals(b.Content, Strings.ComputingMenu)));
+            .Where(b => b.Name == "ComputingButton"));
         Assert.True(button.IsVisible);
 
         var flyout = Assert.IsType<MenuFlyout>(button.Flyout);

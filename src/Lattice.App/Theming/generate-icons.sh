@@ -44,6 +44,14 @@ ICONS=(
   "text_line_spacing|Text Line Spacing|regular"
   "apps_list|Apps List|regular"
   "group_list|Group List|regular"
+  "edit|Edit|regular"
+  "plug_connected|Plug Connected|regular"
+  "play_settings|Play Settings|regular"
+  "snooze|Snooze|regular"
+  "delete|Delete|regular"
+  "developer_board|Developer Board|regular"
+  "developer_board_lightning|Developer Board Lightning|regular"
+  "globe|Globe|regular"
 )
 
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }
