@@ -31,8 +31,16 @@ public static class LanguageCulture
     /// set — number/date formatting stays as-is (the app formats numbers with
     /// InvariantCulture explicitly, #147). System leaves the OS UI culture untouched.</summary>
     public static void ApplyAtStartup(AppLanguage language)
+        => ApplyAtStartup(language, static c => CultureInfo.DefaultThreadCurrentUICulture = c);
+
+    /// <summary>Testable core: applies the resolved culture through <paramref name="setUiCulture"/>
+    /// (System is a no-op). The public overload injects the real process-wide setter; tests inject a
+    /// capturing lambda so they verify the mapping WITHOUT mutating the global default culture — which,
+    /// under xunit's parallel collections, would leak <c>zh-CN</c> into a sibling test resolving
+    /// <c>Strings</c> and make the suite order-dependent (Codex P2, PR #149).</summary>
+    internal static void ApplyAtStartup(AppLanguage language, Action<CultureInfo> setUiCulture)
     {
         if (Resolve(language) is { } culture)
-            CultureInfo.DefaultThreadCurrentUICulture = culture;
+            setUiCulture(culture);
     }
 }

@@ -25,45 +25,22 @@ public class LanguageCultureTests
     public void Chinese_resolves_to_zh_CN()
         => Assert.Equal("zh-CN", LanguageCulture.Resolve(AppLanguage.Chinese)!.Name);
 
+    // These exercise the injected-setter overload so they NEVER mutate the process-global
+    // DefaultThreadCurrentUICulture — which, under xunit's parallel collections, could leak
+    // zh-CN into a sibling test resolving Strings and make the suite order-dependent (Codex P2).
     [Fact]
-    public void ApplyAtStartup_sets_the_ui_culture_for_an_explicit_language_only()
+    public void ApplyAtStartup_applies_the_resolved_culture_for_an_explicit_language()
     {
-        // Save/restore the process-global default around the mutation so this test
-        // cannot leak a culture into a sibling test.
-        CultureInfo? savedUi = CultureInfo.DefaultThreadCurrentUICulture;
-        CultureInfo? savedFormat = CultureInfo.DefaultThreadCurrentCulture;
-        try
-        {
-            CultureInfo.DefaultThreadCurrentUICulture = CultureInfo.GetCultureInfo("en-US");
-            CultureInfo.DefaultThreadCurrentCulture = CultureInfo.GetCultureInfo("en-US");
-
-            LanguageCulture.ApplyAtStartup(AppLanguage.Chinese);
-            Assert.Equal("zh-CN", CultureInfo.DefaultThreadCurrentUICulture!.Name);
-            // Number/date culture is never touched (stays InvariantCulture as-is, #147).
-            Assert.Equal("en-US", CultureInfo.DefaultThreadCurrentCulture!.Name);
-        }
-        finally
-        {
-            CultureInfo.DefaultThreadCurrentUICulture = savedUi;
-            CultureInfo.DefaultThreadCurrentCulture = savedFormat;
-        }
+        CultureInfo? applied = null;
+        LanguageCulture.ApplyAtStartup(AppLanguage.Chinese, c => applied = c);
+        Assert.Equal("zh-CN", applied!.Name);
     }
 
     [Fact]
-    public void ApplyAtStartup_leaves_the_ui_culture_untouched_for_system()
+    public void ApplyAtStartup_does_not_apply_for_system()
     {
-        CultureInfo? savedUi = CultureInfo.DefaultThreadCurrentUICulture;
-        try
-        {
-            var sentinel = CultureInfo.GetCultureInfo("fr-FR");
-            CultureInfo.DefaultThreadCurrentUICulture = sentinel;
-
-            LanguageCulture.ApplyAtStartup(AppLanguage.System);
-            Assert.Equal("fr-FR", CultureInfo.DefaultThreadCurrentUICulture!.Name);
-        }
-        finally
-        {
-            CultureInfo.DefaultThreadCurrentUICulture = savedUi;
-        }
+        var calls = 0;
+        LanguageCulture.ApplyAtStartup(AppLanguage.System, _ => calls++);
+        Assert.Equal(0, calls);
     }
 }
