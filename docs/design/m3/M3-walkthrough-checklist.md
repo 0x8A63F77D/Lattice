@@ -29,6 +29,13 @@ Control operations only *do something* against a **real** BOINC daemon. Point La
 **BOINC 8.2.11** daemon (it lives only while BOINC Manager is running) attached to **Einstein@Home**
 (mac-arm64 work is available), and drive the real control checks (§§2–8) there.
 
+> **Project roles (so the attach checks don't collide).** Throughout this walkthrough your real
+> **Einstein@Home** attachment is the *standing attached* project used by the control checks (§§2–3, 7)
+> and by the already-attached error check (§6c). The *fresh-attach* checks (§6a happy path, §6b bad
+> key) must target a URL the host is **not currently attached to** — attaching a URL that is already
+> attached only ever produces the "Already attached to project" error (that is what §6c verifies), so
+> it cannot exercise a real attach. Each attach step below states which precondition it needs.
+
 **The sample fleet accepts control ops but silently ignores them.** If you run the DEBUG sample fleet
 (below), every control command on a `Sample · Alpha/Beta/Gamma` host *reports success* but the canned
 data never changes:
@@ -144,13 +151,14 @@ three real daemons — the **sample fleet** gives you a real multi-host parent r
 *dialog* (the blast-radius receipt), not the effect.
 
 > **Important — the real Einstein@Home host joins this row.** The sample fleet is attached to the same
-> Einstein@Home URL as the real daemon from §A, and sample mode **merges the sample fleet into your
+> Einstein@Home URL as the real daemon from the prerequisites above, and sample mode **merges the sample fleet into your
 > real host list** (it does not replace it). So if your real Einstein@Home host is configured and
 > connected, the All-hosts Einstein@Home parent row spans **the real host *and* the three samples**
 > (count **> 3**), and — critically — **confirming an op on that row WILL execute it on the real host**
 > (only the sample hosts ignore ops). Two consequences:
 > 1. To see an **exactly-3-host** receipt, run the sample fleet in a session where **no real host is
->    attached to Einstein@Home** (e.g. before you attach the real daemon in §A, or with it detached).
+>    attached to Einstein@Home** (e.g. before you attach the real daemon per the prerequisites, or
+>    with it detached).
 > 2. In this section, **read each dialog and then Cancel it** — do **not** confirm. The receipt (the
 >    host enumeration) is the whole DI-2 requirement; confirming risks a real detach/suspend on your
 >    live project.
@@ -251,8 +259,10 @@ Open **Projects**, click **Add project…** (enabled because a Connected host is
 
 ### 6a. Happy path (email + password)
 
-- [ ] Attach to a project you have an account on (e.g. re-attach Einstein@Home after §7, or another
-      project). Fill URL + email + password, click **Attach**.
+- [ ] Attach to a project you have an account on that the host is **not currently attached to**. If
+      your only account is Einstein@Home (which is attached), do §7's **detach** first and re-attach
+      it here; otherwise use any other project you have an account on. Fill URL + email + password,
+      click **Attach**.
 - [ ] The progress area shows **"Contacting project…"** then **"Attaching…"** (these are the flow's
       real lookup→attach stages, not a fake spinner).
 - [ ] On success the **dialog closes** and the new project **appears in the Projects view** within a
@@ -261,7 +271,10 @@ Open **Projects**, click **Add project…** (enabled because a Connected host is
 ### 6b. Deliberately bad account key — "attached" ≠ "verified" (READ THIS)
 
 - [ ] Switch the credential toggle to **account key** and enter a **deliberately wrong key** for a
-      real project URL. Click **Attach**.
+      real project URL the host is **not currently attached to** (e.g. LHC@home,
+      `https://lhcathome.cern.ch/lhcathome/` — any real project you don't already have attached; do
+      **not** use the still-attached Einstein@Home URL, which would only produce the already-attached
+      error of §6c instead of exercising the bad-key path). Click **Attach**.
 - [ ] **Expected — and this is correct, not a Lattice bug:** the dialog reports the attach **succeeded
       and closes**, and the project **appears** in the Projects view. The daemon does **not** validate
       the account key at attach time — it only accepts the request and creates the entry. The bad key
