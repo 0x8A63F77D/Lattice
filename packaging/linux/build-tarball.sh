@@ -7,17 +7,22 @@
 # short README explains the optional install.
 #
 # Usage: packaging/linux/build-tarball.sh [runtime-id]   (default: linux-x64)
-#   LATTICE_VERSION stamps the assembly + tarball name (default 0.0.0).
+#   Version is derived from git by MinVer (packaging/version.sh); override a dry
+#   run / local one-off with MinVerVersionOverride=1.2.3.
 set -euo pipefail
 
 RID="${1:-linux-x64}"
-VERSION="${LATTICE_VERSION:-0.0.0}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PROJECT="$REPO_ROOT/src/Lattice.App/Lattice.App.csproj"
 HICOLOR_SRC="$REPO_ROOT/docs/design/icon/linux/hicolor"
 DESKTOP_SRC="$REPO_ROOT/packaging/linux/lattice.desktop"
 OUT_DIR="$REPO_ROOT/artifacts/linux/$RID"
+
+# Tarball name Lattice-<version>-<rid>.tar.gz from the MinVer source that also
+# stamps the assembly during publish below.
+source "$REPO_ROOT/packaging/version.sh"
+VERSION="$(lattice_resolve_version "$REPO_ROOT")"
 STAGE_NAME="Lattice-$VERSION-$RID"
 STAGE="$OUT_DIR/$STAGE_NAME"
 TARBALL="$OUT_DIR/$STAGE_NAME.tar.gz"
@@ -25,9 +30,10 @@ TARBALL="$OUT_DIR/$STAGE_NAME.tar.gz"
 echo "==> Publishing Lattice ($RID, version $VERSION)"
 rm -rf "$STAGE" "$TARBALL"
 # Directory publish (not single-file) so the tarball unpacks to a plain
-# ./Lattice apphost + assemblies — nothing self-extracts to /tmp.
+# ./Lattice apphost + assemblies — nothing self-extracts to /tmp. MinVer stamps
+# the assembly version.
 dotnet publish "$PROJECT" -c Release -r "$RID" --self-contained true \
-    -p:PublishSingleFile=false -p:Version="$VERSION" \
+    -p:PublishSingleFile=false \
     -o "$STAGE"
 
 echo "==> Bundling optional desktop-integration assets"

@@ -40,8 +40,8 @@ every launch surface references: `Info.plist`'s `CFBundleExecutable=Lattice` and
 
 ```sh
 # macOS .app bundle (default runtime osx-arm64; pass osx-x64 for Intel).
-# LATTICE_VERSION stamps CFBundle*Version (default 0.0.0).
-LATTICE_VERSION=0.1.0 packaging/macos/bundle.sh
+# The version (assembly + CFBundle*Version) is derived from git by MinVer.
+packaging/macos/bundle.sh
 open artifacts/macos/osx-arm64/Lattice.app   # Dock/Finder shows the mark
 
 # Linux: install the hicolor icons + .desktop launcher (per-user by default)
@@ -61,22 +61,32 @@ them on the matching runner and attaches the output to a GitHub Release.
 
 | Platform | Script | Produces | Notes |
 |----------|--------|----------|-------|
-| **Windows** | [`windows/build-zip.ps1`](windows/build-zip.ps1) | `Lattice-win-x64.zip` (single-file `Lattice.exe`) | Portable, unzip-and-run. Unsigned → SmartScreen prompt. |
-| **macOS** | [`macos/make-dmg.sh`](macos/make-dmg.sh) | `Lattice-osx-arm64.dmg` (and `osx-x64`) | Drag-to-Applications. Ad-hoc signed, not notarized → Gatekeeper prompt. |
-| **Linux** | [`linux/build-appimage.sh`](linux/build-appimage.sh) | `Lattice-x86_64.AppImage` | Primary. Single file, no root, cross-distro. |
+| **Windows** | [`windows/build-zip.ps1`](windows/build-zip.ps1) | `Lattice-<ver>-win-x64.zip` (single-file `Lattice.exe`) | Portable, unzip-and-run. Unsigned → SmartScreen prompt. |
+| **macOS** | [`macos/make-dmg.sh`](macos/make-dmg.sh) | `Lattice-<ver>-osx-arm64.dmg` (and `osx-x64`) | Drag-to-Applications. Ad-hoc signed, not notarized → Gatekeeper prompt. |
+| **Linux** | [`linux/build-appimage.sh`](linux/build-appimage.sh) | `Lattice-<ver>-x86_64.AppImage` | Primary. Single file, no root, cross-distro. |
 | **Linux** | [`linux/build-tarball.sh`](linux/build-tarball.sh) | `Lattice-<ver>-linux-x64.tar.gz` | Unpack and `./Lattice`. |
 
-All scripts honor `LATTICE_VERSION` (default `0.0.0`) to stamp the assembly /
-bundle version and the artifact filename. Default RIDs are `win-x64`, `osx-arm64`,
-`osx-x64`, `linux-x64`; `*-arm64` for Windows/Linux is an easy future addition
-(the AppImage cross-arch build is the only non-trivial one).
+Every artifact filename carries the version, and every script stamps the same
+version into the assembly (and the macOS `Info.plist`). The version is the single
+source computed by **MinVer** ([`version.sh`](version.sh)) — a `v`-prefixed git tag
+on the current commit (`v0.2.0-alpha.1` → `0.2.0-alpha.1`), else the latest tag +
+commit height + short sha (`0.2.0-alpha.1.5+abc1234`; the filename uses the
+metadata-free `0.2.0-alpha.1.5`). No script takes a version argument. To pin a
+value for a dry run or a local one-off, export `MinVerVersionOverride` — MinVer
+honours it for both the assembly build and the filename query, so they can't
+diverge. Default RIDs are `win-x64`, `osx-arm64`, `osx-x64`, `linux-x64`; `*-arm64`
+for Windows/Linux is an easy future addition (the AppImage cross-arch build is the
+only non-trivial one).
 
 ```sh
-# Local builds (each writes under artifacts/<platform>/<rid>/)
-LATTICE_VERSION=0.1.0 packaging/macos/make-dmg.sh osx-arm64
-LATTICE_VERSION=0.1.0 packaging/linux/build-appimage.sh linux-x64
-LATTICE_VERSION=0.1.0 packaging/linux/build-tarball.sh linux-x64
-pwsh packaging/windows/build-zip.ps1 -Rid win-x64 -Version 0.1.0
+# Local builds (each writes under artifacts/<platform>/<rid>/). Version from git.
+packaging/macos/make-dmg.sh osx-arm64
+packaging/linux/build-appimage.sh linux-x64
+packaging/linux/build-tarball.sh linux-x64
+pwsh packaging/windows/build-zip.ps1 -Rid win-x64
+
+# Pin a specific version for a one-off (applies to assembly + filename):
+MinVerVersionOverride=0.1.0 packaging/linux/build-tarball.sh linux-x64
 ```
 
 ### Self-contained publish settings
@@ -104,11 +114,13 @@ engage only for `dotnet publish -r <rid>`:
 a branch push (that is [`ci.yml`](../.github/workflows/ci.yml)'s job).
 
 - **Tag push** (`git tag v0.1.0 && git push --tags`): builds all platforms, then
-  a `release` job publishes a GitHub Release with every artifact attached. The
-  version is derived from the tag (`v0.1.0` → `0.1.0`).
+  a `release` job publishes a GitHub Release with every artifact attached. MinVer
+  reads the pushed tag directly (`v0.1.0` → `0.1.0`) — no version input anywhere.
+  (The checkout uses `fetch-depth: 0` so MinVer sees the tag + history.)
 - **`workflow_dispatch`**: a dry run — builds and uploads the artifacts as
   workflow-run artifacts (downloadable from the run) but publishes **no** Release.
-  Use it to exercise packaging on a branch before cutting a real tag.
+  The dispatch `version` input pins the build via `MinVerVersionOverride`. Use it
+  to exercise packaging on a branch before cutting a real tag.
 
 ### Signing caveats (unsigned for v1)
 

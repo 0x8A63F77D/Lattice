@@ -36,6 +36,11 @@ jobs:
       LATTICE_VISUAL_ARTIFACTS: ${{ github.workspace }}/artifacts/visual
     steps:
       - uses: actions/checkout@v5
+        with:
+          # This builds Lattice.App, whose MinVer version reads git history + tags;
+          # fetch the full history so the version resolves without a shallow-clone
+          # warning.
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x

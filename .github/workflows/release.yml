@@ -28,26 +28,33 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # MinVer computes the version from git tags + commit height, so the
+          # packaging scripts (packaging/version.sh) and the assembly build need
+          # the FULL history — a shallow clone would misreport the version and,
+          # under -warnaserror elsewhere, warn. fetch-depth: 0 fetches all history
+          # and tags.
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
 
-      # Version comes from the tag (v1.2.3 -> 1.2.3) or the dispatch input.
-      # The free-form dispatch input is passed via env (never spliced into the
-      # script body) so a value like $(...) can't be evaluated — GitHub's
-      # script-injection guidance. Both sources are then SemVer-validated.
-      - name: Resolve version
+      # A real tag PUSH needs no version plumbing: MinVer reads the pushed tag
+      # directly (v1.2.3 -> 1.2.3) and stamps both the managed assembly and every
+      # artifact filename from it. A workflow_dispatch DRY RUN has no tag, so pin
+      # the version via MinVer's override env var — honoured identically by the
+      # assembly build and by packaging/version.sh, so filename == stamped version.
+      # The free-form input is passed via env (never spliced into the script body)
+      # so a value like $(...) can't be evaluated — GitHub's script-injection
+      # guidance — then SemVer-validated before it reaches $GITHUB_ENV.
+      - name: Set dry-run version override
+        if: github.event_name == 'workflow_dispatch'
         shell: bash
         env:
           DISPATCH_VERSION: ${{ github.event.inputs.version }}
-          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "$REF_TYPE" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$DISPATCH_VERSION"
-          fi
+          VERSION="$DISPATCH_VERSION"
           # Whole-string validation with bash [[ =~ ]] (NOT line-oriented grep):
           # digits.dots + optional -prerelease, e.g. 1.2.3 or 0.0.0-dev. Because
           # [[ =~ ]] anchors ^…$ to the whole string with no multiline mode, an
@@ -59,12 +66,12 @@ jobs:
             echo "::error::Invalid version '$VERSION' (expected e.g. 1.2.3 or 0.0.0-dev)"
             exit 1
           fi
-          echo "LATTICE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "MinVerVersionOverride=$VERSION" >> "$GITHUB_ENV"
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: ./packaging/windows/build-zip.ps1 -Rid win-x64 -Version $env:LATTICE_VERSION
+        run: ./packaging/windows/build-zip.ps1 -Rid win-x64
 
       - name: Package (macOS)
         if: runner.os == 'macOS'

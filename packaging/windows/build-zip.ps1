@@ -5,34 +5,41 @@
 
 .DESCRIPTION
     Publishes a self-contained, single-file executable (no .NET install needed
-    on the target) and zips the output as Lattice-<rid>.zip. The .exe icon is
-    already embedded via <ApplicationIcon> (#53). UNSIGNED for v1 — no
+    on the target) and zips the output as Lattice-<version>-<rid>.zip. The .exe
+    icon is already embedded via <ApplicationIcon> (#53). UNSIGNED for v1 — no
     Authenticode cert — so users see a SmartScreen "unknown publisher" prompt
     (More info -> Run anyway); documented in packaging/README.md.
 
 .PARAMETER Rid
     .NET runtime identifier. Default: win-x64.
 
-.PARAMETER Version
-    Version to stamp into the assembly + zip name. Defaults to $env:LATTICE_VERSION,
-    then 0.0.0.
+.NOTES
+    The version is derived from git by MinVer (single source; see
+    packaging/version.sh for the rationale). MinVer stamps the assembly during
+    publish, and the same computed value names the zip, so the two can't diverge.
+    Pin a dry run / local one-off with the MinVerVersionOverride env var.
 
 .EXAMPLE
-    pwsh packaging/windows/build-zip.ps1 -Rid win-x64 -Version 0.1.0
+    pwsh packaging/windows/build-zip.ps1 -Rid win-x64
 #>
 param(
-    [string]$Rid = "win-x64",
-    [string]$Version = $env:LATTICE_VERSION
+    [string]$Rid = "win-x64"
 )
 
 $ErrorActionPreference = "Stop"
-if ([string]::IsNullOrWhiteSpace($Version)) { $Version = "0.0.0" }
 
 $RepoRoot = (Resolve-Path "$PSScriptRoot/../..").Path
 $Project  = Join-Path $RepoRoot "src/Lattice.App/Lattice.App.csproj"
+
+# Ask MinVer for its computed Version (no build metadata). -t:MinVer runs only
+# that target so -getProperty sees the computed value; -restore makes it work on
+# a fresh checkout. Select-Object -Last 1 guards against any leading output.
+$Version = (& dotnet msbuild $Project -t:MinVer -getProperty:Version -restore -nologo | Select-Object -Last 1).Trim()
+if ($LASTEXITCODE -ne 0) { throw "MinVer version query failed ($LASTEXITCODE)" }
+
 $OutDir   = Join-Path $RepoRoot "artifacts/windows/$Rid"
 $Publish  = Join-Path $OutDir "publish"
-$Zip      = Join-Path $OutDir "Lattice-$Rid.zip"
+$Zip      = Join-Path $OutDir "Lattice-$Version-$Rid.zip"
 
 Write-Host "==> Publishing Lattice ($Rid, version $Version)"
 if (Test-Path $Publish) { Remove-Item -Recurse -Force $Publish }
@@ -42,9 +49,9 @@ New-Item -ItemType Directory -Force -Path $Publish | Out-Null
 # Single-file self-contained is the csproj default for a per-RID publish; pass
 # it explicitly here so the script is self-describing. Symbol/XML suppression
 # lives in the csproj RID-publish group (DebugType=none etc.), so it needn't be
-# repeated here.
+# repeated here. MinVer stamps the assembly version (no -p:Version).
 dotnet publish $Project -c Release -r $Rid --self-contained true `
-    -p:PublishSingleFile=true -p:Version=$Version `
+    -p:PublishSingleFile=true `
     -o $Publish
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
 

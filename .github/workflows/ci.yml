@@ -20,6 +20,12 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          # MinVer (on Lattice.App) reads the version from git history + tags. A
+          # shallow clone makes it warn, and this build is -warnaserror, so a
+          # shallow checkout would fail the build. fetch-depth: 0 fetches all
+          # history and tags.
+          fetch-depth: 0
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
