@@ -62,12 +62,33 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
     //     cc_status's CPU-lane mode_delay by RunModePolicy.temporaryUntil; the chip
     //     shows only while a temporary CPU override (a snooze) is live. ---
 
-    /// <summary>"Snoozed until hh:mm" while a temporary CPU override is active, else empty.</summary>
+    /// <summary>"Snoozed until hh:mm" while a temporary CPU override is active, else empty.
+    /// Used by the tooltip line only (the pill shows the time alone — see
+    /// <see cref="SnoozedUntilTimeText"/>).</summary>
     [ObservableProperty] private string _snoozedUntilText = "";
 
+    /// <summary>The snooze deadline as local "HH:mm" only (design PR H, S1): the time-pill
+    /// form binds this. Empty when not snoozed.</summary>
+    [ObservableProperty] private string _snoozedUntilTimeText = "";
+
     /// <summary>Whether a temporary CPU override (snooze) is currently active — gates the
-    /// chip's visibility and the "Resume computing" menu item.</summary>
+    /// tooltip snooze line and the "Resume computing" menu item.</summary>
     [ObservableProperty] private bool _isSnoozed;
+
+    /// <summary>Pill form gate (design PR H, S1): the time pill (Form A) shows when snoozed
+    /// and the row is not degraded; the icon chip (Form B) shows when snoozed and degraded.
+    /// Both are ANDed in XAML with the pane-open state (the compact rail hides the pill).</summary>
+    [ObservableProperty] private bool _pillShowsTime;
+    [ObservableProperty] private bool _pillShowsChip;
+
+    /// <summary>The host's PERMANENT run mode per lane — what the "Run modes" radio reflects
+    /// (design PR H, S2). Bound to the *_mode_perm cc_status fields (not the temp-aware
+    /// current mode), so a snooze — a temporary CPU Never override, shown by the pill — does
+    /// not flip the CPU radio away from the user's standing selection. Defaults to Auto until
+    /// the first snapshot arrives.</summary>
+    [ObservableProperty] private RunMode _cpuMode = RunMode.Auto;
+    [ObservableProperty] private RunMode _gpuMode = RunMode.Auto;
+    [ObservableProperty] private RunMode _networkMode = RunMode.Auto;
 
     // XAML binds five stacked, statically-typed PathIcons to these bools so the
     // VM stays Avalonia-free and the state brushes stay DynamicResource-live.
@@ -126,6 +147,7 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         };
 #pragma warning restore CS8524
         RefreshSnooze();
+        RefreshRunModes();
         // Tooltip priority mirrors SubtextDisplay (kept in sync by OnTestResultTextChanged):
         // a transient action result wins over live state, so only rebuild the live tooltip
         // when no transient result is currently showing.
@@ -195,9 +217,14 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         {
             _snoozeDeadline = until.Value;
             IsSnoozed = true;
-            SnoozedUntilText = string.Format(
-                Strings.RailSnoozedUntilFmt,
-                until.Value.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture));
+            string time = until.Value.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+            SnoozedUntilTimeText = time;
+            SnoozedUntilText = string.Format(Strings.RailSnoozedUntilFmt, time);
+            // S1 degrade: keep the time pill unless the host text needs the room, in which
+            // case the compact chip shows and the time falls back to the tooltip.
+            bool chip = RunModePillPolicy.Decide(Name.Length, SubtextDisplay.Length) == RunModePillForm.Chip;
+            PillShowsChip = chip;
+            PillShowsTime = !chip;
         }
         else
         {
@@ -205,11 +232,26 @@ public sealed partial class HostRailItemViewModel : ObservableObject, IDisposabl
         }
     }
 
+    // The permanent per-lane run modes for the radio checkmarks. Keeps the last-known
+    // values when no snapshot is present (menu items are disabled off Connected anyway,
+    // DI-3), so a transient gap does not clear the checkmarks.
+    private void RefreshRunModes()
+    {
+        if (_entry.Snapshot?.CcStatus is not { } status)
+            return;
+        CpuMode = status.TaskModePerm;
+        GpuMode = status.GpuModePerm;
+        NetworkMode = status.NetworkModePerm;
+    }
+
     private void ClearSnooze()
     {
         _snoozeDeadline = null;
         IsSnoozed = false;
         SnoozedUntilText = "";
+        SnoozedUntilTimeText = "";
+        PillShowsTime = false;
+        PillShowsChip = false;
     }
 
     private void ExpireSnoozeIfPast()

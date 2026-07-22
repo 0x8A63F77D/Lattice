@@ -86,29 +86,40 @@
                   IsVisible="{Binding HasScopedHost}">
             <Button.Flyout>
               <MenuFlyout>
+                <!-- Radios reflect the scoped host's PERMANENT mode (design PR H, S2/S3 —
+                     identical to the rail menu, one spec two hosts). -->
                 <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeCpu"
+                              IsChecked="{Binding ScopedHost.CpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:always" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeCpu"
+                              IsChecked="{Binding ScopedHost.CpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:auto" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeCpu"
+                              IsChecked="{Binding ScopedHost.CpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="cpu:never" />
                   </MenuItem>
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeGpu"
+                              IsChecked="{Binding ScopedHost.GpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:always" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeGpu"
+                              IsChecked="{Binding ScopedHost.GpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:auto" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeGpu"
+                              IsChecked="{Binding ScopedHost.GpuMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="gpu:never" />
                   </MenuItem>
                   <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeNet"
+                              IsChecked="{Binding ScopedHost.NetworkMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:always" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeNet"
+                              IsChecked="{Binding ScopedHost.NetworkMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:auto" />
-                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                    <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeNet"
+                              IsChecked="{Binding ScopedHost.NetworkMode, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                               Command="{Binding ScopedHost.SetRunModeCommand}" CommandParameter="net:never" />
                   </MenuItem>
                 </MenuItem>

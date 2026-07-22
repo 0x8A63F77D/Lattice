@@ -185,6 +185,28 @@ public class RunModeControlTests : IAsyncLifetime
         Assert.Equal("", vm.SnoozedUntilText);
     }
 
+    // --- radio mode properties (S2): reflect the PERMANENT lane mode, not the temp-aware current ---
+
+    [Fact]
+    public async Task Run_mode_properties_follow_the_permanent_lane_modes_not_the_current()
+    {
+        // Current CPU is Never (as during a snooze), but the permanent CPU mode is Auto —
+        // the radio must follow the permanent selection so a snooze doesn't flip it.
+        var status = new CcStatus(
+            RunMode.Never, RunMode.Auto, RunMode.Auto,
+            SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
+            RunMode.Auto, 0, RunMode.Always, 0, RunMode.Never, 0);   // perm: CPU Auto, GPU Always, Net Never
+        var fake = new FakeGuiRpcClient { OnGetCcStatus = () => Task.FromResult(status) };
+        _fx.AddHost("host-a", fake);
+        _fx.Start();
+        await _fx.SettleAsync(() => _fx.Store.Hosts[0].Snapshot is not null);
+        var vm = new HostRailItemViewModel(_fx.Store.Hosts[0], _fx.Clock, _fx.Control);
+
+        Assert.Equal(RunMode.Auto, vm.CpuMode);       // permanent, not the current Never
+        Assert.Equal(RunMode.Always, vm.GpuMode);
+        Assert.Equal(RunMode.Never, vm.NetworkMode);
+    }
+
     // --- shell scoped-host surface (DI-4: present single-host, absent All-hosts) ---
 
     private ShellViewModel MakeShell() =>

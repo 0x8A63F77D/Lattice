@@ -213,29 +213,43 @@
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).TestHostCommand}"
                                 CommandParameter="{Binding HostId}" />
                       <MenuItem Header="-" />
+                      <!-- Mode leaves are radios (design PR H, S2): GroupName per lane,
+                           IsChecked reflects the host's PERMANENT mode (OneWay — the daemon
+                           owns the value; the command drives the change and the next poll
+                           re-checks). EnumMatchConverter matches the RunMode against the
+                           parameter name. -->
                       <MenuItem Header="{x:Static loc:Strings.HostMenuRunModes}">
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneCpu}">
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeCpu"
+                                    IsChecked="{Binding CpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="cpu:always" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeCpu"
+                                    IsChecked="{Binding CpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="cpu:auto" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeCpu"
+                                    IsChecked="{Binding CpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="cpu:never" />
                         </MenuItem>
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneGpu}">
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeGpu"
+                                    IsChecked="{Binding GpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="gpu:always" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeGpu"
+                                    IsChecked="{Binding GpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="gpu:auto" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeGpu"
+                                    IsChecked="{Binding GpuMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="gpu:never" />
                         </MenuItem>
                         <MenuItem Header="{x:Static loc:Strings.HostMenuLaneNetwork}">
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAlways}" ToggleType="Radio" GroupName="RunModeNet"
+                                    IsChecked="{Binding NetworkMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Always, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="net:always" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeAuto}" ToggleType="Radio" GroupName="RunModeNet"
+                                    IsChecked="{Binding NetworkMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Auto, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="net:auto" />
-                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}"
+                          <MenuItem Header="{x:Static loc:Strings.RunModeNever}" ToggleType="Radio" GroupName="RunModeNet"
+                                    IsChecked="{Binding NetworkMode, Converter={x:Static v:EnumMatchConverter.Instance}, ConverterParameter=Never, Mode=OneWay}"
                                     Command="{Binding SetRunModeCommand}" CommandParameter="net:never" />
                         </MenuItem>
                       </MenuItem>
@@ -274,16 +288,20 @@
                               Data="{StaticResource IconKeyRegular}"
                               Foreground="{DynamicResource LatticeDangerFgBrush}" />
                   </Panel>
-                  <!-- Snooze chip (M3 PR H, H2): right-docked pill shown only while a
-                       temporary CPU override is active, and only when the pane is open
-                       (the 48px compact rail shows the state icon only). -->
+                  <!-- Snooze pill (M3 PR H, S1). Two forms of one element, right-docked,
+                       shown only while snoozed AND the pane is open (the 48px compact rail
+                       shows the state icon only; the tooltip carries the snooze time there).
+                       Form A = time pill (default); Form B = 20×20 icon chip (degraded when
+                       the host text needs the room — RunModePillPolicy). Both lead with the
+                       pause glyph so they read as one element; only one is visible per row. -->
+                  <!-- Form A — time pill -->
                   <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="4,0,0,0"
-                          Padding="6,1" CornerRadius="{StaticResource LatticeControlRadius}"
+                          Padding="6,2" CornerRadius="{StaticResource LatticeControlRadius}"
                           Background="{DynamicResource LatticeWarningTintBrush}"
                           BorderBrush="{DynamicResource LatticeWarningInfoBarBorderBrush}" BorderThickness="1">
                     <Border.IsVisible>
                       <MultiBinding Converter="{x:Static BoolConverters.And}">
-                        <Binding Path="IsSnoozed" />
+                        <Binding Path="PillShowsTime" />
                         <Binding Path="#Nav.IsPaneOpen" />
                       </MultiBinding>
                     </Border.IsVisible>
@@ -291,9 +309,26 @@
                       <PathIcon Width="10" Height="10" VerticalAlignment="Center"
                                 Data="{StaticResource IconPauseRegular}"
                                 Foreground="{DynamicResource LatticeWarningFgBrush}" />
-                      <TextBlock Text="{Binding SnoozedUntilText}" FontSize="10" VerticalAlignment="Center"
+                      <!-- tnum so the minutes don't jitter the pill width as they tick. -->
+                      <TextBlock Text="{Binding SnoozedUntilTimeText}" FontSize="11" FontFeatures="+tnum"
+                                 VerticalAlignment="Center"
                                  Foreground="{DynamicResource LatticeWarningFgBrush}" />
                     </StackPanel>
+                  </Border>
+                  <!-- Form B — icon chip (degraded) -->
+                  <Border DockPanel.Dock="Right" VerticalAlignment="Center" Margin="4,0,0,0"
+                          Width="20" Height="20" CornerRadius="{StaticResource LatticeControlRadius}"
+                          Background="{DynamicResource LatticeWarningTintBrush}"
+                          BorderBrush="{DynamicResource LatticeWarningInfoBarBorderBrush}" BorderThickness="1">
+                    <Border.IsVisible>
+                      <MultiBinding Converter="{x:Static BoolConverters.And}">
+                        <Binding Path="PillShowsChip" />
+                        <Binding Path="#Nav.IsPaneOpen" />
+                      </MultiBinding>
+                    </Border.IsVisible>
+                    <PathIcon Width="10" Height="10" HorizontalAlignment="Center" VerticalAlignment="Center"
+                              Data="{StaticResource IconPauseRegular}"
+                              Foreground="{DynamicResource LatticeWarningFgBrush}" />
                   </Border>
                   <StackPanel x:Name="HostText" VerticalAlignment="Center" Margin="4,0,0,0"
                               IsVisible="{Binding #Nav.IsPaneOpen}">
