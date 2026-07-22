@@ -53,10 +53,13 @@ machine, dyld stall):
 LATTICE_SAMPLE_HOSTS=1 dotnet run -c Debug --project src/Lattice.App
 ```
 
-This injects a **three-host fleet** (`Sample · Alpha / Beta / Gamma`) alongside any real hosts. All
-three connect and are attached to **Einstein@Home**, so in All-hosts scope the Projects view shows one
-**Einstein@Home parent row spanning all three hosts** — which is exactly what §4 needs to exercise the
-multi-host confirmation receipt without owning three real daemons.
+This injects a **three-host fleet** (`Sample · Alpha / Beta / Gamma`) **merged into** your real host
+list (it does not replace it). All three connect and are attached to **Einstein@Home**, so in All-hosts
+scope the Projects view shows one **Einstein@Home parent row** — which §4 uses to exercise the
+multi-host confirmation receipt without owning three real daemons. Note the sample fleet shares the
+**same Einstein@Home URL** as the real daemon, so if your real host is also attached the parent row
+covers it too; §4 explains how that changes the count and why you must **Cancel** (never confirm) its
+dialogs.
 
 *Sources: control lane + failure taxonomy — PR D (#131); attach flow — PR E (#132); Tasks ops — PR F;
 Projects ops — PR G; run modes + snooze — PR H (#137); attach dialog — PR I (#138). Sample fleet —
@@ -137,29 +140,43 @@ host it is a single, leaf-style row).
 
 This section verifies **DI-2**: a project action on an aggregated parent row acts on **every** host,
 and any multi-host action confirms first and **spells out which hosts** it will touch. You do not need
-three real daemons — the **sample fleet** gives you a real 3-host parent row. Remember the caveat: the
-**dialogs are real and correct**, but the sample hosts **ignore the actual op**, so nothing changes
-afterward. You are checking the *dialog*, not the effect.
+three real daemons — the **sample fleet** gives you a real multi-host parent row. You are checking the
+*dialog* (the blast-radius receipt), not the effect.
+
+> **Important — the real Einstein@Home host joins this row.** The sample fleet is attached to the same
+> Einstein@Home URL as the real daemon from §A, and sample mode **merges the sample fleet into your
+> real host list** (it does not replace it). So if your real Einstein@Home host is configured and
+> connected, the All-hosts Einstein@Home parent row spans **the real host *and* the three samples**
+> (count **> 3**), and — critically — **confirming an op on that row WILL execute it on the real host**
+> (only the sample hosts ignore ops). Two consequences:
+> 1. To see an **exactly-3-host** receipt, run the sample fleet in a session where **no real host is
+>    attached to Einstein@Home** (e.g. before you attach the real daemon in §A, or with it detached).
+> 2. In this section, **read each dialog and then Cancel it** — do **not** confirm. The receipt (the
+>    host enumeration) is the whole DI-2 requirement; confirming risks a real detach/suspend on your
+>    live project.
 
 Launch with `LATTICE_SAMPLE_HOSTS=1`, switch to **All-hosts** scope, open **Projects**, and select the
-**Einstein@Home parent row** (it spans `Sample · Alpha`, `Sample · Beta`, `Sample · Gamma`).
+**Einstein@Home parent row** (in a sample-only session it spans `Sample · Alpha`, `Sample · Beta`,
+`Sample · Gamma`).
 
 - [ ] **Suspend** (or **Resume** / **Update**) the parent row → because this is a **reversible op on
       more than one host**, a **Caution confirmation** appears even though the op is reversible:
-      - Title: **`Suspend on 3 hosts?`** (the op label + host count)
-      - Body: **`Suspend "Einstein@Home" on 3 hosts: <the three host names>.`** — i.e. it lists
-        `Sample · Alpha`, `Sample · Beta`, and `Sample · Gamma`.
-      - The dialog **names all three hosts** — this is the "receipt" so a fat-finger on an aggregate
-        row can't silently hit three daemons. (Single-host reversible ops in §3 had **no** dialog;
-        the dialog is the multi-host difference.)
-- [ ] **Detach** the parent row → a **danger** confirmation naming all three hosts:
+      - Title: **`Suspend on N hosts?`** (the op label + the covered-host count — **3** in a
+        sample-only session, more if a real Einstein@Home host is also in the row)
+      - Body: **`Suspend "Einstein@Home" on N hosts: <the host names>.`** — it **enumerates every
+        covered host** (`Sample · Alpha`, `Sample · Beta`, `Sample · Gamma`, plus your real host if
+        present).
+      - The named list is the "receipt" so a fat-finger on an aggregate row can't silently hit N
+        daemons. (Single-host reversible ops in §3 had **no** dialog; the dialog is the multi-host
+        difference.) **Cancel** it.
+- [ ] **Detach** the parent row → a **danger** confirmation enumerating every covered host:
       - Title: **"Detach project?"**
-      - Body: **`Detach "Einstein@Home" from 3 hosts: <the three host names>? In-progress tasks on
-        those hosts will be lost and must be re-downloaded to re-attach.`** — naming all three sample
-        hosts.
-- [ ] Confirm either dialog → the op **reports success** but the sample fleet's rows are **unchanged**
-      (expected — sample hosts ignore ops). No red failure bar appears. (Confirming the *effect*
-      belongs to the real daemon; this section is only about the receipt.)
+      - Body: **`Detach "Einstein@Home" from N hosts: <the host names>? In-progress tasks on those
+        hosts will be lost and must be re-downloaded to re-attach.`**
+      - **Cancel** it (confirming here would really detach every listed host, including your real one).
+- [ ] Confirm the receipt matched reality: the count equals the number of hosts actually attached to
+      Einstein@Home in scope, and each is named. You **Cancelled** both dialogs, so nothing executed
+      on any host.
 
 *Design: DI-2 (act on all hosts, confirm when N > 1, enumerate the hosts); PR G.*
 
