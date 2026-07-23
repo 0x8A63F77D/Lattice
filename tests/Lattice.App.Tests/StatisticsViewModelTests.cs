@@ -1,6 +1,7 @@
 using Lattice.App.Aggregation;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
+using Lattice.Core;
 using Lattice.Tests;
 using Xunit;
 
@@ -155,6 +156,36 @@ public class StatisticsViewModelTests : IAsyncLifetime
 
         Assert.Contains("3 projects", vm.CountsText);
         Assert.Contains("9 days", vm.CountsText);
+    }
+
+    [Fact]
+    public async Task Unreachable_host_keeps_the_chart_and_raises_the_stale_banner()
+    {
+        var fake = Fake(3);
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart, "the host connects and charts its history");
+
+        // Break the live tick (forces a teardown) AND every reconnect, so attempts climb into
+        // the Unreachable tier (Retrying, attempt >= 4) while the cached snapshot — and its
+        // history — persists.
+        fake.OnGetCcStatus = () => throw new BoincConnectionException("poll boom");
+        fake.OnConnect = (_, _) => throw new BoincConnectionException("no route");
+        await _fx.AdvanceUntilAsync(
+            () =>
+            {
+                var s = _fx.Store.Hosts.Single(h => h.Config.Id == host.Id).Status;
+                return s.State == HostConnectionState.Retrying && s.Attempt >= 4;
+            },
+            TimeSpan.FromSeconds(30),
+            "host should climb into the Unreachable tier");
+
+        Assert.True(vm.IsStale);
+        Assert.False(vm.IsEmpty);
+        Assert.True(vm.HasChart, "the last-known history keeps rendering while stale");
+        Assert.Contains("Host unreachable", vm.StaleText);
     }
 
     [Fact]
