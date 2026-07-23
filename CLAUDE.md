@@ -11,6 +11,7 @@ Lattice is a GUI RPC *client*. It does not schedule, download, or compute anythi
 ```
 lattice/
 ├── Lattice.App/            # Avalonia UI (views, viewmodels, theming)
+├── Lattice.App.Aggregation/ # Pure F# core for the App layer: multi-host scope + row slicing, keyed grid reconciliation, rail layout. Consumed by Lattice.App ViewModels; no UI deps.
 ├── Lattice.Core/           # Domain: host registry, polling scheduler, state cache + diff. NO UI deps, NO direct socket code.
 ├── Lattice.Core.Machine/    # Pure F# decision core for HostMonitor (HostMachine.step). No I/O, no deps.
 ├── Lattice.Boinc.GuiRpc/   # Protocol layer: connection, auth, RPC ops, strongly-typed models. Single-host semantics only.
@@ -131,7 +132,7 @@ Single + multi-host: task list with progress, project list, transfers, message l
 Suspend/resume (task, project, global run modes), task abort, project update/attach/detach (incl. the async lookup_account flow), snooze. Confirmation UX for destructive ops.
 
 **M4 — Differentiators**
-Charts (credit history, task timeline, throughput). SSH tunnel manager for remote hosts. Host groups. Notification surface (task failures, unreachable hosts) via InfoBar/tray.
+Charts: IN PROGRESS (#148 ruling, 2026-07-22) — first batch scoped to official-Manager Statistics parity (per-project user/host total & average credit history). SSH tunnel manager for remote hosts: still planned. Host groups: DEFERRED (reopen trigger: real-user demand at 10+ host fleets). Notification surface (task failures, unreachable hosts) via InfoBar/tray: DEFERRED, revisit later. See #148 for the ruling.
 
 ## Naming
 
