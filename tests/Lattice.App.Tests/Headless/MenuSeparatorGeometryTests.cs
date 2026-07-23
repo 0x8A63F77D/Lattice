@@ -73,6 +73,20 @@ public class MenuSeparatorGeometryTests
         double below2 = belowTop - sep.CentreY;
         Assert.True(System.Math.Abs(above2 - below2) < 1.5,
             $"divider line must be centred in its gap; above={above2:F1}px, below={below2:F1}px");
+
+        // The line is actually a painted rule, not just an empty thin slot: it is
+        // visible, laid out at FA's ~1px separator height, spans the menu width
+        // (not clipped to nothing), and carries the FA MenuFlyoutSeparatorBackground
+        // brush (a null/transparent brush would render invisibly). This closes the
+        // "thin slot but no visible line / wrong colour / clipped" gap at the wiring
+        // level; the actual pixels are the owner-eyeball gate for this visual PR.
+        var line = sep.Sep;
+        Assert.True(line.IsVisible, "divider line must be visible");
+        Assert.True(line.Bounds is { Height: > 0.5 and < 3.0, Width: > 8.0 },
+            $"divider line must render as a thin, full-width rule; bounds={line.Bounds.Width:F1}x{line.Bounds.Height:F1}");
+        Assert.True(presenter.TryFindResource("MenuFlyoutSeparatorBackground", out var sepBrush) && sepBrush is not null,
+            "the FA MenuFlyoutSeparatorBackground brush must resolve");
+        Assert.Equal(sepBrush, line.Background);
     }
 
     // Reproduce ShellWindow's window-level rule (design 3b: 32px menu rows) on the
