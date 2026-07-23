@@ -1,0 +1,370 @@
+using System.Collections.ObjectModel;
+using System.Globalization;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using LiveChartsCore;
+using LiveChartsCore.Kernel.Sketches;
+using LiveChartsCore.Measure;
+using Lattice.App.Aggregation;
+using Lattice.App.Charting;
+using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
+using Lattice.Boinc.GuiRpc;
+using Lattice.Core;
+using Microsoft.FSharp.Collections;
+
+namespace Lattice.App.ViewModels;
+
+/// <summary>
+/// Drives the Statistics page (design contract, issue #148). Unlike the grid views this is
+/// a SINGLE-host surface — cross-host overlay is out of scope ([HARD], §4) — so it charts
+/// the scoped host, or the ComboBox-selected host under the "All hosts" scope. All chart-
+/// content decisions live in the pure <see cref="StatisticsChart"/> module and the shared
+/// <see cref="StatisticsChartBuilder"/>; this class owns only the chrome state (metric
+/// switch, legend visibility, overflow cap, empty/stale surfaces) and the GuiRpc → F#
+/// projection. Takes (HostStore, IUiClock) only — shell-agnostic; ShellViewModel pushes
+/// <see cref="Scope"/> on change and the view pushes <see cref="Theme"/> on a theme switch.
+/// </summary>
+public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
+{
+    private readonly HostStore _store;
+    private readonly IUiClock _clock;
+    private ScopeSelection _scope = ScopeSelection.AllHosts;
+
+    // Visible master URLs and the host they belong to: user toggles persist across the 1 s
+    // ticks, but switching the charted host re-derives the top-6 default.
+    private readonly HashSet<string> _visible = [];
+    private Guid? _visibleHostId;
+
+    public StatisticsViewModel(HostStore store, IUiClock clock)
+    {
+        _store = store;
+        _clock = clock;
+        MetricOptions =
+        [
+            new StatisticsMetricOption(Strings.StatisticsMetricUserTotal, CreditMetric.UserTotal),
+            new StatisticsMetricOption(Strings.StatisticsMetricUserAverage, CreditMetric.UserAverage),
+            new StatisticsMetricOption(Strings.StatisticsMetricHostTotal, CreditMetric.HostTotal),
+            new StatisticsMetricOption(Strings.StatisticsMetricHostAverage, CreditMetric.HostAverage),
+        ];
+        _selectedMetric = MetricOptions[0]; // User total (§4 default)
+        store.Changed += OnStoreChanged;
+        clock.Tick += OnTick;
+        Rebuild();
+    }
+
+    // ---- chrome collections & chart output -------------------------------
+
+    /// <summary>The four metric-switcher segments (§4), Manager wording and order.</summary>
+    public IReadOnlyList<StatisticsMetricOption> MetricOptions { get; }
+
+    /// <summary>Legend chips for the ≤6 default-visible projects (§4).</summary>
+    public ObservableCollection<StatisticsLegendChip> Chips { get; } = [];
+
+    /// <summary>Overflow-flyout rows for projects beyond the cap (§4).</summary>
+    public ObservableCollection<StatisticsOverflowItem> Overflow { get; } = [];
+
+    /// <summary>Host picker entries, shown only in the "All hosts" scope (§4).</summary>
+    public ObservableCollection<StatisticsHostOption> HostOptions { get; } = [];
+
+    // Chart-content wiring for the CartesianChart binding (built by the shared renderer).
+    [ObservableProperty] private IEnumerable<ISeries> _series = [];
+    [ObservableProperty] private IEnumerable<ICartesianAxis> _xAxes = [];
+    [ObservableProperty] private IEnumerable<ICartesianAxis> _yAxes = [];
+
+    // Chart-level pins (§3 [HARD] / §6), surfaced for XAML binding so the page and the
+    // snapshot harness share them.
+    public TimeSpan AnimationsSpeed => StatisticsChartBuilder.AnimationsSpeed;
+    public Func<float, float> EasingFunction => StatisticsChartBuilder.Easing;
+    public FindingStrategy FindingStrategy => StatisticsChartBuilder.TooltipFindingStrategy;
+    public ZoomAndPanMode ZoomMode => StatisticsChartBuilder.ZoomMode;
+
+    // ---- observable chrome state -----------------------------------------
+
+    [ObservableProperty] private bool _isAllHostsScope;
+    [ObservableProperty] private StatisticsHostOption? _selectedHost;
+    [ObservableProperty] private string _countsText = "";
+    [ObservableProperty] private string _pollingText = "";
+    [ObservableProperty] private string _updatedText = "";
+    [ObservableProperty] private bool _hasChart;
+    [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isEmpty;
+    [ObservableProperty] private bool _isStale;
+    [ObservableProperty] private string _staleText = "";
+    [ObservableProperty] private string _overflowLabel = "";
+    [ObservableProperty] private bool _hasOverflow;
+    [ObservableProperty] private bool _isAtCap;
+
+    /// <summary>The active metric (§4). Two-way bound to the segmented switcher.</summary>
+    [ObservableProperty] private StatisticsMetricOption _selectedMetric;
+
+    /// <summary>The chart theme, pushed by the view on a live theme switch (warning #1).</summary>
+    [ObservableProperty] private StatisticsChartTheme _theme = StatisticsChartTheme.Light;
+
+    partial void OnSelectedMetricChanged(StatisticsMetricOption value) => Rebuild();
+
+    partial void OnSelectedHostChanged(StatisticsHostOption? value) => Rebuild();
+
+    partial void OnThemeChanged(StatisticsChartTheme value) => Rebuild();
+
+    /// <summary>Pushed by ShellViewModel whenever the global rail scope changes.</summary>
+    public ScopeSelection Scope
+    {
+        get => _scope;
+        set
+        {
+            if (_scope.Equals(value)) return;
+            _scope = value;
+            Rebuild();
+        }
+    }
+
+    [RelayCommand]
+    private void Retry() => _store.RequestRefresh(EffectiveHost()?.Config.Id);
+
+    private void OnStoreChanged(object? sender, EventArgs e) => Rebuild();
+
+    // The 1 s tick only advances the "Updated Ns ago" caption; Rebuild recomputes
+    // everything together rather than special-casing a freshness-only path (Tasks idiom).
+    private void OnTick(object? sender, EventArgs e) => Rebuild();
+
+    // ---- host resolution -------------------------------------------------
+
+    /// <summary>
+    /// The host whose statistics are charted: the scoped host in a single-host scope, else
+    /// the picker's selection (defaulting to the first connected host) in "All hosts".
+    /// </summary>
+    private HostEntry? EffectiveHost()
+    {
+        if (!Scope.IsAllHosts)
+            return _store.Hosts.FirstOrDefault(h => h.Config.Id == Scope.HostId);
+        if (SelectedHost is { } sel)
+        {
+            var picked = _store.Hosts.FirstOrDefault(h => h.Config.Id == sel.HostId);
+            if (picked is not null) return picked;
+        }
+        return FirstConnected() ?? _store.Hosts.FirstOrDefault();
+    }
+
+    private HostEntry? FirstConnected() =>
+        _store.Hosts.FirstOrDefault(h => RailStateProjection.From(h.Status) == RailState.Connected)
+        ?? _store.Hosts.FirstOrDefault(h => h.Snapshot is not null);
+
+    private void SyncHostOptions()
+    {
+        IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
+        if (!IsAllHostsScope)
+        {
+            if (HostOptions.Count > 0) HostOptions.Clear();
+            return;
+        }
+
+        var desired = _store.Hosts.Select(h => new StatisticsHostOption(h.Config.Id, h.Config.DisplayName)).ToList();
+        if (!desired.SequenceEqual(HostOptions))
+        {
+            HostOptions.Clear();
+            foreach (var o in desired) HostOptions.Add(o);
+        }
+
+        // Default / repair the selection to the effective host so the picker mirrors the chart.
+        var effective = EffectiveHost();
+        var match = effective is null ? null : HostOptions.FirstOrDefault(o => o.HostId == effective.Config.Id);
+        if (!Equals(SelectedHost, match))
+            SelectedHost = match; // setter reenters Rebuild once; guarded by the equality check
+    }
+
+    // ---- projection ------------------------------------------------------
+
+    /// <summary>
+    /// Projects the effective host's snapshot into GuiRpc-free <see cref="ProjectHistory"/>
+    /// records: ordinal = the project's index in the daemon project list (the stable colour
+    /// key), Rac = the live per-host RAC, Daily = its credit history. Only projects with at
+    /// least one daily record are chartable.
+    /// </summary>
+    private static List<ProjectHistory> Project(HostSnapshot snapshot)
+    {
+        var statsByUrl = new Dictionary<string, ProjectStatistics>();
+        foreach (var s in snapshot.Statistics)
+            statsByUrl.TryAdd(s.MasterUrl, s);
+
+        var histories = new List<ProjectHistory>();
+        for (int ordinal = 0; ordinal < snapshot.Projects.Count; ordinal++)
+        {
+            var project = snapshot.Projects[ordinal].Project;
+            if (!statsByUrl.TryGetValue(project.MasterUrl, out var stats) || stats.Daily.Count == 0)
+                continue; // no chartable history for this project
+            var daily = stats.Daily
+                .Select(d => new DailyCredit(d.Day, d.UserTotalCredit, d.UserExpavgCredit, d.HostTotalCredit, d.HostExpavgCredit))
+                .ToList();
+            histories.Add(new ProjectHistory(
+                project.MasterUrl, project.ProjectName, ordinal, project.HostExpavgCredit, ListModule.OfSeq(daily)));
+        }
+
+        return histories;
+    }
+
+    // ---- rebuild ---------------------------------------------------------
+
+    private void Rebuild()
+    {
+        SyncHostOptions();
+        PollingText = string.Format(Strings.PollingFmt, _store.PollingIntervalSeconds);
+
+        var host = EffectiveHost();
+        var snapshot = host?.Snapshot;
+        var histories = snapshot is null ? [] : Project(snapshot);
+        var hasHistory = histories.Count > 0;
+
+        // Overlay choice reuses the shared per-host taxonomy: loading = first fetch still
+        // plausibly in flight, empty = a Connected host answered with no history (§5).
+        var rail = host is null ? RailState.Connecting : RailStateProjection.From(host.Status);
+        (IsLoading, IsEmpty) = TasksOverlayPolicy.Decide(
+            host is null ? [] : [new TasksOverlayPolicy.HostFacts(rail, snapshot is not null)],
+            hasHistory);
+
+        HasChart = hasHistory;
+
+        // Stale banner (§5): an unreachable host keeps rendering its last data with a warning.
+        IsStale = hasHistory && rail == RailState.Unreachable && snapshot is not null;
+        StaleText = IsStale
+            ? string.Format(Strings.StatisticsStaleFmt, snapshot!.Timestamp.LocalDateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture))
+            : "";
+
+        UpdatedText = snapshot is not null ? TimeText.UpdatedAgo(snapshot.Timestamp, _clock.Now) : "";
+
+        if (!hasHistory)
+        {
+            _visibleHostId = null;
+            _visible.Clear();
+            if (Chips.Count > 0) Chips.Clear();
+            if (Overflow.Count > 0) Overflow.Clear();
+            HasOverflow = false;
+            IsAtCap = false;
+            Series = [];
+            XAxes = [];
+            YAxes = [];
+            CountsText = "";
+            return;
+        }
+
+        var hostId = host!.Config.Id;
+        var masters = histories.Select(h => h.MasterUrl).ToHashSet();
+        if (_visibleHostId != hostId)
+        {
+            // New charted host: re-derive the top-6-by-RAC default visibility.
+            _visible.Clear();
+            foreach (var url in StatisticsChart.defaultVisible(ListModule.OfSeq(histories)))
+                _visible.Add(url);
+            _visibleHostId = hostId;
+        }
+        else
+        {
+            _visible.IntersectWith(masters); // drop projects that vanished
+        }
+
+        var partition = StatisticsChart.partition(ListModule.OfSeq(histories));
+        SyncChips(partition.Chips);
+        SyncOverflow(partition.Overflow);
+
+        var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
+        var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme);
+        Series = visual.Series;
+        XAxes = visual.XAxes;
+        YAxes = visual.YAxes;
+
+        CountsText = string.Format(
+            CultureInfo.CurrentCulture, Strings.StatisticsCountsFmt,
+            histories.Count, StatisticsChart.historyDepthDays(ListModule.OfSeq(histories)));
+    }
+
+    private void SyncChips(FSharpList<ProjectHistory> chips)
+    {
+        var desired = chips.ToList();
+        var sameShape = Chips.Count == desired.Count
+            && Chips.Zip(desired).All(pair => pair.First.MasterUrl == pair.Second.MasterUrl);
+
+        if (!sameShape)
+        {
+            Chips.Clear();
+            foreach (var p in desired)
+            {
+                var chip = new StatisticsLegendChip(p.MasterUrl, p.Name, p.Ordinal, StatisticsPalette.Brush(p.Ordinal), _visible.Contains(p.MasterUrl))
+                {
+                    Toggled = OnChipToggled,
+                };
+                Chips.Add(chip);
+            }
+            return;
+        }
+
+        // Same projects: only sync visibility (silently, so the sync itself never re-enters).
+        foreach (var (chip, p) in Chips.Zip(desired))
+            chip.SetVisibleSilently(_visible.Contains(p.MasterUrl));
+    }
+
+    private void SyncOverflow(FSharpList<ProjectHistory> overflow)
+    {
+        var desired = overflow.ToList();
+        HasOverflow = desired.Count > 0;
+        OverflowLabel = string.Format(Strings.StatisticsOverflowFmt, desired.Count);
+        IsAtCap = !StatisticsChart.canAddSeries(_visible.Count);
+
+        var sameShape = Overflow.Count == desired.Count
+            && Overflow.Zip(desired).All(pair => pair.First.MasterUrl == pair.Second.MasterUrl);
+
+        if (!sameShape)
+        {
+            Overflow.Clear();
+            foreach (var p in desired)
+                Overflow.Add(new StatisticsOverflowItem(
+                    p.MasterUrl, p.Name, RacText(p.Rac), _visible.Contains(p.MasterUrl), CanCheck(p.MasterUrl))
+                {
+                    Toggled = OnOverflowToggled,
+                });
+            return;
+        }
+
+        foreach (var (item, p) in Overflow.Zip(desired))
+        {
+            item.RacText = RacText(p.Rac);
+            item.SetVisibleSilently(_visible.Contains(p.MasterUrl));
+            item.CanCheck = CanCheck(p.MasterUrl);
+        }
+    }
+
+    // A row can be checked if it is already shown or the cap has room (§4).
+    private bool CanCheck(string master) => _visible.Contains(master) || StatisticsChart.canAddSeries(_visible.Count);
+
+    private static string RacText(double rac) =>
+        ((long)Math.Round(rac)).ToString("N0", CultureInfo.CurrentCulture);
+
+    private void OnChipToggled(StatisticsLegendChip chip)
+    {
+        ApplyVisibility(chip.MasterUrl, chip.IsVisible);
+        Rebuild();
+    }
+
+    private void OnOverflowToggled(StatisticsOverflowItem item)
+    {
+        // The cap gate disables unchecked rows at six, but guard anyway: never exceed six.
+        if (item.IsVisible && !CanCheck(item.MasterUrl))
+        {
+            item.SetVisibleSilently(false);
+            return;
+        }
+        ApplyVisibility(item.MasterUrl, item.IsVisible);
+        Rebuild();
+    }
+
+    private void ApplyVisibility(string master, bool visible)
+    {
+        if (visible) _visible.Add(master);
+        else _visible.Remove(master);
+    }
+
+    public void Dispose()
+    {
+        _store.Changed -= OnStoreChanged;
+        _clock.Tick -= OnTick;
+    }
+}
