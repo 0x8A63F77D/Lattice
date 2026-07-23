@@ -314,26 +314,36 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     private void OnChipToggled(StatisticsLegendChip chip)
     {
-        ApplyVisibility(chip.MasterUrl, chip.IsVisible);
+        if (!TryApplyToggle(chip.MasterUrl, chip.IsVisible))
+        {
+            chip.SetVisibleSilently(false);
+            return;
+        }
         Rebuild();
     }
 
     private void OnOverflowToggled(StatisticsOverflowItem item)
     {
-        // The cap gate disables unchecked rows at six, but guard anyway: never exceed six.
-        if (item.IsVisible && !CanCheck(item.MasterUrl))
+        if (!TryApplyToggle(item.MasterUrl, item.IsVisible))
         {
             item.SetVisibleSilently(false);
             return;
         }
-        ApplyVisibility(item.MasterUrl, item.IsVisible);
         Rebuild();
     }
 
-    private void ApplyVisibility(string master, bool visible)
+    // The SINGLE cap-guarded visibility mutation (§4 ≤6): a check that would exceed the cap is
+    // refused (the caller snaps the control back). Both the chip and the overflow toggle route
+    // through here so the cap can never be enforced on one path and forgotten on the other — the
+    // overflow flyout disables its rows at six, but a re-checked chip is the same invariant and
+    // must not slip past it (Codex P2, PR #167).
+    private bool TryApplyToggle(string master, bool visible)
     {
+        if (visible && !CanCheck(master))
+            return false;
         if (visible) _visible.Add(master);
         else _visible.Remove(master);
+        return true;
     }
 
     public void Dispose()

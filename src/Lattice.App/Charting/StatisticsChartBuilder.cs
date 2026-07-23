@@ -124,13 +124,18 @@ public static class StatisticsChartBuilder
     }
 
     /// <summary>Chart hexes per theme (§2): (Y gridline, axis label).</summary>
+#pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED StatisticsChartTheme
+    // left unhandled) must stay a build error so its chart hexes are chosen here. CS8524 is the
+    // residual unnamed-value case — an out-of-range cast like (StatisticsChartTheme)999,
+    // unreachable for a well-formed value — and is suppressed; a `_` arm would silence CS8509 too
+    // and defeat the guard. (Same RailTierProjection / TaskStatusPolicy pattern.)
     private static (string Grid, string Label) ThemeHexes(StatisticsChartTheme theme) =>
         theme switch
         {
             StatisticsChartTheme.Light => ("#E8E8E8", "#616161"),
             StatisticsChartTheme.Dark => ("#383838", "#ADADAD"),
-            _ => throw new ArgumentOutOfRangeException(nameof(theme), theme, null),
         };
+#pragma warning restore CS8524
 
     // The X axis value is a DateTime tick count (DateTimePoint). Numeric month-day matches
     // the reference renders ("07-14"); .NET has no culture "numeric month-day" standard

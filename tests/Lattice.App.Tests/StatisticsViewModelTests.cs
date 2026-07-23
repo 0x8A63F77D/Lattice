@@ -132,6 +132,26 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Re_checking_a_chip_cannot_exceed_the_six_series_cap()
+    {
+        // Codex P2 (PR #167): uncheck a default chip (5), fill the cap from the overflow (6),
+        // then re-check the chip — the cap must refuse it so the chart never renders seven.
+        _fx.AddHost("host-a", Fake(8));
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6);
+
+        vm.Chips[0].IsVisible = false;   // 5 visible
+        vm.Overflow[0].IsVisible = true; // back to 6 (cap full)
+        Assert.Equal(6, SeriesCount(vm));
+
+        vm.Chips[0].IsVisible = true;    // attempt the 7th
+
+        Assert.Equal(6, SeriesCount(vm)); // refused
+        Assert.False(vm.Chips[0].IsVisible); // control snapped back
+    }
+
+    [Fact]
     public async Task Switching_metric_rebuilds_the_chart_keeping_visibility()
     {
         _fx.AddHost("host-a", Fake(3));
