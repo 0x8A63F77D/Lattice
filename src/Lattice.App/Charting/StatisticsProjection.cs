@@ -29,8 +29,11 @@ public static class StatisticsProjection
             var daily = stats.Daily
                 .Select(d => new DailyCredit(d.Day, d.UserTotalCredit, d.UserExpavgCredit, d.HostTotalCredit, d.HostExpavgCredit))
                 .ToList();
+            // A blank ProjectName (BOINC can report one) would render an empty legend chip and
+            // series label — fall back to the MasterUrl, as ProjectRows.compute's DisplayName does.
+            var name = string.IsNullOrEmpty(project.ProjectName) ? project.MasterUrl : project.ProjectName;
             histories.Add(new ProjectHistory(
-                project.MasterUrl, project.ProjectName, ordinal, project.HostExpavgCredit, ListModule.OfSeq(daily)));
+                project.MasterUrl, name, ordinal, project.HostExpavgCredit, ListModule.OfSeq(daily)));
         }
 
         return histories;
