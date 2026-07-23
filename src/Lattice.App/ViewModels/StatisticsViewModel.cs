@@ -124,9 +124,19 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     private void OnStoreChanged(object? sender, EventArgs e) => Rebuild();
 
-    // The 1 s tick only advances the "Updated Ns ago" caption; Rebuild recomputes
-    // everything together rather than special-casing a freshness-only path (Tasks idiom).
-    private void OnTick(object? sender, EventArgs e) => Rebuild();
+    // The 1 s tick ONLY advances the "Updated Ns ago" caption — it must NOT run the full
+    // Rebuild, which reassigns the LiveCharts series/axes wholesale and (with the 200ms enter
+    // animation) would re-animate an otherwise-idle chart once per second. Chart inputs change
+    // only via the store, metric, host, theme, scope and toggle paths, all of which Rebuild
+    // (Codex P2, PR #167). The grid views get the same effect for free through their keyed
+    // reconciler; this page has no reconciler, so the freshness-only path is explicit.
+    private void OnTick(object? sender, EventArgs e) => RefreshFreshness();
+
+    private void RefreshFreshness()
+    {
+        var snapshot = EffectiveHost()?.Snapshot;
+        UpdatedText = snapshot is not null ? TimeText.UpdatedAgo(snapshot.Timestamp, _clock.Now) : "";
+    }
 
     // ---- host resolution -------------------------------------------------
 

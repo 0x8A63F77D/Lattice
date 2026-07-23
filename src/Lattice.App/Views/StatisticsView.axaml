@@ -176,7 +176,11 @@
       <Panel>
         <!-- Chart stack: stale banner above the plot (§5). Visible only with data. -->
         <DockPanel IsVisible="{Binding HasChart}">
+          <!-- IsVisible (not just IsOpen) tracks IsStale: a closed FAInfoBar still reserves its
+               docked margin, so a non-stale chart would carry an 8px gap / shrunken plot (the
+               App.axaml partial-bar pattern; Codex P2, PR #167). -->
           <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsClosable="False" Margin="16,0,16,8"
+                        IsVisible="{Binding IsStale}"
                         IsOpen="{Binding IsStale}" Message="{Binding StaleText}">
             <ui:FAInfoBar.ActionButton>
               <HyperlinkButton Content="{x:Static loc:Strings.StatisticsRetry}" Command="{Binding RetryCommand}" />
