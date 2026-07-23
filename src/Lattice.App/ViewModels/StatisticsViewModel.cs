@@ -36,6 +36,10 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _visible = [];
     private Guid? _visibleHostId;
 
+    // Last chart-input signature (host, metric, theme, visible set, statistics ref); the chart is
+    // reassigned only when this changes, so idle polls/ticks don't re-run the enter animation.
+    private (Guid, CreditMetric, StatisticsChartTheme, string, object?) _chartSignature;
+
     public StatisticsViewModel(HostStore store, IUiClock clock)
     {
         _store = store;
@@ -227,6 +231,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             Series = [];
             XAxes = [];
             YAxes = [];
+            _chartSignature = default;
             CountsText = "";
             return;
         }
@@ -250,11 +255,24 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         SyncChips(partition.Chips);
         SyncOverflow(partition.Overflow);
 
-        var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
-        var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme, SelectedMetric.Metric);
-        Series = visual.Series;
-        XAxes = visual.XAxes;
-        YAxes = visual.YAxes;
+        // Reassign the LiveCharts series/axes ONLY when a chart INPUT changed — the effective
+        // host, metric, theme, visible set, or the statistics history itself (carried forward by
+        // reference between the 6h refetches). A steady-state store poll (~5s, updates only RAC)
+        // or a freshness tick leaves the signature unchanged, so the plot is not recreated and the
+        // 200ms enter animation does not re-run on an idle page (Codex P2, PR #167). The chrome
+        // above (chips/overflow RAC) still refreshes in place; only the animated chart is gated.
+        (Guid, CreditMetric, StatisticsChartTheme, string, object?) signature = (hostId, SelectedMetric.Metric, Theme,
+            string.Join(",", _visible.OrderBy(u => u, StringComparer.Ordinal)),
+            snapshot!.Statistics);
+        if (!signature.Equals(_chartSignature))
+        {
+            var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
+            var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme, SelectedMetric.Metric);
+            Series = visual.Series;
+            XAxes = visual.XAxes;
+            YAxes = visual.YAxes;
+            _chartSignature = signature;
+        }
 
         CountsText = string.Format(
             CultureInfo.CurrentCulture, Strings.StatisticsCountsFmt,

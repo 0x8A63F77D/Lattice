@@ -152,6 +152,30 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_steady_poll_does_not_reassign_the_chart_but_a_metric_change_does()
+    {
+        // Codex P2 (PR #167): a store poll (~5s) carries the same 6h-cadence history, so it must
+        // not recreate the LiveCharts series and re-run the enter animation. Only a genuine input
+        // change (here the metric) reassigns the chart.
+        var fake = Fake(3);
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart);
+
+        var before = vm.Series;
+        var pollsBefore = fake.Calls.Count(c => c == "get_cc_status");
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(() => fake.Calls.Count(c => c == "get_cc_status") > pollsBefore);
+
+        Assert.Same(before, vm.Series); // steady poll: chart untouched
+
+        vm.SelectedMetric = vm.MetricOptions.Single(m => m.Metric == CreditMetric.HostAverage);
+        Assert.NotSame(before, vm.Series); // real input change: rebuilt
+    }
+
+    [Fact]
     public async Task Switching_metric_rebuilds_the_chart_keeping_visibility()
     {
         _fx.AddHost("host-a", Fake(3));
