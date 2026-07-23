@@ -34,9 +34,9 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     // Visible master URLs and the host they belong to: user toggles persist across the 1 s
     // ticks, but switching the charted host re-derives the top-6 default.
     private readonly HashSet<string> _visible = [];
-    // Every project master seen for the current host, so a refetch that ADDS a project can be
-    // told apart from one the user simply toggled off (the latter stays hidden).
-    private readonly HashSet<string> _knownMasters = [];
+    // Whether the user has toggled visibility for the current host. Until they do, the page mirrors
+    // the live default (all ≤6, else top-6 by RAC); once they do, their set is authoritative.
+    private bool _userOverrode;
     private Guid? _visibleHostId;
 
     // Last chart-input signature (host, metric, theme, visible set, visible names, statistics ref);
@@ -228,7 +228,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         {
             _visibleHostId = null;
             _visible.Clear();
-            _knownMasters.Clear();
+            _userOverrode = false;
             if (Chips.Count > 0) Chips.Clear();
             if (Overflow.Count > 0) Overflow.Clear();
             HasOverflow = false;
@@ -245,28 +245,26 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         var masters = histories.Select(h => h.MasterUrl).ToHashSet();
         if (_visibleHostId != hostId)
         {
-            // New charted host: re-derive the top-6-by-RAC default visibility.
+            _userOverrode = false; // a fresh host starts on the default set
+            _visibleHostId = hostId;
+        }
+
+        // Visibility model (Codex P2 family, PR #167): until the user toggles anything, the page
+        // always mirrors the LIVE default — all projects when ≤6, else the current top-6 by RAC —
+        // so a mid-session refetch that adds a project, or a RAC reorder that changes the top-6,
+        // is reflected immediately (no stuck unchecked chip, no stale top-6). The moment the user
+        // toggles a chip/overflow row their choice is authoritative: it persists across polls, and
+        // only vanished projects are dropped. (The signature gate above still rebuilds the chart
+        // only when this SET actually changes, so an idle page never re-animates.)
+        if (!_userOverrode)
+        {
             _visible.Clear();
             foreach (var url in StatisticsChart.defaultVisible(ListModule.OfSeq(histories)))
                 _visible.Add(url);
-            _knownMasters.Clear();
-            _knownMasters.UnionWith(masters);
-            _visibleHostId = hostId;
         }
         else
         {
-            _visible.IntersectWith(masters);      // drop projects that vanished
-            _knownMasters.IntersectWith(masters);
-            // A later get_statistics refetch can add a project (a new attach, or first daily
-            // history) while the host stays selected. A newcomer must follow the default rule —
-            // visible while a slot is free — so a ≤6 host keeps overlaying ALL projects; without
-            // this it would appear as an unchecked chip until the user switched hosts (Codex P2,
-            // PR #167). Highest RAC first so the shown set stays the top-6-by-RAC when slots are
-            // scarce; a project already known (incl. one the user toggled off) is left untouched.
-            foreach (var project in StatisticsChart.rankByRac(ListModule.OfSeq(histories)))
-                if (!_knownMasters.Contains(project.MasterUrl) && StatisticsChart.canAddSeries(_visible.Count))
-                    _visible.Add(project.MasterUrl);
-            _knownMasters.UnionWith(masters);
+            _visible.IntersectWith(masters); // persist the user's set; drop vanished projects
         }
 
         var partition = StatisticsChart.partition(ListModule.OfSeq(histories));
@@ -400,6 +398,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             return false;
         if (visible) _visible.Add(master);
         else _visible.Remove(master);
+        _userOverrode = true; // the user's set is now authoritative over the live default
         return true;
     }
 

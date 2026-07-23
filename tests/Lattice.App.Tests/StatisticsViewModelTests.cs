@@ -231,6 +231,35 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_high_rac_newcomer_at_the_cap_displaces_the_lowest_default_series()
+    {
+        // Codex P2 (PR #167): with six shown and no user override, a newly chartable HIGH-RAC
+        // project must enter the top-6 and push the lowest-RAC one to overflow — the page always
+        // shows the current top-6-by-RAC, not a stale set.
+        var projects = new List<Project>(Enumerable.Range(0, 6).Select(i => Proj(i, 60 - 10 * i)));
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects.ToList())),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(projects.ToList()),
+            OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
+                [.. Enumerable.Range(0, 7).Select(i => Stats(i, 9))]), // history for all seven cached
+        };
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6 && !vm.HasOverflow);
+
+        projects.Add(Proj(6, 100)); // a higher-RAC project than any current one comes in
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(() => vm.HasOverflow);
+
+        Assert.Equal(6, SeriesCount(vm)); // still six
+        Assert.Contains(vm.Chips, c => c.MasterUrl == "https://p6.org/" && c.IsVisible); // newcomer shown
+        Assert.Contains(vm.Overflow, o => o.MasterUrl == "https://p5.org/"); // lowest RAC displaced
+    }
+
+    [Fact]
     public async Task A_late_filled_project_name_refreshes_the_legend_chip()
     {
         // Codex P2 (PR #167): a project can attach with a blank name (chip falls back to the URL),
