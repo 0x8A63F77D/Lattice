@@ -203,8 +203,12 @@
                          row's DataContext, so no $parent hop is needed (unlike the
                          Edit/Test/Remove items, whose commands live on the shell).
                          DI-3: the command's CanExecute gates each item on Connected.
-                         Separators are MenuItem Header="-" — a raw <Separator/> silently
-                         no-ops in a MenuFlyout (avalonia-menu-context-facts).
+                         Dividers are raw <Separator/> — the first-class MenuFlyout
+                         separator (FA 3.0.1 themes {x:Type Separator} with its own thin
+                         metrics: MenuFlyoutSeparatorHeight/-ThemePadding). The old
+                         MenuItem Header="-" pseudo-item kept a full item's MinHeight=32,
+                         inflating the gap around the line (#155); a Separator is not a
+                         MenuItem so it collapses to the correct ~1px rule.
                          Placement RightEdgeAlignedTop: the rail sits at the left edge, so
                          the menu opens from the host row's RIGHT into the content area
                          (owner call) instead of over the pane. ContextFlyout shows via
@@ -224,7 +228,7 @@
                           <PathIcon Data="{StaticResource IconPlugConnectedRegular}" Width="16" Height="16" />
                         </MenuItem.Icon>
                       </MenuItem>
-                      <MenuItem Header="-" />
+                      <Separator />
                       <!-- Mode leaves are radios (design PR H, S2): GroupName per lane,
                            IsChecked reflects the host's PERMANENT mode (OneWay — the daemon
                            owns the value; the command drives the change and the next poll
@@ -295,7 +299,7 @@
                           <PathIcon Data="{StaticResource IconPlayRegular}" Width="16" Height="16" />
                         </MenuItem.Icon>
                       </MenuItem>
-                      <MenuItem Header="-" />
+                      <Separator />
                       <MenuItem Header="{x:Static loc:Strings.HostMenuRemove}"
                                 Command="{Binding $parent[ListBox].((vm:ShellViewModel)DataContext).RemoveHostCommand}"
                                 CommandParameter="{Binding HostId}"

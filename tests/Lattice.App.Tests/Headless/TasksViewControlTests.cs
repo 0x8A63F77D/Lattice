@@ -83,12 +83,14 @@ public class TasksViewControlTests
         fx.Layout();
 
         var flyout = Assert.IsType<MenuFlyout>(view.Grid.ContextFlyout);
-        // DI-1(c) applies to the menu too (Codex R1 P3 / R3 P2, PR #135): the
-        // divider between Resume and Abort must be MenuFlyout's SUPPORTED
-        // separator form — a MenuItem with Header "-" (the docs' MenuFlyout page
-        // is explicit that a raw <Separator/> does not work in a menu flyout).
-        var headers = flyout.Items.OfType<MenuItem>().Select(i => i.Header).ToArray();
-        Assert.Equal([Strings.Suspend, Strings.Resume, "-", Strings.Abort], headers);
+        // DI-1(c) applies to the menu too (Codex R1 P3, PR #135): a divider between
+        // Resume and Abort keeps a misclick off the destructive op. The divider is a
+        // raw <Separator/> — the first-class MenuFlyout separator (#155; the earlier
+        // "raw Separator no-ops" claim was re-tested and is false on FA 3.0.1). Pin
+        // the exact item sequence, separator included, by type.
+        var kinds = flyout.Items.Select(i => i is MenuItem mi ? mi.Header : "<sep>").ToArray();
+        Assert.Equal([Strings.Suspend, Strings.Resume, "<sep>", Strings.Abort], kinds);
+        Assert.IsType<Separator>(flyout.Items[2]);
 
         fx.Dispose();
     }
