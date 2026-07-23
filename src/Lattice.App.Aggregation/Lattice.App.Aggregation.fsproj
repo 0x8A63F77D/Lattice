@@ -14,6 +14,7 @@
     <Compile Include="RailLayout.fs" />
     <Compile Include="ScopeMachine.fs" />
     <Compile Include="ProjectRows.fs" />
+    <Compile Include="StatisticsChart.fs" />
     <Compile Include="MessageLog.fs" />
     <Compile Include="ControlConfirmation.fs" />
   </ItemGroup>
