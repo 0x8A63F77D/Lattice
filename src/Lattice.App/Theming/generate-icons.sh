@@ -52,6 +52,8 @@ ICONS=(
   "developer_board|Developer Board|regular"
   "developer_board_lightning|Developer Board Lightning|regular"
   "globe|Globe|regular"
+  "data_trending|Data Trending|regular"
+  "data_trending|Data Trending|filled"
 )
 
 pascal() { echo "$1" | awk -F_ '{ for (i=1;i<=NF;i++) printf "%s%s", toupper(substr($i,1,1)), substr($i,2) }'; }

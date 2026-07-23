@@ -1,0 +1,220 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:vm="using:Lattice.App.ViewModels"
+             xmlns:controls="using:Lattice.App.Controls"
+             xmlns:loc="using:Lattice.App.Localization"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="Lattice.App.Views.StatisticsView"
+             x:DataType="vm:StatisticsViewModel">
+
+  <UserControl.Styles>
+    <!-- Metric switcher: a native ListBox restyled into a segmented control (§4). FA 3.0.1
+         ships no SegmentedControl/SelectorBar and no RadioButtons, so the native single-select
+         primitive carries the selection behaviour and this template carries only the pill look
+         (theme-resource driven; no hand-built selection logic). -->
+    <Style Selector="ListBox.segmented">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Padding" Value="0" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="Root" Background="Transparent" BorderBrush="Transparent" BorderThickness="1"
+                  CornerRadius="6" Padding="12,5">
+            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                              VerticalAlignment="Center" HorizontalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:pointerover /template/ Border#Root">
+      <Setter Property="Background" Value="{DynamicResource LatticeStrokeSubtleBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected /template/ Border#Root">
+      <Setter Property="Background" Value="{DynamicResource LatticeSurfaceBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource LatticeStrokeBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
+    </Style>
+    <Style Selector="ListBox.segmented ListBoxItem:selected TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Legend chip: a native ToggleButton (§4 "Legend = chrome"). Its checked state is the
+         series' visibility; the swatch colour is by ordinal (never recoloured on toggle),
+         unchecked = grey swatch + struck-through secondary text. -->
+    <Style Selector="ToggleButton.legendChip">
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border x:Name="Root" Background="Transparent" BorderBrush="{DynamicResource LatticeStrokeBrush}"
+                  BorderThickness="1" CornerRadius="14" Padding="10,4">
+            <ContentPresenter Content="{TemplateBinding Content}" VerticalAlignment="Center" />
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.legendChip:not(:checked) /template/ Border#Root">
+      <Setter Property="Background" Value="{DynamicResource LatticeStrokeSubtleBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.legendChip TextBlock.chipText">
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextPrimaryBrush}" />
+    </Style>
+    <Style Selector="ToggleButton.legendChip:not(:checked) TextBlock.chipText">
+      <Setter Property="Foreground" Value="{DynamicResource LatticeTextSecondaryBrush}" />
+      <Setter Property="TextDecorations" Value="Strikethrough" />
+    </Style>
+  </UserControl.Styles>
+
+  <DockPanel>
+    <!-- Command bar (§4): title, metric switcher on the left; host picker + freshness caption
+         on the right. No refresh button — forcing a statistics refetch would add HostMonitor
+         shared state (see the PR body); the data changes once a day. -->
+    <Border x:Name="CommandBar" DockPanel.Dock="Top" Height="{StaticResource LatticeCommandBarHeight}"
+            Background="{DynamicResource LatticeCommandBarSurfaceBrush}"
+            BorderBrush="{DynamicResource LatticeStrokeSubtleBrush}"
+            BorderThickness="0,0,0,1">
+      <DockPanel Margin="16,0" LastChildFill="False">
+        <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <TextBlock Text="{x:Static loc:Strings.StatisticsTitle}" FontSize="16" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" VerticalAlignment="Center" />
+          <ListBox Classes="segmented" ItemsSource="{Binding MetricOptions}"
+                   SelectedItem="{Binding SelectedMetric, Mode=TwoWay}" VerticalAlignment="Center">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:StatisticsMetricOption">
+                <TextBlock Text="{Binding Label}" FontSize="12" />
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <ComboBox ItemsSource="{Binding HostOptions}" SelectedItem="{Binding SelectedHost, Mode=TwoWay}"
+                    MinWidth="140" VerticalAlignment="Center" IsVisible="{Binding IsAllHostsScope}" />
+          <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <!-- One opaque content region for everything below the command bar (design: content is
+         always opaque; only the command bar reveals Mica). -->
+    <DockPanel x:Name="ContentRegion" Background="{DynamicResource LatticeCanvasBrush}">
+
+      <!-- Status strip (§4): "N projects · N days" left, "Polling every Ns" right. -->
+      <controls:StatusBarControl DockPanel.Dock="Bottom"
+                                 LeftText="{Binding CountsText}"
+                                 RightText="{Binding PollingText}" />
+
+      <!-- Legend row (§4), under the command bar; present only when a chart is shown. -->
+      <Border DockPanel.Dock="Top" Padding="16,10" IsVisible="{Binding HasChart}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <ItemsControl ItemsSource="{Binding Chips}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="8" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:StatisticsLegendChip">
+                <ToggleButton Classes="legendChip" IsChecked="{Binding IsVisible, Mode=TwoWay}">
+                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Panel Width="12" Height="12">
+                      <Border CornerRadius="3" Background="{Binding Swatch}" IsVisible="{Binding IsVisible}" />
+                      <Border CornerRadius="3" Background="{DynamicResource LatticeDisabledBrush}"
+                              IsVisible="{Binding !IsVisible}" />
+                    </Panel>
+                    <TextBlock Classes="chipText" Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
+                  </StackPanel>
+                </ToggleButton>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <!-- Overflow "+N more" (§4): checkbox flyout; rows disable at the ≤6 cap. -->
+          <DropDownButton Content="{Binding OverflowLabel}" IsVisible="{Binding HasOverflow}"
+                          VerticalAlignment="Center" FontSize="12">
+            <DropDownButton.Flyout>
+              <Flyout Placement="BottomEdgeAlignedLeft">
+                <StackPanel Width="260" Spacing="0">
+                  <ItemsControl ItemsSource="{Binding Overflow}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="vm:StatisticsOverflowItem">
+                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,3">
+                          <CheckBox Grid.Column="0" MinWidth="0"
+                                    IsChecked="{Binding IsVisible, Mode=TwoWay}"
+                                    IsEnabled="{Binding CanCheck}" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="4,0" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis" />
+                          <TextBlock Grid.Column="2" Text="{Binding RacText}" Classes="numeric" VerticalAlignment="Center"
+                                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Border Height="1" Background="{DynamicResource LatticeStrokeSubtleBrush}" Margin="0,6,0,6"
+                          IsVisible="{Binding IsAtCap}" />
+                  <TextBlock Text="{x:Static loc:Strings.StatisticsCapCaption}" TextWrapping="Wrap" FontSize="12"
+                             Margin="4,0,4,4" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                             IsVisible="{Binding IsAtCap}" />
+                </StackPanel>
+              </Flyout>
+            </DropDownButton.Flyout>
+          </DropDownButton>
+        </StackPanel>
+      </Border>
+
+      <!-- Chart + overlays. -->
+      <Panel>
+        <!-- Chart stack: stale banner above the plot (§5). Visible only with data. -->
+        <DockPanel IsVisible="{Binding HasChart}">
+          <ui:FAInfoBar DockPanel.Dock="Top" Severity="Warning" IsClosable="False" Margin="16,0,16,8"
+                        IsOpen="{Binding IsStale}" Message="{Binding StaleText}">
+            <ui:FAInfoBar.ActionButton>
+              <HyperlinkButton Content="{x:Static loc:Strings.StatisticsRetry}" Command="{Binding RetryCommand}" />
+            </ui:FAInfoBar.ActionButton>
+          </ui:FAInfoBar>
+          <lvc:CartesianChart x:Name="Chart" Margin="16,4,16,8"
+                              Background="Transparent"
+                              Series="{Binding Series}"
+                              XAxes="{Binding XAxes}"
+                              YAxes="{Binding YAxes}"
+                              AnimationsSpeed="{Binding AnimationsSpeed}"
+                              EasingFunction="{Binding EasingFunction}"
+                              FindingStrategy="{Binding FindingStrategy}"
+                              ZoomMode="{Binding ZoomMode}" />
+        </DockPanel>
+
+        <!-- First-fetch pending (§5): centered ring + caption. -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12"
+                    IsVisible="{Binding IsLoading}">
+          <!-- IsActive MUST track IsLoading (issue #95): the ring's composition animation
+               ignores IsVisible and would starve pointer input if left active. -->
+          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" IsActive="{Binding IsLoading}" />
+          <TextBlock Text="{x:Static loc:Strings.StatisticsLoading}" FontSize="13"
+                     Foreground="{DynamicResource LatticeTextSecondaryBrush}" HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <!-- No history at all (§5): icon + title + caption. -->
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" MaxWidth="360"
+                    IsVisible="{Binding IsEmpty}">
+          <PathIcon Width="28" Height="28" Data="{StaticResource IconDataTrendingRegular}"
+                    Foreground="{DynamicResource LatticeDisabledBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="{x:Static loc:Strings.StatisticsEmptyTitle}" FontSize="14" FontWeight="SemiBold"
+                     Foreground="{DynamicResource LatticeTextPrimaryBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="{x:Static loc:Strings.StatisticsEmptyCaption}" FontSize="12" TextWrapping="Wrap"
+                     TextAlignment="Center" Foreground="{DynamicResource LatticeTextSecondaryBrush}"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Panel>
+    </DockPanel>
+  </DockPanel>
+</UserControl>

@@ -39,7 +39,7 @@ public class StatisticsChartBuilderTests
     [Fact]
     public void Every_line_pins_the_section_two_style()
     {
-        var visual = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light);
+        var visual = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
         var line = Assert.IsType<LineSeries<DateTimePoint>>(Assert.Single(visual.Series));
 
         Assert.Null(line.Fill); // warning #2
@@ -55,10 +55,10 @@ public class StatisticsChartBuilderTests
     [Fact]
     public void Marker_size_follows_the_longest_visible_series()
     {
-        var small = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 9)], StatisticsChartTheme.Light);
+        var small = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 9)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
         Assert.Equal(8d, ((LineSeries<DateTimePoint>)small.Series[0]).GeometrySize);
 
-        var dense = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 40)], StatisticsChartTheme.Light);
+        var dense = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 40)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
         Assert.Equal(0d, ((LineSeries<DateTimePoint>)dense.Series[0]).GeometrySize);
     }
 
@@ -67,7 +67,7 @@ public class StatisticsChartBuilderTests
     {
         // An already-gap-filled spec (as F# seriesFor emits): days 0 and 2 real, day 1 a None.
         var visual = StatisticsChartBuilder.Build(
-            [Spec("a", "A", 0, Point(0, 1), Point(1, null), Point(2, 3))], StatisticsChartTheme.Light);
+            [Spec("a", "A", 0, Point(0, 1), Point(1, null), Point(2, 3))], StatisticsChartTheme.Light, CreditMetric.UserTotal);
         var values = ((LineSeries<DateTimePoint>)visual.Series[0]).Values!.Cast<DateTimePoint>().ToList();
         Assert.Equal(3, values.Count);
         Assert.Equal([1d, null, 3d], values.Select(v => v.Value));
@@ -76,7 +76,7 @@ public class StatisticsChartBuilderTests
     [Fact]
     public void Axes_put_gridlines_on_Y_only_with_a_zero_baseline()
     {
-        var visual = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light);
+        var visual = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
         var x = Assert.IsType<Axis>(Assert.Single(visual.XAxes));
         var y = Assert.IsType<Axis>(Assert.Single(visual.YAxes));
 
@@ -90,9 +90,9 @@ public class StatisticsChartBuilderTests
     public void Theme_switches_the_gridline_and_label_hexes()
     {
         var light = (SolidColorPaint)StatisticsChartBuilder
-            .Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light).YAxes[0].SeparatorsPaint!;
+            .Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Light, CreditMetric.UserTotal).YAxes[0].SeparatorsPaint!;
         var dark = (SolidColorPaint)StatisticsChartBuilder
-            .Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Dark).YAxes[0].SeparatorsPaint!;
+            .Build([Ramp("a", "A", 0, 3)], StatisticsChartTheme.Dark, CreditMetric.UserTotal).YAxes[0].SeparatorsPaint!;
 
         Assert.Equal(SKColor.Parse("#E8E8E8"), light.Color);
         Assert.Equal(SKColor.Parse("#383838"), dark.Color);

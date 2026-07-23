@@ -56,13 +56,13 @@ public static class StatisticsChartBuilder
     /// <c>LineSmoothness = 0</c>, circle markers with a solid fill and no stroke, Y-axis-only
     /// gridlines (warning #3), a 0 baseline, and the compact labeler.
     /// </summary>
-    public static ChartVisual Build(IReadOnlyList<SeriesSpec> specs, StatisticsChartTheme theme)
+    public static ChartVisual Build(IReadOnlyList<SeriesSpec> specs, StatisticsChartTheme theme, CreditMetric metric)
     {
         double marker = StatisticsChart.markerSize(ListModule.OfSeq(specs));
         var (gridHex, labelHex) = ThemeHexes(theme);
         var gridPaint = new SolidColorPaint(SKColor.Parse(gridHex)) { StrokeThickness = 1f };
 
-        var series = specs.Select(spec => BuildSeries(spec, marker)).ToList<ISeries>();
+        var series = specs.Select(spec => BuildSeries(spec, marker, metric)).ToList<ISeries>();
 
         var yAxis = new Axis
         {
@@ -91,13 +91,20 @@ public static class StatisticsChartBuilder
         return new ChartVisual(series, [xAxis], [yAxis]);
     }
 
-    private static LineSeries<DateTimePoint> BuildSeries(SeriesSpec spec, double marker)
+    private static LineSeries<DateTimePoint> BuildSeries(SeriesSpec spec, double marker, CreditMetric metric)
     {
         var color = StatisticsPalette.SkColor(spec.Ordinal);
         var points = ListModule
             .ToArray(spec.Points)
             .Select(p => new DateTimePoint(p.Day.UtcDateTime, ToNullable(p.Value)))
             .ToArray();
+
+        // Tooltip shows EXACT values, never compact (§6): Total metrics integer + separators,
+        // Average (RAC) metrics fixed 2 decimals + separators; the date header is yyyy-MM-dd.
+        // Axis compact vs tooltip exact — the two never mix.
+        // F# DU cases are singletons, not C# constants, so compare by value (no `is X or Y`).
+        bool isAverage = metric.Equals(CreditMetric.UserAverage) || metric.Equals(CreditMetric.HostAverage);
+        string valueFormat = isAverage ? "N2" : "N0";
 
         return new LineSeries<DateTimePoint>
         {
@@ -109,6 +116,10 @@ public static class StatisticsChartBuilder
             GeometrySize = marker,
             GeometryFill = new SolidColorPaint(color),
             GeometryStroke = null, // solid marker, no ring.
+            YToolTipLabelFormatter = point =>
+                (point.Coordinate.PrimaryValue).ToString(valueFormat, CultureInfo.CurrentCulture),
+            XToolTipLabelFormatter = point =>
+                new DateTime((long)point.Coordinate.SecondaryValue).ToString("yyyy-MM-dd", CultureInfo.CurrentCulture),
         };
     }
 
