@@ -175,34 +175,6 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     // ---- projection ------------------------------------------------------
 
-    /// <summary>
-    /// Projects the effective host's snapshot into GuiRpc-free <see cref="ProjectHistory"/>
-    /// records: ordinal = the project's index in the daemon project list (the stable colour
-    /// key), Rac = the live per-host RAC, Daily = its credit history. Only projects with at
-    /// least one daily record are chartable.
-    /// </summary>
-    private static List<ProjectHistory> Project(HostSnapshot snapshot)
-    {
-        var statsByUrl = new Dictionary<string, ProjectStatistics>();
-        foreach (var s in snapshot.Statistics)
-            statsByUrl.TryAdd(s.MasterUrl, s);
-
-        var histories = new List<ProjectHistory>();
-        for (int ordinal = 0; ordinal < snapshot.Projects.Count; ordinal++)
-        {
-            var project = snapshot.Projects[ordinal].Project;
-            if (!statsByUrl.TryGetValue(project.MasterUrl, out var stats) || stats.Daily.Count == 0)
-                continue; // no chartable history for this project
-            var daily = stats.Daily
-                .Select(d => new DailyCredit(d.Day, d.UserTotalCredit, d.UserExpavgCredit, d.HostTotalCredit, d.HostExpavgCredit))
-                .ToList();
-            histories.Add(new ProjectHistory(
-                project.MasterUrl, project.ProjectName, ordinal, project.HostExpavgCredit, ListModule.OfSeq(daily)));
-        }
-
-        return histories;
-    }
-
     // ---- rebuild ---------------------------------------------------------
 
     private void Rebuild()
@@ -212,7 +184,9 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
         var host = EffectiveHost();
         var snapshot = host?.Snapshot;
-        var histories = snapshot is null ? [] : Project(snapshot);
+        List<ProjectHistory> histories = snapshot is null
+            ? []
+            : StatisticsProjection.FromProjects([.. snapshot.Projects.Select(p => p.Project)], snapshot.Statistics);
         var hasHistory = histories.Count > 0;
 
         // Overlay choice reuses the shared per-host taxonomy: loading = first fetch still
@@ -267,7 +241,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         SyncOverflow(partition.Overflow);
 
         var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
-        var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme);
+        var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme, SelectedMetric.Metric);
         Series = visual.Series;
         XAxes = visual.XAxes;
         YAxes = visual.YAxes;
