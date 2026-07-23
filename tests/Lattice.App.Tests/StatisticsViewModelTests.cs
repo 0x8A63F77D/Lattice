@@ -203,6 +203,34 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_project_that_gains_history_mid_session_becomes_visible_by_default()
+    {
+        // Codex P2 (PR #167): while a host stays selected, a project can become chartable (an
+        // attach, or its first daily history). It must follow the ≤6 default and appear visible,
+        // not sit as an unchecked chip until the user switches hosts.
+        var projects = new List<Project> { Proj(0, 3), Proj(1, 2) };
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects.ToList())),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(projects.ToList()),
+            OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
+                [Stats(0, 9), Stats(1, 9), Stats(2, 9)]), // history for all three is already cached
+        };
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 2);
+
+        projects.Add(Proj(2, 1)); // project 2 now reports in — its history was already fetched
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(() => vm.Chips.Count == 3);
+
+        Assert.Equal(3, SeriesCount(vm)); // newcomer visible by default (≤6)
+        Assert.All(vm.Chips, c => Assert.True(c.IsVisible));
+    }
+
+    [Fact]
     public async Task Unreachable_host_keeps_the_chart_and_raises_the_stale_banner()
     {
         var fake = Fake(3);
