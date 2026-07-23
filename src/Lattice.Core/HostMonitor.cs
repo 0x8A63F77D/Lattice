@@ -357,6 +357,13 @@ public sealed class HostMonitor : IAsyncDisposable
         IReadOnlyList<Project> projectStatuses = [];
         IReadOnlyList<Message> newMessages = [];
         HostSnapshot? builtSnapshot = null;
+        // Statistics (issue #148) live at a coarser cadence than the per-tick data: the
+        // last-fetched history is carried across ticks and the timestamp gates the next
+        // refetch (StatisticsCadencePolicy). Both are attempt-scoped loop locals — reset
+        // by SnapshotConfig so a reconnect always refetches — never shared fields, so they
+        // add no concurrency surface (verification/README shared-state inventory).
+        IReadOnlyList<ProjectStatistics> statistics = [];
+        DateTimeOffset? statisticsFetchedAt = null;
 
         // Executes one command. Returns the produced Input for request commands, or
         // null for fire-and-forget ones. Each case reproduces the pre-restructure
@@ -388,6 +395,18 @@ public sealed class HostMonitor : IAsyncDisposable
                     transfers = await client!.GetFileTransfersAsync(connCt).ConfigureAwait(false);
                     newMessages = await client!.GetMessagesAsync(t.lastSeqno, connCt).ConfigureAwait(false);
                     projectStatuses = await client!.GetProjectStatusAsync(connCt).ConfigureAwait(false);
+                    // Credit history (issue #148), fetched only when the low-frequency cadence
+                    // says it is due — on the connection's first tick (statisticsFetchedAt null)
+                    // then every RefreshInterval. A stamp AFTER the call means a fault before it
+                    // completes leaves statisticsFetchedAt unchanged, so the retry refetches. This
+                    // sixth RPC faults exactly like the five above (an unauthorized routes through
+                    // the same silent-re-auth fold), so it adds no new decision-core routing.
+                    DateTimeOffset statsNow = _time.GetUtcNow();
+                    if (StatisticsCadencePolicy.ShouldRefresh(statisticsFetchedAt, statsNow))
+                    {
+                        statistics = await client!.GetStatisticsAsync(connCt).ConfigureAwait(false);
+                        statisticsFetchedAt = statsNow;
+                    }
                     // A result naming an uncached workunit means new work arrived since
                     // the last get_state (d3950c2:616-618): route triggers the refetch.
                     HashSet<string> knownWorkunits = [.. ccState!.Workunits.Select(w => w.Name)];
@@ -452,6 +471,8 @@ public sealed class HostMonitor : IAsyncDisposable
                         projectStatuses = [];
                         newMessages = [];
                         builtSnapshot = null;
+                        statistics = [];
+                        statisticsFetchedAt = null;
                         return HostMachine.Input.NewConfigSnapshotted(config.Password.Length > 0);
                     }
 
@@ -491,10 +512,14 @@ public sealed class HostMonitor : IAsyncDisposable
 
                     if (cmd.IsBuildSnapshot)
                     {
-                        // Pure in-memory build into an attempt local (d3950c2:630-631).
+                        // Pure in-memory build into an attempt local (d3950c2:630-631). The
+                        // last-known credit history is attached here: it rides the same snapshot
+                        // surface as the tick data but is not derived from it, so it stays out of
+                        // SnapshotBuilder (and its mutation-gated scope).
                         builtSnapshot = SnapshotBuilder.Build(
                             HostId, config.DisplayName, _time.GetUtcNow(),
-                            ccState!, ccStatus!, projectStatuses, results, transfers);
+                            ccState!, ccStatus!, projectStatuses, results, transfers)
+                            with { Statistics = statistics };
                         return null;
                     }
 

@@ -13,7 +13,18 @@ public sealed record HostSnapshot(
     CcStatus CcStatus,
     IReadOnlyList<TaskSnapshot> Tasks,
     IReadOnlyList<TransferSnapshot> Transfers,
-    IReadOnlyList<ProjectSnapshot> Projects);
+    IReadOnlyList<ProjectSnapshot> Projects)
+{
+    /// <summary>
+    /// Per-project daily credit history (issue #148, get_statistics). Unlike the tick data
+    /// above, this is refreshed at a low cadence (<see cref="StatisticsCadencePolicy"/>) and
+    /// carried forward unchanged on ticks that do not refetch, so every snapshot exposes the
+    /// last-known history. Empty until the connection's first fetch completes, and for hosts
+    /// with no attached projects. Kept off the positional constructor because it is attached
+    /// by the monitor loop, not derived by <see cref="SnapshotBuilder"/> from the tick RPCs.
+    /// </summary>
+    public IReadOnlyList<ProjectStatistics> Statistics { get; init; } = [];
+}
 
 /// <summary>A task with the view-ready values derived from the cached get_state join tables.</summary>
 public sealed record TaskSnapshot(
