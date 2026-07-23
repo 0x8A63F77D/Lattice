@@ -231,6 +231,30 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task A_late_filled_project_name_refreshes_the_legend_chip()
+    {
+        // Codex P2 (PR #167): a project can attach with a blank name (chip falls back to the URL),
+        // then BOINC fills the name on a later poll. The chip must pick it up, not stay on the URL.
+        var projects = new List<Project> { new("https://p0.org/", "", 0, 0, 0, 3, 100, false, false) };
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects.ToList())),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(projects.ToList()),
+            OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>([Stats(0, 9)]),
+        };
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.Chips.Count == 1);
+        Assert.Equal("https://p0.org/", vm.Chips[0].Name); // fallback while blank
+
+        projects[0] = projects[0] with { ProjectName = "Einstein@Home" };
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(() => vm.Chips[0].Name == "Einstein@Home");
+    }
+
+    [Fact]
     public async Task Unreachable_host_keeps_the_chart_and_raises_the_stale_banner()
     {
         var fake = Fake(3);

@@ -20,6 +20,18 @@ public class StatisticsProjectionTests
     }
 
     [Fact]
+    public void Duplicate_master_urls_collapse_to_the_first_entry()
+    {
+        var projects = new[]
+        {
+            new Project("https://p.org/", "First", 0, 0, 0, 5, 100, false, false),
+            new Project("https://p.org/", "Second", 0, 0, 0, 9, 100, false, false),
+        };
+        var history = Assert.Single(StatisticsProjection.FromProjects(projects, [Stats("https://p.org/")]));
+        Assert.Equal("First", history.Name); // first entry wins, no duplicate series
+    }
+
+    [Fact]
     public void A_named_project_keeps_its_name_and_daemon_ordinal()
     {
         var projects = new[]

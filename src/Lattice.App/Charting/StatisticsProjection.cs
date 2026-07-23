@@ -21,9 +21,15 @@ public static class StatisticsProjection
             statsByUrl.TryAdd(s.MasterUrl, s);
 
         var histories = new List<ProjectHistory>();
+        var seen = new HashSet<string>();
         for (int ordinal = 0; ordinal < projects.Count; ordinal++)
         {
             var project = projects[ordinal];
+            // Lenient-parse guard: a malformed reply can carry the same master_url twice. Keep the
+            // first (its ordinal is the colour key), like ProjectRows.compute — else one BOINC
+            // project would render duplicate chips/series and inflate the project count.
+            if (!seen.Add(project.MasterUrl))
+                continue;
             if (!statsByUrl.TryGetValue(project.MasterUrl, out var stats) || stats.Daily.Count == 0)
                 continue;
             var daily = stats.Daily

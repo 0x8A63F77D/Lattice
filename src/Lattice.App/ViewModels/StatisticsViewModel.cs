@@ -39,9 +39,10 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private readonly HashSet<string> _knownMasters = [];
     private Guid? _visibleHostId;
 
-    // Last chart-input signature (host, metric, theme, visible set, statistics ref); the chart is
-    // reassigned only when this changes, so idle polls/ticks don't re-run the enter animation.
-    private (Guid, CreditMetric, StatisticsChartTheme, string, object?) _chartSignature;
+    // Last chart-input signature (host, metric, theme, visible set, visible names, statistics ref);
+    // the chart is reassigned only when this changes, so idle polls/ticks don't re-run the enter
+    // animation.
+    private (Guid, CreditMetric, StatisticsChartTheme, string, string, object?) _chartSignature;
 
     public StatisticsViewModel(HostStore store, IUiClock clock)
     {
@@ -278,9 +279,16 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         // or a freshness tick leaves the signature unchanged, so the plot is not recreated and the
         // 200ms enter animation does not re-run on an idle page (Codex P2, PR #167). The chrome
         // above (chips/overflow RAC) still refreshes in place; only the animated chart is gated.
-        (Guid, CreditMetric, StatisticsChartTheme, string, object?) signature = (hostId, SelectedMetric.Metric, Theme,
+        // The visible series' names ride the signature too, so a late-filled project name
+        // refreshes the LineSeries label/tooltip even though the history reference is unchanged.
+        var visibleNames = string.Join("", histories
+            .Where(h => _visible.Contains(h.MasterUrl))
+            .OrderBy(h => h.Ordinal)
+            .Select(h => h.Name));
+        (Guid, CreditMetric, StatisticsChartTheme, string, string, object?) signature = (hostId,
+            SelectedMetric.Metric, Theme,
             string.Join(",", _visible.OrderBy(u => u, StringComparer.Ordinal)),
-            snapshot!.Statistics);
+            visibleNames, snapshot!.Statistics);
         if (!signature.Equals(_chartSignature))
         {
             var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
@@ -299,8 +307,11 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private void SyncChips(FSharpList<ProjectHistory> chips)
     {
         var desired = chips.ToList();
+        // Name is part of the shape: a chip's label is immutable, so a project whose blank name
+        // BOINC later fills in must trigger a rebuild, not just a visibility sync (Codex P2, #167).
         var sameShape = Chips.Count == desired.Count
-            && Chips.Zip(desired).All(pair => pair.First.MasterUrl == pair.Second.MasterUrl);
+            && Chips.Zip(desired).All(pair =>
+                pair.First.MasterUrl == pair.Second.MasterUrl && pair.First.Name == pair.Second.Name);
 
         if (!sameShape)
         {
@@ -329,7 +340,8 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         IsAtCap = !StatisticsChart.canAddSeries(_visible.Count);
 
         var sameShape = Overflow.Count == desired.Count
-            && Overflow.Zip(desired).All(pair => pair.First.MasterUrl == pair.Second.MasterUrl);
+            && Overflow.Zip(desired).All(pair =>
+                pair.First.MasterUrl == pair.Second.MasterUrl && pair.First.Name == pair.Second.Name);
 
         if (!sameShape)
         {
