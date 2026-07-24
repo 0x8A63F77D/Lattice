@@ -85,12 +85,14 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Tasks = new TasksViewModel(store, clock, uiState, density, _control);
         Projects = new ProjectsViewModel(store, clock, _control, attachRunner.RunAsync, AvaloniaUiDispatcher.Instance);
         Transfers = new TransfersViewModel(store, clock, density);
+        Statistics = new StatisticsViewModel(store, clock);
         EventLog = new EventLogViewModel(store);
         Views =
         [
             new NavItemViewModel(Strings.NavTasks, "IconTaskListSquareLtrRegular", "IconTaskListSquareLtrFilled", Tasks),
             new NavItemViewModel(Strings.NavProjects, "IconGridRegular", "IconGridFilled", Projects),
             new NavItemViewModel(Strings.NavTransfers, "IconArrowSwapRegular", "IconArrowSwapFilled", Transfers),
+            new NavItemViewModel(Strings.NavStatistics, "IconDataTrendingRegular", "IconDataTrendingFilled", Statistics),
             new NavItemViewModel(Strings.NavEventLog, "IconDocumentTextRegular", "IconDocumentTextFilled", EventLog),
         ];
         _selectedView = Views[0];
@@ -131,7 +133,11 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
     /// can push scope changes into it.</summary>
     public TransfersViewModel Transfers { get; }
 
-    /// <summary>The Event-log page (Views[3].Page); the shell pushes scope into it,
+    /// <summary>The Statistics page (Views[3].Page): single-host credit-history charts; the
+    /// shell pushes scope into it like the other data views.</summary>
+    public StatisticsViewModel Statistics { get; }
+
+    /// <summary>The Event-log page (Views[4].Page); the shell pushes scope into it,
     /// toggles its active flag as it becomes / leaves CurrentPage (which zeroes the
     /// unread badge on activation), and mirrors its unread count for the nav badge.</summary>
     public EventLogViewModel EventLog { get; }
@@ -254,6 +260,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Tasks.Scope = value;
         Projects.Scope = value;
         Transfers.Scope = value;
+        Statistics.Scope = value;
         EventLog.Scope = value;
         RefreshScopedHost();
     }
@@ -584,6 +591,7 @@ public sealed partial class ShellViewModel : ObservableObject, IDisposable
         Tasks.Dispose();
         Projects.Dispose();
         Transfers.Dispose();
+        Statistics.Dispose();
         EventLog.Dispose();
         foreach (var g in RailEntries.OfType<GroupHeaderRailItemViewModel>())
             g.ToggleRequested -= OnGroupToggleRequested;

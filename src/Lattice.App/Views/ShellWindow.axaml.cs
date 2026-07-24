@@ -355,7 +355,8 @@ public partial class ShellWindow : Window
                     0 => NavTasks,
                     1 => NavProjects,
                     2 => NavTransfers,
-                    3 => NavEventLog,
+                    3 => NavStatistics,
+                    4 => NavEventLog,
                     _ => null,
                 };
         return null;

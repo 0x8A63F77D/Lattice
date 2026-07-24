@@ -904,4 +904,46 @@
   <data name="AttachInfo" xml:space="preserve">
     <value>项目一旦被接受即完成添加；错误的账户密钥会稍后显示在事件日志中（守护进程在首次调度请求时进行检查）。</value>
   </data>
+  <data name="NavStatistics" xml:space="preserve">
+    <value>统计</value>
+  </data>
+  <data name="StatisticsTitle" xml:space="preserve">
+    <value>统计</value>
+  </data>
+  <data name="StatisticsMetricUserTotal" xml:space="preserve">
+    <value>用户总计</value>
+  </data>
+  <data name="StatisticsMetricUserAverage" xml:space="preserve">
+    <value>用户平均</value>
+  </data>
+  <data name="StatisticsMetricHostTotal" xml:space="preserve">
+    <value>主机总计</value>
+  </data>
+  <data name="StatisticsMetricHostAverage" xml:space="preserve">
+    <value>主机平均</value>
+  </data>
+  <data name="StatisticsCountsFmt" xml:space="preserve">
+    <value>{0} 个项目 · {1} 天历史</value>
+  </data>
+  <data name="StatisticsLoading" xml:space="preserve">
+    <value>正在加载统计…</value>
+  </data>
+  <data name="StatisticsEmptyTitle" xml:space="preserve">
+    <value>暂无统计数据</value>
+  </data>
+  <data name="StatisticsEmptyCaption" xml:space="preserve">
+    <value>BOINC 每个项目每天记录一个数据点。明天再来查看。</value>
+  </data>
+  <data name="StatisticsStaleFmt" xml:space="preserve">
+    <value>主机不可达。显示自 {0} 起的统计数据。</value>
+  </data>
+  <data name="StatisticsOverflowFmt" xml:space="preserve">
+    <value>+{0} 更多</value>
+  </data>
+  <data name="StatisticsCapCaption" xml:space="preserve">
+    <value>已显示 6 / 6 条曲线。取消勾选一条以添加另一条。</value>
+  </data>
+  <data name="StatisticsRetry" xml:space="preserve">
+    <value>重试</value>
+  </data>
 </root>
