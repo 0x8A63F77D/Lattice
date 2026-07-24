@@ -12,7 +12,13 @@ namespace Lattice.App.Views;
 /// </summary>
 public partial class StatisticsView : UserControl
 {
-    public StatisticsView() => InitializeComponent();
+    public StatisticsView()
+    {
+        InitializeComponent();
+        // The design's Fluent hover card (§3/§6): the tooltip motion + shadow ride the custom
+        // tooltip; its surface/text colours are theme-dependent and applied in ApplyTheme.
+        Chart.Tooltip = new FluentChartTooltip();
+    }
 
     protected override void OnAttachedToVisualTree(Avalonia.VisualTreeAttachmentEventArgs e)
     {
@@ -31,9 +37,18 @@ public partial class StatisticsView : UserControl
 
     private void ApplyTheme()
     {
+        var theme = ActualThemeVariant == ThemeVariant.Dark
+            ? StatisticsChartTheme.Dark
+            : StatisticsChartTheme.Light;
+
         if (DataContext is StatisticsViewModel vm)
-            vm.Theme = ActualThemeVariant == ThemeVariant.Dark
-                ? StatisticsChartTheme.Dark
-                : StatisticsChartTheme.Light;
+            vm.Theme = theme;
+
+        // Tooltip surface/text colours are SkiaSharp paints (not DynamicResource-aware, warning
+        // #1), so reassign them on every theme switch — matched to the app's Fluent surface (§6).
+        var (background, text) = StatisticsChartBuilder.TooltipPaints(theme);
+        Chart.TooltipBackgroundPaint = background;
+        Chart.TooltipTextPaint = text;
+        Chart.TooltipTextSize = 12;
     }
 }

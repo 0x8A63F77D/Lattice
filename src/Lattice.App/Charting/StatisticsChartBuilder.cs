@@ -3,8 +3,10 @@ using LiveChartsCore;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.Kernel.Sketches;
 using LiveChartsCore.Measure;
+using LiveChartsCore.Painting;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using Lattice.App.Aggregation;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
@@ -86,6 +88,16 @@ public static class StatisticsChartBuilder
             // exact tick cadence is left to the library's automatic spacing (§2).
             UnitWidth = TimeSpan.FromDays(1).Ticks,
             Labeler = DateLabel,
+            // Dashed vertical guide through the hovered day column (§6 recommended visual): a light
+            // 1px dashed crosshair snapped to the nearest point, no crosshair LABELS (the labeled
+            // "crosshair section" stays off, §6). Hover-only — absent from the static content-gate
+            // snapshots (no pointer). Only the X axis gets it, so the guide is vertical only.
+            CrosshairPaint = new SolidColorPaint(SKColor.Parse(labelHex))
+            {
+                StrokeThickness = 1f,
+                PathEffect = new DashEffect([4f, 4f]),
+            },
+            CrosshairSnapEnabled = true,
         };
 
         return new ChartVisual(series, [xAxis], [yAxis]);
@@ -122,6 +134,28 @@ public static class StatisticsChartBuilder
                 new DateTime((long)point.Coordinate.SecondaryValue).ToString("yyyy-MM-dd", CultureInfo.CurrentCulture),
         };
     }
+
+    /// <summary>
+    /// The Fluent hover-card paints for the chart tooltip (§6), per theme: a solid surface fill
+    /// and text colour matching the app's own surface/text tokens (light #FFFFFF/#242424, dark
+    /// #292929/#FFFFFF). Kept here beside the other §2 hex → paint mappings (warning #1); the view
+    /// assigns them onto the chart on a theme switch, since these SkiaSharp paints, like the axis
+    /// paints, are not DynamicResource-aware.
+    /// </summary>
+    public static (Paint Background, Paint Text) TooltipPaints(StatisticsChartTheme theme)
+    {
+        var (surface, text) = TooltipHexes(theme);
+        return (new SolidColorPaint(SKColor.Parse(surface)), new SolidColorPaint(SKColor.Parse(text)));
+    }
+
+#pragma warning disable CS8524 // No `_` arm: a new NAMED theme must choose its tooltip hexes here.
+    private static (string Surface, string Text) TooltipHexes(StatisticsChartTheme theme) =>
+        theme switch
+        {
+            StatisticsChartTheme.Light => ("#FFFFFF", "#242424"),
+            StatisticsChartTheme.Dark => ("#292929", "#FFFFFF"),
+        };
+#pragma warning restore CS8524
 
     /// <summary>Chart hexes per theme (§2): (Y gridline, axis label).</summary>
 #pragma warning disable CS8524 // No `_` arm on purpose: CS8509 (a new NAMED StatisticsChartTheme
