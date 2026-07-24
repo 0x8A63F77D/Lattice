@@ -78,6 +78,51 @@ public class StatisticsViewTests
     }
 
     [AvaloniaFact]
+    public async Task Host_picker_opens_on_press_so_the_loading_ring_cannot_starve_it()
+    {
+        // Issue #95: the FAProgressRing shown while a host is still loading starves pointer input,
+        // so a release-open picker reads as stuck. The escape hatch to a working host must carry
+        // ComboBoxPressOpenBehavior like the Tasks view's combo.
+        var (fx, _, view, vm) = MakeView();
+        fx.AddHost("host-a", Fake(3));
+        fx.AddHost("host-b", Fake(3));
+        fx.Start();
+        await fx.SettleAsync(() => vm.IsAllHostsScope);
+        fx.Layout();
+
+        var combo = Assert.Single(view.GetVisualDescendants().OfType<ComboBox>());
+        Assert.True(ComboBoxPressOpenBehavior.GetOpenOnPress(combo));
+
+        await fx.DisposeAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task Loading_progress_bar_animates_only_while_loading()
+    {
+        // The loading indicator is a stock indeterminate ProgressBar, not an FAProgressRing:
+        // the ring starves app-wide pointer input while it spins (issue #95), and lowering
+        // DispatcherOptions.InputStarvationTimeout was MEASURED not to help (PR #167). The
+        // §95 leak-gate discipline still applies to the new control: IsIndeterminate must
+        // track IsLoading so the animation runs only during a first fetch. A dropped binding
+        // fails the during-loading assertion (IsIndeterminate defaults false) or the leak gate.
+        var (fx, _, view, vm) = MakeView();
+        fx.AddHost("host-a", Fake(3));
+        fx.Layout();
+
+        Assert.True(vm.IsLoading);
+        var bar = view.GetVisualDescendants().OfType<ProgressBar>().Single();
+        Assert.True(bar.IsIndeterminate); // animating during the first fetch
+
+        fx.Start();
+        // Settle on the BAR's end state, not the VM flag (the flag flips first; the binding
+        // target is the behaviour under guard — same fixture-determinism contract as the rings).
+        await fx.SettleAsync(() => !bar.IsIndeterminate);
+        Assert.False(vm.IsLoading); // leak gate: loading ended and the animation stopped
+
+        await fx.DisposeAsync();
+    }
+
+    [AvaloniaFact]
     public async Task Shows_the_empty_state_when_a_connected_host_has_no_history()
     {
         var (fx, _, view, vm) = MakeView();

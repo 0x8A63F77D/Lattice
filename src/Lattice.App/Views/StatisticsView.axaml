@@ -3,6 +3,7 @@
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              xmlns:vm="using:Lattice.App.ViewModels"
              xmlns:controls="using:Lattice.App.Controls"
+             xmlns:views="using:Lattice.App.Views"
              xmlns:loc="using:Lattice.App.Localization"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              x:Class="Lattice.App.Views.StatisticsView"
@@ -97,8 +98,12 @@
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <!-- OpenOnPress: without it the FAProgressRing shown while a host is still loading
+               starves pointer input (issue #95), so the release-open never fires and the picker
+               reads as stuck — the escape hatch to a working host must open on press. -->
           <ComboBox ItemsSource="{Binding HostOptions}" SelectedItem="{Binding SelectedHost, Mode=TwoWay}"
-                    MinWidth="140" VerticalAlignment="Center" IsVisible="{Binding IsAllHostsScope}" />
+                    MinWidth="140" VerticalAlignment="Center" IsVisible="{Binding IsAllHostsScope}"
+                    views:ComboBoxPressOpenBehavior.OpenOnPress="True" />
           <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
         </StackPanel>
@@ -197,12 +202,19 @@
                               ZoomMode="{Binding ZoomMode}" />
         </DockPanel>
 
-        <!-- First-fetch pending (§5): centered ring + caption. -->
+        <!-- First-fetch pending (§5): centered indeterminate ProgressBar + caption. This
+             deviates from §5's "centered ProgressRing" on purpose (owner eyeball is the
+             authority): a spinning FAProgressRing starves app-wide pointer input to ~1s via
+             its composition animation while visible (issue #95), which froze the host picker
+             on a still-loading host. InputStarvationTimeout tuning was MEASURED ineffective
+             (it reaches the scheduler yet the ring still starves; PR #167); a stock
+             indeterminate ProgressBar measured clean. IsIndeterminate tracks IsLoading so the
+             animation runs only during a first fetch — a dropped binding is caught by the
+             guard test (IsIndeterminate defaults false, so the during-loading assertion bites)
+             and the leak gate. -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12"
                     IsVisible="{Binding IsLoading}">
-          <!-- IsActive MUST track IsLoading (issue #95): the ring's composition animation
-               ignores IsVisible and would starve pointer input if left active. -->
-          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" IsActive="{Binding IsLoading}" />
+          <ProgressBar Width="160" HorizontalAlignment="Center" IsIndeterminate="{Binding IsLoading}" />
           <TextBlock Text="{x:Static loc:Strings.StatisticsLoading}" FontSize="13"
                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" HorizontalAlignment="Center" />
         </StackPanel>
