@@ -58,6 +58,12 @@ change is needed.
   `Dispatcher.UIThread.Post` — use the deferred-queue dispatcher for multi-monitor fixtures.
 - Visual bugs: geometry/pixel probing (headless Skia) is the verification bar; a fix without
   end-state visual verification is not done.
+- Headless test assemblies (`Lattice.App.Tests`, `Lattice.VisualTests`) must keep
+  `[assembly: CollectionBehavior(DisableTestParallelization = true)]`. Avalonia's UI-thread
+  identity is a process-global first-toucher-wins claim that every `AvaloniaObject` ctor makes,
+  and `HeadlessUnitTestSession` clears and re-claims it around every `[AvaloniaFact]`; a test
+  body on any other thread that constructs an Avalonia object inside that window steals it
+  (issue #169). Never add a headless test assembly without the attribute.
 
 ## Mutation gates (Stryker.NET pilot, issue #77)
 

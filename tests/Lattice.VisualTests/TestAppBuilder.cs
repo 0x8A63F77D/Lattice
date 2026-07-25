@@ -2,8 +2,18 @@ using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media;
 using Lattice.VisualTests;
+using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(TestAppBuilder))]
+
+// Issue #169. Avalonia's UI-thread identity is a process-global, first-toucher-wins claim
+// made implicitly by every AvaloniaObject constructor, and HeadlessUnitTestSession clears
+// and re-claims it around each [AvaloniaFact] under the default PerTest isolation. A test
+// body running on any other thread inside that window steals the claim and the session's
+// next VerifyAccess throws "a different thread owns it". Serializing the assembly removes
+// the concurrency the race needs. The full mechanism, evidence and rejected alternatives
+// are documented on Lattice.App.Tests' copy of this attribute — keep the two in step.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace Lattice.VisualTests;
 
