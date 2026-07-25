@@ -1,8 +1,10 @@
+using System.Reflection;
 using Lattice.App.Aggregation;
 using Lattice.App.Charting;
 using LiveChartsCore.Defaults;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
+using LiveChartsCore.SkiaSharpView.Painting.Effects;
 using Microsoft.FSharp.Collections;
 using Microsoft.FSharp.Core;
 using SkiaSharp;
@@ -13,7 +15,8 @@ namespace Lattice.App.Tests;
 /// <summary>
 /// Wiring guards for the shared chart renderer: the §2 pins the pixel gate would only catch
 /// after a full render (Fill=null, 2px stroke, straight segments, Y-only gridlines, 0 baseline,
-/// gaps → null points, colour-by-ordinal). Cheap structural asserts fail fast on a broken paint.
+/// gaps → null points, colour-by-ordinal) plus the #170 gap split (which metrics get a dashed
+/// bridge series, and what it looks like). Cheap structural asserts fail fast on a broken paint.
 /// </summary>
 public class StatisticsChartBuilderTests
 {
@@ -71,6 +74,98 @@ public class StatisticsChartBuilderTests
         var values = ((LineSeries<DateTimePoint>)visual.Series[0]).Values!.Cast<DateTimePoint>().ToList();
         Assert.Equal(3, values.Count);
         Assert.Equal([1d, null, 3d], values.Select(v => v.Value));
+    }
+
+    // ---- #170 gap rendering: dashed bridge for totals, hard break for averages ----------
+
+    // Two gap runs: day 1 alone, then days 4-5, with an OBSERVED segment (2 → 3) between them.
+    private static SeriesSpec Gapped() => Spec(
+        "a", "A", 0,
+        Point(0, 10), Point(1, null), Point(2, 12), Point(3, 13), Point(4, null), Point(5, null), Point(6, 16));
+
+    private static List<LineSeries<DateTimePoint>> Lines(CreditMetric metric) =>
+        [.. StatisticsChartBuilder.Build([Gapped()], StatisticsChartTheme.Light, metric)
+            .Series.Cast<LineSeries<DateTimePoint>>()];
+
+    [Theory]
+    [InlineData(false, 3)] // UserTotal / HostTotal: the real series + one bridge per gap RUN
+    [InlineData(true, 1)] // UserAverage / HostAverage: the real series alone, breaks intact
+    public void Only_the_cumulative_metrics_add_bridge_series(bool average, int expectedSeries)
+    {
+        foreach (var metric in average
+                     ? new[] { CreditMetric.UserAverage, CreditMetric.HostAverage }
+                     : [CreditMetric.UserTotal, CreditMetric.HostTotal])
+        {
+            var lines = Lines(metric);
+            Assert.Equal(expectedSeries, lines.Count);
+            // The real series is untouched either way: every day still present, gaps still null.
+            var real = lines[0].Values!.Cast<DateTimePoint>().ToList();
+            Assert.Equal([10d, null, 12d, 13d, null, null, 16d], real.Select(v => v.Value));
+        }
+    }
+
+    // dev-798 does not expose DashEffect's pattern publicly, so read it reflectively — asserting
+    // only "it is A DashEffect" would let any pattern through. Fails loudly if the member moves.
+    private static float[] DashArrayOf(DashEffect effect)
+    {
+        for (var t = effect.GetType(); t is not null; t = t.BaseType)
+            if (t.GetProperty("DashArray", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic) is { } p)
+                return (float[])p.GetValue(effect)!;
+        throw new InvalidOperationException("DashEffect's dash pattern member moved — update this probe.");
+    }
+
+    [Fact]
+    public void A_bridge_carries_only_the_two_observed_endpoints_of_its_gap()
+    {
+        var bridges = Lines(CreditMetric.UserTotal).Skip(1)
+            .Select(s => s.Values!.Cast<DateTimePoint>().Select(p => (p.DateTime, p.Value)).ToList())
+            .ToList();
+
+        Assert.Equal(
+            [
+                [(Day0.AddDays(0).UtcDateTime, 10d), (Day0.AddDays(2).UtcDateTime, 12d)],
+                [(Day0.AddDays(3).UtcDateTime, 13d), (Day0.AddDays(6).UtcDateTime, 16d)],
+            ],
+            bridges);
+    }
+
+    [Fact]
+    public void A_bridge_is_the_series_colour_dashed_with_no_markers_and_no_chrome()
+    {
+        var bridge = Lines(CreditMetric.HostTotal)[1]; // the first of the two bridges
+
+        var stroke = Assert.IsType<SolidColorPaint>(bridge.Stroke);
+        Assert.Equal(StatisticsPalette.SkColor(0), stroke.Color); // same colour as the real line
+        Assert.Equal(2f, stroke.StrokeThickness);
+        var dash = Assert.IsType<DashEffect>(stroke.PathEffect);
+        Assert.Equal([4f, 4f], DashArrayOf(dash)); // the 4/4 idiom the hover guide already uses
+
+        Assert.Null(bridge.Fill);
+        Assert.Equal(0, bridge.LineSmoothness);
+        Assert.Equal(0d, bridge.GeometrySize); // no markers on unobserved days
+        Assert.Null(bridge.GeometryFill);
+        Assert.Null(bridge.GeometryStroke);
+        Assert.False(bridge.IsHoverable); // tooltip lists one entry per project
+        Assert.False(bridge.IsVisibleAtLegend);
+    }
+
+    [Fact]
+    public void A_gapless_history_gets_no_bridge_series_at_all()
+    {
+        var visual = StatisticsChartBuilder.Build([Ramp("a", "A", 0, 5)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
+        Assert.Single(visual.Series);
+    }
+
+    [Fact]
+    public void Bridges_do_not_shift_the_marker_rule()
+    {
+        // 31 observed days with one gap → 31 real points > 30 → pure line, bridge series ignored.
+        var points = Enumerable.Range(0, 33).Select(i => Point(i, i == 5 || i == 6 ? null : i)).ToArray();
+        var visual = StatisticsChartBuilder.Build(
+            [Spec("a", "A", 0, points)], StatisticsChartTheme.Light, CreditMetric.UserTotal);
+        var lines = visual.Series.Cast<LineSeries<DateTimePoint>>().ToList();
+        Assert.Equal(2, lines.Count);
+        Assert.Equal(0d, lines[0].GeometrySize);
     }
 
     [Fact]

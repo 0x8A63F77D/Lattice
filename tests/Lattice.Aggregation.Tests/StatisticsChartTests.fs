@@ -100,6 +100,66 @@ let ``buildSeriesPoints: points are exactly one calendar day apart`` () =
     let deltas = pts |> List.pairwise |> List.map (fun (a, b) -> (b.Day - a.Day).Days)
     Assert.All(deltas, fun d -> Assert.Equal(1, d))
 
+// ---- bridgesGaps / gapBridges (#170 metric split) ------------------------
+
+/// The points for `offsets` (observed days) over the full span, as the chart sees them.
+let private pointsFor metric offsets =
+    offsets
+    |> List.map (fun n -> daily n (10.0 + float n) (20.0 + float n) (30.0 + float n) (40.0 + float n))
+    |> StatisticsChart.buildSeriesPoints metric
+
+let private bridgeDays (bs: GapBridge list) =
+    bs |> List.map (fun b -> (b.FromDay - day0).Days, (b.ToDay - day0).Days)
+
+[<Fact>]
+let ``bridgesGaps: cumulative metrics bridge, averages break`` () =
+    Assert.True(StatisticsChart.bridgesGaps UserTotal)
+    Assert.True(StatisticsChart.bridgesGaps HostTotal)
+    Assert.False(StatisticsChart.bridgesGaps UserAverage)
+    Assert.False(StatisticsChart.bridgesGaps HostAverage)
+
+[<Fact>]
+let ``gapBridges: a contiguous history has nothing to bridge`` () =
+    Assert.Empty(StatisticsChart.gapBridges UserTotal (pointsFor UserTotal [ 0; 1; 2 ]))
+
+[<Fact>]
+let ``gapBridges: one missing day bridges its two observed endpoints, carrying their values`` () =
+    let bridges = StatisticsChart.gapBridges UserTotal (pointsFor UserTotal [ 0; 2 ])
+    let b = Assert.Single(bridges)
+    Assert.Equal(day0, b.FromDay)
+    Assert.Equal(day0.AddDays 2.0, b.ToDay)
+    Assert.Equal(10.0, b.FromValue) // the OBSERVED values, never an interpolation
+    Assert.Equal(12.0, b.ToValue)
+
+[<Fact>]
+let ``gapBridges: a multi-day gap run is ONE bridge, not one per missing day`` () =
+    // days 0 and 4 observed; 1..3 missing.
+    let bridges = StatisticsChart.gapBridges UserTotal (pointsFor UserTotal [ 0; 4 ])
+    Assert.Equal<(int * int) list>([ 0, 4 ], bridgeDays bridges)
+
+[<Fact>]
+let ``gapBridges: separate gap runs each get their own bridge, in day order`` () =
+    // observed 0,1,3,4,7 → gaps at {2} and {5,6}; the 0-1 and 3-4 segments stay solid.
+    let bridges = StatisticsChart.gapBridges UserTotal (pointsFor UserTotal [ 0; 1; 3; 4; 7 ])
+    Assert.Equal<(int * int) list>([ 1, 3; 4, 7 ], bridgeDays bridges)
+
+[<Fact>]
+let ``gapBridges: HostTotal bridges on its own column`` () =
+    let bridges = StatisticsChart.gapBridges HostTotal (pointsFor HostTotal [ 0; 2 ])
+    let b = Assert.Single(bridges)
+    Assert.Equal(30.0, b.FromValue) // HostTotal's field, not UserTotal's
+    Assert.Equal(32.0, b.ToValue)
+
+[<Fact>]
+let ``gapBridges: the average metrics keep hard breaks over the very same gap`` () =
+    Assert.Empty(StatisticsChart.gapBridges UserAverage (pointsFor UserAverage [ 0; 2 ]))
+    Assert.Empty(StatisticsChart.gapBridges HostAverage (pointsFor HostAverage [ 0; 2 ]))
+
+[<Fact>]
+let ``gapBridges: a single point or no points cannot bridge`` () =
+    Assert.Empty(StatisticsChart.gapBridges UserTotal (pointsFor UserTotal [ 3 ]))
+    Assert.Empty(StatisticsChart.gapBridges UserTotal [])
+
 // ---- seriesFor -----------------------------------------------------------
 
 [<Fact>]
@@ -214,6 +274,31 @@ let ``buildSeriesPoints: real points sit exactly on the input days, span is gapl
                 |> List.choose (fun p -> p.Value |> Option.map (fun v -> int ((p.Day - day0).Days), v))
             let expected = offsets |> List.sort |> List.map (fun n -> n, float n)
             gapless && realDays = expected)
+
+[<Property>]
+let ``gapBridges: bridges are exactly the runs of unobserved days, endpoints observed`` () =
+    Prop.forAll distinctDays (fun offsets ->
+        let sorted = List.sort offsets
+        let observed = Set.ofList sorted
+        let bridges = StatisticsChart.gapBridges UserTotal (pointsFor UserTotal offsets)
+        // one bridge per pair of consecutive observed days more than a day apart
+        let expected = sorted |> List.pairwise |> List.filter (fun (a, b) -> b - a > 1)
+        bridgeDays bridges = expected
+        // and each bridge spans ONLY unobserved days, carrying its endpoints' observed values
+        && bridges
+           |> List.forall (fun b ->
+               let lo = (b.FromDay - day0).Days
+               let hi = (b.ToDay - day0).Days
+               hi - lo > 1
+               && [ lo + 1 .. hi - 1 ] |> List.forall (observed.Contains >> not)
+               && b.FromValue = 10.0 + float lo
+               && b.ToValue = 10.0 + float hi))
+
+[<Property>]
+let ``gapBridges: no average metric ever bridges, whatever the gaps`` () =
+    Prop.forAll distinctDays (fun offsets ->
+        [ UserAverage; HostAverage ]
+        |> List.forall (fun m -> (StatisticsChart.gapBridges m (pointsFor m offsets)).IsEmpty))
 
 [<Property>]
 let ``partition: chips ∪ overflow = input, disjoint, chips capped at 6`` (racs: int list) =
