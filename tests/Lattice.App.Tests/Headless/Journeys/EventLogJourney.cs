@@ -74,7 +74,7 @@ public class EventLogJourney
 
         // --- Navigate to the Event log: activation clears the badge and the grid
         //     realizes, the alert row carrying its "warning" severity class. -----
-        harness.Shell.SelectViewCommand.Execute("3");
+        harness.Shell.SelectViewCommand.Execute("4");
         harness.Layout();
 
         Assert.Same(harness.Shell.EventLog, harness.Shell.CurrentPage);

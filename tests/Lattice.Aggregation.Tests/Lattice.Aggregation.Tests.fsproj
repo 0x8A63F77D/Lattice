@@ -11,6 +11,7 @@
     <Compile Include="RailLayoutTests.fs" />
     <Compile Include="ScopeMachineTests.fs" />
     <Compile Include="ProjectRowsTests.fs" />
+    <Compile Include="StatisticsChartTests.fs" />
     <Compile Include="MessageLogTests.fs" />
     <Compile Include="ControlConfirmationTests.fs" />
   </ItemGroup>

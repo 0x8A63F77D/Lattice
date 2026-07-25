@@ -264,7 +264,7 @@ public class ShellRailTests
         Assert.Same(settingsFilled, settingsIcon.Data);
         // Invariant: exactly one filled glyph on the rail — no view item fills while
         // Settings is active (all four view items resolve their *Regular geometry).
-        var viewItems = new[] { window.NavTasks, window.NavProjects, window.NavTransfers, window.NavEventLog };
+        var viewItems = new[] { window.NavTasks, window.NavProjects, window.NavTransfers, window.NavStatistics, window.NavEventLog };
         for (var i = 0; i < viewItems.Length; i++)
         {
             Assert.True(Application.Current!.TryGetResource(shell.Views[i].IconKey, null, out var viewRegular));

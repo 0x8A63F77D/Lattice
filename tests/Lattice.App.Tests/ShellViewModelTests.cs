@@ -44,9 +44,10 @@ public class ShellViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public void Has_four_views_and_starts_on_tasks()
+    public void Has_five_views_and_starts_on_tasks()
     {
-        Assert.Equal([Strings.NavTasks, Strings.NavProjects, Strings.NavTransfers, Strings.NavEventLog],
+        Assert.Equal(
+            [Strings.NavTasks, Strings.NavProjects, Strings.NavTransfers, Strings.NavStatistics, Strings.NavEventLog],
             _shell.Views.Select(v => v.Title).ToArray());
         Assert.Same(_shell.Views[0], _shell.SelectedView);
         Assert.Same(_shell.Views[0].Page, _shell.CurrentPage);
@@ -135,7 +136,7 @@ public class ShellViewModelTests : IAsyncLifetime
     [Fact]
     public void EventLog_page_is_an_EventLogViewModel_and_receives_scope_changes()
     {
-        var eventLog = Assert.IsType<EventLogViewModel>(_shell.Views[3].Page);
+        var eventLog = Assert.IsType<EventLogViewModel>(_shell.Views[4].Page);
         Assert.Same(_shell.EventLog, eventLog);
         Assert.True(eventLog.Scope.IsAllHosts);
 
@@ -144,6 +145,20 @@ public class ShellViewModelTests : IAsyncLifetime
         _shell.Scope = new ScopeSelection(host.Id);
 
         Assert.Equal(host.Id, eventLog.Scope.HostId);
+    }
+
+    [Fact]
+    public void Statistics_page_is_a_StatisticsViewModel_and_receives_scope_changes()
+    {
+        var statistics = Assert.IsType<StatisticsViewModel>(_shell.Views[3].Page);
+        Assert.Same(_shell.Statistics, statistics);
+        Assert.True(statistics.Scope.IsAllHosts);
+
+        var host = TestData.MakeHostConfig();
+        _registry.AddHost(host);
+        _shell.Scope = new ScopeSelection(host.Id);
+
+        Assert.Equal(host.Id, statistics.Scope.HostId);
     }
 
     [Fact]
@@ -172,7 +187,7 @@ public class ShellViewModelTests : IAsyncLifetime
             _manager, new MessagesAddedEventArgs(host.Id, [Alert(1, "boom")]));
         Assert.Equal(1, _shell.EventLogUnread);
 
-        _shell.SelectViewCommand.Execute("3");
+        _shell.SelectViewCommand.Execute("4");
 
         Assert.Same(_shell.EventLog, _shell.CurrentPage);
         Assert.Equal(0, _shell.EventLogUnread);
@@ -186,7 +201,7 @@ public class ShellViewModelTests : IAsyncLifetime
         _registry.AddHost(host);
 
         // Activate (zeroes + stops counting), then leave for Tasks.
-        _shell.SelectViewCommand.Execute("3");
+        _shell.SelectViewCommand.Execute("4");
         _shell.SelectViewCommand.Execute("0");
 
         ManagerTestAccess.RaiseMessagesAdded(
@@ -202,7 +217,7 @@ public class ShellViewModelTests : IAsyncLifetime
         var host = TestData.MakeHostConfig(name: "host-a", address: "host-a");
         _registry.AddHost(host);
 
-        _shell.SelectViewCommand.Execute("3");
+        _shell.SelectViewCommand.Execute("4");
         Assert.True(_shell.EventLog.IsViewActive);
 
         _shell.NavigateToSettings();

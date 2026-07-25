@@ -909,4 +909,46 @@
   <data name="AttachInfo" xml:space="preserve">
     <value>The project is attached once accepted; a bad account key surfaces later in the event log (the daemon checks it on its first scheduler request).</value>
   </data>
+  <data name="NavStatistics" xml:space="preserve">
+    <value>Statistics</value>
+  </data>
+  <data name="StatisticsTitle" xml:space="preserve">
+    <value>Statistics</value>
+  </data>
+  <data name="StatisticsMetricUserTotal" xml:space="preserve">
+    <value>User total</value>
+  </data>
+  <data name="StatisticsMetricUserAverage" xml:space="preserve">
+    <value>User average</value>
+  </data>
+  <data name="StatisticsMetricHostTotal" xml:space="preserve">
+    <value>Host total</value>
+  </data>
+  <data name="StatisticsMetricHostAverage" xml:space="preserve">
+    <value>Host average</value>
+  </data>
+  <data name="StatisticsCountsFmt" xml:space="preserve">
+    <value>{0} projects · {1} days of history</value>
+  </data>
+  <data name="StatisticsLoading" xml:space="preserve">
+    <value>Loading statistics…</value>
+  </data>
+  <data name="StatisticsEmptyTitle" xml:space="preserve">
+    <value>No statistics yet</value>
+  </data>
+  <data name="StatisticsEmptyCaption" xml:space="preserve">
+    <value>BOINC records one point per project per day. Check back tomorrow.</value>
+  </data>
+  <data name="StatisticsStaleFmt" xml:space="preserve">
+    <value>Host unreachable. Showing statistics from {0}.</value>
+  </data>
+  <data name="StatisticsOverflowFmt" xml:space="preserve">
+    <value>+{0} more</value>
+  </data>
+  <data name="StatisticsCapCaption" xml:space="preserve">
+    <value>6 of 6 series shown. Uncheck one to add another.</value>
+  </data>
+  <data name="StatisticsRetry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
 </root>

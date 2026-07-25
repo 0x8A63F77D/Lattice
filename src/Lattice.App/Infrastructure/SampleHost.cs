@@ -21,7 +21,13 @@ internal sealed record SampleHostData(
     CcStatus Status,
     IReadOnlyList<Result> Results,
     IReadOnlyList<FileTransfer> Transfers,
-    IReadOnlyList<Message> Messages);
+    IReadOnlyList<Message> Messages)
+{
+    /// <summary>Per-project credit history for the Statistics page (issue #148). Kept off the
+    /// positional list — like <see cref="HostSnapshot.Statistics"/> — because not every sample
+    /// host needs one; default empty exercises the "No statistics yet" state.</summary>
+    public IReadOnlyList<ProjectStatistics> Statistics { get; init; } = [];
+}
 
 /// <summary>
 /// DEBUG-only injectable sample fleet (shell-design §12.4). The live test daemon
@@ -202,7 +208,17 @@ internal static class SampleHost
 
         return new SampleHostData(
             new HostConfig(AlphaId, "Sample · Alpha", AlphaAddress, 31416, "sample"),
-            state, RunningStatus, results, transfers, messages);
+            state, RunningStatus, results, transfers, messages)
+        {
+            // Normal marker state (9 points), three series in ordinal/palette order
+            // (Einstein qual.1, Rosetta qual.2, LHC qual.3).
+            Statistics =
+            [
+                History(EinsteinUrl, now, 9, utBase: 4_100_000, utStep: 200_000, uaBase: 1_900, htBase: 500_000, htStep: 20_000, haBase: 640),
+                History(RosettaUrl, now, 9, utBase: 1_350_000, utStep: 95_000, uaBase: 900, htBase: 180_000, htStep: 6_000, haBase: 210),
+                History(LhcUrl, now, 9, utBase: 500_000, utStep: 7_000, uaBase: 300, htBase: 50_000, htStep: 1_000, haBase: 120),
+            ],
+        };
     }
 
     // Beta: shares Einstein (SUSPENDED here) and Rosetta with Alpha; contributes
@@ -243,7 +259,15 @@ internal static class SampleHost
 
         return new SampleHostData(
             new HostConfig(BetaId, "Sample · Beta", BetaAddress, 31416, "sample"),
-            state, RunningStatus, results, transfers, messages);
+            state, RunningStatus, results, transfers, messages)
+        {
+            // Two-series marker state; Beta is a smaller host, so its host totals are lower.
+            Statistics =
+            [
+                History(EinsteinUrl, now, 9, utBase: 4_100_000, utStep: 200_000, uaBase: 1_900, htBase: 120_000, htStep: 5_000, haBase: 300),
+                History(RosettaUrl, now, 9, utBase: 1_350_000, utStep: 95_000, uaBase: 900, htBase: 90_000, htStep: 3_000, haBase: 160),
+            ],
+        };
     }
 
     // Gamma: shares Einstein (NO NEW TASKS here) and LHC; contributes the
@@ -283,7 +307,16 @@ internal static class SampleHost
 
         return new SampleHostData(
             new HostConfig(GammaId, "Sample · Gamma", GammaAddress, 31416, "sample"),
-            state, RunningStatus, results, transfers, messages);
+            state, RunningStatus, results, transfers, messages)
+        {
+            // Density state: 90 daily points → the marker rule switches every series to a pure
+            // line (GeometrySize 0). Lets the owner eyeball the >30-point render live.
+            Statistics =
+            [
+                History(EinsteinUrl, now, 90, utBase: 4_100_000, utStep: 20_000, uaBase: 1_900, htBase: 300_000, htStep: 3_000, haBase: 500),
+                History(LhcUrl, now, 90, utBase: 500_000, utStep: 2_000, uaBase: 300, htBase: 40_000, htStep: 400, haBase: 120),
+            ],
+        };
     }
 
     // ---- Builders ----------------------------------------------------------
@@ -292,6 +325,30 @@ internal static class SampleHost
         RunMode.Auto, RunMode.Auto, RunMode.Auto,
         SuspendReason.NotSuspended, SuspendReason.NotSuspended, SuspendReason.NotSuspended,
         RunMode.Auto, 0, RunMode.Auto, 0, RunMode.Auto, 0);
+
+    // Synthetic per-project credit history for the Statistics page (issue #148): a monotone
+    // daily ramp keyed to the host's own project URLs, `days` points ending "today" so the X
+    // axis lands on recent dates. Totals ramp linearly; the averages drift ~1%/day. The 9-point
+    // hosts show the marker state (Alpha/Beta); Gamma's 90-point history shows the pure-line
+    // density state (marker rule, >30 points). The exact 4-project and 12-project-overflow
+    // states are pixel-gated by the standalone snapshot baselines rather than the fleet, to keep
+    // the multi-host aggregation demo's project set intact (see the landing PR).
+    private static ProjectStatistics History(
+        string url, DateTimeOffset now, int days,
+        double utBase, double utStep, double uaBase, double htBase, double htStep, double haBase)
+    {
+        var lastDay = new DateTimeOffset(now.UtcDateTime.Date, TimeSpan.Zero);
+        var firstDay = lastDay.AddDays(-(days - 1));
+        return new ProjectStatistics(url,
+        [
+            .. Enumerable.Range(0, days).Select(i => new DailyStatistics(
+                firstDay.AddDays(i),
+                UserTotalCredit: utBase + utStep * i,
+                UserExpavgCredit: uaBase * (1 + 0.01 * i),
+                HostTotalCredit: htBase + htStep * i,
+                HostExpavgCredit: haBase * (1 + 0.01 * i))),
+        ]);
+    }
 
     private static Project ProjectOf(
         string url, string name, double share, bool suspended = false, bool noNewTasks = false) =>
@@ -447,9 +504,10 @@ internal sealed class SampleGuiRpcClient(SampleHostData data) : IGuiRpcClient
     public Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default) =>
         Task.FromResult(data.State.Projects);
 
-    // Sample hosts carry no credit history yet; charts wiring lands with M4 Core plumbing.
+    // Canned per-project credit history for the Statistics page (issue #148); static like the
+    // rest of the canned state (the low-frequency stats cadence never refetches within a demo).
     public Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default) =>
-        Task.FromResult<IReadOnlyList<ProjectStatistics>>([]);
+        Task.FromResult(data.Statistics);
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 }

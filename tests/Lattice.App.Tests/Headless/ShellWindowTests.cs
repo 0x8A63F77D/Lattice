@@ -210,7 +210,7 @@ public class ShellWindowTests
     [InlineData("0")] // Tasks
     [InlineData("1")] // Projects
     [InlineData("2")] // Transfers
-    [InlineData("3")] // EventLog
+    [InlineData("4")] // EventLog
     public void No_data_grid_column_is_a_star_and_each_pins_min_width_to_spec(string tag)
     {
         var (window, shell, registry) = MakeShell();
@@ -240,7 +240,7 @@ public class ShellWindowTests
     [InlineData("0")] // Tasks
     [InlineData("1")] // Projects
     [InlineData("2")] // Transfers
-    [InlineData("3")] // EventLog
+    [InlineData("4")] // EventLog
     public void No_page_overflows_horizontally_at_the_design_default_window(string tag)
     {
         var (window, shell, registry) = MakeShell();
@@ -267,7 +267,7 @@ public class ShellWindowTests
     [InlineData("0")] // Tasks
     [InlineData("1")] // Projects
     [InlineData("2")] // Transfers
-    [InlineData("3")] // EventLog
+    [InlineData("4")] // EventLog
     public void Narrow_window_overflows_each_page_into_a_working_scrollbar(string tag)
     {
         var (window, shell, registry) = MakeShell();

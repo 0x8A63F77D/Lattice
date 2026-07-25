@@ -65,6 +65,12 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.0.1" />
+    <!-- Charting for the M4 Statistics page (issue #148 ruling). Pinned to the exact
+         evaluated prerelease — the 2.1.0-dev line has no stable release, so float would
+         silently drift the render across builds and break the pixel-gated snapshots. The
+         two-layer verification gate and the ScottPlot flip-back trigger are recorded on
+         #148; bump this pin deliberately, never via a range. -->
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" Version="2.1.0-dev-798" />
     <PackageReference Include="VocaDb.ResXFileCodeGenerator" Version="3.2.1" PrivateAssets="all" />
     <!-- Derive the version from git so an un-stamped local build self-identifies in
          Settings -> About instead of showing the SDK's 1.0.0 default (issue #151):

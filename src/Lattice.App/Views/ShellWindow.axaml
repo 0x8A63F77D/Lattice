@@ -18,6 +18,7 @@
     <KeyBinding Gesture="Ctrl+D2" Command="{Binding SelectViewCommand}" CommandParameter="1" />
     <KeyBinding Gesture="Ctrl+D3" Command="{Binding SelectViewCommand}" CommandParameter="2" />
     <KeyBinding Gesture="Ctrl+D4" Command="{Binding SelectViewCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Ctrl+D5" Command="{Binding SelectViewCommand}" CommandParameter="4" />
   </Window.KeyBindings>
 
   <Window.Styles>
@@ -131,7 +132,12 @@
             <ui:FAPathIconSource Data="{StaticResource IconArrowSwapRegular}" />
           </ui:FANavigationViewItem.IconSource>
         </ui:FANavigationViewItem>
-        <ui:FANavigationViewItem x:Name="NavEventLog" Content="{x:Static loc:Strings.NavEventLog}" Tag="3">
+        <ui:FANavigationViewItem x:Name="NavStatistics" Content="{x:Static loc:Strings.NavStatistics}" Tag="3">
+          <ui:FANavigationViewItem.IconSource>
+            <ui:FAPathIconSource Data="{StaticResource IconDataTrendingRegular}" />
+          </ui:FANavigationViewItem.IconSource>
+        </ui:FANavigationViewItem>
+        <ui:FANavigationViewItem x:Name="NavEventLog" Content="{x:Static loc:Strings.NavEventLog}" Tag="4">
           <ui:FANavigationViewItem.IconSource>
             <ui:FAPathIconSource Data="{StaticResource IconDocumentTextRegular}" />
           </ui:FANavigationViewItem.IconSource>
@@ -439,6 +445,9 @@
           </DataTemplate>
           <DataTemplate DataType="vm:TransfersViewModel">
             <v:TransfersView />
+          </DataTemplate>
+          <DataTemplate DataType="vm:StatisticsViewModel">
+            <v:StatisticsView />
           </DataTemplate>
           <DataTemplate DataType="vm:EventLogViewModel">
             <v:EventLogView />
