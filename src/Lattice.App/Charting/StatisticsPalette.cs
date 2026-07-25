@@ -31,10 +31,19 @@ public static class StatisticsPalette
     ];
 
     /// <summary>
-    /// Palette slot for a project ordinal. Wraps modulo the palette length — a documented
-    /// last resort that only collides when a host has &gt;10 projects AND two whose ordinals
-    /// differ by exactly the palette length are visible at once; the ≤6 visible cap makes
-    /// that astronomically rare. Negative ordinals never occur but are folded for totality.
+    /// Palette slot for a project ordinal, wrapping modulo the palette length.
+    /// <para>KNOWN LIMITATION (issue #171, raised by review on PR #167): on a host with &gt;10
+    /// projects two visible series whose ordinals differ by a multiple of 10 get the SAME colour.
+    /// The ≤6 visible cap does NOT prevent this — it bounds how many series show, not how far
+    /// apart their ordinals are — so the contract §2 claim "the cap means colours never repeat"
+    /// is unsound past ten projects. Nor is it rare: an 11-project host defaults to the top 6 by
+    /// RAC, and if RAC order is unrelated to list order the chance ordinals 0 and 10 are both
+    /// visible is C(9,4)/C(11,6) = 3/11 ≈ 27%.</para>
+    /// <para>It is left as-is deliberately: past ten projects the contract's rules are jointly
+    /// unsatisfiable — colour must be a pure function of ordinal (toggling never recolours),
+    /// colours must never repeat, and no colour may be invented. Something has to give, and which
+    /// one is a design call, tracked on #171. Negative ordinals never occur but are folded for
+    /// totality.</para>
     /// </summary>
     public static int Slot(int ordinal) => ((ordinal % Hex.Length) + Hex.Length) % Hex.Length;
 
