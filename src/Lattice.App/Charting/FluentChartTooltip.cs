@@ -70,6 +70,22 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
         Geometry.DropShadow = Soft;
     }
 
+    // Date-header padding. Top = 2 (not the default's 0): the card's interior padding is ~4px on
+    // every side, and the last value row carries 2px of bottom padding — so a 0-top date header sat
+    // 4px from the top edge while the last row sat 6px from the bottom. Matching the row's 2px
+    // balances the two (owner eyeball round: "date too close to the top edge"). Bottom = 8 is the
+    // date→table separator, unchanged from the default.
+    internal const float DateHeaderTopPadding = 2f;
+    internal const float DateHeaderBottomPadding = 8f;
+
+    /// <summary>
+    /// One composed row of the hover card — the pure input to <see cref="ComposeCard"/>, so the
+    /// card's geometry is assertable without a live chart or a synthesised hover (test seam,
+    /// InternalsVisibleTo). <paramref name="Name"/> is null when the series opts out of a label
+    /// (<c>LiveCharts.IgnoreSeriesName</c>).
+    /// </summary>
+    internal readonly record struct CardRow(string? Name, string Value, SKColor Color);
+
     /// <summary>
     /// Faithful transcription of <see cref="SKDefaultTooltip"/>'s default layout (dev-798) with
     /// exactly two design deltas (contract §6, owner round-3 eyeball requests, greenlit on #167):
@@ -79,10 +95,12 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
     /// <item>(b) the date header (the X/secondary label) is LEFT-aligned to the table's left edge
     /// — the default centres it because the outer stack uses <see cref="Align.Middle"/>.</item>
     /// </list>
-    /// Everything else — nearest-X content, the per-series row table, paddings, RTL column order,
-    /// and crucially the label TEXT via <c>GetSecondaryToolTipText</c>/<c>GetPrimaryToolTipText</c>
-    /// (so number/date formatting never forks from <see cref="StatisticsChartBuilder"/>) — is the
-    /// default verbatim.
+    /// Everything else — nearest-X content, the per-series row table, paddings, and crucially the
+    /// label TEXT via <c>GetSecondaryToolTipText</c>/<c>GetPrimaryToolTipText</c> (so number/date
+    /// formatting never forks from <see cref="StatisticsChartBuilder"/>) — is the default verbatim.
+    /// This override only reads the hovered points; the composition lives in the pure
+    /// <see cref="ComposeCard"/> so it can be geometry-asserted (AGENTS.md: visual fixes need
+    /// end-state verification — a silently dropped <c>TextSize</c> shipped once, PR #167).
     /// </summary>
     protected override Layout<SkiaSharpDrawingContext> GetLayout(IEnumerable<ChartPoint> foundPoints, Chart chart)
     {
@@ -93,6 +111,54 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
         Paint textPaint = chart.View.TooltipTextPaint
             ?? theme.TooltipTextPaint
             ?? new SolidColorPaint(new SKColor(28, 49, 58));
+
+        var (date, rows) = ReadPoints(foundPoints);
+        return ComposeCard(date, rows, textSize, textPaint);
+    }
+
+    /// <summary>
+    /// Reads the hovered points into the pure card model. The date header is the first point's
+    /// secondary label (every hovered point shares the snapped day, §6 nearest-X) and is emitted at
+    /// most once — the default would re-emit it for a second point when the first contributed no
+    /// row, which cannot arise here since the Statistics formatters always yield a value.
+    /// </summary>
+    private static (string? Date, List<CardRow> Rows) ReadPoints(IEnumerable<ChartPoint> foundPoints)
+    {
+        string? date = null;
+        var rows = new List<CardRow>();
+
+        foreach (var point in foundPoints)
+        {
+            var series = point.Context.Series;
+
+            var secondary = series.GetSecondaryToolTipText(point) ?? string.Empty;
+            if (date is null && secondary != LiveCharts.IgnoreToolTipLabel)
+                date = secondary;
+
+            var value = series.GetPrimaryToolTipText(point) ?? string.Empty;
+            if (value == LiveCharts.IgnoreToolTipLabel)
+                continue;
+
+            rows.Add(new CardRow(
+                series.Name == LiveCharts.IgnoreSeriesName ? null : series.Name ?? string.Empty,
+                value,
+                SeriesColor(series)));
+        }
+
+        return (date, rows);
+    }
+
+    /// <summary>
+    /// Composes the hover card: an optional date header stacked above a one-row-per-series table of
+    /// (swatch, name, value). Pure — same inputs, same geometry — so the design's metrics are
+    /// machine-checkable (<c>FluentChartTooltipCardTests</c>). Column order is LTR only: Lattice
+    /// ships zh-CN + en, and the default's RTL mirroring branch reads an internal text setting with
+    /// no public accessor.
+    /// </summary>
+    internal static StackLayout ComposeCard(
+        string? dateText, IReadOnlyList<CardRow> rows, float textSize, Paint textPaint)
+    {
+        var maxWidth = (float)LiveCharts.DefaultSettings.MaxTooltipsAndLegendsLabelsWidth;
 
         var stack = new StackLayout
         {
@@ -108,72 +174,54 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
             VerticalAlignment = Align.Middle,
         };
 
-        var maxWidth = (float)LiveCharts.DefaultSettings.MaxTooltipsAndLegendsLabelsWidth;
-        var row = 0;
-        foreach (var point in foundPoints)
+        if (dateText is not null)
         {
-            var series = point.Context.Series;
-
-            // Date header (secondary label = the hovered day), once, above the rows.
-            if (row == 0 && (series.GetSecondaryToolTipText(point) ?? string.Empty) != LiveCharts.IgnoreToolTipLabel)
+            stack.Children.Add(new LabelGeometry
             {
-                stack.Children.Add(new LabelGeometry
-                {
-                    Text = series.GetSecondaryToolTipText(point) ?? string.Empty,
-                    Paint = textPaint,
-                    // The chart's tooltip text size (12, set by the view) — one source of truth with
-                    // the rows, and the design's header size exactly. Must stay explicit: dropping
-                    // it falls back to the geometry default, which renders the date visibly small.
-                    TextSize = textSize,
-                    // Top = 2 (not the default's 0): the card's interior padding is ~4px on every
-                    // side, and the last value row carries 2px of bottom padding — so a 0-top date
-                    // header sat 4px from the top edge while the last row sat 6px from the bottom.
-                    // Matching the row's 2px balances the header's top gap with the bottom gap
-                    // (owner eyeball round: "date too close to the top edge"). Bottom stays 8 (the
-                    // date→table separator).
-                    Padding = new Padding(0, 2, 0, 8),
-                    MaxWidth = maxWidth,
-                    VerticalAlign = Align.Start,
-                    HorizontalAlign = Align.Start,
-                });
-            }
+                Text = dateText,
+                Paint = textPaint,
+                // The chart's tooltip text size (12, set by the view) — one source of truth with the
+                // rows, and the design's header size exactly. Must stay explicit: dropping it falls
+                // back to the geometry default (0), which renders the date degenerately small.
+                TextSize = textSize,
+                Padding = new Padding(0, DateHeaderTopPadding, 0, DateHeaderBottomPadding),
+                MaxWidth = maxWidth,
+                VerticalAlign = Align.Start,
+                HorizontalAlign = Align.Start,
+            });
+        }
 
-            var valueText = series.GetPrimaryToolTipText(point) ?? string.Empty;
-            // Lattice ships LTR-only (zh-CN + en); the default's RTL column-mirroring branch has no
-            // public accessor and no Lattice audience, so the LTR column order is inlined.
-            const bool isRTL = false;
-            if (valueText != LiveCharts.IgnoreToolTipLabel)
+        for (var row = 0; row < rows.Count; row++)
+        {
+            var (name, value, color) = rows[row];
+
+            // (a): rounded-rect swatch in the series colour, replacing the default line miniature.
+            table.AddChild(Swatch(color), row, 0);
+
+            if (name is not null)
             {
-                // (a): rounded-rect swatch in the series colour, replacing the default miniature.
-                table.AddChild(Swatch(series), row, isRTL ? 3 : 0);
-
-                if (series.Name != LiveCharts.IgnoreSeriesName)
-                {
-                    table.AddChild(new LabelGeometry
-                    {
-                        Text = series.Name ?? string.Empty,
-                        Paint = textPaint,
-                        TextSize = textSize,
-                        Padding = new Padding(10, 0),
-                        MaxWidth = maxWidth,
-                        VerticalAlign = Align.Start,
-                        HorizontalAlign = Align.Start,
-                    }, row, 1, isRTL ? Align.End : Align.Start);
-                }
-
                 table.AddChild(new LabelGeometry
                 {
-                    Text = valueText,
+                    Text = name,
                     Paint = textPaint,
                     TextSize = textSize,
-                    Padding = new Padding(8, 2),
+                    Padding = new Padding(10, 0),
                     MaxWidth = maxWidth,
                     VerticalAlign = Align.Start,
                     HorizontalAlign = Align.Start,
-                }, row, isRTL ? 0 : 2, Align.End);
-
-                row++;
+                }, row, 1, Align.Start);
             }
+
+            table.AddChild(new LabelGeometry
+            {
+                Text = value,
+                Paint = textPaint,
+                TextSize = textSize,
+                Padding = new Padding(8, 2),
+                MaxWidth = maxWidth,
+                VerticalAlign = Align.Start,
+                HorizontalAlign = Align.Start,
+            }, row, 2, Align.End);
         }
 
         stack.Children.Add(table);
@@ -181,19 +229,22 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
     }
 
     /// <summary>
-    /// A rounded-rect legend swatch (§4 metrics) filled with the series' own palette colour. The
-    /// Statistics chart's series are always <see cref="LineSeries{T}"/> of <see cref="DateTimePoint"/>
-    /// (this tooltip is set only on that chart), each built by <see cref="StatisticsChartBuilder"/>
-    /// with a <see cref="SolidColorPaint"/> stroke in the palette colour; we read that colour and
-    /// fill a fresh paint (never the series' own paint, which tracks its own canvas geometries).
+    /// The series' palette colour. The Statistics chart's series are always
+    /// <see cref="LineSeries{T}"/> of <see cref="DateTimePoint"/> (this tooltip is set only on that
+    /// chart), each built by <see cref="StatisticsChartBuilder"/> with a
+    /// <see cref="SolidColorPaint"/> stroke in the palette colour.
     /// </summary>
-    private static RoundedRectangleGeometry Swatch(ISeries series)
-    {
-        var color = (series as LineSeries<DateTimePoint>)?.Stroke is SolidColorPaint stroke
+    private static SKColor SeriesColor(ISeries series) =>
+        (series as LineSeries<DateTimePoint>)?.Stroke is SolidColorPaint stroke
             ? stroke.Color
             : new SKColor(0x60, 0x60, 0x60);
 
-        return new RoundedRectangleGeometry
+    /// <summary>
+    /// A rounded-rect legend swatch (§4 metrics) filled with a fresh paint in the series colour —
+    /// never the series' own paint, which tracks its own canvas geometries.
+    /// </summary>
+    private static RoundedRectangleGeometry Swatch(SKColor color) =>
+        new()
         {
             Fill = new SolidColorPaint(color),
             Width = SwatchSize,
@@ -201,5 +252,4 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
             BorderRadius = new LvcPoint(SwatchRadius, SwatchRadius),
             ClippingBounds = LvcRectangle.Empty,
         };
-    }
 }
