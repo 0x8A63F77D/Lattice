@@ -182,10 +182,16 @@
       <!-- Loading overlay. dataOverlay (issue #88): inset below the column header. -->
       <Border Classes="dataOverlay" Background="{DynamicResource LatticeSurfaceBrush}" IsVisible="{Binding IsLoading}">
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" Width="220">
-          <!-- IsActive MUST track IsLoading: the ring's composition animation ignores IsVisible —
-               once shown it re-registers for every frame forever, keeping the dispatcher non-idle
-               and starving pointer input to the 1 s InputStarvationTimeout ceiling (issue #95). -->
-          <ui:FAProgressRing Width="32" Height="32" HorizontalAlignment="Center" IsActive="{Binding IsLoading}" />
+          <!-- Stock indeterminate ProgressBar, NOT an FAProgressRing (issue #168): the ring's
+               composition animation starves app-wide pointer input to ~1 s for as long as it is
+               visible (issue #95), and lowering DispatcherOptions.InputStarvationTimeout was
+               MEASURED not to help — it reaches the render scheduler and the ring still starves
+               (PR #167). A stock indeterminate ProgressBar measured clean. IsIndeterminate tracks
+               IsLoading so the animation runs only during a first fetch — a dropped binding is
+               caught by the guard test (IsIndeterminate defaults false, so the during-loading
+               assertion bites) and the leak gate. Sizing/placement replicate the owner-approved
+               Statistics loading overlay. -->
+          <ProgressBar Width="160" HorizontalAlignment="Center" IsIndeterminate="{Binding IsLoading}" />
           <TextBlock Text="{Binding LoadingText}" HorizontalAlignment="Center" FontSize="12"
                      TextWrapping="Wrap" TextAlignment="Center"
                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
