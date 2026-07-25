@@ -43,7 +43,7 @@ namespace Lattice.VisualTests;
 ///
 /// COVERAGE. The probe drives the REAL flyouts — <c>ProjectsView</c>, <c>TasksView</c>, and the
 /// host rail inside a real <c>ShellWindow</c> — not hand-rolled replicas, and it pins the expected
-/// number of rules per menu. Reverting any one of the five dividers the fix touched turns this
+/// number of rules per menu. Reverting any one of the four dividers the fix touched turns this
 /// gate red. The grid views are rendered without a DataContext: their items bind to commands that
 /// then do not resolve, so the rows paint in their disabled foreground. That is deliberate and
 /// harmless — this gate measures the geometry of glyph ink and the rule, not text colour.
