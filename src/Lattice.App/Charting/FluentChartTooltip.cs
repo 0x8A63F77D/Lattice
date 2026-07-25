@@ -36,6 +36,18 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
     private const float SwatchSize = 12f;
     private const float SwatchRadius = 3f;
 
+    // Design reference for this card (M4 Motion Demo, the interactive hover reference):
+    //   date header : font "600 12px", colour #242424, 6px gap to the rows
+    //   series rows : 12px, colour #424242, 10px swatch @3px radius
+    // So the header is the SAME 12px as the rows — the design emphasises it with weight 600, not
+    // with size. Weight is deliberately NOT replicated: in LiveCharts a label's weight comes from
+    // its paint's SKTypeface, and (measured) SKTypeface.FromFamilyName only yields a 600 face when
+    // given a PLATFORM-SPECIFIC family (".AppleSystemUIFont" → 600 on macOS; "Segoe UI" falls back
+    // to Helvetica 400), and it returns a SHARED CACHED instance — which LiveCharts disposes on
+    // chart teardown (see StatisticsChartSnapshotTests' typeface note). Hardcoding per-OS font
+    // names plus a use-after-dispose risk is a bad trade for one bold line, so the header is
+    // distinguished by size-parity + the 8px separator + left alignment instead.
+
     public FluentChartTooltip()
     {
         // Fluent 2 motion (§3 [HARD]): 200ms, decelerate cubic-bezier — no bounce. The library
@@ -109,8 +121,17 @@ internal sealed class FluentChartTooltip : SKDefaultTooltip
                 {
                     Text = series.GetSecondaryToolTipText(point) ?? string.Empty,
                     Paint = textPaint,
+                    // The chart's tooltip text size (12, set by the view) — one source of truth with
+                    // the rows, and the design's header size exactly. Must stay explicit: dropping
+                    // it falls back to the geometry default, which renders the date visibly small.
                     TextSize = textSize,
-                    Padding = new Padding(0, 0, 0, 8),
+                    // Top = 2 (not the default's 0): the card's interior padding is ~4px on every
+                    // side, and the last value row carries 2px of bottom padding — so a 0-top date
+                    // header sat 4px from the top edge while the last row sat 6px from the bottom.
+                    // Matching the row's 2px balances the header's top gap with the bottom gap
+                    // (owner eyeball round: "date too close to the top edge"). Bottom stays 8 (the
+                    // date→table separator).
+                    Padding = new Padding(0, 2, 0, 8),
                     MaxWidth = maxWidth,
                     VerticalAlign = Align.Start,
                     HorizontalAlign = Align.Start,
