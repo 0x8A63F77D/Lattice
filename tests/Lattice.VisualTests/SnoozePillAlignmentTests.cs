@@ -9,6 +9,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -17,6 +18,7 @@ using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Core;
 using Lattice.Tests;
+using SkiaSharp;
 using Xunit;
 
 namespace Lattice.VisualTests;
@@ -151,6 +153,62 @@ public class SnoozePillAlignmentTests
                        $"bars={ink.IconTop:F3}..{ink.IconBottom:F3}, digits={ink.TextTop:F3}..{ink.TextBottom:F3}, " +
                        $"ink centroids {ink.CentroidDelta:+0.000;-0.000} apart.");
         });
+    }
+
+    /// <summary>
+    /// Issue #181 — the pill's digits render in a face Lattice SHIPS, not in whatever the host's
+    /// font stack supplies. Complements the sweep above rather than replacing it: the sweep proves
+    /// the alignment mechanism survives ANY font, this proves which font users actually get.
+    ///
+    /// WHY IT IS NOT ENOUGH TO ASK THE FONT MANAGER "IS THIS INTER?". A font manager that cannot
+    /// resolve a family silently substitutes the default one, and in THIS harness the default IS
+    /// Inter (<see cref="TestAppBuilder"/>) — so a typo'd avares URI, or no pin at all, would still
+    /// hand back a typeface reporting FamilyName "Inter". Every assertion below therefore probes
+    /// the pin itself rather than the resolved result: that the family carries an <c>avares</c> key
+    /// into THIS app's assembly (no pin ⇒ the inherited <c>fonts:Inter#Inter</c> default fails the
+    /// scheme), that the key's path really holds embedded font files (a broken path ⇒ none), and
+    /// that the name after the '#' is a family one of those files actually declares (read from the
+    /// file's own name table, not from the font manager, which would answer with the fallback).
+    ///
+    /// Falsified three ways. No pin ⇒ the family is <c>$Default</c> and the first assertion fails.
+    /// A mistyped path or family name ⇒ red too, though in Avalonia 12.1 it never reaches the
+    /// assertions: the Skia text run throws "Could not create glyphTypeface" while the pill renders.
+    /// The assertions below are what still bites if that ever softens into a silent fallback.
+    /// </summary>
+    [AvaloniaFact]
+    public void Pill_time_is_pinned_to_the_embedded_face()
+    {
+        using var pill = Pill.Open(ThemeVariant.Dark, scaling: 1.0);
+        var pinned = pill.TimeFontFamily;
+
+        Assert.True(pinned.Key?.Source is { Scheme: "avares" },
+            $"the pill's time renders in '{pinned}', which resolves through the host's font stack " +
+            "(or this harness's default) rather than a font the app embeds.");
+
+        // Fragment-free: the family name after '#' is checked separately, against the files.
+        var source = new Uri(pinned.Key!.Source.GetLeftPart(UriPartial.Path));
+        Assert.Equal(typeof(ShellWindow).Assembly.GetName().Name, source.Authority);
+
+        var files = AssetLoader.GetAssets(source, null)
+            .Where(asset => asset.AbsolutePath.EndsWith(".ttf", StringComparison.OrdinalIgnoreCase)
+                            || asset.AbsolutePath.EndsWith(".otf", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        Assert.True(files.Count > 0,
+            $"'{source}' embeds no font file, so the pin falls back to the platform default — check " +
+            "the AvaloniaResource include and the URI's path.");
+
+        var declared = files.Select(asset =>
+        {
+            using var stream = AssetLoader.Open(asset);
+            using var typeface = SKTypeface.FromStream(stream);
+            return typeface?.FamilyName;
+        }).ToList();
+        Assert.Contains(pinned.Name, declared);
+
+        // Only the Regular face is embedded (one weight, one file). A bolded pill would render a
+        // SYNTHETIC bold off that face — legible, but no longer the shipped outlines this pin
+        // exists to fix; embed the real face here if the design ever asks for one.
+        Assert.Equal(FontWeight.Normal, pill.TimeFontWeight);
     }
 
     /// <summary>
@@ -314,6 +372,12 @@ public class SnoozePillAlignmentTests
                 return Top(_text) + (ink.Top + ink.Bottom) / 2;
             }
         }
+
+        /// <summary>The time text's font as the template pins it — read before any
+        /// <see cref="UseFont"/> call replaces it with a probe family.</summary>
+        public FontFamily TimeFontFamily => _text.FontFamily;
+
+        public FontWeight TimeFontWeight => _text.FontWeight;
 
         public double IconBoxCentre => Top(_icon) + _icon.Bounds.Height / 2;
 

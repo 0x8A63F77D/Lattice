@@ -25,10 +25,13 @@ public static class RunModePillPolicy
 {
     // The open pane is 260px; less the ListBoxItem 8px×2 padding leaves ~244px of row
     // content. The 24px state icon + its 4px text margin take ~28px. Form A (the time
-    // pill) is ~62px + a 4px left margin. The host text must keep a ~110px legibility
-    // floor. All in device-independent px (rail is fixed at RenderScaling considerations
-    // aside — the pane width is constant while open; the compact 48px rail hides the pill
-    // entirely, so no other width regime reaches this policy).
+    // pill) measures 60px + a 4px left margin since its digits were pinned to the
+    // embedded Inter face (#181) — a fixed number now, where before it followed the
+    // platform font (56px in macOS's Helvetica); the constant below keeps 2px of slack
+    // over that. The host text must keep a ~110px legibility floor. All in
+    // device-independent px (rail is fixed at RenderScaling considerations aside — the pane
+    // width is constant while open; the compact 48px rail hides the pill entirely, so no
+    // other width regime reaches this policy).
     private const double RowContentWidth = 244.0;
     private const double IconArea = 28.0;
     private const double TimePillWidth = 66.0;
