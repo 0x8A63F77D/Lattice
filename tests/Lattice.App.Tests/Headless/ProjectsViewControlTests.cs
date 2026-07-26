@@ -77,11 +77,12 @@ public class ProjectsViewControlTests
         fx.Layout();
 
         var flyout = Assert.IsType<MenuFlyout>(view.Grid.ContextFlyout);
-        // Detach's divider must be MenuFlyout's supported separator form — a
-        // MenuItem with Header "-" (a raw <Separator/> silently no-ops in a menu
-        // flyout; PR #135 R3 P2). Pin the exact sequence.
-        var headers = flyout.Items.OfType<MenuItem>().Select(i => i.Header).ToArray();
-        Assert.Equal([Strings.ProjectsUpdate, Strings.Suspend, Strings.Resume, "-", Strings.Detach], headers);
+        // Detach's divider is a raw <Separator/> — the first-class MenuFlyout
+        // separator (#155; the earlier "raw Separator no-ops" claim was re-tested and
+        // is false on FA 3.0.1). Pin the exact item sequence, separator included, by type.
+        var kinds = flyout.Items.Select(i => i is MenuItem mi ? mi.Header : "<sep>").ToArray();
+        Assert.Equal([Strings.ProjectsUpdate, Strings.Suspend, Strings.Resume, "<sep>", Strings.Detach], kinds);
+        Assert.IsType<Separator>(flyout.Items[3]);
 
         fx.Dispose();
     }
