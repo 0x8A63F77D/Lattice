@@ -42,9 +42,17 @@ public sealed class StartupPreference
     /// survive an off/on cycle, during which no record exists to carry it.</summary>
     public bool StartMinimized => _store.Load().StartMinimized;
 
-    /// <summary>Registers or removes the OS record. Nothing to persist — the record itself is
-    /// what <see cref="StartAtLogin"/> reads back.</summary>
-    public bool SetStartAtLogin(bool value) => _registration.Apply(value, StartMinimized);
+    /// <summary>
+    /// Registers or removes the OS record. Nothing to persist — the record itself is what
+    /// <see cref="StartAtLogin"/> reads back.
+    ///
+    /// <para>Success means the OS now REFLECTS the request, not merely that the write did not
+    /// throw (Codex P2, PR #188). Anything that leaves the requested state unreached — a
+    /// disable we could not clear, a record something else removed underneath us — surfaces
+    /// as a failure the user can see, rather than a toggle that silently springs back.</para>
+    /// </summary>
+    public bool SetStartAtLogin(bool value) =>
+        _registration.Apply(value, StartMinimized) && _registration.IsRegistered == value;
 
     /// <summary>
     /// Persists the minimized-start choice, re-writing the login record when one is live.
@@ -54,8 +62,11 @@ public sealed class StartupPreference
     /// </summary>
     public bool SetStartMinimized(bool value)
     {
+        // Heal, not Apply: changing this flag rewrites a live record's CONTENT and must never
+        // be read as a request to register or to undo an OS-level disable. When nothing is
+        // registered it is a no-op and only the preference moves.
         bool registered = _registration.IsRegistered;
-        if (registered && !_registration.Apply(true, value))
+        if (!_registration.Heal(value))
             return false;
         if (_store.TryUpdate(s => s with { StartMinimized = value }))
             return true;
@@ -64,7 +75,7 @@ public sealed class StartupPreference
         // record back so the two never disagree — otherwise the login item would keep starting
         // minimized while the toggle, restored from the un-saved preference, reads off.
         if (registered)
-            _registration.Apply(true, !value);
+            _registration.Heal(!value);
         return false;
     }
 
@@ -83,9 +94,5 @@ public sealed class StartupPreference
     /// <para>Best-effort by design — a failure here has no user-visible surface to report
     /// into, and the next launch tries again.</para>
     /// </summary>
-    public void SyncOnLaunch()
-    {
-        if (_registration.IsRegistered)
-            _registration.Apply(true, _store.Load().StartMinimized);
-    }
+    public void SyncOnLaunch() => _registration.Heal(_store.Load().StartMinimized);
 }

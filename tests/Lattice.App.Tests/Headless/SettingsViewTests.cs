@@ -113,7 +113,9 @@ public class SettingsViewTests
 
         Assert.True(settings.StartAtLogin);
         Assert.True(settings.StartMinimized);
-        Assert.Equal([(true, false), (true, true)], registration.Calls);
+        // Registering is the authoritative Apply; the minimized flag is a content Heal.
+        Assert.Equal([(true, false)], registration.Calls);
+        Assert.Equal([true], registration.Heals);
         window.Close();
     }
 

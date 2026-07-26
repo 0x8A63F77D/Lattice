@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Versioning;
+using System.Text;
 using Microsoft.Win32;
 
 namespace Lattice.App.Infrastructure;
@@ -27,13 +28,27 @@ public interface IStartupRegistration
     bool IsRegistered { get; }
 
     /// <summary>
-    /// Brings the OS record in line with the requested state and returns whether it
-    /// succeeded. Writing is idempotent: an unchanged record is left ALONE, because macOS's
+    /// The user asked for this, so it is authoritative: create or remove the record, and
+    /// CLEAR any OS-level disable when enabling — otherwise turning the toggle back on after
+    /// switching the item off in the OS's own settings would write a byte-identical record,
+    /// report success and change nothing (Codex P2, PR #188).
+    ///
+    /// <para>Writing stays idempotent: an unchanged record is left alone, because macOS's
     /// Background Task Management notifies the user whenever a login item's record appears or
-    /// changes, and the launch-time self-heal would otherwise fire that notification on every
-    /// boot. Disabling always succeeds when there is nothing to remove.
+    /// changes. Disabling always succeeds when there is nothing to remove.</para>
     /// </summary>
     bool Apply(bool enabled, bool startMinimized);
+
+    /// <summary>
+    /// Launch-time repair of an EXISTING registration's content — the stale path #187 req 3
+    /// exists for. Deliberately weaker than <see cref="Apply"/> in both directions: it never
+    /// creates a record, and it never clears an OS-level disable. Both restrictions protect
+    /// the same thing — a choice the user made outside Lattice — and they live here, in the
+    /// type, rather than in a caller's discipline, because two review rounds found bugs on
+    /// exactly this axis. A registration that does not exist, or that the OS has switched
+    /// off, is nothing to heal: the call succeeds having done nothing.
+    /// </summary>
+    bool Heal(bool startMinimized);
 }
 
 /// <summary>File-backed registration: macOS (<c>~/Library/LaunchAgents/*.plist</c>) and Linux
@@ -45,6 +60,7 @@ public sealed class FileStartupRegistration : IStartupRegistration
     private readonly string? _target;
     private readonly Func<string, bool, string> _render;
     private readonly Func<string, bool>? _isDisabledByOs;
+    private readonly Func<bool>? _clearOsDisable;
 
     /// <param name="path">Absolute path of the record file.</param>
     /// <param name="target">Executable to launch, or null when this launch has none.</param>
@@ -54,14 +70,18 @@ public sealed class FileStartupRegistration : IStartupRegistration
     /// (<see cref="LoginItemPolicy.IsAutostartDisabledByDesktop"/>); macOS keeps it outside
     /// the plist, so its reader ignores the content it is handed and asks launchd
     /// (<see cref="LaunchdOverrides"/>). Null means "nothing can switch it off but us".</param>
+    /// <param name="clearOsDisable">Undoes such an OS-level disable, for an explicit
+    /// <see cref="Apply"/>. Only platforms that keep the state OUTSIDE the record need one:
+    /// on Linux the flag lives in the file, so rewriting the file already clears it.</param>
     public FileStartupRegistration(
         string path, string? target, Func<string, bool, string> render,
-        Func<string, bool>? isDisabledByOs = null)
+        Func<string, bool>? isDisabledByOs = null, Func<bool>? clearOsDisable = null)
     {
         _path = path;
         _target = target;
         _render = render;
         _isDisabledByOs = isDisabledByOs;
+        _clearOsDisable = clearOsDisable;
     }
 
     /// <summary>Exposed so a test can assert WHERE the platform factory decided to write.</summary>
@@ -102,6 +122,40 @@ public sealed class FileStartupRegistration : IStartupRegistration
                 return true;
             }
 
+            // Before the content check, never after: when the OS holds the disable outside
+            // the record, the content is already identical and the write below would be
+            // skipped, leaving the user unable to re-enable from Lattice at all.
+            if (_clearOsDisable is not null && !_clearOsDisable())
+                return false;
+
+            return Write(startMinimized);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            // A no-DE Linux box with no config dir, a read-only home, a sandbox: degrade to
+            // "the toggle did not take" and let the caller surface it, never throw.
+            return false;
+        }
+    }
+
+    /// <summary>Repairs content only — see <see cref="IStartupRegistration.Heal"/>. Both the
+    /// "no record" and the "OS switched it off" cases are folded into
+    /// <see cref="IsRegistered"/>, so this cannot resurrect or re-enable anything.</summary>
+    public bool Heal(bool startMinimized)
+    {
+        try
+        {
+            return !IsRegistered || Write(startMinimized);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            return false;
+        }
+    }
+
+    private bool Write(bool startMinimized)
+    {
+        {
             if (_target is null)
                 return false;
 
@@ -122,12 +176,6 @@ public sealed class FileStartupRegistration : IStartupRegistration
             File.WriteAllText(tmp, desired);
             File.Move(tmp, _path, overwrite: true);
             return true;
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
-        {
-            // A no-DE Linux box with no config dir, a read-only home, a sandbox: degrade to
-            // "the toggle did not take" and let the caller surface it, never throw.
-            return false;
         }
     }
 }
@@ -186,6 +234,11 @@ public sealed class WindowsStartupRegistration : IStartupRegistration
             return false;
         }
     }
+
+    /// <summary>Nothing to clear on this platform — Task Manager's approval state is a
+    /// separate key we deliberately do not touch (see the #116 checklist) — so healing is
+    /// just a content rewrite of a value that already exists.</summary>
+    public bool Heal(bool startMinimized) => !IsRegistered || Apply(true, startMinimized);
 }
 
 /// <summary>No mechanism available. Enabling fails (and the toggle is disabled via
@@ -195,6 +248,7 @@ public sealed class UnsupportedStartupRegistration : IStartupRegistration
     public bool IsSupported => false;
     public bool IsRegistered => false;
     public bool Apply(bool enabled, bool startMinimized) => !enabled;
+    public bool Heal(bool startMinimized) => true; // nothing exists to repair
 }
 
 /// <summary>
@@ -209,35 +263,74 @@ public sealed class UnsupportedStartupRegistration : IStartupRegistration
 /// </summary>
 internal static class LaunchdOverrides
 {
+    /// <summary>Hard ceiling on any launchctl call. This runs synchronously from the
+    /// composition root and from a UI-bound getter, so it must be bounded no matter how
+    /// launchd is behaving.</summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
+
     // DllImport, not the newer LibraryImport: the source-generated variant demands
     // AllowUnsafeBlocks project-wide, which is far too big a lever for one uid lookup.
     [System.Runtime.InteropServices.DllImport("libc")]
     private static extern uint getuid();
 
-    public static bool IsDisabled(string label)
+    /// <summary>Whether launchd has been told to skip our job.</summary>
+    public static bool IsDisabled(string label) =>
+        Run(out string output, "print-disabled", $"gui/{getuid()}")
+        && LoginItemPolicy.IsDisabledInLaunchdOverrides(output, label);
+
+    /// <summary>Clears a disabled override, so an explicit "on" in Lattice's own settings can
+    /// undo one made in the OS's settings. Without this, re-enabling would write a plist that
+    /// is already byte-identical, report success, and leave the job disabled (Codex P2).</summary>
+    public static bool Enable(string label) =>
+        Run(out _, "enable", $"gui/{getuid()}/{label}");
+
+    /// <summary>
+    /// Runs launchctl and returns whether it exited 0 within <see cref="Timeout"/>.
+    ///
+    /// <para>Output is drained through the ASYNCHRONOUS events rather than
+    /// <c>ReadToEnd()</c> (Codex P2, PR #188): a synchronous read blocks until the child
+    /// closes stdout, so a wedged launchctl would hang before the timed wait was ever
+    /// reached — freezing app startup or the Settings page despite the bound this method
+    /// claims. stderr is drained too, or a chatty child could fill that pipe and block
+    /// itself. The parameterless <c>WaitForExit</c> after a successful timed wait is the
+    /// documented way to be sure the async handlers have flushed.</para>
+    /// </summary>
+    private static bool Run(out string output, params string[] arguments)
     {
+        output = string.Empty;
         try
         {
             var psi = new ProcessStartInfo("/bin/launchctl")
             {
-                ArgumentList = { "print-disabled", $"gui/{getuid()}" },
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
             };
+            foreach (string argument in arguments)
+                psi.ArgumentList.Add(argument);
+
             using Process? process = Process.Start(psi);
             if (process is null)
                 return false;
-            // Read before waiting: the output is a few KB and the pipe would deadlock a
-            // wait-then-read. The bounded wait then covers a launchctl that never exits.
-            string output = process.StandardOutput.ReadToEnd();
-            if (!process.WaitForExit(TimeSpan.FromSeconds(2)))
+
+            var stdout = new StringBuilder();
+            process.OutputDataReceived += (_, e) =>
+            {
+                if (e.Data is not null)
+                    lock (stdout) stdout.AppendLine(e.Data);
+            };
+            process.ErrorDataReceived += (_, _) => { };
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+
+            if (!process.WaitForExit(Timeout))
             {
                 process.Kill(entireProcessTree: true);
                 return false;
             }
-            return process.ExitCode == 0
-                && LoginItemPolicy.IsDisabledInLaunchdOverrides(output, label);
+            process.WaitForExit(); // flush the async handlers
+            lock (stdout) output = stdout.ToString();
+            return process.ExitCode == 0;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
             or PlatformNotSupportedException or IOException or ObjectDisposedException)
@@ -246,6 +339,10 @@ internal static class LaunchdOverrides
         }
     }
 }
+
+/// <summary>The two launchd operations the macOS registration needs, bundled so tests can
+/// substitute both without spawning anything.</summary>
+internal sealed record LaunchdControl(Func<bool> IsDisabled, Func<bool> Enable);
 
 /// <summary>Platform factory. The environment is read HERE and nowhere else, so
 /// <see cref="Create"/> stays a pure-input decision a test can drive for any platform.</summary>
@@ -258,15 +355,17 @@ public static class StartupRegistration
         Environment.ProcessPath,
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
         Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
-        () => LaunchdOverrides.IsDisabled(LoginItemPolicy.LaunchAgentLabel));
+        new LaunchdControl(
+            () => LaunchdOverrides.IsDisabled(LoginItemPolicy.LaunchAgentLabel),
+            () => LaunchdOverrides.Enable(LoginItemPolicy.LaunchAgentLabel)));
 
     /// <summary>Internal seam for tests: same decision, explicit inputs.</summary>
-    /// <param name="isDisabledInLaunchd">macOS only. Null — the default — means "never
-    /// disabled", so a test never spawns launchctl and never depends on what this machine
-    /// happens to have in its override database. The composition root passes the real reader.</param>
+    /// <param name="launchd">macOS only. Null — the default — means "never disabled, nothing
+    /// to clear", so a test never spawns launchctl and never depends on what this machine
+    /// happens to have in its override database. The composition root passes the real pair.</param>
     internal static IStartupRegistration Create(
         TrayPlatform platform, string? appImagePath, string? processPath,
-        string homeDirectory, string? xdgConfigHome, Func<bool>? isDisabledInLaunchd = null)
+        string homeDirectory, string? xdgConfigHome, LaunchdControl? launchd = null)
     {
         string? target = LoginItemPolicy.ResolveTarget(appImagePath, processPath);
 #pragma warning disable CS8524 // Domain enum: CS8509 must stay live so a new TrayPlatform
@@ -279,7 +378,8 @@ public static class StartupRegistration
             // platform's answer.
             TrayPlatform.MacOS => new FileStartupRegistration(
                 LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist,
-                isDisabledInLaunchd is null ? null : _ => isDisabledInLaunchd()),
+                launchd is null ? null : _ => launchd.IsDisabled(),
+                launchd?.Enable),
             TrayPlatform.Linux => new FileStartupRegistration(
                 LoginItemPolicy.AutostartPath(LoginItemPolicy.ConfigHome(xdgConfigHome, homeDirectory)),
                 target,

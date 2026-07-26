@@ -15,18 +15,39 @@ public sealed class FakeStartupRegistration : IStartupRegistration
     /// write" — the launch-time self-heal case — and "the OS switched it off behind us".</summary>
     public bool IsRegistered { get; set; }
 
-    /// <summary>When true, every <see cref="Apply"/> reports failure and changes nothing.</summary>
+    /// <summary>When true, every call reports failure and changes nothing.</summary>
     public bool Fails { get; set; }
 
-    /// <summary>Every call, in order, as (enabled, startMinimized).</summary>
+    /// <summary>When true, <see cref="Apply"/> reports success without the OS state actually
+    /// moving — the shape of a macOS enable whose launchd disable could not be cleared.</summary>
+    public bool SucceedsWithoutRegistering { get; set; }
+
+    /// <summary>Every <see cref="Apply"/>, in order, as (enabled, startMinimized). Kept
+    /// separate from <see cref="Heals"/> because the whole point of the two methods is that
+    /// they are NOT interchangeable: Apply is the user's explicit request and may clear an
+    /// OS-level disable, Heal may not.</summary>
     public List<(bool Enabled, bool StartMinimized)> Calls { get; } = [];
+
+    /// <summary>Every <see cref="Heal"/>, in order, as the requested startMinimized flag.</summary>
+    public List<bool> Heals { get; } = [];
 
     public bool Apply(bool enabled, bool startMinimized)
     {
         Calls.Add((enabled, startMinimized));
         if (Fails)
             return false;
-        IsRegistered = enabled;
+        if (!SucceedsWithoutRegistering)
+            IsRegistered = enabled;
         return true;
+    }
+
+    public bool Heal(bool startMinimized)
+    {
+        // Mirrors the real contract: nothing registered (or switched off by the OS, which the
+        // production readers fold into IsRegistered) means nothing to repair.
+        if (!IsRegistered)
+            return true;
+        Heals.Add(startMinimized);
+        return !Fails;
     }
 }

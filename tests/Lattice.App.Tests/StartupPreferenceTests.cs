@@ -100,6 +100,7 @@ public class StartupPreferenceTests : IDisposable
         Assert.True(_startup.SetStartMinimized(true));
 
         Assert.Empty(_registration.Calls);
+        Assert.Empty(_registration.Heals);
         Assert.True(_store.Load().StartMinimized);
     }
 
@@ -107,12 +108,15 @@ public class StartupPreferenceTests : IDisposable
     public void Minimized_toggled_while_registered_rewrites_the_record()
     {
         // The flag lives ONLY in the registered command line, so nothing else would carry it.
+        // It goes through Heal, not Apply: rewriting content must never be read as a request
+        // to register or to undo an OS-level disable (Codex P2, PR #188).
         _startup.SetStartAtLogin(true);
         _registration.Calls.Clear();
 
         Assert.True(_startup.SetStartMinimized(true));
 
-        Assert.Equal([(true, true)], _registration.Calls);
+        Assert.Equal([true], _registration.Heals);
+        Assert.Empty(_registration.Calls);
         Assert.True(_store.Load().StartMinimized);
     }
 
@@ -133,10 +137,12 @@ public class StartupPreferenceTests : IDisposable
         _startup.SetStartAtLogin(true);
         _startup.SetStartMinimized(true);
         _registration.Calls.Clear();
+        _registration.Heals.Clear();
 
         _startup.SyncOnLaunch();
 
-        Assert.Equal([(true, true)], _registration.Calls);
+        Assert.Equal([true], _registration.Heals);
+        Assert.Empty(_registration.Calls);   // never the authoritative path
     }
 
     [Fact]
@@ -150,9 +156,11 @@ public class StartupPreferenceTests : IDisposable
         _startup.SetStartMinimized(true);
         _registration.IsRegistered = false;
         _registration.Calls.Clear();
+        _registration.Heals.Clear();
 
         _startup.SyncOnLaunch();
 
+        Assert.Empty(_registration.Heals);
         Assert.Empty(_registration.Calls);
     }
 
@@ -165,10 +173,24 @@ public class StartupPreferenceTests : IDisposable
         _startup.SetStartAtLogin(true);
         _registration.IsRegistered = false;   // the desktop switched it off behind us
         _registration.Calls.Clear();
+        _registration.Heals.Clear();
 
         _startup.SyncOnLaunch();
 
+        Assert.Empty(_registration.Heals);
         Assert.Empty(_registration.Calls);
+    }
+
+    [Fact]
+    public void An_enable_that_the_OS_does_not_reflect_is_reported_as_a_failure()
+    {
+        // The write "succeeded" but the OS still will not start us — e.g. a disable we could
+        // not clear (Codex P2, PR #188). Success has to mean the OS reflects the request, or
+        // the toggle would spring back with no explanation and the user would be stuck.
+        _registration.SucceedsWithoutRegistering = true;
+
+        Assert.False(_startup.SetStartAtLogin(true));
+        Assert.False(_startup.StartAtLogin);
     }
 
     [Fact]
@@ -194,10 +216,11 @@ public class StartupPreferenceTests : IDisposable
         try
         {
             _registration.Calls.Clear();
+            _registration.Heals.Clear();
 
             Assert.False(_startup.SetStartMinimized(true));
 
-            Assert.Equal([(true, true), (true, false)], _registration.Calls);
+            Assert.Equal([true, false], _registration.Heals);   // written, then put back
             Assert.False(_startup.StartMinimized);
         }
         finally
@@ -215,6 +238,7 @@ public class StartupPreferenceTests : IDisposable
             Assert.False(_startup.SetStartMinimized(true));
 
             Assert.Empty(_registration.Calls);
+            Assert.Empty(_registration.Heals);
         }
         finally
         {

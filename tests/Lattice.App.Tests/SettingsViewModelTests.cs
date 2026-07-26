@@ -104,7 +104,9 @@ public class SettingsViewModelTests : IAsyncLifetime
 
         _settings.StartMinimized = true;
 
-        Assert.Equal([(true, true)], _startupRegistration.Calls);
+        // Through Heal: a content rewrite, never a re-registration (Codex P2, PR #188).
+        Assert.Equal([true], _startupRegistration.Heals);
+        Assert.Empty(_startupRegistration.Calls);
         Assert.True(_uiStore.Load().StartMinimized);
     }
 
