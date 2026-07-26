@@ -41,8 +41,21 @@ snapshot matrix (4 metrics × 2 themes). Small multiples and dual-Y were explore
 - **Point markers:** visible point count ≤ 30 → circle geometry, `GeometrySize = 8`, solid
   series color, no geometry stroke; count > 30 → `GeometrySize = 0` (pure line).
 - A project with **1 point renders marker only; 2+ points renders the line.**
-- **Gaps are real:** days missing from the daemon history render as line breaks (nullable
-  points), never interpolated. No data cap — render whatever depth the daemon returns.
+- **Gaps are real:** days missing from the daemon history are never invented as data — the
+  series always keeps one nullable point per missing day. How a gap *renders* is
+  **metric-split** (issue #170, Controller ruling; this amends the original "render as line
+  breaks" wording, which applied one rule to all four metrics):
+  - `User total` / `Host total` (**cumulative**): each *run* of missing days is **bridged by a
+    dashed segment** — 2px, the series' own colour, `4/4` dash — joining the two observed
+    points that straddle it. **No markers on a bridge** (a marker would claim an observation
+    that does not exist). One bridge per run, so a 3-day gap is one dashed segment.
+  - `User average` / `Host average` (**RAC**): unchanged **hard break**. Any drawn slope across
+    the gap fabricates a trend, dashed or not; the break IS the honest rendering.
+  - The one-sentence rule: *a total that was not observed is still a total (bridge it, dashed);
+    an average that was not observed is not an average (break it).* Per-metric inconsistency is
+    acceptable because the switcher shows one metric at a time.
+
+  No data cap — render whatever depth the daemon returns.
 
 ### Palette (Fluent UI charting `DataVizPalette`, qualitative.1–6 — same hex both themes)
 | # | Name | Hex |
@@ -147,7 +160,13 @@ animation anywhere on the page.
    fill.
 3. Gridlines: set `SeparatorsPaint` on the **Y axis only**; X axis `SeparatorsPaint = null`.
 4. Gaps require **nullable values** (`double?` / null `ObservablePoint.Y`) — filtering the
-   missing days out would silently join the line across the gap.
+   missing days out would silently join the line across the gap. This holds for **all four**
+   metrics after the #170 metric split, including the bridged ones: the dashed bridge is a
+   **second, dash-stroked series** carrying only the two *observed* endpoints of each gap run
+   (`StatisticsChart.gapBridges`, pure — one series per run, `IsHoverable = false` so the
+   tooltip still lists one entry per project), while the real series keeps its nulls. Never
+   implement the bridge by dropping or interpolating points in the real series: that is the
+   silent join, and it would corrupt RAC as well.
 5. The marker rule (≤30 → 8, else 0) is evaluated on the **visible point count of the
    longest visible series**, re-evaluated when data depth or filters change.
 6. RAC values from the daemon are doubles — do not round them before charting; rounding is
@@ -158,8 +177,10 @@ animation anywhere on the page.
 ## Snapshot matrix (machine gate)
 
 4 metrics × 2 themes × baseline data (9 points, 3 projects) = 8 content snapshots, plus:
-Top-6 overflow state (light), >30-point pure-line state (light), the three §5 states.
-Culture pinned `en-US` in the harness.
+4 metrics × 2 themes × **gap data** (12-day span: a 3-day gap run, a 1-day gap, one contiguous
+control project) = 8 more, gating the #170 metric split from both sides — the totals' dashed
+bridges and the averages' hard breaks in the same fixture. Plus: Top-6 overflow state (light),
+>30-point pure-line state (light), the three §5 states. Culture pinned `en-US` in the harness.
 
 ## Files
 - `README.md` — this contract.

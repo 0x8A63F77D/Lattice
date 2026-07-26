@@ -56,6 +56,20 @@ public class StatisticsChartSnapshotTests
         return Verify(new MemoryStream(png), extension: "png").UseParameters(name);
     }
 
+    // The #170 metric split, same fixture across all four metrics: the two CUMULATIVE metrics
+    // bridge each run of missing days with a dashed segment (no markers on it); the two AVERAGE
+    // metrics keep the hard break. Same matrix shape as Baseline so a reviewer can diff
+    // Gap_user_total_* against Gap_user_average_* and see exactly the split.
+    [AvaloniaTheory]
+    [MemberData(nameof(BaselineCases))]
+    public Task Gap(string name, CreditMetric metric, StatisticsChartTheme theme)
+    {
+        VisualGate.SkipUnlessEnabled();
+        var histories = Gapped();
+        var png = Render(histories, StatisticsChart.defaultVisible(histories), metric, theme);
+        return Verify(new MemoryStream(png), extension: "png").UseParameters(name);
+    }
+
     [AvaloniaFact]
     public Task Overflow_top_six_of_twelve_light()
     {
@@ -135,16 +149,22 @@ public class StatisticsChartSnapshotTests
 
     // ---- fixtures --------------------------------------------------------
 
+    // `skip` drops those day offsets from the history — the daemon recorded nothing on them, so
+    // they are real gaps (#170). The ramp keeps its slope across a gap: credit accrued while
+    // unobserved, which is exactly why the totals may be bridged.
     private static ProjectHistory Hist(
         string url, string name, int ordinal, double rac, int days,
-        double utBase, double utStep, double uaBase, double htBase, double htStep, double haBase)
+        double utBase, double utStep, double uaBase, double htBase, double htStep, double haBase,
+        int[]? skip = null)
     {
-        var daily = Enumerable.Range(0, days).Select(i => new DailyCredit(
-            Day0.AddDays(i),
-            utBase + utStep * i,
-            uaBase * (1 + 0.01 * i),
-            htBase + htStep * i,
-            haBase * (1 + 0.01 * i)));
+        var daily = Enumerable.Range(0, days)
+            .Where(i => skip is null || !skip.Contains(i))
+            .Select(i => new DailyCredit(
+                Day0.AddDays(i),
+                utBase + utStep * i,
+                uaBase * (1 + 0.01 * i),
+                htBase + htStep * i,
+                haBase * (1 + 0.01 * i)));
         return new ProjectHistory(url, name, ordinal, rac, ListModule.OfSeq(daily));
     }
 
@@ -155,6 +175,18 @@ public class StatisticsChartSnapshotTests
         Hist("u1", "Rosetta@home", 1, 210, 9, 1_350_000, 95_000, 900, 180_000, 6_000, 210),
         Hist("u2", "World Community Grid", 2, 300, 9, 3_000_000, 40_000, 1_200, 300_000, 8_000, 300),
         Hist("u3", "LHC@home", 3, 120, 9, 500_000, 7_000, 300, 50_000, 1_000, 120),
+    ]);
+
+    // The #170 gap fixture: a 12-day span, three projects, one gap shape each —
+    //   Einstein: a 3-day run missing (days 4-6)   → one WIDE bridge
+    //   Rosetta:  a single day missing (day 9)     → one NARROW bridge
+    //   WCG:      contiguous                       → the control line, never dashed
+    // All under 30 real points, so markers stay on and their absence over a bridge is visible.
+    private static FSharpList<ProjectHistory> Gapped() => ListModule.OfSeq(
+    [
+        Hist("u0", "Einstein@Home", 0, 640, 12, 4_100_000, 200_000, 1_900, 500_000, 20_000, 640, skip: [4, 5, 6]),
+        Hist("u1", "Rosetta@home", 1, 210, 12, 1_350_000, 95_000, 900, 180_000, 6_000, 210, skip: [9]),
+        Hist("u2", "World Community Grid", 2, 300, 12, 3_000_000, 40_000, 1_200, 300_000, 8_000, 300),
     ]);
 
     // 12 projects with RAC DESCENDING by ordinal, so the top-6-by-RAC are ordinals 0..5 and

@@ -34,10 +34,23 @@ type ProjectHistory =
       Rac: float
       Daily: DailyCredit list }
 
-/// A charted point: a real value, or None for a calendar day with no daemon record
-/// — a GAP, rendered as a line break and never interpolated (§2 / implementer
-/// warning #4: filtering missing days out would silently join the line across them).
+/// A charted point: a real value, or None for a calendar day with no daemon record —
+/// a GAP. The gap always stays in the series as a None (§2 / implementer warning #4:
+/// filtering missing days out would silently join the line across them); how it RENDERS
+/// is metric-split (#170) — see GapBridge.
 type SeriesPoint = { Day: DateTimeOffset; Value: float option }
+
+/// One dashed bridge across a run of unobserved days (#170): the two OBSERVED points that
+/// straddle the gap. Nothing is interpolated — the bridge carries only real observations and
+/// the straight dashed segment drawn between them IS the rendering, which is why it lives in
+/// its own dash-stroked series instead of touching the real series' Nones.
+/// The rule this type exists to encode: a total that was not observed is still a total
+/// (bridge it, dashed); an average that was not observed is not an average (break it).
+type GapBridge =
+    { FromDay: DateTimeOffset
+      FromValue: float
+      ToDay: DateTimeOffset
+      ToValue: float }
 
 /// One project's line series for the chosen metric: daily points (with gap Nones)
 /// plus the identity/colour facts the renderer needs. Ordinal drives the palette
@@ -102,7 +115,8 @@ module StatisticsChart =
 
     /// One project's line points for a metric: exactly one point per calendar day from
     /// its first to its last record, a real value where a record exists and None for a
-    /// missing day (line break, §2). Days that collapse to the same bucket keep the
+    /// missing day (§2; the None is unconditional — whether it renders as a break or gets a
+    /// dashed bridge is gapBridges' call, #170). Days that collapse to the same bucket keep the
     /// first record (lenient-parse guard, mirroring ProjectRows.compute). Empty history
     /// yields no points.
     let buildSeriesPoints (metric: CreditMetric) (daily: DailyCredit list) : SeriesPoint list =
@@ -143,6 +157,43 @@ module StatisticsChart =
                       Name = p.Name
                       Ordinal = p.Ordinal
                       Points = points })
+
+    /// Whether a metric's gaps are BRIDGED with a dashed segment, or left as hard breaks
+    /// (#170 ruling). Total over CreditMetric — a new metric must choose its own gap
+    /// semantics here, never inherit one silently (no DU wildcard).
+    ///
+    /// The two CUMULATIVE metrics bridge: the quantity provably existed on the unobserved
+    /// days and was monotonic, so a dashed segment honestly renders "value existed,
+    /// observation missing". The two AVERAGE metrics (RAC) do not: any drawn slope across
+    /// the gap fabricates a trend, dashed or not, so the break IS the honest rendering.
+    let bridgesGaps (metric: CreditMetric) : bool =
+        match metric with
+        | UserTotal -> true
+        | UserAverage -> false
+        | HostTotal -> true
+        | HostAverage -> false
+
+    /// The dashed bridges for one series' points under a metric (#170). For a bridging
+    /// metric: one bridge per RUN of missing days (a 3-day gap is one bridge, not three),
+    /// spanning the two observed points on either side, in day order. For a non-bridging
+    /// metric: none — the Nones stay visible as breaks.
+    ///
+    /// Derived from consecutive OBSERVED points more than one calendar day apart, so it needs
+    /// no assumption about the grid beyond the day spacing the points themselves carry, and
+    /// it can never emit a bridge over an observed day.
+    let gapBridges (metric: CreditMetric) (points: SeriesPoint list) : GapBridge list =
+        if not (bridgesGaps metric) then
+            []
+        else
+            points
+            |> List.choose (fun p -> p.Value |> Option.map (fun v -> p.Day, v))
+            |> List.pairwise
+            |> List.filter (fun ((fromDay, _), (toDay, _)) -> (toDay - fromDay).Days > 1)
+            |> List.map (fun ((fromDay, fromValue), (toDay, toValue)) ->
+                { FromDay = fromDay
+                  FromValue = fromValue
+                  ToDay = toDay
+                  ToValue = toValue })
 
     /// Count of REAL (non-gap) points in a series — the marker rule's denominator.
     let realCount (s: SeriesSpec) : int =

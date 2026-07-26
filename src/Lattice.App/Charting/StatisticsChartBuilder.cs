@@ -56,7 +56,8 @@ public static class StatisticsChartBuilder
     /// size is decided once on the densest visible series (§2, warning #5) and applied to
     /// every line. All §2 pins are set here: 2px stroke, <c>Fill = null</c> (warning #2),
     /// <c>LineSmoothness = 0</c>, circle markers with a solid fill and no stroke, Y-axis-only
-    /// gridlines (warning #3), a 0 baseline, and the compact labeler.
+    /// gridlines (warning #3), a 0 baseline, and the compact labeler. Under a CUMULATIVE metric a
+    /// project with gaps also gets its dashed bridge series (#170, <see cref="BuildBridges"/>).
     /// </summary>
     public static ChartVisual Build(IReadOnlyList<SeriesSpec> specs, StatisticsChartTheme theme, CreditMetric metric)
     {
@@ -64,7 +65,14 @@ public static class StatisticsChartBuilder
         var (gridHex, labelHex) = ThemeHexes(theme);
         var gridPaint = new SolidColorPaint(SKColor.Parse(gridHex)) { StrokeThickness = 1f };
 
-        var series = specs.Select(spec => BuildSeries(spec, marker, metric)).ToList<ISeries>();
+        // Each project contributes its real series (nullable points, gaps intact) plus — for the
+        // cumulative metrics only — one dash-stroked bridge series per gap run (#170).
+        var series = new List<ISeries>();
+        foreach (var spec in specs)
+        {
+            series.Add(BuildSeries(spec, marker, metric));
+            series.AddRange(BuildBridges(spec, metric));
+        }
 
         var yAxis = new Axis
         {
@@ -133,6 +141,52 @@ public static class StatisticsChartBuilder
             XToolTipLabelFormatter = point =>
                 new DateTime((long)point.Coordinate.SecondaryValue).ToString("yyyy-MM-dd", CultureInfo.CurrentCulture),
         };
+    }
+
+    /// <summary>
+    /// The dashed gap bridges for one project (#170): one 2-point, dash-stroked series per run of
+    /// unobserved days, drawn in the project's own palette colour so it reads as the same line —
+    /// only not observed. Empty for the AVERAGE metrics, where the break is the honest rendering
+    /// (the pure <c>StatisticsChart.gapBridges</c> owns that split; this method only paints).
+    /// <para>Kept as separate 2-point series ON PURPOSE: the real series must keep its nulls
+    /// (warning #4), and one bridge series per gap is the only shape that cannot accidentally
+    /// dash over an OBSERVED segment — a single per-project bridge series would need a break
+    /// between two gaps that are two observed days apart, and a daily grid has no room for the
+    /// null that would carry it. Nothing is interpolated: each series holds exactly the two
+    /// observed endpoints.</para>
+    /// </summary>
+    private static IEnumerable<ISeries> BuildBridges(SeriesSpec spec, CreditMetric metric)
+    {
+        var color = StatisticsPalette.SkColor(spec.Ordinal);
+        return ListModule
+            .ToArray(StatisticsChart.gapBridges(metric, spec.Points))
+            .Select(bridge => (ISeries)new LineSeries<DateTimePoint>
+            {
+                Name = spec.Name,
+                Values = new[]
+                {
+                    new DateTimePoint(bridge.FromDay.UtcDateTime, bridge.FromValue),
+                    new DateTimePoint(bridge.ToDay.UtcDateTime, bridge.ToValue),
+                },
+                // Same colour and thickness as the real line — same 4/4 dash idiom as the hover
+                // guide below — so it reads as "this line, unobserved", not as a second quantity.
+                Stroke = new SolidColorPaint(color)
+                {
+                    StrokeThickness = 2f,
+                    PathEffect = new DashEffect([4f, 4f]),
+                },
+                Fill = null, // warning #2
+                LineSmoothness = 0,
+                // NO markers on a bridge: a marker would claim a daily observation that does not
+                // exist. The two endpoints are real days and already carry the real series' markers.
+                GeometrySize = 0,
+                GeometryFill = null,
+                GeometryStroke = null,
+                // Chrome invisibility: the tooltip lists one entry per project (§6) and the
+                // chart-internal legend is off (§4) — a bridge must not double either.
+                IsHoverable = false,
+                IsVisibleAtLegend = false,
+            });
     }
 
     /// <summary>
