@@ -171,9 +171,15 @@ public class SnoozePillAlignmentTests
         var candidate = new FontFamily(family);
         if (!FontManager.Current.TryGetGlyphTypeface(new Typeface(candidate), out var typeface))
             return null;
-        // ".AppleSystemUIFont" only ever resolves under its display name ("System Font"), so a
-        // leading-dot alias is accepted; every other family must come back under the name asked for.
-        return typeface.FamilyName == family || family.StartsWith('.') ? candidate : null;
+        if (typeface.FamilyName == family)
+            return candidate;
+        // ".AppleSystemUIFont" only ever resolves under its display name ("System Font"), so the
+        // dot-prefixed aliases cannot be matched by name. Accepting them unconditionally would
+        // re-admit the very substitution this method exists to reject — on a runner without the
+        // Apple stack the alias resolves to the DEFAULT family, i.e. Inter wearing another name.
+        return family.StartsWith('.') && typeface.FamilyName != FontManager.Current.DefaultFontFamily.Name
+            ? candidate
+            : null;
     }
 
     private readonly record struct RenderedInk(
@@ -379,6 +385,9 @@ public class SnoozePillAlignmentTests
             const double InkFloor = 0.10;
             int first = Array.FindIndex(rows, row => row > InkFloor);
             int last = Array.FindLastIndex(rows, row => row > InkFloor);
+            Assert.True(first >= 0,
+                $"no row in x={x0}..{x1} cleared the {InkFloor:P0} ink floor, so the element's extent " +
+                "cannot be measured — it painted nothing, or only anti-aliasing fringe.");
             return (y0 + first + (1 - rows[first]), y0 + last + rows[last], weighted / weight);
         }
 
