@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Tests;
@@ -134,7 +135,7 @@ public class OverlayHeaderClearanceTests
     public async Task Projects_empty_overlay_leaves_the_header_visible_and_hittable()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var window = fx.Host(new ProjectsView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         fx.AddHost("host-b", new FakeGuiRpcClient());
@@ -210,7 +211,7 @@ public class OverlayHeaderClearanceTests
     public void Projects_loading_overlay_leaves_the_header_visible_and_hittable()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var window = fx.Host(new ProjectsView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         window.Show();

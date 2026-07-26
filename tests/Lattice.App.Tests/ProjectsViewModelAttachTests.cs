@@ -27,13 +27,10 @@ public class ProjectsViewModelAttachTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync() => await _fx.DisposeAsync();
 
-    private static Task<AttachFlowResult> NoopRun(
-        Guid id, AttachMachine.AttachRequest r, IProgress<AttachMachine.Stage>? p, CancellationToken ct) =>
-        Task.FromResult(new AttachFlowResult(AttachFlowOutcome.Attached, [], null));
-
     private ProjectsViewModel MakeVm()
     {
-        var vm = new ProjectsViewModel(_fx.Store, _fx.Clock, _fx.Control, NoopRun, new ImmediateUiDispatcher());
+        var vm = new ProjectsViewModel(
+            _fx.Store, _fx.Clock, _fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         vm.AddProjectRequested += (_, avm) => _raised.Add(avm);
         return vm;
     }

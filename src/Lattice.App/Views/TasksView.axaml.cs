@@ -100,11 +100,6 @@ public partial class TasksView : UserControl
         // visibility path above (widths key off the column Tag, not the header).
         _widthPersistence = ColumnWidthPersistence.Attach(Grid, "tasks");
         ApplyColumnVisibility(BreakpointWidth);
-#if DEBUG
-        // Issue #95 measurement instrumentation; inert unless LATTICE_COMBO_PROBE is set.
-        if (ComboOpenProbe.Mode is "tasks" or "watch")
-            ComboOpenProbe.Attach(StateFilterBox, "tasks:StateFilterBox");
-#endif
     }
 
     // The shell owns one long-lived TasksViewModel while TasksViews are

@@ -167,7 +167,7 @@ public class MenuSeparatorGeometryTests
     public void Projects_row_menu_divider_is_a_thin_rule()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         ApplyMenuRowMinHeight(window);

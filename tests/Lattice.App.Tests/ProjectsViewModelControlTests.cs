@@ -1,3 +1,4 @@
+using System.Globalization;
 using Lattice.App.Aggregation;
 using Lattice.App.Localization;
 using Lattice.App.Tests.Fakes;
@@ -29,7 +30,8 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
 
     public async ValueTask DisposeAsync() => await _fx.DisposeAsync();
 
-    private ProjectsViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.Control);
+    private ProjectsViewModel MakeVm() =>
+        new(_fx.Store, _fx.Clock, _fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
 
     private static Project Proj(string url, string name) => TestData.MakeProject(url, name);
 
@@ -38,6 +40,20 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
 
     private ProjectRow ParentRow(ProjectsViewModel vm, string masterUrl) =>
         (ProjectRow)vm.Rows.Single(r => r.Data.IsParent && r.Data.MasterUrl == masterUrl);
+
+    /// <summary>
+    /// "This group has aggregated exactly <paramref name="hosts"/> attachments" — the
+    /// settle condition every MULTI-host case here needs. A parent row's HostsText IS
+    /// its attachment count (<see cref="ProjectRowViewModel.Parent"/>). A row COUNT
+    /// cannot express this: hosts sharing a project merge into ONE row, so `Rows.Count
+    /// == 1` is already true with the first host alone and stays true afterwards —
+    /// the settle can return mid-fleet, and the op under test then classifies as
+    /// single-host and skips the confirmation seam entirely (issue #189). Written as a
+    /// predicate over Rows, not a Single() lookup, so it is safe before the row exists.
+    /// </summary>
+    private static bool Aggregates(ProjectsViewModel vm, string masterUrl, int hosts) =>
+        vm.Rows.Any(r => r.Data.IsParent && r.Data.MasterUrl == masterUrl
+                         && r.Data.HostsText == hosts.ToString(CultureInfo.InvariantCulture));
 
     // --- DI-3 enablement -----------------------------------------------------
 
@@ -63,7 +79,10 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
         _fx.AddHost("host-b", FakeWithProjects(Proj("http://p/", "P")));
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        // BOTH hosts, not just enough hosts to make one row: the test name says "the
+        // selected row's hostS", so a settle host-a alone satisfies would silently
+        // assert the single-host case (issue #189's class).
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2));
         vm.SelectedRow = vm.Rows[0];
 
         Assert.True(vm.SuspendSelectedCommand.CanExecute(null));
@@ -80,7 +99,7 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
         _fx.AddHost("host-b", fakeB);
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2));
 
         vm.ToggleExpandCommand.Execute("http://p/");
         await _fx.SettleAsync(() => vm.Rows.Count == 3, "expanding shows the two child rows");
@@ -113,7 +132,13 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
         _fx.AddHost("host-c", fakeC);
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 2, "two project groups: P over a+b, Q on c");
+        // P must have aggregated BOTH a and b before the row is selected: `Rows.Count == 2`
+        // alone is satisfied by host-a (P) + host-c (Q) with host-b still in flight, and the
+        // fan-out would then never reach fakeB — the settle below would hang to the ceiling
+        // rather than fail fast (issue #189's class).
+        await _fx.SettleAsync(
+            () => vm.Rows.Count == 2 && Aggregates(vm, "http://p/", hosts: 2) && Aggregates(vm, "http://q/", hosts: 1),
+            "two project groups: P over a+b, Q on c");
 
         vm.SelectedRow = ParentRow(vm, "http://p/");
         vm.ConfirmationHandler = _ => Task.FromResult(true); // Caution (2 hosts)
@@ -135,7 +160,13 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
         _fx.AddHost("host-b", fakeB);
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        // The multi-host CLASSIFICATION is what this test gates, and it is read off the
+        // row's attachments at execute time. `Rows.Count == 1` is true the moment host-a
+        // lands and never becomes false, so it let the op run as single-host — the instant
+        // path, which never consults the seam, leaving `consulted` empty (issue #189, seen
+        // on a loaded windows-latest runner).
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2),
+            "the row must span BOTH hosts before the op classifies");
         vm.SelectedRow = vm.Rows[0];
 
         var consulted = new List<ConfirmationRequest>();
@@ -251,7 +282,10 @@ public class ProjectsViewModelControlTests : IAsyncLifetime
         _fx.AddHost("host-b", fakeB);
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        // Without host-b in the row the fan-out only reaches the host that SUCCEEDS, so
+        // ControlFailure never opens and the settle below burns the hang ceiling (#189's class).
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2),
+            "the failing host must be in the row before the fan-out runs");
         vm.SelectedRow = vm.Rows[0];
         vm.ConfirmationHandler = _ => Task.FromResult(true);
 

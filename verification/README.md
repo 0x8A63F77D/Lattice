@@ -126,7 +126,10 @@ vintage/visibility per correspondence rule 2, not merely data-race absence.
 **Interpreter attempt-scoped locals (no inventory rows):** the interpreter's
 `RunAsync` holds the per-attempt resources and payloads as method locals —
 `client`, `config`, `connCt`, `fetchedVersion`, the tick payloads (`ccState`,
-`ccStatus`, `results`, `transfers`, `projectStatuses`, `newMessages`) and `builtSnapshot` — plus
+`ccStatus`, `results`, `transfers`, `projectStatuses`, `newMessages`), `builtSnapshot`
+and the statistics pair (`statistics`, `statisticsFetchedAt` — issue #164; carried
+ACROSS ticks because statistics refresh at a coarser cadence than the per-tick data,
+but still reset by `SnapshotConfig`, so they remain attempt-scoped) — plus
 the `HostMachine.State` loop-local that carries the decision core's state. All
 are single-writer, loop-confined method locals, structurally incapable of
 cross-thread exposure, so none earns an inventory row. The machine `State` in

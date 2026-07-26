@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
 using Lattice.App.Localization;
+using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Xunit;
@@ -21,7 +22,7 @@ public class ProjectsViewControlTests
     private static (HostGraphFixture Fx, Window Window, ProjectsView View, ProjectsViewModel Vm) MakeView()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         return (fx, window, view, vm);
@@ -91,7 +92,7 @@ public class ProjectsViewControlTests
     public void Recreated_view_replaces_a_stale_view_installed_handler_but_never_a_fake()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var window = fx.Host(new ProjectsView { DataContext = vm });
         window.Show();
         fx.Layout();

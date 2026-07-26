@@ -112,6 +112,17 @@
   <ItemGroup>
     <ProjectReference Include="../Lattice.Core/Lattice.Core.csproj" />
     <ProjectReference Include="../Lattice.App.Aggregation/Lattice.App.Aggregation.fsproj" />
+    <!-- Declared, not incidental. Core's public surface hands the App GuiRpc types by
+         design (#139's adjudication): HostSnapshot embeds CcStatus / Result / Project /
+         Message, IGuiRpcClient is the factory seam the composition root wires, and a
+         dozen App files name those types directly. Without this line the App compiled
+         only through Core's transitive reference — a dependency that is real but
+         undeclared, so a future ProjectReference-hygiene change to Core (PrivateAssets,
+         or dropping a type from its surface) would break the App for reasons invisible
+         in the App's own file. It is NOT a licence for protocol logic in the App: the
+         boundary rule (no RPC calls outside Core) stays, and the App still never
+         constructs an RPC op itself. -->
+    <ProjectReference Include="../Lattice.Boinc.GuiRpc/Lattice.Boinc.GuiRpc.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Lattice.App.Tests" />

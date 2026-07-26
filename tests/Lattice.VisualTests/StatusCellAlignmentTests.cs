@@ -471,7 +471,9 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
             var clock = new InertUiClock();
 
             var tasks = new TasksViewModel(store, clock, uiState, density, control);
-            var projects = new ProjectsViewModel(store, clock, control);
+            // Attach seams are required ctor args; this fixture hand-builds rows and never
+            // opens the "Add project…" dialog, so a never-invoked no-op run is the whole need.
+            var projects = new ProjectsViewModel(store, clock, control, NoopAttachRun, new InlineUiDispatcher());
             var transfers = new TransfersViewModel(store, clock, density);
 
             tasks.Rows.Add(TaskHolder());
@@ -514,6 +516,11 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
         /// first child is a Border (the progress/share BAR cells) is not this construction and is
         /// deliberately not swept.
         /// </summary>
+        private static Task<AttachFlowResult> NoopAttachRun(
+            Guid hostId, AttachMachine.AttachRequest request,
+            IProgress<AttachMachine.Stage>? progress, CancellationToken ct) =>
+            Task.FromResult(new AttachFlowResult(AttachFlowOutcome.Attached, [], null));
+
         private static IReadOnlyList<Probe> Discover(Window window)
         {
             var probes = new List<Probe>();

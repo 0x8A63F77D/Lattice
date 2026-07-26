@@ -162,4 +162,45 @@ public class HostRegistryTests
             File.Delete(bogusParent);
         }
     }
+
+    // --- published-list immutability (Codex R3 P2 on PR #196) -----------------------
+    //
+    // The class doc promises that a reader enumerating Hosts on any thread cannot see the
+    // list change underneath it. That promise is only worth making if it survives an
+    // ill-behaved caller, since the constructor is public API in a library: both tests below
+    // fail without HostRegistry.Sealed's defensive copy + ReadOnlyCollection wrapper.
+
+    [Fact]
+    public void A_caller_that_keeps_its_host_list_cannot_mutate_the_registrys_view()
+    {
+        // The caller hands in a MUTABLE list and holds on to it — the shape a defensive
+        // copy exists for. Mutating it afterwards must not reach the registry, whose
+        // readers may be mid-enumeration on a control lane.
+        List<HostConfig> retained = [NewHost("a")];
+        var registry = new HostRegistry(new LatticeConfig(5, retained), TempPath());
+
+        retained.Add(NewHost("smuggled"));
+        retained[0] = NewHost("swapped");
+
+        Assert.Single(registry.Hosts);
+        Assert.Equal("a", registry.Hosts[0].Name);
+    }
+
+    [Fact]
+    public void Hosts_cannot_be_downcast_to_a_mutable_list()
+    {
+        // The other half: IReadOnlyList is a VIEW, not a guarantee — a consumer holding one
+        // whose runtime type is List<T> can cast the promise away. Both publication paths are
+        // pinned because both once produced a List: the ctor whenever a caller passes one, and
+        // UpdateHost/RemoveHost, which build `List<HostConfig> hosts = [.. Config.Hosts]` and
+        // publish that very instance. (AddHost would not discriminate — its collection
+        // expression already yields an array — so asserting on it alone is a false green.)
+        HostConfig a = NewHost("a");
+        var registry = new HostRegistry(new LatticeConfig(5, new List<HostConfig> { a }), TempPath());
+        Assert.Null(registry.Hosts as List<HostConfig>);
+
+        registry.UpdateHost(a with { Name = "renamed" });
+        Assert.Null(registry.Hosts as List<HostConfig>);
+        Assert.Equal("renamed", Assert.Single(registry.Hosts).Name);
+    }
 }
