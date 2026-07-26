@@ -62,7 +62,7 @@ State model (this drives Core's design):
 
 Remote hosts:
 - Daemon refuses remote connections unless `remote_hosts.cfg` lists the client IP or `cc_config.xml` sets `allow_remote_gui_rpc`.
-- **No transport encryption.** Challenge-response only protects the password itself. Cross-network management realistically requires an SSH tunnel. A built-in tunnel manager (via SSH.NET) is a candidate differentiator feature — design Core's connection abstraction so a tunnel can wrap the TCP endpoint transparently.
+- **No transport encryption.** Challenge-response only protects the password itself. Cross-network management realistically requires an SSH tunnel or a private overlay (Tailscale/VPN) — run externally by the user; Lattice just connects to the forwarded local endpoint. A built-in tunnel manager was CUT as a pseudo-need (owner ruling 2026-07-26); do not re-propose without real-user demand. Core's connection abstraction still keeps the endpoint pluggable, which is all an external tunnel needs.
 
 ## Avalonia coding rules
 
@@ -133,7 +133,7 @@ Single + multi-host: task list with progress, project list, transfers, message l
 Suspend/resume (task, project, global run modes), task abort, project update/attach/detach (incl. the async lookup_account flow), snooze. Confirmation UX for destructive ops.
 
 **M4 — Differentiators**
-Charts: IN PROGRESS (#148 ruling, 2026-07-22) — first batch scoped to official-Manager Statistics parity (per-project user/host total & average credit history). SSH tunnel manager for remote hosts: still planned. Host groups: DEFERRED (reopen trigger: real-user demand at 10+ host fleets). Notification surface (task failures, unreachable hosts) via InfoBar/tray: DEFERRED, revisit later. See #148 for the ruling.
+Charts: first batch SHIPPED (#148 ruling; Statistics page merged in PR #167, 2026-07-24) — official-Manager Statistics parity (per-project user/host total & average credit history); later batches (task timeline, per-project throughput) not yet scoped. SSH tunnel manager: CUT (owner ruling 2026-07-26: pseudo-need — cross-network users run their own tunnel/VPN; reopen only on real-user demand). Host groups: DEFERRED (reopen trigger: real-user demand at 10+ host fleets). Notification surface (task failures, unreachable hosts) via InfoBar/tray: DEFERRED, revisit later. See #148 for the ruling.
 
 ## Naming
 

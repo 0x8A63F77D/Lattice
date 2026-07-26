@@ -62,13 +62,14 @@ Lattice is under active development. Milestones track on GitHub:
 | **M1 — Protocol layer** | `Lattice.Boinc.GuiRpc`: connect, frame, auth, `get_state` / `get_cc_status` / `get_results` / `get_messages`, typed models. NuGet-publishable. | ✅ Done |
 | **[M2 — Read-only dashboard](https://github.com/0x8A63F77D/Lattice/milestone/1)** | NavigationView shell, per-host state machines, and the read-only views: Tasks (Wave 1), plus Projects / Transfers / Event log (Wave 2). | ✅ Functionally complete |
 | **[M3 — Control operations](https://github.com/0x8A63F77D/Lattice/milestone/2)** | Suspend/resume, task abort, project update/attach/detach, run modes, snooze, with confirmation UX. | ✅ Functionally complete |
-| **[M4 — Differentiators](https://github.com/0x8A63F77D/Lattice/milestone/3)** | Charts, SSH tunnel manager, host groups, notification surface. | ⏳ Planned |
+| **[M4 — Differentiators](https://github.com/0x8A63F77D/Lattice/milestone/3)** | Charts (first batch — the per-project credit Statistics page — on `main`; task timeline and throughput later). Host groups and the notification surface are deferred; a built-in SSH tunnel manager was cut. | 🚧 In progress |
 
 This alpha covers read-only monitoring (M2) **and** control operations (M3):
 suspend/resume, task abort, per-host run modes, snooze, and project
 attach/detach/update — all with confirmation prompts on the destructive ones. The
-M4 differentiators (charts, a built-in SSH tunnel manager, host groups, desktop
-notifications) are **not built yet** — see [Known limitations](#known-limitations).
+first M4 charts (the Statistics page) landed on `main` after this alpha was cut
+and ship in the next build; the remaining M4 surface is deferred or cut — see
+[Known limitations](#known-limitations).
 
 ## Try the alpha
 
@@ -161,16 +162,18 @@ it in Lattice's add-host dialog).
 >   [Tailscale](https://tailscale.com/) puts the host on a private address you can
 >   reach directly.
 >
-> A built-in SSH tunnel manager is planned for M4; until then, set up the tunnel
-> or overlay yourself.
+> Lattice deliberately has no built-in tunnel manager — set up the tunnel or
+> overlay yourself, then point Lattice at the resulting local/private endpoint
+> like any other host.
 
 ## Known limitations
 
 This is an alpha. Known gaps and unverified surfaces a tester is likely to hit:
 
-- **No charts or data visualization yet.** Credit history, task timelines, and
-  per-project throughput are the M4 differentiators — not built yet.
-- **No built-in SSH tunnel manager yet (M4).** Remote hosts over an untrusted
+- **Charts are not in this build.** The per-project credit Statistics page merged
+  after this alpha was cut and ships in the next one; task timelines and
+  per-project throughput are not built yet.
+- **No built-in SSH tunnel manager (by design).** Remote hosts over an untrusted
   network need your own SSH tunnel or VPN/overlay (see [Remote hosts](#remote-hosts)).
 - **No host groups or desktop/tray notifications yet (M4).**
 - **Windows & Linux tray residency is not hardware-verified**
