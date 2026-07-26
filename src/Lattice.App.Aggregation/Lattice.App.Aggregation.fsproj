@@ -16,6 +16,7 @@
     <Compile Include="ProjectRows.fs" />
     <Compile Include="SeriesColors.fs" />
     <Compile Include="StatisticsChart.fs" />
+    <Compile Include="StatisticsVisibility.fs" />
     <Compile Include="MessageLog.fs" />
     <Compile Include="ControlConfirmation.fs" />
   </ItemGroup>

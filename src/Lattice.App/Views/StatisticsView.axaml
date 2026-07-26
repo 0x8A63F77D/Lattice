@@ -144,15 +144,18 @@
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
+              <!-- Holder rows (#191): what the chip RENDERS lives in Data, so a re-label or a
+                   re-colour swaps that record on the surviving row rather than rebuilding the
+                   legend. IsVisible stays on the holder — it is the two-way binding target. -->
               <DataTemplate x:DataType="vm:StatisticsLegendChip">
                 <ToggleButton Classes="legendChip" IsChecked="{Binding IsVisible, Mode=TwoWay}">
                   <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                     <Panel Width="12" Height="12">
-                      <Border CornerRadius="3" Background="{Binding Swatch}" IsVisible="{Binding IsVisible}" />
+                      <Border CornerRadius="3" Background="{Binding Data.Swatch}" IsVisible="{Binding IsVisible}" />
                       <Border CornerRadius="3" Background="{DynamicResource LatticeDisabledBrush}"
                               IsVisible="{Binding !IsVisible}" />
                     </Panel>
-                    <TextBlock Classes="chipText" Text="{Binding Name}" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Classes="chipText" Text="{Binding Data.Name}" FontSize="12" VerticalAlignment="Center" />
                   </StackPanel>
                 </ToggleButton>
               </DataTemplate>
@@ -167,14 +170,16 @@
                 <StackPanel Width="260" Spacing="0">
                   <ItemsControl ItemsSource="{Binding Overflow}">
                     <ItemsControl.ItemTemplate>
+                      <!-- Holder rows (#191): these checkboxes are under the user's pointer while
+                           the flyout is open, so the list is reconciled in place — never rebuilt. -->
                       <DataTemplate x:DataType="vm:StatisticsOverflowItem">
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,3">
                           <CheckBox Grid.Column="0" MinWidth="0"
                                     IsChecked="{Binding IsVisible, Mode=TwoWay}"
-                                    IsEnabled="{Binding CanCheck}" VerticalAlignment="Center" />
-                          <TextBlock Grid.Column="1" Text="{Binding Name}" Margin="4,0" VerticalAlignment="Center"
+                                    IsEnabled="{Binding Data.CanCheck}" VerticalAlignment="Center" />
+                          <TextBlock Grid.Column="1" Text="{Binding Data.Name}" Margin="4,0" VerticalAlignment="Center"
                                      TextTrimming="CharacterEllipsis" />
-                          <TextBlock Grid.Column="2" Text="{Binding RacText}" Classes="numeric" VerticalAlignment="Center"
+                          <TextBlock Grid.Column="2" Text="{Binding Data.RacText}" Classes="numeric" VerticalAlignment="Center"
                                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                         </Grid>
                       </DataTemplate>

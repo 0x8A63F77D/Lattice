@@ -1,3 +1,4 @@
+using System.Collections.Specialized;
 using Avalonia.Media;
 using Lattice.App.Aggregation;
 using Lattice.App.Charting;
@@ -58,8 +59,16 @@ public class StatisticsViewModelTests : IAsyncLifetime
             [.. Enumerable.Range(0, 11).Select(i => Stats(i, days))]),
     };
 
+    // Row facts read through one accessor each: the rows are reconciled holders whose immutable
+    // Data carries the rendered values (#191), so the assertions below stay about behaviour.
+    private static string NameOf(StatisticsLegendChip chip) => chip.Data.Name;
+    private static int OrdinalOf(StatisticsLegendChip chip) => chip.Data.Ordinal;
+    private static IBrush? BrushOf(StatisticsLegendChip chip) => chip.Data.Swatch;
+    private static string NameOf(StatisticsOverflowItem item) => item.Data.Name;
+    private static bool CanCheckOf(StatisticsOverflowItem item) => item.Data.CanCheck;
+
     private static Color? SwatchOf(StatisticsLegendChip chip) =>
-        chip.Swatch is SolidColorBrush brush ? brush.Color : null;
+        BrushOf(chip) is SolidColorBrush brush ? brush.Color : null;
 
     private StatisticsViewModel MakeVm() => new(_fx.Store, _fx.Clock);
 
@@ -111,12 +120,12 @@ public class StatisticsViewModelTests : IAsyncLifetime
 
         // RAC = ordinal, so the top 6 by RAC are ordinals 2..7 (chips, ordinal-ordered),
         // and ordinals 1,0 are the overflow tail.
-        Assert.Equal([2, 3, 4, 5, 6, 7], vm.Chips.Select(c => c.Ordinal));
+        Assert.Equal([2, 3, 4, 5, 6, 7], vm.Chips.Select(OrdinalOf));
         Assert.Equal(["https://p1.org/", "https://p0.org/"], vm.Overflow.Select(o => o.MasterUrl));
         Assert.Equal(6, SeriesCount(vm));
         Assert.True(vm.HasOverflow);
         Assert.True(vm.IsAtCap); // six shown → overflow rows disabled
-        Assert.All(vm.Overflow, o => Assert.False(o.CanCheck));
+        Assert.All(vm.Overflow, o => Assert.False(CanCheckOf(o)));
     }
 
     [Fact]
@@ -131,7 +140,7 @@ public class StatisticsViewModelTests : IAsyncLifetime
 
         Assert.Equal(5, SeriesCount(vm));
         Assert.False(vm.IsAtCap);
-        Assert.All(vm.Overflow, o => Assert.True(o.CanCheck)); // room again
+        Assert.All(vm.Overflow, o => Assert.True(CanCheckOf(o))); // room again
     }
 
     [Fact]
@@ -294,11 +303,11 @@ public class StatisticsViewModelTests : IAsyncLifetime
         vm.Scope = new ScopeSelection(host.Id);
         _fx.Start();
         await _fx.SettleAsync(() => vm.Chips.Count == 1);
-        Assert.Equal("https://p0.org/", vm.Chips[0].Name); // fallback while blank
+        Assert.Equal("https://p0.org/", NameOf(vm.Chips[0])); // fallback while blank
 
         projects[0] = projects[0] with { ProjectName = "Einstein@Home" };
         _fx.Store.RequestRefresh(host.Id);
-        await _fx.SettleAsync(() => vm.Chips[0].Name == "Einstein@Home");
+        await _fx.SettleAsync(() => NameOf(vm.Chips[0]) == "Einstein@Home");
     }
 
     [Fact]
@@ -394,6 +403,97 @@ public class StatisticsViewModelTests : IAsyncLifetime
         await _fx.SettleAsync(() => vm.Chips.Count == 3);
         Assert.Equal(3, SeriesCount(vm));
     }
+    // ---- #191 (P2-2): the legend and the flyout reconcile, they never Clear() -------------
+    //
+    // Clear()-and-refill raises a CollectionChanged Reset, which destroys and rebuilds every
+    // container in the bound ItemsControl — for the "+N more" flyout, the very checkboxes the
+    // user may be clicking. Both triggers below made the old `sameShape` gate return false.
+
+    /// <summary>Counts Reset notifications raised by a bound collection.</summary>
+    private static Func<int> ResetCounter(params System.Collections.IEnumerable[] collections)
+    {
+        var resets = 0;
+        foreach (var c in collections)
+            ((INotifyCollectionChanged)c).CollectionChanged += (_, e) =>
+            {
+                if (e.Action == NotifyCollectionChangedAction.Reset) resets++;
+            };
+        return () => resets;
+    }
+
+    [Fact]
+    public async Task A_late_filled_project_name_never_rebuilds_the_legend_or_the_flyout()
+    {
+        // BOINC reports a freshly attached project with a blank name and fills it in on a later
+        // poll (the case #167 already had to handle for the chip LABEL). The label must refresh
+        // without recreating the row: same holder instance, no Reset.
+        var projects = new List<Project>(Enumerable.Range(0, 8).Select(i => Proj(i, i)));
+        projects[1] = projects[1] with { ProjectName = "" }; // an overflow row...
+        projects[7] = projects[7] with { ProjectName = "" }; // ...and a chip
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects.ToList())),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(projects.ToList()),
+            OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
+                [.. Enumerable.Range(0, 8).Select(i => Stats(i, 9))]),
+        };
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6 && vm.Overflow.Count == 2);
+
+        var chip = vm.Chips.Single(c => c.MasterUrl == "https://p7.org/");
+        var row = vm.Overflow.Single(o => o.MasterUrl == "https://p1.org/");
+        var resets = ResetCounter(vm.Chips, vm.Overflow);
+
+        projects[1] = projects[1] with { ProjectName = "Rosetta@home" };
+        projects[7] = projects[7] with { ProjectName = "Einstein@Home" };
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(
+            () => NameOf(vm.Chips.Single(c => c.MasterUrl == "https://p7.org/")) == "Einstein@Home"
+                && NameOf(vm.Overflow.Single(o => o.MasterUrl == "https://p1.org/")) == "Rosetta@home",
+            "both late-filled names reach their rows");
+
+        Assert.Equal(0, resets());
+        Assert.Same(chip, vm.Chips.Single(c => c.MasterUrl == "https://p7.org/"));
+        Assert.Same(row, vm.Overflow.Single(o => o.MasterUrl == "https://p1.org/"));
+    }
+
+    [Fact]
+    public async Task A_rac_reorder_moves_the_flyout_rows_instead_of_rebuilding_them()
+    {
+        // The flyout is RAC-ordered, so live RAC alone reshuffles it — the second trigger of the
+        // old rebuild. A reorder must move the existing rows, not replace them.
+        var projects = new List<Project>(Enumerable.Range(0, 8).Select(i => Proj(i, i)));
+        var fake = new FakeGuiRpcClient
+        {
+            OnGetState = () => Task.FromResult(TestData.MakeState(projects: projects.ToList())),
+            OnGetProjectStatus = () => Task.FromResult<IReadOnlyList<Project>>(projects.ToList()),
+            OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
+                [.. Enumerable.Range(0, 8).Select(i => Stats(i, 9))]),
+        };
+        var host = _fx.AddHost("host-a", fake);
+        var vm = MakeVm();
+        vm.Scope = new ScopeSelection(host.Id);
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Overflow.Count == 2);
+
+        // RAC = ordinal, so ordinal 1 leads the two-row overflow and ordinal 0 trails it.
+        Assert.Equal(["https://p1.org/", "https://p0.org/"], vm.Overflow.Select(o => o.MasterUrl));
+        var rowForP0 = vm.Overflow.Single(o => o.MasterUrl == "https://p0.org/");
+        var resets = ResetCounter(vm.Overflow);
+
+        projects[0] = projects[0] with { HostExpavgCredit = 1.5 }; // p0 now out-earns p1
+        _fx.Store.RequestRefresh(host.Id);
+        await _fx.SettleAsync(
+            () => vm.Overflow.Select(o => o.MasterUrl).SequenceEqual(["https://p0.org/", "https://p1.org/"]),
+            "the flyout re-ranks on live RAC");
+
+        Assert.Equal(0, resets());
+        Assert.Same(rowForP0, vm.Overflow[0]);
+    }
+
     // ---- series colours (§2, issue #171) ---------------------------------
 
     [Fact]
@@ -404,7 +504,7 @@ public class StatisticsViewModelTests : IAsyncLifetime
         _fx.Start();
         await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6);
 
-        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(c => c.Ordinal));
+        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(OrdinalOf));
         var swatches = vm.Chips.Select(SwatchOf).ToList();
         Assert.All(swatches, s => Assert.NotNull(s));
         Assert.Equal(swatches.Count, swatches.Distinct().Count());
@@ -421,13 +521,13 @@ public class StatisticsViewModelTests : IAsyncLifetime
         var vm = MakeVm();
         _fx.Start();
         await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 3);
-        Assert.All(vm.Chips, c => Assert.NotNull(c.Swatch));
+        Assert.All(vm.Chips, c => Assert.NotNull(BrushOf(c)));
 
         vm.Chips[0].IsVisible = false; // user toggle
 
         // Off the chart → no slot, no colour. The view draws its grey "not plotted" swatch.
-        Assert.Null(vm.Chips[0].Swatch);
-        Assert.All(vm.Chips.Skip(1), c => Assert.NotNull(c.Swatch));
+        Assert.Null(BrushOf(vm.Chips[0]));
+        Assert.All(vm.Chips.Skip(1), c => Assert.NotNull(BrushOf(c)));
     }
 
     [Fact]
@@ -455,7 +555,7 @@ public class StatisticsViewModelTests : IAsyncLifetime
         _fx.Start();
         await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 5);
 
-        Assert.All(vm.Chips, chip => Assert.Equal(StatisticsPalette.Color(chip.Ordinal), SwatchOf(chip)));
+        Assert.All(vm.Chips, chip => Assert.Equal(StatisticsPalette.Color(OrdinalOf(chip)), SwatchOf(chip)));
     }
 
 }

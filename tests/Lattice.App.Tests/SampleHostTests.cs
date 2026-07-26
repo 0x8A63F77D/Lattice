@@ -138,11 +138,11 @@ public class SampleHostTests : IAsyncLifetime
 
         await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6, "the eleven-project host caps its legend at six chips");
 
-        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(c => c.Ordinal));
-        Assert.Equal("World Community Grid", vm.Chips[0].Name);
-        Assert.Equal("SiDock@home", vm.Chips[^1].Name);
+        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(c => c.Data.Ordinal));
+        Assert.Equal("World Community Grid", vm.Chips[0].Data.Name);
+        Assert.Equal("SiDock@home", vm.Chips[^1].Data.Name);
 
-        var swatches = vm.Chips.Select(c => ((SolidColorBrush)c.Swatch!).Color).ToList();
+        var swatches = vm.Chips.Select(c => ((SolidColorBrush)c.Data.Swatch!).Color).ToList();
         Assert.Equal(6, swatches.Distinct().Count());
 
         // Five projects left over → the "+5 more" flyout has real rows to click.
