@@ -22,32 +22,34 @@ public sealed record RegistryChangedEventArgs(RegistryChangeKind Kind, HostConfi
 /// <para>
 /// <b>Publication protocol.</b> WRITES are single-threaded: mutate from one thread only
 /// (the UI thread in the app) — two concurrent mutators would lose one another's edit,
-/// because each builds its next state from the <c>_config</c> it read (read-modify-write
-/// with no lock). READS are free from any thread and need no lock, which is what
+/// because each builds its next state from the config it read (read-modify-write with no
+/// lock). READS are free from any thread and need no lock, which is what
 /// <c>HostControlService.FindConfig</c> relies on when it walks <see cref="Hosts"/> on a
 /// thread-pool lane. Three facts make that safe, and all three must hold together:
 /// </para>
 /// <list type="number">
 /// <item><description><see cref="LatticeConfig"/> is an immutable record and the
 /// <see cref="HostConfig"/> list it carries is never mutated in place — <see cref="Mutate"/>
-/// always builds a NEW list (<c>[.. _config.Hosts, host]</c>) inside a NEW record. A reader
-/// enumerating the old list therefore cannot see it change underneath it, so no reader can
-/// observe a half-applied edit or throw a collection-modified exception.</description></item>
-/// <item><description>Publication is one reference assignment (<c>_config = next</c>),
-/// and reference writes are atomic — a reader sees either the whole old config or the
-/// whole new one, never a torn reference to neither.</description></item>
-/// <item><description>The reference is published AFTER the record it points at is fully
-/// built (the record is constructed and its list materialized before <see cref="Mutate"/>
-/// even runs), so a reader that observes the new reference observes complete contents.</description></item>
+/// always builds a NEW list inside a NEW record. A reader enumerating the old list therefore
+/// cannot see it change underneath it, so no reader can observe a half-applied edit or throw
+/// a collection-modified exception.</description></item>
+/// <item><description>Publication is one reference assignment, and reference writes are
+/// atomic — a reader sees either the whole old config or the whole new one, never a torn
+/// reference to neither.</description></item>
+/// <item><description>That assignment goes through <c>Volatile.Write</c> and every read
+/// through <c>Volatile.Read</c> (the <see cref="Config"/> accessor below), so a
+/// swap is not merely eventually visible: the release/acquire pair orders it against the
+/// reading thread. This is the leg <c>HostControlService</c>'s <b>I-CL2</b> rests on — "a
+/// config edit made between the user's click and execution wins" — and I-CL2 is a freshness
+/// claim, not a tearing claim, so atomicity alone would not have bought it. A lane turn that
+/// reads the registry after an edit sees that edit, rather than connecting with a superseded
+/// address or password.</description></item>
 /// </list>
 /// <para>
-/// The field is deliberately NOT <c>volatile</c>: the only thing volatility would add here
-/// is a freshness bound, and no consumer needs one. Every reader is either edge-driven —
-/// it acts on a <see cref="Changed"/> event, which is raised after the swap by the mutating
-/// thread — or, like <c>FindConfig</c>, tolerant of one stale read by construction: a host
-/// removed a microsecond ago still yields a connection attempt that the caller must already
-/// handle failing (<c>HostRemovedException</c> covers the converse). Reading a stale
-/// snapshot is a semantic outcome here, not a data race.
+/// Note what is still NOT promised, because I-CL2 does not need it: a lane turn that reads
+/// BEFORE a concurrent edit lands is simply an op that started first — an ordering outcome,
+/// not a stale read. Removal is the same shape from the other side, and the lane turn already
+/// handles losing that race (<c>HostRemovedException</c>).
 /// </para>
 /// </summary>
 public sealed class HostRegistry
@@ -56,15 +58,28 @@ public sealed class HostRegistry
     public static readonly IReadOnlyList<int> AllowedPollingIntervals = LatticeConfig.AllowedPollingIntervals;
 
     private readonly string _path;
-    // Single-writer, any-reader: swapped whole by Mutate on the one mutating thread,
-    // read lock-free from any thread. See the class doc's publication protocol for why
-    // that is safe without volatile — it hangs on this field only ever holding a fully
-    // built immutable record.
+    // Single-writer, any-reader: swapped whole by Mutate on the one mutating thread, read
+    // lock-free from any thread. Never touched directly — Config below is the only accessor,
+    // so no call site can silently drop the Volatile pairing the class doc's protocol needs.
     private LatticeConfig _config;
+
+    /// <summary>
+    /// The published config. Same shape as HostMonitor's Status/Snapshot: the field is
+    /// private and every read/write goes through this property, so the release/acquire
+    /// pairing is structural rather than a rule each call site has to remember.
+    /// </summary>
+    private LatticeConfig Config
+    {
+        get => Volatile.Read(ref _config);
+        set => Volatile.Write(ref _config, value);
+    }
 
     /// <summary>Wraps an in-memory config; <paramref name="path"/> is where mutations are saved.</summary>
     public HostRegistry(LatticeConfig config, string path)
     {
+        // The one place a plain field write is the right one: nothing can observe the
+        // instance until the constructor returns, and .NET guarantees that publication
+        // barrier already. Going through Config here would only trip CS8618.
         _config = config;
         _path = path;
     }
@@ -73,13 +88,13 @@ public sealed class HostRegistry
     public static HostRegistry Load(string path) => new(LatticeConfig.Load(path), path);
 
     /// <summary>The registered hosts, in insertion order.</summary>
-    public IReadOnlyList<HostConfig> Hosts => _config.Hosts;
+    public IReadOnlyList<HostConfig> Hosts => Config.Hosts;
 
     /// <summary>Steady-state polling interval in seconds.</summary>
-    public int PollingIntervalSeconds => _config.PollingIntervalSeconds;
+    public int PollingIntervalSeconds => Config.PollingIntervalSeconds;
 
     /// <summary>Whether the relaxed hidden-window polling floor is bypassed (issue #92).</summary>
-    public bool FullSpeedHiddenPolling => _config.FullSpeedHiddenPolling;
+    public bool FullSpeedHiddenPolling => Config.FullSpeedHiddenPolling;
 
     /// <summary>Raised after every persisted mutation.</summary>
     public event EventHandler<RegistryChangedEventArgs>? Changed;
@@ -89,7 +104,7 @@ public sealed class HostRegistry
     {
         if (IndexOf(host.Id) is not null)
             throw new ArgumentException($"A host with id {host.Id} is already registered.", nameof(host));
-        Mutate(_config with { Hosts = [.. _config.Hosts, host] }, RegistryChangeKind.HostAdded, host);
+        Mutate(Config with { Hosts = [.. Config.Hosts, host] }, RegistryChangeKind.HostAdded, host);
     }
 
     /// <summary>Replaces the host with the same Id. Throws if no such host exists.</summary>
@@ -97,9 +112,9 @@ public sealed class HostRegistry
     {
         int index = IndexOf(host.Id)
             ?? throw new ArgumentException($"No host with id {host.Id}.", nameof(host));
-        List<HostConfig> hosts = [.. _config.Hosts];
+        List<HostConfig> hosts = [.. Config.Hosts];
         hosts[index] = host;
-        Mutate(_config with { Hosts = hosts }, RegistryChangeKind.HostUpdated, host);
+        Mutate(Config with { Hosts = hosts }, RegistryChangeKind.HostUpdated, host);
     }
 
     /// <summary>Removes the host with the given Id. Throws if no such host exists.</summary>
@@ -107,10 +122,10 @@ public sealed class HostRegistry
     {
         int index = IndexOf(id)
             ?? throw new ArgumentException($"No host with id {id}.", nameof(id));
-        HostConfig removed = _config.Hosts[index];
-        List<HostConfig> hosts = [.. _config.Hosts];
+        HostConfig removed = Config.Hosts[index];
+        List<HostConfig> hosts = [.. Config.Hosts];
         hosts.RemoveAt(index);
-        Mutate(_config with { Hosts = hosts }, RegistryChangeKind.HostRemoved, removed);
+        Mutate(Config with { Hosts = hosts }, RegistryChangeKind.HostRemoved, removed);
     }
 
     /// <summary>Sets the polling interval. Only <see cref="AllowedPollingIntervals"/> values are accepted.</summary>
@@ -119,7 +134,7 @@ public sealed class HostRegistry
         if (!AllowedPollingIntervals.Contains(seconds))
             throw new ArgumentOutOfRangeException(nameof(seconds), seconds,
                 "Allowed polling intervals: 2, 5, 10, 30, 60 seconds.");
-        Mutate(_config with { PollingIntervalSeconds = seconds }, RegistryChangeKind.IntervalChanged, null);
+        Mutate(Config with { PollingIntervalSeconds = seconds }, RegistryChangeKind.IntervalChanged, null);
     }
 
     /// <summary>
@@ -133,15 +148,15 @@ public sealed class HostRegistry
         // the effective interval via ApplyCadence either way, and no consumer distinguishes
         // the two causes. A new enum member would force the repo-wide exhaustive-switch
         // sweep for zero behavioral gain (plan Part 4).
-        if (_config.FullSpeedHiddenPolling == enabled)
+        if (Config.FullSpeedHiddenPolling == enabled)
             return;
-        Mutate(_config with { FullSpeedHiddenPolling = enabled }, RegistryChangeKind.IntervalChanged, null);
+        Mutate(Config with { FullSpeedHiddenPolling = enabled }, RegistryChangeKind.IntervalChanged, null);
     }
 
     private int? IndexOf(Guid id)
     {
-        for (int i = 0; i < _config.Hosts.Count; i++)
-            if (_config.Hosts[i].Id == id)
+        for (int i = 0; i < Config.Hosts.Count; i++)
+            if (Config.Hosts[i].Id == id)
                 return i;
         return null;
     }
@@ -149,11 +164,11 @@ public sealed class HostRegistry
     private void Mutate(LatticeConfig next, RegistryChangeKind kind, HostConfig? host)
     {
         // Persist before swapping the in-memory state: if Save throws (unwritable
-        // directory, full disk), _config must stay at its old value so memory, disk,
+        // directory, full disk), Config must stay at its old value so memory, disk,
         // and every already-connected monitor's config remain consistent. Swapping
         // first would leave memory diverged from disk until the next app start.
         next.Save(_path);
-        _config = next;
+        Config = next;
         Changed?.Invoke(this, new RegistryChangedEventArgs(kind, host));
     }
 }
