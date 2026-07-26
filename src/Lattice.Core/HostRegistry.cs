@@ -37,19 +37,33 @@ public sealed record RegistryChangedEventArgs(RegistryChangeKind Kind, HostConfi
 /// atomic — a reader sees either the whole old config or the whole new one, never a torn
 /// reference to neither.</description></item>
 /// <item><description>That assignment goes through <c>Volatile.Write</c> and every read
-/// through <c>Volatile.Read</c> (the <see cref="Config"/> accessor below), so a
-/// swap is not merely eventually visible: the release/acquire pair orders it against the
-/// reading thread. This is the leg <c>HostControlService</c>'s <b>I-CL2</b> rests on — "a
-/// config edit made between the user's click and execution wins" — and I-CL2 is a freshness
-/// claim, not a tearing claim, so atomicity alone would not have bought it. A lane turn that
-/// reads the registry after an edit sees that edit, rather than connecting with a superseded
-/// address or password.</description></item>
+/// through <c>Volatile.Read</c> (the <see cref="Config"/> accessor below), which is what makes
+/// the read well-defined against a concurrent writer: the JIT may not cache or reorder it, so
+/// each call genuinely re-reads the field rather than reusing a value it hoisted earlier.
+/// </description></item>
 /// </list>
 /// <para>
-/// Note what is still NOT promised, because I-CL2 does not need it: a lane turn that reads
-/// BEFORE a concurrent edit lands is simply an op that started first — an ordering outcome,
-/// not a stale read. Removal is the same shape from the other side, and the lane turn already
-/// handles losing that race (<c>HostRemovedException</c>).
+/// <b>What this does and does not give <c>HostControlService</c>'s I-CL2.</b> Be precise here,
+/// because the tempting over-claim is that the reader always observes the newest write. It does
+/// not, and no primitive would provide that — not <c>Volatile</c>, and not a lock: if an edit
+/// and a lane turn's read are genuinely concurrent, nothing orders them, since there is no
+/// happens-before edge between "the user finished editing" and "the queued turn started". A
+/// lock would add a total order over its own acquisitions; it would not make the lane turn
+/// acquire second.
+/// </para>
+/// <para>
+/// I-CL2 — "a config edit made between the user's click and execution wins" — is satisfied by
+/// READ PLACEMENT in program order, not by a memory barrier. The lane turn reads the registry
+/// inside the turn (<c>HostControlService.RunAfterAsync</c>), after awaiting its predecessor,
+/// instead of capturing a <see cref="HostConfig"/> at submission time and carrying it through
+/// the queue. Capturing early is the defect I-CL2 rules out, and it is a structural property of
+/// where the call sits. This field's job is only to make that late read a real read; the
+/// invariant is upheld by <c>HostControlService</c>, not here.
+/// </para>
+/// <para>
+/// So the residual case is not a stale read but an ordering outcome: a turn that reads before a
+/// concurrent edit lands is simply an op that started first. Removal is the same shape from the
+/// other side, and the turn already handles losing that race (<c>HostRemovedException</c>).
 /// </para>
 /// </summary>
 public sealed class HostRegistry
