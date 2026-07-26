@@ -150,31 +150,6 @@ public static class LoginItemPolicy
         && (processPath is null || !processPath.Contains("/.mount_", StringComparison.Ordinal));
 
     /// <summary>
-    /// Whether launchd has been told not to run our job, parsed from
-    /// <c>launchctl print-disabled gui/&lt;uid&gt;</c> (Codex P2, PR #188). macOS keeps this
-    /// state OUTSIDE the plist — Background Task Management leaves the file byte-identical
-    /// when the user switches the item off — so file content can never answer the question
-    /// "will this actually start at login". launchd can, and this parses its answer.
-    ///
-    /// <para>Lines look like <c>"com.example.job" =&gt; disabled</c>. An absent label means no
-    /// override, i.e. enabled. Pure, so the shape is pinned by tests rather than by whatever
-    /// the local machine happens to have in its override database.</para>
-    /// </summary>
-    public static bool IsDisabledInLaunchdOverrides(string printDisabledOutput, string label)
-    {
-        string needle = '"' + label + '"';
-        foreach (string rawLine in printDisabledOutput.Split('\n'))
-        {
-            string line = rawLine.Trim();
-            if (!line.StartsWith(needle, StringComparison.Ordinal))
-                continue;
-            // Labels are unique in the override list, so the first match settles it.
-            return line[needle.Length..].Trim() == "=> disabled";
-        }
-        return false;
-    }
-
-    /// <summary>
     /// Whether an EXISTING autostart entry has been switched off through the desktop's own
     /// startup-app settings (Codex P2, PR #188). GNOME's session tooling writes
     /// <c>X-GNOME-Autostart-enabled=false</c> and other desktops write <c>Hidden=true</c>,

@@ -28,10 +28,11 @@ public interface IStartupRegistration
     bool IsRegistered { get; }
 
     /// <summary>
-    /// The user asked for this, so it is authoritative: create or remove the record, and
-    /// CLEAR any OS-level disable when enabling — otherwise turning the toggle back on after
-    /// switching the item off in the OS's own settings would write a byte-identical record,
-    /// report success and change nothing (Codex P2, PR #188).
+    /// The user asked for this, so it is authoritative: create or remove the record. Where
+    /// the OS keeps its own opt-out INSIDE that record (Linux), rewriting our canonical
+    /// content is what clears it, so an explicit "on" undoes a desktop-level "off". Where the
+    /// OS keeps it elsewhere and unreadably (macOS BTM, Windows StartupApproved) we cannot,
+    /// and do not pretend to — see the factory's macOS arm.
     ///
     /// <para>Writing stays idempotent: an unchanged record is left alone, because macOS's
     /// Background Task Management notifies the user whenever a login item's record appears or
@@ -60,7 +61,6 @@ public sealed class FileStartupRegistration : IStartupRegistration
     private readonly string? _target;
     private readonly Func<string, bool, string> _render;
     private readonly Func<string, bool>? _isDisabledByOs;
-    private readonly Func<bool>? _clearOsDisable;
 
     /// <param name="path">Absolute path of the record file.</param>
     /// <param name="target">Executable to launch, or null when this launch has none.</param>
@@ -68,20 +68,16 @@ public sealed class FileStartupRegistration : IStartupRegistration
     /// <param name="isDisabledByOs">Given an existing record's content, reports whether the
     /// OS's own startup settings switched it off. Linux carries that state INSIDE the file
     /// (<see cref="LoginItemPolicy.IsAutostartDisabledByDesktop"/>); macOS keeps it outside
-    /// the plist, so its reader ignores the content it is handed and asks launchd
-    /// (<see cref="LaunchdOverrides"/>). Null means "nothing can switch it off but us".</param>
-    /// <param name="clearOsDisable">Undoes such an OS-level disable, for an explicit
-    /// <see cref="Apply"/>. Only platforms that keep the state OUTSIDE the record need one:
-    /// on Linux the flag lives in the file, so rewriting the file already clears it.</param>
+    /// the plist in a database we cannot read, so it passes null — see the factory's macOS
+    /// arm. Null means "nothing we can see switches it off but us".</param>
     public FileStartupRegistration(
         string path, string? target, Func<string, bool, string> render,
-        Func<string, bool>? isDisabledByOs = null, Func<bool>? clearOsDisable = null)
+        Func<string, bool>? isDisabledByOs = null)
     {
         _path = path;
         _target = target;
         _render = render;
         _isDisabledByOs = isDisabledByOs;
-        _clearOsDisable = clearOsDisable;
     }
 
     /// <summary>Exposed so a test can assert WHERE the platform factory decided to write.</summary>
@@ -121,12 +117,6 @@ public sealed class FileStartupRegistration : IStartupRegistration
                     File.Delete(_path);
                 return true;
             }
-
-            // Before the content check, never after: when the OS holds the disable outside
-            // the record, the content is already identical and the write below would be
-            // skipped, leaving the user unable to re-enable from Lattice at all.
-            if (_clearOsDisable is not null && !_clearOsDisable())
-                return false;
 
             return Write(startMinimized);
         }
@@ -251,99 +241,6 @@ public sealed class UnsupportedStartupRegistration : IStartupRegistration
     public bool Heal(bool startMinimized) => true; // nothing exists to repair
 }
 
-/// <summary>
-/// Asks launchd whether our job is switched off (Codex P2, PR #188). macOS records that
-/// choice outside the plist, so the file cannot answer it; <c>launchctl print-disabled</c>
-/// can, needs no root, and — unlike inferring from a UI's behaviour — answers the question
-/// that actually matters: will launchd run this at login.
-///
-/// <para>Every failure degrades to "not disabled", which is exactly the behaviour we had
-/// before this reader existed, so a launchctl that is missing, slow, or reformatted by a
-/// future macOS can only cost accuracy, never correctness.</para>
-/// </summary>
-internal static class LaunchdOverrides
-{
-    /// <summary>Hard ceiling on any launchctl call. This runs synchronously from the
-    /// composition root and from a UI-bound getter, so it must be bounded no matter how
-    /// launchd is behaving.</summary>
-    private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(2);
-
-    // DllImport, not the newer LibraryImport: the source-generated variant demands
-    // AllowUnsafeBlocks project-wide, which is far too big a lever for one uid lookup.
-    [System.Runtime.InteropServices.DllImport("libc")]
-    private static extern uint getuid();
-
-    /// <summary>Whether launchd has been told to skip our job.</summary>
-    public static bool IsDisabled(string label) =>
-        Run(out string output, "print-disabled", $"gui/{getuid()}")
-        && LoginItemPolicy.IsDisabledInLaunchdOverrides(output, label);
-
-    /// <summary>Clears a disabled override, so an explicit "on" in Lattice's own settings can
-    /// undo one made in the OS's settings. Without this, re-enabling would write a plist that
-    /// is already byte-identical, report success, and leave the job disabled (Codex P2).</summary>
-    public static bool Enable(string label) =>
-        Run(out _, "enable", $"gui/{getuid()}/{label}");
-
-    /// <summary>
-    /// Runs launchctl and returns whether it exited 0 within <see cref="Timeout"/>.
-    ///
-    /// <para>Output is drained through the ASYNCHRONOUS events rather than
-    /// <c>ReadToEnd()</c> (Codex P2, PR #188): a synchronous read blocks until the child
-    /// closes stdout, so a wedged launchctl would hang before the timed wait was ever
-    /// reached — freezing app startup or the Settings page despite the bound this method
-    /// claims. stderr is drained too, or a chatty child could fill that pipe and block
-    /// itself. The parameterless <c>WaitForExit</c> after a successful timed wait is the
-    /// documented way to be sure the async handlers have flushed.</para>
-    /// </summary>
-    private static bool Run(out string output, params string[] arguments)
-    {
-        output = string.Empty;
-        try
-        {
-            var psi = new ProcessStartInfo("/bin/launchctl")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            };
-            foreach (string argument in arguments)
-                psi.ArgumentList.Add(argument);
-
-            using Process? process = Process.Start(psi);
-            if (process is null)
-                return false;
-
-            var stdout = new StringBuilder();
-            process.OutputDataReceived += (_, e) =>
-            {
-                if (e.Data is not null)
-                    lock (stdout) stdout.AppendLine(e.Data);
-            };
-            process.ErrorDataReceived += (_, _) => { };
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-
-            if (!process.WaitForExit(Timeout))
-            {
-                process.Kill(entireProcessTree: true);
-                return false;
-            }
-            process.WaitForExit(); // flush the async handlers
-            lock (stdout) output = stdout.ToString();
-            return process.ExitCode == 0;
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
-            or PlatformNotSupportedException or IOException or ObjectDisposedException)
-        {
-            return false;
-        }
-    }
-}
-
-/// <summary>The two launchd operations the macOS registration needs, bundled so tests can
-/// substitute both without spawning anything.</summary>
-internal sealed record LaunchdControl(Func<bool> IsDisabled, Func<bool> Enable);
-
 /// <summary>Platform factory. The environment is read HERE and nowhere else, so
 /// <see cref="Create"/> stays a pure-input decision a test can drive for any platform.</summary>
 public static class StartupRegistration
@@ -354,32 +251,27 @@ public static class StartupRegistration
         Environment.GetEnvironmentVariable("APPIMAGE"),
         Environment.ProcessPath,
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
-        new LaunchdControl(
-            () => LaunchdOverrides.IsDisabled(LoginItemPolicy.LaunchAgentLabel),
-            () => LaunchdOverrides.Enable(LoginItemPolicy.LaunchAgentLabel)));
+        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"));
 
     /// <summary>Internal seam for tests: same decision, explicit inputs.</summary>
-    /// <param name="launchd">macOS only. Null — the default — means "never disabled, nothing
-    /// to clear", so a test never spawns launchctl and never depends on what this machine
-    /// happens to have in its override database. The composition root passes the real pair.</param>
     internal static IStartupRegistration Create(
         TrayPlatform platform, string? appImagePath, string? processPath,
-        string homeDirectory, string? xdgConfigHome, LaunchdControl? launchd = null)
+        string homeDirectory, string? xdgConfigHome)
     {
         string? target = LoginItemPolicy.ResolveTarget(appImagePath, processPath);
 #pragma warning disable CS8524 // Domain enum: CS8509 must stay live so a new TrayPlatform
         // member forces this mapping to be revisited. Same pattern as TrayResidencyDefaults.
         return platform switch
         {
-            // macOS: the opt-out is not in the file — Background Task Management leaves the
-            // plist byte-identical — so the reader ignores the content it is handed and asks
-            // launchd instead. The content parameter is part of the seam's shape, not of this
-            // platform's answer.
+            // macOS gets NO opt-out reader, and that is a measured limit rather than an
+            // oversight: switching a login item off in System Settings leaves the plist
+            // byte-identical AND leaves launchd's own override list reading "enabled"
+            // (verified on macOS 27 — the earlier launchctl-based reader was blind to it),
+            // while the Background Task Management database that does hold the answer is
+            // root-only. So the toggle can over-report here exactly as it can on Windows;
+            // both are recorded in README and on the #116 checklist.
             TrayPlatform.MacOS => new FileStartupRegistration(
-                LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist,
-                launchd is null ? null : _ => launchd.IsDisabled(),
-                launchd?.Enable),
+                LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist),
             TrayPlatform.Linux => new FileStartupRegistration(
                 LoginItemPolicy.AutostartPath(LoginItemPolicy.ConfigHome(xdgConfigHome, homeDirectory)),
                 target,

@@ -189,85 +189,6 @@ public class StartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void The_macos_factory_reads_the_opt_out_from_launchd_not_from_the_file()
-    {
-        // macOS keeps the disable outside the plist, so the file content is irrelevant both
-        // ways: a stray Linux-style line must not disable it, and launchd's answer must.
-        var enabled = (FileStartupRegistration)StartupRegistration.Create(
-            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
-            homeDirectory: _dir, xdgConfigHome: null,
-            launchd: new LaunchdControl(() => false, () => true));
-        Assert.True(enabled.Apply(enabled: true, startMinimized: false));
-        File.AppendAllText(enabled.Path, "Hidden=true\n");
-        Assert.True(enabled.IsRegistered);
-
-        var disabled = (FileStartupRegistration)StartupRegistration.Create(
-            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
-            homeDirectory: _dir, xdgConfigHome: null,
-            launchd: new LaunchdControl(() => true, () => true));
-        Assert.False(disabled.IsRegistered);
-    }
-
-    [Fact]
-    public void Turning_the_toggle_on_clears_an_OS_level_disable()
-    {
-        // The case that made this a bug: the plist is byte-identical, so the content fast path
-        // would report success and change nothing, leaving the user unable to re-enable from
-        // Lattice at all (Codex P2, PR #188). The clear must happen BEFORE that check.
-        bool disabled = true;
-        var reg = (FileStartupRegistration)StartupRegistration.Create(
-            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
-            homeDirectory: _dir, xdgConfigHome: null,
-            launchd: new LaunchdControl(() => disabled, () => { disabled = false; return true; }));
-
-        // Stage it: a record on disk that the OS has switched off.
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reg.Path)!);
-        File.WriteAllText(reg.Path, LoginItemPolicy.LaunchAgentPlist(
-            "/Applications/Lattice.app/Contents/MacOS/Lattice", false));
-        Assert.False(reg.IsRegistered);
-
-        Assert.True(reg.Apply(enabled: true, startMinimized: false));
-
-        Assert.False(disabled);
-        Assert.True(reg.IsRegistered);
-    }
-
-    [Fact]
-    public void An_enable_whose_disable_cannot_be_cleared_fails()
-    {
-        var reg = (FileStartupRegistration)StartupRegistration.Create(
-            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
-            homeDirectory: _dir, xdgConfigHome: null,
-            launchd: new LaunchdControl(() => true, () => false));
-
-        Assert.False(reg.Apply(enabled: true, startMinimized: false));
-        // Nothing written either: reporting success here would be the silent-no-op bug again.
-        Assert.False(File.Exists(reg.Path));
-    }
-
-    [Fact]
-    public void Healing_never_clears_an_OS_level_disable()
-    {
-        // The other direction of the same axis: a launch-time repair must not undo a choice
-        // the user made in the OS's settings, which is why Heal is a separate operation.
-        bool disabled = true;
-        bool cleared = false;
-        var reg = (FileStartupRegistration)StartupRegistration.Create(
-            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
-            homeDirectory: _dir, xdgConfigHome: null,
-            launchd: new LaunchdControl(() => disabled, () => { cleared = true; disabled = false; return true; }));
-        Directory.CreateDirectory(System.IO.Path.GetDirectoryName(reg.Path)!);
-        File.WriteAllText(reg.Path, LoginItemPolicy.LaunchAgentPlist("/old/stale/path/Lattice", false));
-
-        Assert.True(reg.Heal(startMinimized: false));
-
-        Assert.False(cleared);
-        Assert.True(disabled);
-        // …and the stale path is left as-is, because a disabled item is nothing to repair.
-        Assert.Contains("/old/stale/path/Lattice", File.ReadAllText(reg.Path));
-    }
-
-    [Fact]
     public void Healing_never_creates_a_record()
     {
         var reg = Make();
@@ -290,14 +211,20 @@ public class StartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void A_test_that_supplies_no_launchd_reader_never_spawns_one()
+    public void The_macos_factory_treats_presence_alone_as_registration()
     {
-        // The default must be hermetic: presence alone is registration, so the suite can never
-        // depend on what this machine happens to have in its launchd override database.
+        // A measured limit, not an oversight (owner-verified on macOS 27): switching a login
+        // item off in System Settings leaves the plist byte-identical AND leaves launchd's own
+        // override list reading "enabled", while the Background Task Management database that
+        // does hold the answer is root-only. So there is nothing macOS can be asked, and the
+        // toggle over-reports exactly as it does on Windows — recorded in README and #116.
         var reg = (FileStartupRegistration)StartupRegistration.Create(
             TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
             homeDirectory: _dir, xdgConfigHome: null);
         Assert.True(reg.Apply(enabled: true, startMinimized: false));
+
+        // Not even a Linux-style marker appended to the plist counts here.
+        File.AppendAllText(reg.Path, "Hidden=true\n");
 
         Assert.True(reg.IsRegistered);
     }

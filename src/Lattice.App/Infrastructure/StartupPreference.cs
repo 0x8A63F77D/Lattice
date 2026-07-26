@@ -31,9 +31,14 @@ public sealed class StartupPreference
     /// a ui-state save that failed after the record was written left the toggle contradicting
     /// the OS, and a user who switched the login item off in their desktop's own settings still
     /// read back "on". With the record as the sole source of truth those states cannot be
-    /// constructed. (It is also why <see cref="LoginItemPolicy"/>'s LaunchAgent choice matters:
-    /// SMAppService reports a user-disabled item as "not found", which would make this
-    /// derivation impossible.)
+    /// constructed.
+    ///
+    /// <para>It is the truth we can SEE, which is not always the whole truth: where the OS
+    /// records its own opt-out somewhere we cannot read (macOS's root-only Background Task
+    /// Management database, Windows' <c>StartupApproved</c> key) this reads "registered" for
+    /// an item the OS will skip. Only Linux writes that state into the record itself, so only
+    /// there is it visible. The limit is measured, documented in README and on the #116
+    /// checklist, and NOT papered over with a guess.</para>
     /// </summary>
     public bool StartAtLogin => _registration.IsRegistered;
 

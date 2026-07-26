@@ -287,47 +287,6 @@ public class LoginItemPolicyTests
             LoginItemPolicy.DesktopEntry("/opt/my 100%/Lattice", true).Split('\n'));
     }
 
-    // ---- launchd override state (Codex P2, PR #188) ------------------------
-
-    // Real `launchctl print-disabled gui/<uid>` output, captured on this machine.
-    private const string PrintDisabledSample = """
-
-        	disabled services = {
-        		"com.apple.ManagedClientAgent.enrollagent" => disabled
-        		"io.github.0x8a63f77d.lattice" => disabled
-        		"com.example.other" => enabled
-        	}
-        """;
-
-    [Fact]
-    public void A_label_listed_as_disabled_is_recognised()
-    {
-        Assert.True(LoginItemPolicy.IsDisabledInLaunchdOverrides(
-            PrintDisabledSample, "io.github.0x8a63f77d.lattice"));
-    }
-
-    [Fact]
-    public void A_label_listed_as_enabled_is_not_disabled()
-    {
-        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "com.example.other"));
-    }
-
-    [Fact]
-    public void A_label_with_no_override_at_all_is_not_disabled()
-    {
-        // The common case: no entry means no override, i.e. launchd will run it.
-        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "com.example.absent"));
-        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides("", "io.github.0x8a63f77d.lattice"));
-    }
-
-    [Fact]
-    public void A_label_that_is_only_a_prefix_of_another_is_not_matched()
-    {
-        // "io.github.0x8a63f77d" must not pick up "io.github.0x8a63f77d.lattice"; the quotes
-        // in the needle are what make the match exact.
-        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "io.github.0x8a63f77d"));
-    }
-
     // ---- Windows Run value -------------------------------------------------
 
     [Fact]
