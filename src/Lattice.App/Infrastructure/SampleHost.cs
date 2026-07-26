@@ -63,6 +63,21 @@ internal static class SampleHost
 
     public static bool Ticking => IsTruthy(Environment.GetEnvironmentVariable(TickEnvVar));
 
+    /// <summary>
+    /// Opt-in DEBUG aid (set to 1/true/yes/on ALONGSIDE <see cref="EnvVar"/>): adds a FOURTH
+    /// sample host carrying eleven projects. More than ten is the only shape in which two
+    /// projects prefer the same Statistics palette slot (issue #171), and the three walkthrough
+    /// hosts carry three projects between them, so without this the contended-slot path cannot
+    /// be reached in the running app at all.
+    /// <para>Behind its own flag rather than in the default fleet on purpose: the three-host
+    /// aggregation walkthrough is built around exactly three shared projects (Varies share,
+    /// mixed status tier), and eleven more single-host parents would drown that Projects-page
+    /// demo. Off by default, so the fleet's shape is unchanged.</para>
+    /// </summary>
+    public const string ManyProjectsEnvVar = "LATTICE_SAMPLE_MANY_PROJECTS";
+
+    public static bool ManyProjects => IsTruthy(Environment.GetEnvironmentVariable(ManyProjectsEnvVar));
+
     /// <summary>Per-poll progress step for the live-progress aid (fraction of the whole).</summary>
     private const double TickStep = 0.08;
 
@@ -102,12 +117,14 @@ internal static class SampleHost
     private static readonly Guid AlphaId = new("5a3f0001-0000-4000-8000-000000000001");
     private static readonly Guid BetaId = new("5a3f0002-0000-4000-8000-000000000002");
     private static readonly Guid GammaId = new("5a3f0003-0000-4000-8000-000000000003");
+    private static readonly Guid DeltaId = new("5a3f0004-0000-4000-8000-000000000004");
 
     // Sentinel addresses: the routing client matches on these to serve canned
     // data; any other address falls through to the real BOINC client.
     private const string AlphaAddress = "sample-alpha";
     private const string BetaAddress = "sample-beta";
     private const string GammaAddress = "sample-gamma";
+    private const string DeltaAddress = "sample-delta";
 
     private const string EinsteinUrl = "https://einstein.phys.uwm.edu/";
     private const string RosettaUrl = "https://boinc.bakerlab.org/rosetta/";
@@ -133,7 +150,7 @@ internal static class SampleHost
     public static (HostRegistry Registry, Func<IGuiRpcClient> Factory) Compose(
         HostRegistry real, Func<IGuiRpcClient> realFactory, DateTimeOffset now)
     {
-        IReadOnlyList<SampleHostData> fleet = BuildHosts(now);
+        IReadOnlyList<SampleHostData> fleet = BuildHosts(now, ManyProjects);
         Dictionary<string, SampleHostData> byAddress = fleet.ToDictionary(h => h.Config.Address);
 
         var merged = new LatticeConfig(
@@ -150,13 +167,15 @@ internal static class SampleHost
     /// The canned fleet, resolved against <paramref name="now"/> so retry
     /// countdowns land in the future for both the live clock (real app) and the
     /// fixture's frozen clock (headless test). Pure — same input, same output.
+    /// <para><paramref name="includeManyProjects"/> appends the eleven-project host
+    /// (see <see cref="ManyProjectsEnvVar"/>). Passed explicitly rather than read from the
+    /// environment here so tests can build either fleet deterministically, without mutating
+    /// process-global state.</para>
     /// </summary>
-    public static IReadOnlyList<SampleHostData> BuildHosts(DateTimeOffset now) =>
-    [
-        Alpha(now),
-        Beta(now),
-        Gamma(now),
-    ];
+    public static IReadOnlyList<SampleHostData> BuildHosts(DateTimeOffset now, bool includeManyProjects = false) =>
+        includeManyProjects
+            ? [Alpha(now), Beta(now), Gamma(now), Delta(now)]
+            : [Alpha(now), Beta(now), Gamma(now)];
 
     // ---- Hosts -------------------------------------------------------------
 
@@ -322,6 +341,88 @@ internal static class SampleHost
         };
     }
 
+    // Delta's eleven projects, in daemon-list order — the index IS the ordinal, which is the
+    // palette slot a series PREFERS when it goes on the chart. RAC is chosen so the §4
+    // default-visible top six are ordinals 0-4 and 10: SiDock@home (ordinal 10) prefers slot
+    // 0, which World Community Grid (ordinal 0) already holds. That pair IS the issue #171
+    // case — under the old colour-by-ordinal model both lines painted cornflower.
+    // Scale spreads the eleven credit ramps apart so the six visible lines read separately.
+    private static readonly (string Url, string Name, double Rac, double Scale)[] DeltaProjects =
+    [
+        ("https://www.worldcommunitygrid.org/", "World Community Grid", 1_200, 11),
+        ("https://www.primegrid.com/", "PrimeGrid", 1_100, 10),
+        ("https://milkyway.cs.rpi.edu/milkyway/", "Milkyway@home", 1_000, 9),
+        ("https://asteroidsathome.net/boinc/", "Asteroids@home", 900, 8),
+        ("https://universeathome.pl/universe/", "Universe@Home", 800, 7),
+        ("https://numberfields.asu.edu/NumberFields/", "NumberFields@home", 40, 6),
+        ("https://sech.me/boinc/Amicable/", "Amicable Numbers", 35, 5),
+        ("https://www.rechenkraft.net/yoyo/", "yoyo@home", 30, 4),
+        ("https://www.cosmologyathome.org/", "Cosmology@Home", 25, 3),
+        ("https://gene.disi.unitn.it/test/", "TN-Grid", 20, 2),
+        ("https://www.sidock.si/sidock/", "SiDock@home", 700, 1),
+    ];
+
+    // Delta: the ELEVEN-project host, opt-in via LATTICE_SAMPLE_MANY_PROJECTS. It exists for
+    // one surface — the Statistics page's palette. With eleven projects two of them prefer the
+    // same slot, and Delta's RACs put exactly that pair in the default-visible six, so the
+    // owner can see (and click) what the three walkthrough hosts can never show: six visible
+    // lines in six colours, chips that keep their colour when other chips are toggled, and a
+    // hidden chip that holds no colour at all. Its projects are its own — none shared with
+    // Alpha/Beta/Gamma — so it adds no legs to their aggregation demo.
+    private static SampleHostData Delta(DateTimeOffset now)
+    {
+        List<Project> projects =
+            [.. DeltaProjects.Select(p => ProjectOf(p.Url, p.Name, share: 100, rac: p.Rac))];
+
+        // A modest task/transfer load on the top two projects: enough that the host does not
+        // read as dead in the rail, far too little to disturb the 500-row virtualization demo.
+        List<Result> results =
+        [
+            .. Tasks(DeltaProjects[0].Url, "wu_wcg", "delta", 12, now),
+            .. Tasks(DeltaProjects[1].Url, "wu_primegrid", "delta", 8, now),
+        ];
+
+        List<FileTransfer> transfers =
+        [
+            Xfer("mcm1_x0042.zip", DeltaProjects[0].Url, DeltaProjects[0].Name, TransferKind.Active, up: false, now, fraction: 0.35, speed: 260_000),
+        ];
+
+        var state = new CcState(
+            new VersionInfo(8, 2, 11),
+            HostInfoOf("sample-delta.local", "Linux Xeon E5"),
+            projects,
+            [AppOf("mcm1", "Mapping Cancer Markers"),
+             AppOf("llr", "LLR prime search")],
+            [],
+            [WorkunitOf("wu_wcg", "mcm1"),
+             WorkunitOf("wu_primegrid", "llr")],
+            results);
+
+        List<Message> messages =
+        [
+            Msg(DeltaProjects[0].Name, MessagePriority.Info, 1, now.AddMinutes(-25), "Sending scheduler request: to fetch work"),
+            Msg(DeltaProjects[10].Name, MessagePriority.Info, 2, now.AddMinutes(-6), "Computation for task sidock_ab12 finished"),
+        ];
+
+        return new SampleHostData(
+            new HostConfig(DeltaId, "Sample · Delta", DeltaAddress, 31416, "sample"),
+            state, RunningStatus, results, transfers, messages)
+        {
+            // One 9-point history per project — the marker state, and the same depth as the
+            // §2 reference render. All eleven carry history, so the "+5 more" overflow flyout
+            // has real rows to check and uncheck against the ≤6 cap.
+            Statistics =
+            [
+                .. DeltaProjects.Select(p => History(
+                    p.Url, now, 9,
+                    utBase: 300_000 * p.Scale, utStep: 22_000 * p.Scale,
+                    uaBase: 90 * p.Scale,
+                    htBase: 60_000 * p.Scale, htStep: 4_400 * p.Scale,
+                    haBase: 20 * p.Scale)),
+            ],
+        };
+    }
+
     // ---- Builders ----------------------------------------------------------
 
     private static readonly CcStatus RunningStatus = new(
@@ -360,11 +461,15 @@ internal static class SampleHost
         ]);
     }
 
+    // `rac` is the per-host running average (HostExpavgCredit) — the value §4 ranks the
+    // Statistics legend by, hence a parameter on the many-project host where the ranking
+    // decides which series are visible; the walkthrough hosts keep the shared default.
     private static Project ProjectOf(
-        string url, string name, double share, bool suspended = false, bool noNewTasks = false) =>
+        string url, string name, double share, bool suspended = false, bool noNewTasks = false,
+        double rac = 640) =>
         new(url, name,
             UserTotalCredit: 4_200_000, UserExpavgCredit: 1_850,
-            HostTotalCredit: 512_000, HostExpavgCredit: 640,
+            HostTotalCredit: 512_000, HostExpavgCredit: rac,
             ResourceShare: share, SuspendedViaGui: suspended, DontRequestMoreWork: noNewTasks);
 
     private static BoincApp AppOf(string name, string friendly) => new(name, friendly);

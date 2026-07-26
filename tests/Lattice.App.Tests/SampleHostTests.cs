@@ -1,4 +1,5 @@
 #if DEBUG
+using Avalonia.Media;
 using Lattice.App.Infrastructure;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
@@ -39,19 +40,23 @@ public class SampleHostTests : IAsyncLifetime
     private void SeedFleet()
     {
         foreach (SampleHostData data in SampleHost.BuildHosts(_fx.MonitorTime.GetUtcNow()))
+            Seed(data);
+    }
+
+    private void Seed(SampleHostData data)
+    {
+        var fake = new FakeGuiRpcClient
         {
-            var fake = new FakeGuiRpcClient
-            {
-                OnExchangeVersions = () => Task.FromResult(data.State.CoreClientVersion),
-                OnGetState = () => Task.FromResult(data.State),
-                OnGetCcStatus = () => Task.FromResult(data.Status),
-                OnGetResults = _ => Task.FromResult(data.Results),
-                OnGetFileTransfers = () => Task.FromResult(data.Transfers),
-                OnGetMessages = seqno =>
-                    Task.FromResult<IReadOnlyList<Message>>([.. data.Messages.Where(m => m.Seqno > seqno)]),
-            };
-            _fx.AddHost(data.Config.Address, fake, name: data.Config.Name);
-        }
+            OnExchangeVersions = () => Task.FromResult(data.State.CoreClientVersion),
+            OnGetState = () => Task.FromResult(data.State),
+            OnGetCcStatus = () => Task.FromResult(data.Status),
+            OnGetResults = _ => Task.FromResult(data.Results),
+            OnGetFileTransfers = () => Task.FromResult(data.Transfers),
+            OnGetMessages = seqno =>
+                Task.FromResult<IReadOnlyList<Message>>([.. data.Messages.Where(m => m.Seqno > seqno)]),
+            OnGetStatistics = () => Task.FromResult(data.Statistics),
+        };
+        _fx.AddHost(data.Config.Address, fake, name: data.Config.Name);
     }
 
     [Fact]
@@ -106,5 +111,44 @@ public class SampleHostTests : IAsyncLifetime
         Assert.False(einstein.Data.ShowShareBar, "a Varies share renders the range text, not a uniform bar");
         Assert.Equal(ProjectStatusKind.Mixed, einstein.Data.StatusKind);
     }
+    // ---- the opt-in eleven-project host (issue #171) ----------------------
+
+    [Fact]
+    public void The_walkthrough_fleet_is_unchanged_by_the_many_project_host()
+    {
+        // It is behind its own flag precisely so the three-host aggregation demo keeps its
+        // exact project set; this pins that the default fleet never gains a fourth host.
+        var now = _fx.MonitorTime.GetUtcNow();
+        Assert.Equal(3, SampleHost.BuildHosts(now).Count);
+        Assert.DoesNotContain(SampleHost.BuildHosts(now), h => h.Config.Name == "Sample · Delta");
+        Assert.Equal(4, SampleHost.BuildHosts(now, includeManyProjects: true).Count);
+    }
+
+    [Fact]
+    public async Task The_eleven_project_host_gives_every_visible_series_its_own_colour()
+    {
+        // The reason this host exists: past ten projects two of them prefer the same palette
+        // slot, and Delta's RACs put exactly that pair — World Community Grid (ordinal 0) and
+        // SiDock@home (ordinal 10) — in the default-visible six. The old colour-by-ordinal
+        // model painted both cornflower; every visible series now holds its own slot.
+        SampleHostData delta = SampleHost.BuildHosts(_fx.MonitorTime.GetUtcNow(), includeManyProjects: true)[^1];
+        Seed(delta);
+        var vm = new StatisticsViewModel(_fx.Store, _fx.Clock);
+        _fx.Start();
+
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6, "the eleven-project host caps its legend at six chips");
+
+        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(c => c.Ordinal));
+        Assert.Equal("World Community Grid", vm.Chips[0].Name);
+        Assert.Equal("SiDock@home", vm.Chips[^1].Name);
+
+        var swatches = vm.Chips.Select(c => ((SolidColorBrush)c.Swatch!).Color).ToList();
+        Assert.Equal(6, swatches.Distinct().Count());
+
+        // Five projects left over → the "+5 more" flyout has real rows to click.
+        Assert.Equal(5, vm.Overflow.Count);
+        vm.Dispose();
+    }
+
 }
 #endif
