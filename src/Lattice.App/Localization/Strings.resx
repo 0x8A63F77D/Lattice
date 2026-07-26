@@ -434,6 +434,27 @@
   <data name="SettingsFullSpeedHiddenDescription" xml:space="preserve">
     <value>When off, hidden-window polling is floored at 30 seconds to save battery.</value>
   </data>
+  <data name="SettingsStartupSection" xml:space="preserve">
+    <value>Startup</value>
+  </data>
+  <data name="SettingsStartAtLoginLabel" xml:space="preserve">
+    <value>Start Lattice at login</value>
+  </data>
+  <data name="SettingsStartAtLoginDescription" xml:space="preserve">
+    <value>When on, Lattice is registered with your desktop session so it starts automatically after you sign in. The registration points at the copy you are running now and is refreshed on every launch, so moving or updating the app repairs it.</value>
+  </data>
+  <data name="SettingsStartMinimizedLabel" xml:space="preserve">
+    <value>Start minimized to the tray</value>
+  </data>
+  <data name="SettingsStartMinimizedDescription" xml:space="preserve">
+    <value>Applies to the login start only: Lattice comes up with no window, monitoring already running, and you open it from the tray. Starting Lattice by hand always shows the window.</value>
+  </data>
+  <data name="SettingsStartupUnsupported" xml:space="preserve">
+    <value>This build cannot register itself: it was started through the .NET host rather than as the Lattice executable. Run the packaged app to use these settings.</value>
+  </data>
+  <data name="SettingsStartupSaveFailed" xml:space="preserve">
+    <value>Saving the login-startup setting failed; it was left unchanged.</value>
+  </data>
   <data name="TrayShowWindow" xml:space="preserve">
     <value>Show window</value>
   </data>

@@ -91,6 +91,32 @@
         </ui:FASettingsExpander.Footer>
       </ui:FASettingsExpander>
 
+      <TextBlock Text="{x:Static loc:Strings.SettingsStartupSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <ui:FASettingsExpander x:Name="StartAtLoginExpander"
+                             Header="{x:Static loc:Strings.SettingsStartAtLoginLabel}"
+                             Description="{x:Static loc:Strings.SettingsStartAtLoginDescription}"
+                             IsEnabled="{Binding CanStartAtLogin}">
+        <ui:FASettingsExpander.Footer>
+          <ToggleSwitch IsChecked="{Binding StartAtLogin, Mode=TwoWay}" />
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+      <ui:FASettingsExpander x:Name="StartMinimizedExpander"
+                             Header="{x:Static loc:Strings.SettingsStartMinimizedLabel}"
+                             Description="{x:Static loc:Strings.SettingsStartMinimizedDescription}"
+                             IsEnabled="{Binding CanStartAtLogin}">
+        <ui:FASettingsExpander.Footer>
+          <ToggleSwitch IsChecked="{Binding StartMinimized, Mode=TwoWay}" />
+        </ui:FASettingsExpander.Footer>
+      </ui:FASettingsExpander>
+      <!-- Why the toggles are greyed out, shown only when they are (a dotnet-host run). -->
+      <TextBlock Text="{x:Static loc:Strings.SettingsStartupUnsupported}" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding !CanStartAtLogin}"
+                 Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
+      <TextBlock Text="{Binding StartupError}" FontSize="12" TextWrapping="Wrap"
+                 IsVisible="{Binding StartupError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource LatticeDangerFgBrush}" />
+
       <TextBlock Text="{x:Static loc:Strings.SettingsAboutSection}" FontSize="11" FontWeight="SemiBold" Margin="0,8,0,0"
                  Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
       <!-- Label + version share ONE TextBlock (inline Runs) so they sit on a single text

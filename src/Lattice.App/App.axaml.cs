@@ -55,7 +55,15 @@ public partial class App : Application
             var store = new HostStore(registry, manager, AvaloniaUiDispatcher.Instance);
             var clock = new DispatcherUiClock();
             var uiState = new UiStateStore();
-            var shell = new ShellViewModel(registry, store, clock, uiState, factory, () => RestartApp(desktop));
+            // Start-at-login (#187): the platform seam is resolved once, here, from the running
+            // process — everything below it is pure policy over explicit inputs.
+            var startup = new StartupPreference(uiState, StartupRegistration.ForCurrentPlatform());
+            // Path self-heal: while the toggle is on, rewrite the OS record to point at the
+            // binary that is actually running, so a moved/updated app repairs its own
+            // registration. Idempotent — an unchanged record is left untouched, which is what
+            // keeps macOS's "background item added" notification from firing on every boot.
+            startup.SyncOnLaunch();
+            var shell = new ShellViewModel(registry, store, clock, uiState, factory, () => RestartApp(desktop), startup);
             // Apply the persisted theme once, here at the composition root on the UI thread
             // (#101). ThemePreference construction is pure by design — it never touches the
             // UI-thread-affine Application.Current.RequestedThemeVariant — so this explicit
@@ -68,7 +76,20 @@ public partial class App : Application
             // seam), so the store rides an inherited attached property set once
             // on the window and resolved on every descendant grid at attach.
             ColumnWidthScope.SetStore(shellWindow, uiState);
-            desktop.MainWindow = shellWindow;
+
+            // Start minimized to tray (#187). Avalonia's classic desktop lifetime shows
+            // whatever MainWindow holds — StartCore() calls ShowMainWindow() -> MainWindow?.Show()
+            // AFTER this method returns — so the way to come up with no window is simply to
+            // leave MainWindow unassigned. Nothing else in the app reads it (dialogs resolve
+            // their owner via TopLevel.GetTopLevel), the tray controller already holds the
+            // window reference, and ShutdownMode is OnExplicitShutdown, so a window-less start
+            // is a fully live app: tray icon, monitors and the activation guard all run. It is
+            // NOT a persisted preference — only the login registration passes --minimized, so
+            // launching Lattice by hand always shows the window.
+            if (LoginItemPolicy.StartsHidden(desktop.Args))
+                manager.SetWindowVisible(false); // hidden-window cadence floor from the first tick
+            else
+                desktop.MainWindow = shellWindow;
 
             // Tray residency (#92): the controller owns the TrayIcon, hide/show/exit
             // funnels, and switches the app to OnExplicitShutdown. Code-constructed here

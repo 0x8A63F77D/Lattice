@@ -366,6 +366,23 @@ public class UiStateStoreTests
         Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
         Assert.Equal(AppTheme.System, loaded.Theme);
         Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
+        // #187: a file written before the start-at-login pair existed must load as opt-OUT.
+        Assert.False(loaded.StartAtLogin);
+        Assert.False(loaded.StartMinimized);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void Startup_preferences_round_trip()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        var store = new UiStateStore(path);
+        store.Update(s => s with { StartAtLogin = true, StartMinimized = true });
+
+        UiState loaded = new UiStateStore(path).Load();
+
+        Assert.True(loaded.StartAtLogin);
+        Assert.True(loaded.StartMinimized);
         File.Delete(path);
     }
 }

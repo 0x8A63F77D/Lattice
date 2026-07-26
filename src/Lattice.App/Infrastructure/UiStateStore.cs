@@ -146,7 +146,13 @@ public sealed record UiState(
     bool? ExitOnClose = null,
     // UI language (#147). Appended LAST with a default: a pre-#147 ui-state.json
     // (JSON-missing "language") loads as System — follow the OS — with no migration.
-    AppLanguage Language = AppLanguage.System)
+    AppLanguage Language = AppLanguage.System,
+    // Start-at-login pair (#187). Both default FALSE and are opt-in: an app that adds
+    // itself to a user's login items uninvited is malware behaviour, and the platform
+    // record is only ever written after the user flips the toggle. Appended LAST with
+    // defaults, so every pre-#187 ui-state.json loads unchanged.
+    bool StartAtLogin = false,
+    bool StartMinimized = false)
 {
     /// <summary>Factory default: standard density, all columns visible, auto widths.
     /// Fresh instance per call — the dictionaries are mutable, so a shared

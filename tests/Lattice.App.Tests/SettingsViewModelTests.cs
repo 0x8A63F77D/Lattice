@@ -16,13 +16,16 @@ public class SettingsViewModelTests : IAsyncLifetime
     private HostMonitorManager _manager = null!;
     private SettingsViewModel _settings = null!;
     private UiStateStore _uiStore = null!;
+    private readonly FakeStartupRegistration _startupRegistration = new();
 
     public ValueTask InitializeAsync()
     {
         _registry = new HostRegistry(new LatticeConfig(5, []), _path);
         _manager = new HostMonitorManager(_registry, () => new FakeGuiRpcClient(), new FakeTimeProvider());
         _uiStore = new UiStateStore(_uiPath);
-        _settings = new SettingsViewModel(_registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), new LanguagePreference(_uiStore), _uiStore);
+        _settings = new SettingsViewModel(
+            _registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), new LanguagePreference(_uiStore),
+            _uiStore, restart: null, startup: new StartupPreference(_uiStore, _startupRegistration));
         return ValueTask.CompletedTask;
     }
 
@@ -60,6 +63,74 @@ public class SettingsViewModelTests : IAsyncLifetime
         _settings.CloseToTray = false;  // "exit on close" ⇒ ExitOnClose = true
         Assert.True(_uiStore.Load().ExitOnClose);
         Assert.False(_settings.CloseToTray);
+    }
+
+    [Fact]
+    public void Startup_toggles_default_off_and_are_available_when_the_platform_supports_them()
+    {
+        Assert.False(_settings.StartAtLogin);
+        Assert.False(_settings.StartMinimized);
+        Assert.True(_settings.CanStartAtLogin);
+        Assert.Null(_settings.StartupError);
+    }
+
+    [Fact]
+    public void StartAtLogin_registers_and_persists()
+    {
+        _settings.StartAtLogin = true;
+
+        Assert.Equal([(true, false)], _startupRegistration.Calls);
+        Assert.True(_uiStore.Load().StartAtLogin);
+        Assert.True(_settings.StartAtLogin);
+        Assert.Null(_settings.StartupError);
+    }
+
+    [Fact]
+    public void StartMinimized_rewrites_a_live_registration()
+    {
+        _settings.StartAtLogin = true;
+        _startupRegistration.Calls.Clear();
+
+        _settings.StartMinimized = true;
+
+        Assert.Equal([(true, true)], _startupRegistration.Calls);
+        Assert.True(_uiStore.Load().StartMinimized);
+    }
+
+    [Fact]
+    public void A_failed_registration_surfaces_an_error_and_snaps_the_toggle_back()
+    {
+        _startupRegistration.Fails = true;
+
+        _settings.StartAtLogin = true;
+
+        Assert.NotNull(_settings.StartupError);
+        Assert.False(_settings.StartAtLogin);        // the bound switch reads the stored value back
+        Assert.False(_uiStore.Load().StartAtLogin);
+    }
+
+    [Fact]
+    public void An_unregistrable_launch_disables_the_toggles()
+    {
+        var vm = new SettingsViewModel(
+            _registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), new LanguagePreference(_uiStore),
+            _uiStore, restart: null, startup: new StartupPreference(_uiStore, new UnsupportedStartupRegistration()));
+
+        Assert.False(vm.CanStartAtLogin);
+    }
+
+    [Fact]
+    public void Omitting_the_startup_owner_yields_disabled_toggles_rather_than_a_real_registration()
+    {
+        // The headless/composition-free path: a suite that forgets to inject must never end up
+        // writing a login item onto the machine running it.
+        var vm = new SettingsViewModel(
+            _registry, () => new FakeGuiRpcClient(), new ThemePreference(_uiStore), new LanguagePreference(_uiStore), _uiStore);
+
+        Assert.False(vm.CanStartAtLogin);
+        vm.StartAtLogin = true;
+        Assert.NotNull(vm.StartupError);
+        Assert.False(vm.StartAtLogin);
     }
 
     [Fact]

@@ -1,0 +1,155 @@
+using Lattice.App.Infrastructure;
+using Xunit;
+
+namespace Lattice.App.Tests;
+
+/// <summary>
+/// The I/O half of start-at-login (issue #187). The file-backed registration serves both macOS
+/// and Linux, so it is exercised against a real temp directory — the honest test for a writer
+/// whose whole job is "is the right file at the right path with the right bytes".
+/// </summary>
+public class StartupRegistrationTests : IDisposable
+{
+    private readonly string _dir = Path.Combine(Path.GetTempPath(), $"lattice-test-{Guid.NewGuid():N}");
+
+    private string RecordPath => Path.Combine(_dir, "nested", "io.github.0x8a63f77d.lattice.plist");
+
+    private FileStartupRegistration Make(string? target = "/Applications/Lattice.app/Contents/MacOS/Lattice") =>
+        new(RecordPath, target, LoginItemPolicy.LaunchAgentPlist);
+
+    public void Dispose()
+    {
+        if (Directory.Exists(_dir))
+            Directory.Delete(_dir, recursive: true);
+    }
+
+    [Fact]
+    public void Enabling_creates_the_record_with_the_rendered_content()
+    {
+        var reg = Make();
+        Assert.True(reg.IsSupported);
+        Assert.False(reg.IsRegistered);
+
+        Assert.True(reg.Apply(enabled: true, startMinimized: false));
+
+        Assert.True(reg.IsRegistered);
+        // The parent directory did not exist — creating it is part of registering.
+        Assert.Equal(
+            LoginItemPolicy.LaunchAgentPlist("/Applications/Lattice.app/Contents/MacOS/Lattice", false),
+            File.ReadAllText(RecordPath));
+    }
+
+    [Fact]
+    public void Re_applying_an_unchanged_record_does_not_rewrite_the_file()
+    {
+        // This is the guard that keeps the launch-time self-heal from re-firing macOS's
+        // "background item added" notification on every boot. Asserted on the write time
+        // rather than the clock: back-date the file, re-apply, and it must not move.
+        var reg = Make();
+        Assert.True(reg.Apply(enabled: true, startMinimized: true));
+        var backdated = new DateTime(2001, 2, 3, 4, 5, 6, DateTimeKind.Utc);
+        File.SetLastWriteTimeUtc(RecordPath, backdated);
+
+        Assert.True(reg.Apply(enabled: true, startMinimized: true));
+
+        Assert.Equal(backdated, File.GetLastWriteTimeUtc(RecordPath));
+    }
+
+    [Fact]
+    public void Changing_the_minimized_flag_rewrites_the_record()
+    {
+        var reg = Make();
+        reg.Apply(enabled: true, startMinimized: false);
+        Assert.DoesNotContain("--minimized", File.ReadAllText(RecordPath));
+
+        Assert.True(reg.Apply(enabled: true, startMinimized: true));
+
+        Assert.Contains("--minimized", File.ReadAllText(RecordPath));
+    }
+
+    [Fact]
+    public void A_stale_path_heals_on_the_next_apply()
+    {
+        // What a moved or updated app leaves behind: a record naming a binary that is gone.
+        Directory.CreateDirectory(Path.GetDirectoryName(RecordPath)!);
+        File.WriteAllText(RecordPath, LoginItemPolicy.LaunchAgentPlist("/old/gone/Lattice", false));
+
+        Assert.True(Make().Apply(enabled: true, startMinimized: false));
+
+        string healed = File.ReadAllText(RecordPath);
+        Assert.Contains("/Applications/Lattice.app/Contents/MacOS/Lattice", healed);
+        Assert.DoesNotContain("/old/gone/Lattice", healed);
+    }
+
+    [Fact]
+    public void Disabling_removes_the_record_and_is_idempotent()
+    {
+        var reg = Make();
+        reg.Apply(enabled: true, startMinimized: false);
+
+        Assert.True(reg.Apply(enabled: false, startMinimized: false));
+        Assert.False(reg.IsRegistered);
+        Assert.False(File.Exists(RecordPath));
+
+        // Nothing to remove is still success — the requested state holds.
+        Assert.True(reg.Apply(enabled: false, startMinimized: false));
+    }
+
+    [Fact]
+    public void Without_a_target_enabling_fails_and_writes_nothing()
+    {
+        var reg = Make(target: null);
+
+        Assert.False(reg.IsSupported);
+        Assert.False(reg.Apply(enabled: true, startMinimized: false));
+        Assert.False(File.Exists(RecordPath));
+        // Disabling still works: there is nothing to remove, which is the requested state.
+        Assert.True(reg.Apply(enabled: false, startMinimized: false));
+    }
+
+    [Fact]
+    public void An_unwritable_location_degrades_to_failure_instead_of_throwing()
+    {
+        // A file where the record's parent directory should be: Linux boxes with no config
+        // dir, read-only homes and sandboxes all land here. Must never escape as an exception.
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, "nested"), "not a directory");
+
+        Assert.False(Make().Apply(enabled: true, startMinimized: false));
+    }
+
+    // ---- Platform factory --------------------------------------------------
+
+    [Fact]
+    public void MacOS_registers_a_LaunchAgent_plist_in_the_users_home()
+    {
+        var reg = Assert.IsType<FileStartupRegistration>(StartupRegistration.Create(
+            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
+            homeDirectory: "/Users/u", xdgConfigHome: null));
+
+        Assert.Equal(LoginItemPolicy.LaunchAgentPath("/Users/u"), reg.Path);
+        Assert.True(reg.IsSupported);
+    }
+
+    [Fact]
+    public void Linux_registers_an_autostart_desktop_entry_under_the_config_home()
+    {
+        var reg = Assert.IsType<FileStartupRegistration>(StartupRegistration.Create(
+            TrayPlatform.Linux, appImagePath: "/home/u/Lattice.AppImage", processPath: "/tmp/.mount_x/Lattice",
+            homeDirectory: "/home/u", xdgConfigHome: "/home/u/cfg"));
+
+        Assert.Equal(LoginItemPolicy.AutostartPath("/home/u/cfg"), reg.Path);
+    }
+
+    [Fact]
+    public void A_dotnet_host_launch_yields_an_unsupported_registration_on_every_platform()
+    {
+        foreach (TrayPlatform platform in Enum.GetValues<TrayPlatform>())
+        {
+            IStartupRegistration reg = StartupRegistration.Create(
+                platform, appImagePath: null, processPath: "/usr/local/share/dotnet/dotnet",
+                homeDirectory: "/home/u", xdgConfigHome: null);
+            Assert.False(reg.IsSupported);
+        }
+    }
+}
