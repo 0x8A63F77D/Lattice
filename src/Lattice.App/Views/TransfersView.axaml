@@ -155,7 +155,11 @@
                                    SortMemberPath="Data.UiState">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TransferRow">
-                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <!-- UseLayoutRounding=False: the capAligned label below carries a fractional
+                     collapse margin, and rounding either child's arrange rect back to whole pixels
+                     re-separates the pair (#180). Set here so the ICON inherits it too. -->
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                            UseLayoutRounding="False">
                   <Panel Width="12" Height="12">
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconArrowSyncRegular}"
                               Foreground="{DynamicResource LatticeSuccessBrush}"
@@ -167,7 +171,10 @@
                               Foreground="{DynamicResource LatticeNeutralFgBrush}"
                               IsVisible="{Binding Data.UiState, Converter={x:Static views:EnumMatchConverter.Instance}, ConverterParameter=Queued}" />
                   </Panel>
-                  <TextBlock Text="{Binding Data.StatusText}" FontSize="12"
+                  <!-- capAligned: icon centred on the cap band, not the line box (issue #180) —
+                       see the class comment in DataGridStyles.axaml. The retrying state also
+                       changes the weight, which the margin binding tracks. -->
+                  <TextBlock Classes="capAligned" Text="{Binding Data.StatusText}" FontSize="12"
                              Classes.retryingText="{Binding Data.IsRetrying}" />
                 </StackPanel>
               </DataTemplate>

@@ -328,11 +328,19 @@
                                    SortMemberPath="Data.Deadline">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
-                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <!-- UseLayoutRounding=False: the capAligned label below carries a fractional
+                     collapse margin, and rounding either child's arrange rect back to whole pixels
+                     re-separates the pair (#180). Set here so the ICON inherits it too. -->
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                            UseLayoutRounding="False">
                   <PathIcon Width="10" Height="10" Data="{StaticResource IconWarningFilled}"
                             IsVisible="{Binding Data.IsDeadlineAtRisk}"
                             Foreground="{DynamicResource LatticeWarningFgBrush}" />
-                  <TextBlock Text="{Binding Data.DeadlineText}" FontSize="12" Classes="numeric"
+                  <!-- capAligned for the same reason as the State cell (#180). The at-risk warning
+                       glyph is the icon here; the band is still cap height, not the digit band the
+                       snooze pill uses — lining figures share the cap band, and this text is a date
+                       with a separator, not a fixed-width clock. -->
+                  <TextBlock Classes="numeric capAligned" Text="{Binding Data.DeadlineText}" FontSize="12"
                              Classes.atRiskText="{Binding Data.IsDeadlineAtRisk}" />
                 </StackPanel>
               </DataTemplate>
@@ -342,7 +350,9 @@
                                    SortMemberPath="Data.StateKind">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:TaskRow">
-                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
+                <!-- UseLayoutRounding=False for the capAligned pair — see the Deadline cell. -->
+                <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
+                            UseLayoutRounding="False">
                   <Panel Width="12" Height="12">
                     <PathIcon Width="12" Height="12" Data="{StaticResource IconPlayRegular}"
                               Foreground="{DynamicResource LatticeSuccessBrush}"
@@ -367,7 +377,10 @@
                        render an ellipsis (Codex R2 P3). A real trailing ellipsis needs a
                        constrained cell layout (icon + star text) — deferred to the design
                        queue as a visual change (owner is the visual gate). -->
-                  <TextBlock Text="{Binding Data.StateText}" FontSize="12"
+                  <!-- capAligned: the icon is centred on this text's CAP band, not on its line box,
+                       so the pair stays aligned in any font and the icon does not move when the
+                       status word changes (issue #180; the class carries the mechanism). -->
+                  <TextBlock Classes="capAligned" Text="{Binding Data.StateText}" FontSize="12"
                              ToolTip.Tip="{Binding Data.StateText}" />
                 </StackPanel>
               </DataTemplate>
