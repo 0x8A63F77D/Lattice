@@ -72,8 +72,12 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     /// <summary>Overflow-flyout rows for projects beyond the cap (§4).</summary>
     public ObservableCollection<StatisticsOverflowItem> Overflow { get; } = [];
 
-    /// <summary>Host picker entries, shown only in the "All hosts" scope (§4).</summary>
-    public ObservableCollection<StatisticsHostOption> HostOptions { get; } = [];
+    /// <summary>
+    /// Host picker entries, shown only in the "All hosts" scope (§4). Reconciled IN PLACE, never
+    /// rebuilt (#175) — hence the holder element type, which CollectionReconciler.Apply's
+    /// signature requires exactly; the items are <see cref="StatisticsHostOption"/>.
+    /// </summary>
+    public ObservableCollection<RowHolder<Guid, string>> HostOptions { get; } = [];
 
     // Chart-content wiring for the CartesianChart binding (built by the shared renderer).
     [ObservableProperty] private IEnumerable<ISeries> _series = [];
@@ -90,7 +94,20 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     // ---- observable chrome state -----------------------------------------
 
     [ObservableProperty] private bool _isAllHostsScope;
-    [ObservableProperty] private StatisticsHostOption? _selectedHost;
+
+    /// <summary>
+    /// The charted host under the "All hosts" scope, held as the host's OWN identity — not as
+    /// one of the <see cref="HostOptions"/> instances (issue #175). The picker binds it through
+    /// <c>SelectedValue</c>/<c>SelectedValueBinding</c>, so the ComboBox resolves the selection
+    /// against whatever option instances currently exist. That is what makes the selection
+    /// survive a rebuilt option list: an item-instance selection is silently dropped by the
+    /// control the moment its instance leaves Items (an emptied list under a single-host scope,
+    /// or a fresh list after the fleet changes), and because StatisticsHostOption is a record,
+    /// the repair write below was then swallowed by the value-equality guard in the
+    /// [ObservableProperty] setter itself — no PropertyChanged, blank picker. A Guid has no
+    /// instance identity to lose, so that whole failure mode cannot be expressed.
+    /// </summary>
+    [ObservableProperty] private Guid? _selectedHostId;
     [ObservableProperty] private string _countsText = "";
     [ObservableProperty] private string _pollingText = "";
     [ObservableProperty] private string _updatedText = "";
@@ -111,7 +128,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     partial void OnSelectedMetricChanged(StatisticsMetricOption value) => Rebuild();
 
-    partial void OnSelectedHostChanged(StatisticsHostOption? value) => Rebuild();
+    partial void OnSelectedHostIdChanged(Guid? value) => Rebuild();
 
     partial void OnThemeChanged(StatisticsChartTheme value) => Rebuild();
 
@@ -156,9 +173,9 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     {
         if (!Scope.IsAllHosts)
             return _store.Hosts.FirstOrDefault(h => h.Config.Id == Scope.HostId);
-        if (SelectedHost is { } sel)
+        if (SelectedHostId is { } sel)
         {
-            var picked = _store.Hosts.FirstOrDefault(h => h.Config.Id == sel.HostId);
+            var picked = _store.Hosts.FirstOrDefault(h => h.Config.Id == sel);
             if (picked is not null) return picked;
         }
         return FirstConnected() ?? _store.Hosts.FirstOrDefault();
@@ -171,24 +188,34 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private void SyncHostOptions()
     {
         IsAllHostsScope = Scope.IsAllHosts && _store.Hosts.Count > 1;
-        if (!IsAllHostsScope)
-        {
-            if (HostOptions.Count > 0) HostOptions.Clear();
-            return;
-        }
 
-        var desired = _store.Hosts.Select(h => new StatisticsHostOption(h.Config.Id, h.Config.DisplayName)).ToList();
-        if (!desired.SequenceEqual(HostOptions))
-        {
-            HostOptions.Clear();
-            foreach (var o in desired) HostOptions.Add(o);
-        }
+        // Reconciled in place through the shared keyed differ, and kept in sync even while the
+        // picker is HIDDEN (issue #175). Both halves are load-bearing: Clear()-and-refill — and a
+        // Clear() on leaving the All-hosts scope — destroy the option instances the ComboBox
+        // resolves its selection against, and the control drops that selection without telling
+        // anyone. Surviving hosts keep their instance here (RowHolder swaps Data on a rename), so
+        // the picker's selection survives a fleet change and a scope round-trip alike.
+        var target = _store.Hosts.Select(h => (h.Config.Id, h.Config.DisplayName)).ToArray();
+        var existing = HostOptions.Select(o => (o.Key, o.Data)).ToArray();
+        CollectionReconciler.Apply(HostOptions, Reconcile.diff(existing, target),
+            (key, row) => new StatisticsHostOption(key, row));
+
+        // Hidden picker: the chart follows the scoped host, so there is no selection to repair.
+        if (!IsAllHostsScope)
+            return;
 
         // Default / repair the selection to the effective host so the picker mirrors the chart.
+        //
+        // INVARIANT (issue #175): after this method, SelectedHostId is the key of an option present
+        // in HostOptions, or null. It is a VALUE, so the guard below is exact — nothing here
+        // depends on which option instance the control happens to hold, which is why the picker
+        // (bound through SelectedValue, not SelectedItem) cannot desynchronise from the chart.
+        // Guarded so a steady-state poll (same effective host) writes nothing: the setter reenters
+        // Rebuild once per real change.
         var effective = EffectiveHost();
-        var match = effective is null ? null : HostOptions.FirstOrDefault(o => o.HostId == effective.Config.Id);
-        if (!Equals(SelectedHost, match))
-            SelectedHost = match; // setter reenters Rebuild once; guarded by the equality check
+        var match = HostOptions.Any(o => o.Key == effective?.Config.Id) ? effective!.Config.Id : (Guid?)null;
+        if (SelectedHostId != match)
+            SelectedHostId = match;
     }
 
     // ---- projection ------------------------------------------------------

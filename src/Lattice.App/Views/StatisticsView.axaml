@@ -101,9 +101,21 @@
           <!-- OpenOnPress: without it the FAProgressRing shown while a host is still loading
                starves pointer input (issue #95), so the release-open never fires and the picker
                reads as stuck — the escape hatch to a working host must open on press. -->
-          <ComboBox ItemsSource="{Binding HostOptions}" SelectedItem="{Binding SelectedHost, Mode=TwoWay}"
+          <!-- Selection keyed by the host's OWN id, not by an option instance (issue #175): the
+               option list is rebuilt (and emptied while a single host is scoped), and a
+               SelectedItem binding silently loses a selection whose instance left Items. -->
+          <ComboBox ItemsSource="{Binding HostOptions}"
+                    SelectedValue="{Binding SelectedHostId, Mode=TwoWay}"
+                    SelectedValueBinding="{Binding Key, DataType=vm:StatisticsHostOption}"
                     MinWidth="140" VerticalAlignment="Center" IsVisible="{Binding IsAllHostsScope}"
-                    views:ComboBoxPressOpenBehavior.OpenOnPress="True" />
+                    views:ComboBoxPressOpenBehavior.OpenOnPress="True">
+            <!-- Holder items (#175): bind Data, so an in-place host rename re-renders here. -->
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:StatisticsHostOption">
+                <TextBlock Text="{Binding Data}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
           <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
         </StackPanel>
