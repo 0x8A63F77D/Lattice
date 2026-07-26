@@ -52,7 +52,7 @@ public class StatisticsChartSnapshotTests
     public Task Baseline(string name, CreditMetric metric, StatisticsChartTheme theme)
     {
         VisualGate.SkipUnlessEnabled();
-        var png = Render(Canonical(), StatisticsChart.defaultVisible(Canonical()), metric, theme);
+        var png = Render(Canonical(), DefaultColors(Canonical()), metric, theme);
         return Verify(new MemoryStream(png), extension: "png").UseParameters(name);
     }
 
@@ -66,7 +66,7 @@ public class StatisticsChartSnapshotTests
     {
         VisualGate.SkipUnlessEnabled();
         var histories = Gapped();
-        var png = Render(histories, StatisticsChart.defaultVisible(histories), metric, theme);
+        var png = Render(histories, DefaultColors(histories), metric, theme);
         return Verify(new MemoryStream(png), extension: "png").UseParameters(name);
     }
 
@@ -75,7 +75,20 @@ public class StatisticsChartSnapshotTests
     {
         VisualGate.SkipUnlessEnabled();
         var histories = Overflow();
-        var png = Render(histories, StatisticsChart.defaultVisible(histories), CreditMetric.UserTotal, StatisticsChartTheme.Light);
+        var png = Render(histories, DefaultColors(histories), CreditMetric.UserTotal, StatisticsChartTheme.Light);
+        return Verify(new MemoryStream(png), extension: "png");
+    }
+
+    // The issue #171 case, which no test covered before — which is why the defect survived to
+    // review. Eleven projects, and the default-visible six include two that prefer the SAME
+    // palette slot (ordinals 0 and 10). Under the old colour-by-ordinal model this render had two
+    // cornflower lines; under the allocation model every visible line holds its own slot.
+    [AvaloniaFact]
+    public Task Collision_home_slot_clash_light()
+    {
+        VisualGate.SkipUnlessEnabled();
+        var histories = HomeSlotClash();
+        var png = Render(histories, DefaultColors(histories), CreditMetric.UserTotal, StatisticsChartTheme.Light);
         return Verify(new MemoryStream(png), extension: "png");
     }
 
@@ -84,20 +97,34 @@ public class StatisticsChartSnapshotTests
     {
         VisualGate.SkipUnlessEnabled();
         var histories = Density();
-        var png = Render(histories, StatisticsChart.defaultVisible(histories), CreditMetric.UserTotal, StatisticsChartTheme.Light);
+        var png = Render(histories, DefaultColors(histories), CreditMetric.UserTotal, StatisticsChartTheme.Light);
         return Verify(new MemoryStream(png), extension: "png");
     }
 
     // ---- render ----------------------------------------------------------
 
+    /// <summary>
+    /// The colours a freshly charted host starts on: the §4 default-visible set (all when ≤ 6,
+    /// else the top 6 by RAC), allocated into palette slots from empty (§2, issue #171). On every
+    /// fixture below with ≤ 10 projects this hands out slot == ordinal, which is why their
+    /// baselines are unchanged by the allocation restructure.
+    /// </summary>
+    private static FSharpMap<string, int> DefaultColors(FSharpList<ProjectHistory> histories)
+    {
+        var visible = StatisticsChart.defaultVisible(histories);
+        return SeriesColors.ofVisible(histories
+            .Where(h => visible.Contains(h.MasterUrl))
+            .Select(h => new SeriesKey(h.MasterUrl, h.Ordinal)));
+    }
+
     private static byte[] Render(
-        FSharpList<ProjectHistory> histories, FSharpSet<string> visible, CreditMetric metric, StatisticsChartTheme theme)
+        FSharpList<ProjectHistory> histories, FSharpMap<string, int> colors, CreditMetric metric, StatisticsChartTheme theme)
     {
         var previous = CultureInfo.CurrentCulture;
         CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("en-US");
         try
         {
-            var specs = StatisticsChart.seriesFor(metric, visible, histories);
+            var specs = StatisticsChart.seriesFor(metric, colors, histories);
             var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), theme, metric);
             PinFont(visual);
 
@@ -197,6 +224,19 @@ public class StatisticsChartSnapshotTests
         {
             double scale = 12 - i; // 12 (ordinal 0, highest RAC) down to 1
             return Hist($"o{i}", $"Project {i}", i, scale, 9,
+                utBase: 300 * scale, utStep: 700 * scale,
+                uaBase: 40 * scale, htBase: 60 * scale, htStep: 140 * scale, haBase: 20 * scale);
+        }));
+
+    // 11 projects whose top-6 by RAC are ordinals 0-4 and 10 (the rest sit in the overflow on a
+    // low RAC), so the visible set holds two series with the same home slot — ordinal 10 prefers
+    // slot 0, which ordinal 0 already has. Lines are scaled apart so all six read separately.
+    private static FSharpList<ProjectHistory> HomeSlotClash() => ListModule.OfSeq(
+        Enumerable.Range(0, 11).Select(i =>
+        {
+            double rac = i <= 4 || i == 10 ? 1000 - i : 1;
+            double scale = 11 - i;
+            return Hist($"c{i}", $"Project {i}", i, rac, 9,
                 utBase: 300 * scale, utStep: 700 * scale,
                 uaBase: 40 * scale, htBase: 60 * scale, htStep: 140 * scale, haBase: 20 * scale);
         }));

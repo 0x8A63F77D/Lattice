@@ -26,25 +26,33 @@ public sealed class StatisticsHostOption(Guid hostId, string displayName)
 
 /// <summary>
 /// A legend chip (§4): a colour swatch + project name whose checked state is the series'
-/// visibility. Colour is keyed by daemon ordinal (never recoloured on toggle). The chip
-/// notifies the ViewModel through <see cref="Toggled"/> so it can enforce the ≤6 cap and
-/// rebuild the chart.
+/// visibility. The chip notifies the ViewModel through <see cref="Toggled"/> so it can enforce
+/// the ≤6 cap and rebuild the chart.
 /// </summary>
 public sealed partial class StatisticsLegendChip : ObservableObject
 {
-    public StatisticsLegendChip(string masterUrl, string name, int ordinal, IBrush swatch, bool isVisible)
+    public StatisticsLegendChip(string masterUrl, string name, int ordinal, IBrush? swatch, bool isVisible)
     {
         MasterUrl = masterUrl;
         Name = name;
         Ordinal = ordinal;
-        Swatch = swatch;
+        _swatch = swatch;
         _isVisible = isVisible;
     }
 
     public string MasterUrl { get; }
     public string Name { get; }
     public int Ordinal { get; }
-    public IBrush Swatch { get; }
+
+    /// <summary>
+    /// The swatch colour of the line this chip stands for, or <c>null</c> when the chip is
+    /// hidden — a hidden series is not on the chart and holds no colour (§2, issue #171), and
+    /// the view draws the grey "not plotted" swatch in its place. Observable because a chip
+    /// instance outlives a rebuild: on an 11+ project host a series re-shown into a different
+    /// free slot must re-render its swatch, not keep the one it was constructed with.
+    /// </summary>
+    [ObservableProperty]
+    private IBrush? _swatch;
 
     /// <summary>Two-way bound to the chip ToggleButton. The setter tells the ViewModel.</summary>
     [ObservableProperty]

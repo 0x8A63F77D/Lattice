@@ -23,10 +23,11 @@ type DailyCredit =
       HostAverage: float }
 
 /// One project's chartable history. Ordinal is the project's position in the daemon
-/// project list (get_state order) — the STABLE colour key (§2: colour by ordinal,
-/// independent of visibility, so toggling a legend chip never recolours a series).
-/// Rac is the current per-host RAC (HostExpavgCredit on the live Project) used to
-/// rank the overflow (§4: default-visible = top 6 by current RAC).
+/// project list (get_state order) — the chip/series ORDER, and the preferred palette slot
+/// of a series that becomes visible (§2; the slot itself is allocated by SeriesColors, and
+/// only while the series is on the chart). Rac is the current per-host RAC
+/// (HostExpavgCredit on the live Project) used to rank the overflow
+/// (§4: default-visible = top 6 by current RAC).
 type ProjectHistory =
     { MasterUrl: string
       Name: string
@@ -53,12 +54,15 @@ type GapBridge =
       ToValue: float }
 
 /// One project's line series for the chosen metric: daily points (with gap Nones)
-/// plus the identity/colour facts the renderer needs. Ordinal drives the palette
-/// slot; Name labels the legend chip and tooltip.
+/// plus the identity/colour facts the renderer needs. Slot is the palette slot the series
+/// HOLDS while it is on the chart (allocated by SeriesColors, §2) — the renderer reads it
+/// and never re-derives a colour from Ordinal, which only orders the series. Name labels
+/// the legend chip and tooltip.
 type SeriesSpec =
     { MasterUrl: string
       Name: string
       Ordinal: int
+      Slot: int
       Points: SeriesPoint list }
 
 /// The legend partition (§4). Chips are the ≤6 default-visible projects; Overflow
@@ -74,8 +78,12 @@ type LegendPartition =
 /// testable in isolation.
 module StatisticsChart =
 
-    /// Hard cap on simultaneously visible series (§4) — so the qualitative.1–6 palette
-    /// never repeats. Raising it is a later batch (continue with qualitative.7–10).
+    /// Hard cap on simultaneously visible series (§4).
+    ///
+    /// CONSTRAINT (§2, issue #171): this must never exceed `SeriesColors.paletteSize`. Every
+    /// series on the chart holds its own slot, so a cap at or below the palette size is what
+    /// makes two visible series sharing a colour structurally impossible. Raising the cap past
+    /// ten needs new official palette colours FIRST, never the other way round.
     [<Literal>]
     let visibleCap = 6
 
@@ -137,26 +145,31 @@ module StatisticsChart =
                   { Day = DateTimeOffset(day, TimeSpan.Zero)
                     Value = Map.tryFind day byDay } ]
 
-    /// The visible line series for a metric, in daemon-ordinal order (stable palette).
-    /// A project is charted when its master is in the visible set AND it has at least
-    /// one point; a fully-empty history contributes nothing.
+    /// The visible line series for a metric, in daemon-ordinal order. Visibility is READ OFF
+    /// the colour state (§2, #171): a series is on the chart exactly when it holds a slot, so
+    /// there is no second visibility set that could disagree with the colours. A project is
+    /// charted when it holds a slot AND has at least one point; a fully-empty history
+    /// contributes nothing (and its slot simply goes unused this frame).
     let seriesFor
         (metric: CreditMetric)
-        (visible: Set<string>)
+        (colors: Map<string, int>)
         (projects: ProjectHistory list)
         : SeriesSpec list =
         projects
-        |> List.filter (fun p -> visible.Contains p.MasterUrl)
         |> List.sortBy (fun p -> p.Ordinal)
         |> List.choose (fun p ->
-            match buildSeriesPoints metric p.Daily with
-            | [] -> None
-            | points ->
-                Some
-                    { MasterUrl = p.MasterUrl
-                      Name = p.Name
-                      Ordinal = p.Ordinal
-                      Points = points })
+            match SeriesColors.trySlot p.MasterUrl colors with
+            | None -> None
+            | Some slot ->
+                match buildSeriesPoints metric p.Daily with
+                | [] -> None
+                | points ->
+                    Some
+                        { MasterUrl = p.MasterUrl
+                          Name = p.Name
+                          Ordinal = p.Ordinal
+                          Slot = slot
+                          Points = points })
 
     /// Whether a metric's gaps are BRIDGED with a dashed segment, or left as hard breaks
     /// (#170 ruling). Total over CreditMetric — a new metric must choose its own gap

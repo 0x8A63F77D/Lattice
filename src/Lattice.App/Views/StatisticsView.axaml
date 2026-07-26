@@ -46,8 +46,11 @@
     </Style>
 
     <!-- Legend chip: a native ToggleButton (§4 "Legend = chrome"). Its checked state is the
-         series' visibility; the swatch colour is by ordinal (never recoloured on toggle),
-         unchecked = grey swatch + struck-through secondary text. -->
+         series' visibility; checked shows the colour of the line it stands for, unchecked =
+         grey swatch + struck-through secondary text. Grey is not a dimmed colour but the
+         ABSENCE of one: a hidden series is off the chart and holds no palette slot at all
+         (§2, issue #171), so the VM hands the chip a null swatch and the grey Border below
+         is what renders. -->
     <Style Selector="ToggleButton.legendChip">
       <Setter Property="Template">
         <ControlTemplate>

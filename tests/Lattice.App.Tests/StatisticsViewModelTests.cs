@@ -1,4 +1,6 @@
+using Avalonia.Media;
 using Lattice.App.Aggregation;
+using Lattice.App.Charting;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
@@ -42,6 +44,22 @@ public class StatisticsViewModelTests : IAsyncLifetime
         OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
             [.. Enumerable.Range(0, count).Select(i => Stats(i, days))]),
     };
+
+    /// <summary>
+    /// Eleven projects whose top-6 by RAC are ordinals 0-4 and 10 — the issue #171 shape: ordinal
+    /// 10's preferred slot (10 mod 10) is the one ordinal 0 already holds. The old model painted
+    /// both cornflower; ordinals 5-9 sit in the overflow on a low RAC.
+    /// </summary>
+    private static FakeGuiRpcClient ElevenWithHomeSlotClash(int days = 9) => new()
+    {
+        OnGetState = () => Task.FromResult(TestData.MakeState(
+            projects: [.. Enumerable.Range(0, 11).Select(i => Proj(i, i <= 4 || i == 10 ? 1000 - i : 1))])),
+        OnGetStatistics = () => Task.FromResult<IReadOnlyList<ProjectStatistics>>(
+            [.. Enumerable.Range(0, 11).Select(i => Stats(i, days))]),
+    };
+
+    private static Color? SwatchOf(StatisticsLegendChip chip) =>
+        chip.Swatch is SolidColorBrush brush ? brush.Color : null;
 
     private StatisticsViewModel MakeVm() => new(_fx.Store, _fx.Clock);
 
@@ -376,4 +394,68 @@ public class StatisticsViewModelTests : IAsyncLifetime
         await _fx.SettleAsync(() => vm.Chips.Count == 3);
         Assert.Equal(3, SeriesCount(vm));
     }
+    // ---- series colours (§2, issue #171) ---------------------------------
+
+    [Fact]
+    public async Task Visible_series_never_share_a_colour_past_ten_projects()
+    {
+        _fx.AddHost("host-a", ElevenWithHomeSlotClash());
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6);
+
+        Assert.Equal([0, 1, 2, 3, 4, 10], vm.Chips.Select(c => c.Ordinal));
+        var swatches = vm.Chips.Select(SwatchOf).ToList();
+        Assert.All(swatches, s => Assert.NotNull(s));
+        Assert.Equal(swatches.Count, swatches.Distinct().Count());
+
+        // Ordinal 0 keeps its home slot; ordinal 10 takes the lowest free one (slot 5).
+        Assert.Equal(StatisticsPalette.Color(0), swatches[0]);
+        Assert.Equal(StatisticsPalette.Color(5), swatches[^1]);
+    }
+
+    [Fact]
+    public async Task A_hidden_chip_holds_no_colour_at_all()
+    {
+        _fx.AddHost("host-a", Fake(3));
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 3);
+        Assert.All(vm.Chips, c => Assert.NotNull(c.Swatch));
+
+        vm.Chips[0].IsVisible = false; // user toggle
+
+        // Off the chart → no slot, no colour. The view draws its grey "not plotted" swatch.
+        Assert.Null(vm.Chips[0].Swatch);
+        Assert.All(vm.Chips.Skip(1), c => Assert.NotNull(c.Swatch));
+    }
+
+    [Fact]
+    public async Task Toggling_one_chip_never_recolours_the_series_that_stay_on_screen()
+    {
+        _fx.AddHost("host-a", ElevenWithHomeSlotClash());
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 6);
+        var before = vm.Chips.ToDictionary(c => c.MasterUrl, SwatchOf);
+
+        vm.Chips[0].IsVisible = false; // hide the series holding the contended slot 0
+
+        foreach (var chip in vm.Chips.Where(c => c.IsVisible))
+            Assert.Equal(before[chip.MasterUrl], SwatchOf(chip));
+    }
+
+    [Fact]
+    public async Task Ten_or_fewer_projects_keep_colour_by_ordinal()
+    {
+        // Every home slot is uncontended there, so the allocation degenerates to the shipped
+        // slot == ordinal — the reason the ≤10-project chart baselines are untouched by #171.
+        _fx.AddHost("host-a", Fake(5));
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.HasChart && vm.Chips.Count == 5);
+
+        Assert.All(vm.Chips, chip => Assert.Equal(StatisticsPalette.Color(chip.Ordinal), SwatchOf(chip)));
+    }
+
 }

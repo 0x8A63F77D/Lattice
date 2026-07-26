@@ -19,6 +19,13 @@ let daily n ut ua ht ha =
 let proj url name ordinal rac dailies : ProjectHistory =
     { MasterUrl = url; Name = name; Ordinal = ordinal; Rac = rac; Daily = dailies }
 
+/// A fresh colour allocation over the given (master URL, ordinal) pairs — the visible set, in
+/// the shape seriesFor now reads visibility from (a series is on the chart iff it holds a slot).
+let colors (pairs: (string * int) list) =
+    pairs
+    |> List.map (fun (url, ordinal) -> { MasterUrl = url; Ordinal = ordinal })
+    |> SeriesColors.ofVisible
+
 /// A project with a contiguous total-credit ramp over `count` days from `start`.
 let ramp url name ordinal rac start count =
     proj url name ordinal rac [ for i in 0 .. count - 1 -> daily i (start + float i) 0.0 0.0 0.0 ]
@@ -168,14 +175,16 @@ let ``seriesFor: only visible projects with history, in ordinal order`` () =
         [ ramp "a" "A" 2 0.0 100.0 3
           ramp "b" "B" 0 0.0 200.0 3
           proj "c" "C" 1 0.0 [] ] // no history → excluded even if visible
-    let specs = StatisticsChart.seriesFor UserTotal (set [ "a"; "b"; "c" ]) ps
+    let specs = StatisticsChart.seriesFor UserTotal (colors [ "a", 2; "b", 0; "c", 1 ]) ps
     Assert.Equal<string list>([ "b"; "a" ], specs |> List.map (fun s -> s.MasterUrl)) // ordinal 0 then 2
     Assert.Equal<int list>([ 0; 2 ], specs |> List.map (fun s -> s.Ordinal))
+    // ≤ 10 projects: every home slot is free, so the slot IS the ordinal (contract §2 point 5).
+    Assert.Equal<int list>([ 0; 2 ], specs |> List.map (fun s -> s.Slot))
 
 [<Fact>]
 let ``seriesFor: hidden projects are dropped`` () =
     let ps = [ ramp "a" "A" 0 0.0 1.0 2; ramp "b" "B" 1 0.0 1.0 2 ]
-    let specs = StatisticsChart.seriesFor UserTotal (set [ "a" ]) ps
+    let specs = StatisticsChart.seriesFor UserTotal (colors [ "a", 0 ]) ps
     Assert.Equal<string list>([ "a" ], specs |> List.map (fun s -> s.MasterUrl))
 
 // ---- markerSize ----------------------------------------------------------
@@ -186,13 +195,13 @@ let ``seriesFor: hidden projects are dropped`` () =
 [<InlineData(31, 0.0)>]
 [<InlineData(90, 0.0)>]
 let ``markerSize: 8 up to 30 real points, 0 beyond`` (count: int) (expected: float) =
-    let specs = [ StatisticsChart.seriesFor UserTotal (set [ "a" ]) [ ramp "a" "A" 0 0.0 0.0 count ] |> List.head ]
+    let specs = [ StatisticsChart.seriesFor UserTotal (colors [ "a", 0 ]) [ ramp "a" "A" 0 0.0 0.0 count ] |> List.head ]
     Assert.Equal(expected, StatisticsChart.markerSize specs)
 
 [<Fact>]
 let ``markerSize: evaluated on the LONGEST visible series`` () =
-    let short = StatisticsChart.seriesFor UserTotal (set [ "s" ]) [ ramp "s" "S" 0 0.0 0.0 5 ] |> List.head
-    let long = StatisticsChart.seriesFor UserTotal (set [ "l" ]) [ ramp "l" "L" 1 0.0 0.0 40 ] |> List.head
+    let short = StatisticsChart.seriesFor UserTotal (colors [ "s", 0 ]) [ ramp "s" "S" 0 0.0 0.0 5 ] |> List.head
+    let long = StatisticsChart.seriesFor UserTotal (colors [ "l", 1 ]) [ ramp "l" "L" 1 0.0 0.0 40 ] |> List.head
     Assert.Equal(0.0, StatisticsChart.markerSize [ short; long ]) // longest (40) > 30 → pure line
 
 [<Fact>]
