@@ -88,8 +88,11 @@ public class LoginItemPolicyTests
     [Fact]
     public void Autostart_lives_under_the_resolved_config_home()
     {
+        // Every segment joined by Path.Combine, so the expectation renders with the SAME
+        // separator the policy uses — a hard-coded "/home/u/.config" prefix passes on Unix
+        // and fails on the Windows CI leg, where Combine emits a backslash (PR #188 CI).
         Assert.Equal(
-            Path.Combine("/home/u/.config", "autostart", "lattice.desktop"),
+            Path.Combine("/home/u", ".config", "autostart", "lattice.desktop"),
             LoginItemPolicy.AutostartPath(LoginItemPolicy.ConfigHome(null, "/home/u")));
     }
 
