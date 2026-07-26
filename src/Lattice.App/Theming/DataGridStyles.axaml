@@ -143,10 +143,11 @@
        horizontal StackPanel and centre both — but VerticalAlignment centres LAYOUT BOXES, and a
        TextBlock's box is a line box (ascent + descent + line gap) whose glyph ink sits at a
        PER-FONT offset inside it. "Centre both boxes" therefore aligns in one font and misaligns in
-       the next: measured at these very cells the icon centre sat 1.83 px off the ink in Inter (the
-       visual harness's pinned font) and 1.79 px off in Helvetica Neue, but only 0.69 px off in
-       Courier New. Helvetica is what the app actually renders with on macOS — Lattice pins no font
-       and Avalonia's Skia font manager resolves the platform default to it (#179).
+       the next: measured at these very cells, icon centre to cap-band centre was 1.063 px off in
+       Helvetica, 0.739 px in Inter, 0.438 px in Courier New and 0.024 px in Times New Roman. The
+       defect is that whole spread — a pixel of drift with nothing but the font changing — and
+       Helvetica is the worst of it AND what the app actually renders with on macOS, since Lattice
+       pins no font and Avalonia's Skia font manager resolves the platform default to it (#179).
 
        This collapses the text's layout box onto the CAP-HEIGHT band, so centring the pair centres
        the icon on the capital the eye lines it up against, by construction, in any font. The band

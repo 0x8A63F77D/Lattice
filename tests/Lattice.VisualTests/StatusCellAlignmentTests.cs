@@ -29,10 +29,16 @@ namespace Lattice.VisualTests;
 /// THE DEFECT. <c>VerticalAlignment="Center"</c> centres each child's LAYOUT box independently, and
 /// a TextBlock's box is a line box (ascent + descent + line gap). Glyph ink sits at a per-font
 /// offset inside that box, so "centre both boxes" aligns in one font and misaligns in the next.
-/// Measured at these cells before the fix, icon-box centre to ink centre: −1.83 px in Inter,
-/// −1.79 px in Helvetica Neue, −1.20 px in Arial, −0.69 px in Courier New. The app renders in
-/// Helvetica on macOS (it pins no font; Avalonia's Skia manager resolves the platform default —
-/// established in #179), so the shipping case is near the worst of those.
+/// Measured here pre-fix, icon-box centre minus CAP-BAND centre at the status cells: +1.063 px in
+/// Helvetica, +0.739 px in Inter, +0.626 px in .AppleSystemUIFont, +0.438 px in Courier New,
+/// +0.024 px in Times New Roman. The defect is that whole SPREAD — over a pixel of drift with
+/// nothing but the font changing — and the app renders in Helvetica on macOS (it pins no font;
+/// Avalonia's Skia manager resolves the platform default there, established in #179), so the
+/// shipping case is the worst one probed.
+///
+/// (#180 quotes larger numbers, −1.83 px in Inter and so on. Those measure the icon against the
+/// centre of the LIVE WORD's ink, descenders included. That is the same layout seen through a
+/// different reference — and not the one to align to, since it moves with the word; see below.)
 ///
 /// WHY NOT THE SNOOZE PILL'S REMEDY. #176/#179 fixed the same defect class in the pill by
 /// collapsing the text box onto the ink of a fixed DIGIT band, valid there because the pill shows
@@ -73,8 +79,13 @@ public class StatusCellAlignmentTests
     /// midpoint, so it inherits the same quantum — no layout can remove it. The cap comes from that
     /// mechanism, not from fitting the observations, but it does bracket them: post-fix the worst
     /// deviation over the probed families is 0.852 px @1x (Times New Roman, whose hinted cap band
-    /// renders half a pixel taller than its outline) and 0.311 px @2x, while pre-fix the ARRANGED
-    /// error alone is 1.6–2.6 px in every family.
+    /// renders half a pixel taller than its outline) and 0.311 px @2x.
+    ///
+    /// This layer is the weaker of the two by construction, and deliberately so. Pre-fix it is red
+    /// only where the arranged error exceeds a device pixel (Helvetica, the shipping font, at
+    /// 1.35 px @1x); the families whose pre-fix error is a fraction of a pixel pass it. The EXACT
+    /// gate is <see cref="Icon_is_centred_on_the_cap_band"/>, which is red in every family; this one
+    /// exists to prove the painted pixels follow the layout, not to detect the defect.
     /// </summary>
     private static double MaxInkDeviationDip(double scaling) => 1.0 / scaling;
 
@@ -103,9 +114,10 @@ public class StatusCellAlignmentTests
     /// the outline extents of <see cref="TextInkCollapseConverter.CapBand"/> at that cell's own
     /// typeface and size.
     ///
-    /// This is what fails pre-fix in every family: the icon centres on the line box, whose centre
-    /// sits roughly half the descent below the cap band's. Comparing the two BOXES instead would
-    /// pass in both states and gate nothing.
+    /// This is what fails pre-fix in EVERY family — by 0.024 px in Times New Roman and 1.063 px in
+    /// Helvetica, which is the point: the error is a per-font constant, so a gate that probed one
+    /// family would call the layout fixed on the strength of that family's luck. Comparing the two
+    /// BOXES instead would pass in both states and gate nothing.
     /// </summary>
     [AvaloniaFact]
     public void Icon_is_centred_on_the_cap_band()
