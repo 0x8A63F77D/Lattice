@@ -59,9 +59,10 @@ public class SnoozePillAlignmentTests
     /// <summary>
     /// Rendered ink may sit up to half a device pixel off the arranged geometry because the glyph
     /// rasterizer snaps the baseline to the pixel grid; at 1x that is 0.5 px of slack nothing in the
-    /// layout can remove. The cap comes from that mechanism, and it brackets the measurements:
-    /// post-fix the worst rendered deviation is 0.38 px (Impact @1x) / 0.21 px (@2x), while pre-fix
-    /// Helvetica — the shipping face — sat at 0.75 px @1x and 0.84 px @2x.
+    /// layout can remove. The cap comes from that mechanism, not from fitting the observations —
+    /// but it does bracket them. Post-fix, the worst deviation over the probed families is 0.36 px
+    /// (Courier New @1x) and 0.21 px (Times New Roman @2x); pre-fix, Helvetica — the face the app
+    /// actually ships with — sat at 0.75 px @1x and 0.84 px @2x.
     /// </summary>
     private const double MaxInkDeviationDip = 0.5;
 
@@ -79,21 +80,6 @@ public class SnoozePillAlignmentTests
         "Inter", "Helvetica", "Helvetica Neue", ".AppleSystemUIFont", "Arial",
         "Verdana", "Georgia", "Courier New", "Times New Roman", "Menlo", "Trebuchet MS", "Segoe UI",
     ];
-
-    public static TheoryData<string> Families() => new(FamilyNames);
-
-    public static TheoryData<string, double> FamiliesAndScalings()
-    {
-        var data = new TheoryData<string, double>();
-        foreach (var family in FamilyNames)
-        {
-            // 1x is the harness default; 2x is a Retina Mac — the owner's own condition, where
-            // layout rounding lands on half-DIP boundaries instead of whole ones.
-            data.Add(family, 1.0);
-            data.Add(family, 2.0);
-        }
-        return data;
-    }
 
     /// <summary>
     /// The arranged invariant: the pause icon's box centre sits on the centre of the DIGIT BAND's
@@ -146,6 +132,8 @@ public class SnoozePillAlignmentTests
     /// type designer's intent, and demanding 0 there would be demanding the pill jitter as the
     /// minutes tick. So the assertion is against that per-font expectation, computed from outlines.
     /// </summary>
+    // 1x is the harness default; 2x is a Retina Mac — the owner's own condition, and the one where
+    // layout rounding lands on half-DIP boundaries instead of whole ones.
     [AvaloniaTheory]
     [InlineData(1.0)]
     [InlineData(2.0)]
