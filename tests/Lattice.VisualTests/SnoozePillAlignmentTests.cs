@@ -65,6 +65,11 @@ public class SnoozePillAlignmentTests
     /// </summary>
     private const double MaxInkDeviationDip = 0.5;
 
+    /// <summary>The arranged geometry is computed, not rasterised, so it is exact up to floating
+    /// point; a thousandth of a pixel is slack for the arithmetic, not for the layout. Pre-fix the
+    /// same numbers are off by 0.34 px in Inter and ~0.8 px in Helvetica.</summary>
+    private const double ArrangedTolerance = 0.001;
+
     /// <summary>Families worth probing: metrically different from each other and from Inter. Ones
     /// this runner lacks are skipped (see <see cref="Resolve"/>); Inter is embedded, so at least it
     /// is always measured — and the LAYOUT assertions are red pre-fix in Inter too, so the gate does
@@ -100,15 +105,16 @@ public class SnoozePillAlignmentTests
     /// centred on the unrounded line). Comparing the two BOXES instead would pass in both states
     /// and gate nothing.
     /// </summary>
-    [AvaloniaTheory]
-    [MemberData(nameof(Families))]
-    public void Pause_icon_is_centred_on_the_digit_band(string family)
+    [AvaloniaFact]
+    public void Pause_icon_is_centred_on_the_digit_band()
     {
-        if (Resolve(family) is not { } resolved) return;
-
-        using var pill = Pill.Open(resolved, ThemeVariant.Dark, scaling: 1.0);
-
-        Assert.Equal(pill.BandInkCentre, pill.IconBoxCentre, 3);
+        AssertAcrossFamilies(scaling: 1.0, (pill, family, report) =>
+        {
+            double delta = pill.IconBoxCentre - pill.BandInkCentre;
+            if (Math.Abs(delta) > ArrangedTolerance)
+                report($"{family}: the pause icon's box centre sits {delta:+0.000;-0.000} px from the " +
+                       "digit band's ink centre — the layout centres boxes, not ink.");
+        });
     }
 
     /// <summary>
@@ -117,15 +123,16 @@ public class SnoozePillAlignmentTests
     /// digits. A centred icon inside an off-centre pill reads as misaligned just as loudly — and a
     /// fix that only nudged the icon would have introduced exactly that.
     /// </summary>
-    [AvaloniaTheory]
-    [MemberData(nameof(Families))]
-    public void Pill_content_box_is_symmetric_about_the_digit_band(string family)
+    [AvaloniaFact]
+    public void Pill_content_box_is_symmetric_about_the_digit_band()
     {
-        if (Resolve(family) is not { } resolved) return;
-
-        using var pill = Pill.Open(resolved, ThemeVariant.Dark, scaling: 1.0);
-
-        Assert.Equal(pill.ContentBoxCentre, pill.BandInkCentre, 3);
+        AssertAcrossFamilies(scaling: 1.0, (pill, family, report) =>
+        {
+            double delta = pill.ContentBoxCentre - pill.BandInkCentre;
+            if (Math.Abs(delta) > ArrangedTolerance)
+                report($"{family}: the pill's content box centre sits {delta:+0.000;-0.000} px from the " +
+                       "digit band's ink centre, so its padding is not symmetric about the digits.");
+        });
     }
 
     /// <summary>
@@ -140,27 +147,64 @@ public class SnoozePillAlignmentTests
     /// minutes tick. So the assertion is against that per-font expectation, computed from outlines.
     /// </summary>
     [AvaloniaTheory]
-    [MemberData(nameof(FamiliesAndScalings))]
-    public void Rendered_pause_ink_and_digit_ink_share_a_centre(string family, double scaling)
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public void Rendered_pause_ink_and_digit_ink_share_a_centre(double scaling)
     {
-        if (Resolve(family) is not { } resolved) return;
+        AssertAcrossFamilies(scaling, (pill, family, report) =>
+        {
+            var ink = pill.MeasureRenderedInk();
+            double expected = pill.ShownTextOffsetFromBand;
 
-        using var pill = Pill.Open(resolved, ThemeVariant.Dark, scaling);
+            if (Math.Abs(ink.BoxCentreDelta - expected) > MaxInkDeviationDip)
+                report($"{family} @{scaling}x: the pause bars' ink box centre sits " +
+                       $"{ink.BoxCentreDelta:+0.000;-0.000} px from the digits' (expected " +
+                       $"{expected:+0.000;-0.000} px, cap ±{MaxInkDeviationDip}). " +
+                       $"bars={ink.IconTop:F3}..{ink.IconBottom:F3}, digits={ink.TextTop:F3}..{ink.TextBottom:F3}, " +
+                       $"ink centroids {ink.CentroidDelta:+0.000;-0.000} apart.");
+        });
+    }
 
-        // Warm THIS window's caches: a theme's first render populates Skia's glyph/render caches and
-        // differs from later ones (VisualWarmup's finding), and this gate shares its process with the
-        // baseline captures. It has to be the same window — warming a throwaway one instead left the
-        // discarded frame compositing into the next capture and put phantom ink at the scan edges.
+    /// <summary>
+    /// Runs <paramref name="probe"/> over every family this runner actually has, inside ONE window.
+    ///
+    /// ONE WINDOW, NOT ONE PER FAMILY. A window per theory case was measured to destabilise the
+    /// neighbouring pixel gate: at twelve families this assembly's <see cref="MenuSeparatorVisualTests"/>
+    /// host-rail case intermittently captured a frame with no menu in it (3 of 4 runs), and the flake
+    /// tracked the ShellWindow count — two families were stable across the same runs, twelve were not.
+    /// Sweeping the families inside a single window keeps the coverage (which is the entire point of
+    /// this gate) while opening four windows per class instead of thirty-six. Failures are collected
+    /// rather than thrown one at a time, so a regression reports EVERY family it broke, not just the
+    /// first the runner happened to reach.
+    /// </summary>
+    private static void AssertAcrossFamilies(double scaling, Action<Pill, string, Action<string>> probe)
+    {
+        var failures = new List<string>();
+        var probed = new List<string>();
+
+        using var pill = Pill.Open(ThemeVariant.Dark, scaling);
+
+        // A theme's first render populates Skia's glyph/render caches and differs from later ones
+        // (VisualWarmup's finding); this gate shares its process with the baseline captures.
         pill.Capture().Dispose();
 
-        var ink = pill.MeasureRenderedInk();
-        double expected = pill.ShownTextOffsetFromBand;
+        foreach (var family in FamilyNames)
+        {
+            if (Resolve(family) is not { } resolved)
+                continue;
+            probed.Add(family);
+            pill.UseFont(resolved);
+            probe(pill, family, failures.Add);
+        }
 
-        Assert.True(Math.Abs(ink.BoxCentreDelta - expected) <= MaxInkDeviationDip,
-            $"{family} @{scaling}x: the pause bars' ink box centre sits " +
-            $"{ink.BoxCentreDelta:+0.000;-0.000} px from the digits' (expected {expected:+0.000;-0.000} px, " +
-            $"cap ±{MaxInkDeviationDip}). bars={ink.IconTop:F3}..{ink.IconBottom:F3}, " +
-            $"digits={ink.TextTop:F3}..{ink.TextBottom:F3}, ink centroids {ink.CentroidDelta:+0.000;-0.000} apart.");
+        // Without this a runner whose font manager resolved nothing would report a serene green over
+        // an empty sweep. Inter ships embedded with the harness, so its absence means the probe
+        // itself is broken, not the runner.
+        Assert.Contains("Inter", probed);
+
+        Assert.True(failures.Count == 0,
+            $"probed {probed.Count} of {FamilyNames.Length} families ({string.Join(", ", probed)}):" +
+            Environment.NewLine + string.Join(Environment.NewLine, failures));
     }
 
     /// <summary>The family, or null when this runner does not have it. A font manager that cannot
@@ -216,7 +260,7 @@ public class SnoozePillAlignmentTests
 
         public const string ShownTime = "14:30";
 
-        public static Pill Open(FontFamily family, ThemeVariant variant, double scaling)
+        public static Pill Open(ThemeVariant variant, double scaling)
         {
             Application.Current!.RequestedThemeVariant = variant;
 
@@ -241,10 +285,16 @@ public class SnoozePillAlignmentTests
 
             var icon = Named<PathIcon>(window, "SnoozePillIcon");
             var text = Named<TextBlock>(window, "SnoozePillTime");
-            TextElement.SetFontFamily(text, family);
-            Arrange(window);
 
             return new Pill(window, icon, text, (Border)icon.GetVisualParent()!.GetVisualParent()!, scaling);
+        }
+
+        /// <summary>Re-renders the pill in <paramref name="family"/>. Set on the text element, so the
+        /// margin binding sees the same change an inherited font change would produce at runtime.</summary>
+        public void UseFont(FontFamily family)
+        {
+            TextElement.SetFontFamily(_text, family);
+            Arrange(_window);
         }
 
         private static void Arrange(Window window)
