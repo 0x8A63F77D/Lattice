@@ -5,20 +5,18 @@ name: Visual Regression
 # now fail the build. macOS only — baselines are macOS/Skia captures and the gate is pinned
 # to that platform. The normal cross-platform ci.yml leaves LATTICE_RUN_VISUAL_TESTS unset,
 # so these tests skip there; this workflow is the sole place they run.
+#
+# Deliberately NO path filter (2026-07 architecture audit, P1-1): the pixels come from more
+# projects than a path list can be trusted to track — chart content is computed in
+# src/Lattice.App.Aggregation, fixtures live in tests/Lattice.TestSupport — and a hand-kept
+# path list silently exempted exactly those. The job costs ~1 minute; running it on every PR
+# is cheaper than maintaining a duplicate of the dependency graph in YAML.
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'tests/Lattice.VisualTests/**'
-      - 'src/Lattice.App/**'
-      - '.github/workflows/visual-tests.yml'
   push:
     branches: [main]
-    paths:
-      - 'tests/Lattice.VisualTests/**'
-      - 'src/Lattice.App/**'
-      - '.github/workflows/visual-tests.yml'
   workflow_dispatch: {}
 
 concurrency:
