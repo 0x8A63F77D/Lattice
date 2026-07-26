@@ -24,7 +24,8 @@ namespace Lattice.VisualTests;
 
 /// <summary>
 /// Issue #180 — a data cell that pairs a fixed-size ICON with a text label must centre the icon on
-/// the text's CAP BAND: in every font, and without the icon moving when the label changes.
+/// the text's REFERENCE BAND: in every font, in every shipped UI script, and without anything in the
+/// cell moving when the label changes.
 ///
 /// THE DEFECT. <c>VerticalAlignment="Center"</c> centres each child's LAYOUT box independently, and
 /// a TextBlock's box is a line box (ascent + descent + line gap). Glyph ink sits at a per-font
@@ -44,9 +45,20 @@ namespace Lattice.VisualTests;
 /// collapsing the text box onto the ink of a fixed DIGIT band, valid there because the pill shows
 /// only digits. These cells show words that change: "Suspended" has a descender, "Running" has
 /// none, so a band read off the live label would shift the pair every time a task changed state
-/// (measured under that mutation: 1.24 px per status change). The band here is the cap-height
-/// reference glyph instead — fixed, and the thing the eye lines the icon up against.
-/// <see cref="Nothing_moves_when_the_status_word_changes"/> is the gate on that.
+/// (measured under that mutation: 1.24 px per status change). The band is a fixed reference glyph
+/// instead. <see cref="Nothing_moves_when_the_status_word_changes"/> is the gate on that.
+///
+/// WHICH band is the cell's business, and both shipped answers are swept here:
+/// <list type="bullet">
+/// <item>a WORD cell (Tasks State, Projects/Transfers Status) aligns to the band its UI script is
+/// read against — the cap band under en-US, the ideograph em band under the shipped zh-CN UI, whose
+/// statuses are Han ("运行中", "活动中") and, measured in the shipping face, do not even share the
+/// Latin line box: "H" reports a 12.000 px line height at 12 px where "运行中" falls back to a CJK
+/// face and reports 16.800 px;</item>
+/// <item>a FIGURES cell (Tasks Deadline, "MM-dd HH:mm" formatted with the invariant culture) aligns
+/// to the digit band — a face with old-style figures draws them shorter than its capitals, so the
+/// cap band would centre the icon on ink that cell never renders.</item>
+/// </list>
 ///
 /// WHAT IS PROBED, AND WHY IT IS FOUND STRUCTURALLY. <see cref="Cells.Probes"/> does not look for
 /// the marker class the fix applies; it looks for the CONSTRUCTION — a horizontal StackPanel in a
@@ -67,27 +79,28 @@ namespace Lattice.VisualTests;
 /// screenshots, so they gate the fix in the normal <c>dotnet test</c> lane on every CI OS.
 /// </summary>
 [Trait("Category", "Visual")]
-public class StatusCellAlignmentTests
+public class StatusCellAlignmentTests(ITestOutputHelper output)
 {
     /// <summary>The arranged geometry is computed, not rasterised, so it is exact up to floating
     /// point; a thousandth of a pixel is slack for the arithmetic, not for the layout.</summary>
     private const double ArrangedTolerance = 0.001;
 
     /// <summary>
-    /// ONE DEVICE PIXEL, in DIPs. The rasterizer hints a glyph's cap top and its baseline onto the
-    /// device pixel grid independently of each other, and the ink centre this gate measures is their
-    /// midpoint, so it inherits the same quantum — no layout can remove it. The cap comes from that
-    /// mechanism, not from fitting the observations, but it does bracket them: post-fix the worst
-    /// deviation over the probed families is 0.852 px @1x (Times New Roman, whose hinted cap band
-    /// renders half a pixel taller than its outline) and 0.311 px @2x.
+    /// TWO DEVICE PIXELS, in DIPs. Hinting grid-fits a glyph's top and bottom edges onto the device
+    /// pixel grid independently and may shift the whole run as it does so, so each edge can move by
+    /// up to a device pixel and the ink CENTRE this gate measures — their midpoint — inherits that
+    /// same bound in each direction. The cap is the mechanism's, not a fit to the observations, and
+    /// the observations sit inside it with room: post-fix the worst deviation is 0.852 px @1x /
+    /// 0.311 px @2x on macOS and 1.194 px @1x on Windows, whose hinting is the more aggressive of
+    /// the two (Times New Roman there renders a cap band a full pixel taller than its outline).
+    /// A one-device-pixel cap was tried first and was red on the Windows runner alone.
     ///
-    /// This layer is the weaker of the two by construction, and deliberately so. Pre-fix it is red
-    /// only where the arranged error exceeds a device pixel (Helvetica, the shipping font, at
-    /// 1.35 px @1x); the families whose pre-fix error is a fraction of a pixel pass it. The EXACT
-    /// gate is <see cref="Icon_is_centred_on_the_cap_band"/>, which is red in every family; this one
-    /// exists to prove the painted pixels follow the layout, not to detect the defect.
+    /// This layer is the weaker of the two by construction, and deliberately so: it proves the
+    /// painted pixels follow the layout, and is not the detector. The EXACT gate is
+    /// <see cref="Icon_is_centred_on_the_reference_band"/>, which is red pre-fix in every family on
+    /// every runner; this one is red pre-fix only where the arranged error clears two device pixels.
     /// </summary>
-    private static double MaxInkDeviationDip(double scaling) => 1.0 / scaling;
+    private static double MaxInkDeviationDip(double scaling) => 2.0 / scaling;
 
     /// <summary>Families worth probing: metrically different from each other and from Inter. Ones
     /// this runner lacks are skipped (see <see cref="Resolve"/>); Inter is embedded, so at least it
@@ -110,26 +123,48 @@ public class StatusCellAlignmentTests
     private static readonly double[] Scalings = [1.0, 2.0];
 
     /// <summary>
-    /// The arranged invariant: each icon's box centre sits on the centre of the CAP BAND —
-    /// the outline extents of <see cref="TextInkCollapseConverter.CapBand"/> at that cell's own
-    /// typeface and size.
+    /// The shipped UI scripts, each with labels of its own. zh-CN is not decoration: those statuses
+    /// are Han, and their band is a different glyph resolved through a different fallback face. A
+    /// figures cell renders "MM-dd HH:mm" in every locale (invariant-culture formatting), so its
+    /// label does not vary by script — only the word cells' does.
+    /// </summary>
+    private static readonly (string Culture, Func<Probe, string> Label)[] Scripts =
+    [
+        ("en-US", p => p.BoundText),
+        ("zh-CN", p => p.BoundText.Any(char.IsLetter) ? "运行中" : p.BoundText),
+    ];
+
+    /// <summary>
+    /// The arranged invariant: each icon's box centre sits on the centre of THAT CELL's reference
+    /// band — the outline extents of <see cref="Probe.Band"/> at the cell's own typeface and size.
     ///
     /// This is what fails pre-fix in EVERY family — by 0.024 px in Times New Roman and 1.063 px in
     /// Helvetica, which is the point: the error is a per-font constant, so a gate that probed one
     /// family would call the layout fixed on the strength of that family's luck. Comparing the two
     /// BOXES instead would pass in both states and gate nothing.
+    ///
+    /// Swept over both shipped UI scripts (see <see cref="Cells.UseUiCulture"/>): under zh-CN the
+    /// labels are Han and the band they are read against is a different glyph in a different
+    /// fallback face, which the Latin-only version of this fix got wrong.
     /// </summary>
     [AvaloniaFact]
-    public void Icon_is_centred_on_the_cap_band()
+    public void Icon_is_centred_on_the_reference_band()
     {
         AssertAcrossFamilies(scaling: 1.0, (cells, family, report) =>
         {
-            foreach (var probe in cells.Probes)
+            foreach (var script in Scripts)
             {
-                double delta = probe.IconBoxCentre - probe.CapBandCentre;
-                if (Math.Abs(delta) > ArrangedTolerance)
-                    report($"{family} · {probe.Label}: the icon's box centre sits {delta:+0.000;-0.000} px " +
-                           "from the cap band's centre — the layout centres boxes, not ink.");
+                if (!cells.UseUiCulture(script.Culture)) continue;
+                foreach (var probe in cells.Probes)
+                {
+                    cells.Show(probe, script.Label(probe));
+                    double delta = probe.IconBoxCentre - probe.BandCentre;
+                    if (Math.Abs(delta) > ArrangedTolerance)
+                        report($"{family} · {script.Culture} · {probe.Label}: the icon's box centre sits " +
+                               $"{delta:+0.000;-0.000} px from the '{probe.Band}' band's centre — the " +
+                               "layout centres boxes, not ink.");
+                    cells.Restore(probe);
+                }
             }
         });
     }
@@ -157,7 +192,7 @@ public class StatusCellAlignmentTests
                 foreach (var word in StatusWords)
                 {
                     cells.Show(probe, word);
-                    seen.Add((word, probe.IconBoxCentre, probe.CapBandCentre));
+                    seen.Add((word, probe.IconBoxCentre, probe.BandCentre));
                 }
 
                 cells.Restore(probe);
@@ -206,7 +241,7 @@ public class StatusCellAlignmentTests
                 cells.Rescale(scaling);
                 foreach (var (probe, ink) in cells.MeasureRenderedInk())
                 {
-                    double expected = probe.ShownTextOffsetFromCapBand;
+                    double expected = probe.ShownTextOffsetFromBand;
                     double delta = ink.IconCentre - ink.TextCentre;
                     if (Math.Abs(delta - expected) > MaxInkDeviationDip(scaling))
                         report($"{family} @{scaling}x · {probe.Label}: the icon's ink centre sits " +
@@ -229,7 +264,7 @@ public class StatusCellAlignmentTests
     /// collected rather than thrown one at a time, so a regression reports EVERY family and cell it
     /// broke, not just the first the runner happened to reach.
     /// </summary>
-    private static void AssertAcrossFamilies(double scaling, Action<Cells, string, Action<string>> probe)
+    private void AssertAcrossFamilies(double scaling, Action<Cells, string, Action<string>> probe)
     {
         var failures = new List<string>();
         var probed = new List<string>();
@@ -258,6 +293,14 @@ public class StatusCellAlignmentTests
         // an empty sweep. Inter ships embedded with the harness, so its absence means the probe
         // itself is broken, not the runner.
         Assert.Contains("Inter", probed);
+
+        // Coverage this runner could not give is ANNOUNCED, never silently dropped: a green from a
+        // sweep that skipped the CJK script (a runner with no Han face) must not read like a green
+        // from the full one.
+        output.WriteLine($"probed {probed.Count}/{FamilyNames.Length} families: {string.Join(", ", probed)}");
+        output.WriteLine(cells.SkippedScripts.Count == 0
+            ? $"probed all {Scripts.Length} UI scripts"
+            : $"SKIPPED scripts (runner cannot draw their band): {string.Join(", ", cells.SkippedScripts)}");
 
         Assert.True(failures.Count == 0,
             $"probed {probed.Count} of {FamilyNames.Length} families ({string.Join(", ", probed)}) " +
@@ -307,23 +350,39 @@ public class StatusCellAlignmentTests
 
         public double IconBoxCentre => Top(Icon) + Icon.Bounds.Height / 2;
 
-        /// <summary>Window-space centre of the cap band's ink, as arranged.</summary>
-        public double CapBandCentre
+        /// <summary>
+        /// The band this cell OUGHT to align to, derived from what its binding actually put on
+        /// screen: a cell whose real text carries no letter is a figures cell (Tasks' Deadline,
+        /// "MM-dd HH:mm" — invariant culture, so figures in every locale) and belongs on the digit
+        /// band; anything else is a word cell and belongs on its UI script's band.
+        ///
+        /// DELIBERATELY NOT READ FROM THE CLASS the fix applies. An expectation taken from the class
+        /// would say "this cell is aligned to the band it claims", which is true however wrongly the
+        /// class was chosen — mark the Deadline cell as a word cell and the gate would follow it and
+        /// stay green. Deriving it from the rendered repertoire keeps the choice itself under test
+        /// (Codex P2 on PR #184 was exactly a wrong choice here).
+        /// </summary>
+        public string Band => BoundText.Any(char.IsLetter)
+            ? TextInkCollapseConverter.WordBandFor(CultureInfo.CurrentUICulture)
+            : TextInkCollapseConverter.DigitBand;
+
+        /// <summary>Window-space centre of that band's ink, as arranged.</summary>
+        public double BandCentre
         {
             get
             {
-                var ink = InkOf(TextInkCollapseConverter.CapBand);
+                var ink = InkOf(Band);
                 return Top(Text) + (ink.Top + ink.Bottom) / 2;
             }
         }
 
-        /// <summary>How far the word actually on screen paints its ink centre from the band the cell
-        /// aligns to — zero only for a word whose ink is exactly the cap band.</summary>
-        public double ShownTextOffsetFromCapBand
+        /// <summary>How far the text actually on screen paints its ink centre from the band the cell
+        /// aligns to — zero only when the shown text's ink is exactly the band.</summary>
+        public double ShownTextOffsetFromBand
         {
             get
             {
-                var band = InkOf(TextInkCollapseConverter.CapBand);
+                var band = InkOf(Band);
                 var shown = InkOf(Text.Text ?? "");
                 return (band.Top + band.Bottom) / 2 - (shown.Top + shown.Bottom) / 2;
             }
@@ -341,6 +400,9 @@ public class StatusCellAlignmentTests
         private readonly HostStore _store;
         private readonly HostMonitorManager _manager;
         private readonly string[] _tempFiles;
+        private readonly CultureInfo _entryUiCulture = CultureInfo.CurrentUICulture;
+        private readonly List<string> _skippedScripts = [];
+        private FontFamily _family = FontFamily.Default;
         private double _scaling;
 
         private Cells(Window window, HostStore store, HostMonitorManager manager, double scaling,
@@ -365,6 +427,9 @@ public class StatusCellAlignmentTests
         }
 
         public IReadOnlyList<Probe> Probes { get; }
+
+        /// <summary>Scripts this runner could not draw, so the caller can announce the gap.</summary>
+        public IReadOnlyList<string> SkippedScripts => _skippedScripts;
 
         public static Cells Open(ThemeVariant variant, double scaling)
         {
@@ -448,9 +513,48 @@ public class StatusCellAlignmentTests
         /// produce at runtime; the icons are vector paths and do not depend on the font.</summary>
         public void UseFont(FontFamily family)
         {
+            _family = family;
             foreach (var probe in Probes)
                 TextElement.SetFontFamily(probe.Text, family);
             Layout(_window);
+        }
+
+        /// <summary>
+        /// Switches the UI culture the converter reads its band from, and re-fires the margin
+        /// bindings — a culture change raises no property notification of its own, and re-applying
+        /// an UNCHANGED font raises none either (measured: the margin kept the previous culture's
+        /// band and the assertions went red by exactly the difference between the two bands). In
+        /// production nothing needs this: the UI culture is fixed before the first cell is
+        /// realized, so the first evaluation already sees the final band.
+        ///
+        /// Returns false when this runner cannot draw the culture's band at all: a bare CI runner
+        /// with no CJK face resolves no outlines for the ideograph, the converter correctly declines
+        /// to collapse onto ink that does not exist, and asserting a band nothing can render would
+        /// be asserting the fallback rather than the fix. Skipping is reported by the caller through
+        /// the probed-family accounting, never silently.
+        /// </summary>
+        public bool UseUiCulture(string culture)
+        {
+            var ui = CultureInfo.GetCultureInfo(culture);
+            var band = TextInkCollapseConverter.WordBandFor(ui);
+            if (!FontManager.Current.TryMatchCharacter(
+                    char.ConvertToUtf32(band, 0), FontStyle.Normal, FontWeight.Normal, FontStretch.Normal,
+                    _family, null, out _))
+            {
+                _skippedScripts.Add($"{culture} in {_family.Name}");
+                return false;
+            }
+
+            CultureInfo.CurrentUICulture = ui;
+            // Two notifications that land back where they started, so the MultiBinding re-evaluates
+            // under the new culture. Italic is guaranteed to differ from these cells' Normal.
+            foreach (var probe in Probes)
+            {
+                TextElement.SetFontStyle(probe.Text, FontStyle.Italic);
+                TextElement.SetFontStyle(probe.Text, FontStyle.Normal);
+            }
+            Layout(_window);
+            return true;
         }
 
         /// <summary>Puts <paramref name="word"/> in the cell. Production changes this text through
@@ -569,6 +673,10 @@ public class StatusCellAlignmentTests
 
         public void Dispose()
         {
+            // ModuleInit pins en-US so the zh-CN satellite cannot bleed Han glyphs into a committed
+            // baseline (#147). This class is the one thing in the assembly that moves it, and the
+            // suite runs serially in one process, so putting it back is not optional.
+            CultureInfo.CurrentUICulture = _entryUiCulture;
             _window.Close();
             _store.Dispose();
             _manager.DisposeAsync().AsTask().GetAwaiter().GetResult();

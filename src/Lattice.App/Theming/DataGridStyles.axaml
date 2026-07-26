@@ -138,8 +138,9 @@
     <Setter Property="FontFeatures" Value="+tnum" />
   </Style>
 
-  <!-- Cell text that a fixed-size ICON is centred against (issue #180): Tasks' State and Deadline,
-       Projects' and Transfers' Status. Those cells put the icon and this TextBlock in one
+  <!-- Cell text that a fixed-size ICON is centred against (issue #180): Tasks' State, Projects'
+       and Transfers' Status (words — this class), and Tasks' Deadline (figures — .digitAligned
+       below). Those cells put the icon and this TextBlock in one
        horizontal StackPanel and centre both — but VerticalAlignment centres LAYOUT BOXES, and a
        TextBlock's box is a line box (ascent + descent + line gap) whose glyph ink sits at a
        PER-FONT offset inside it. "Centre both boxes" therefore aligns in one font and misaligns in
@@ -149,13 +150,14 @@
        Helvetica is the worst of it AND what the app actually renders with on macOS, since Lattice
        pins no font and Avalonia's Skia font manager resolves the platform default to it (#179).
 
-       This collapses the text's layout box onto the CAP-HEIGHT band, so centring the pair centres
-       the icon on the capital the eye lines it up against, by construction, in any font. The band
-       is a fixed reference glyph, NOT the live word: the statuses differ in descender content
-       ("Suspended" has one, "Running" does not), so a band read off the live text would re-centre
-       the cell every time a task changed state (measured under that mutation: 1.24 px of shift) —
-       the reason the snooze pill's digit-band remedy (#176/#179) could not simply be copied here.
-       See TextInkCollapseConverter.CapHeight.
+       This collapses the text's layout box onto the band its own script is read against — the cap
+       band for Latin, the ideograph em band for the zh-CN UI, whose statuses are Han and do not
+       share the Latin line box at all (see TextInkCollapseConverter.WordBandFor). Centring the pair
+       then centres the icon on that band, by construction, in any font. The band is a fixed
+       reference glyph, NOT the live word: the statuses differ in descender content ("Suspended" has
+       one, "Running" does not), so a band read off the live text would re-centre the cell every
+       time a task changed state (measured under that mutation: 1.24 px of shift) — the reason the
+       snooze pill's digit-band remedy (#176/#179) could not simply be copied here.
 
        VerticalAlignment=Center is load-bearing, not decoration: the cell panels carry
        VerticalAlignment=Center, but that centres the PANEL in the cell — a StackPanel child
@@ -169,10 +171,29 @@
        pixels is the other half of the same defect — it must be off for the ICON too, which carries
        no class of its own and inherits the panel's value. A cell that applies this class without it
        is caught by the rendered half of StatusCellAlignmentTests. -->
-  <Style Selector="TextBlock.capAligned">
+  <Style Selector="TextBlock.wordAligned">
     <Setter Property="VerticalAlignment" Value="Center" />
     <Setter Property="Margin">
-      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.CapHeight}">
+      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Words}">
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
+      </MultiBinding>
+    </Setter>
+  </Style>
+
+  <!-- The same mechanism for a cell whose text is FIGURES, not words: Tasks' Deadline, whose
+       "MM-dd HH:mm" is formatted with the invariant culture and so never contains a letter in any
+       locale. The band is therefore the digit repertoire — the one the snooze pill uses — and not
+       the cap band (Codex P2 on PR #184): a face with old-style figures (Georgia) draws digits that
+       descend below the baseline and are shorter than its capitals, so aligning the warning glyph
+       to "H" there would centre it on ink the cell never shows. Everything else about the class is
+       identical, the panel's UseLayoutRounding="False" included. -->
+  <Style Selector="TextBlock.digitAligned">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Margin">
+      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Instance}">
         <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
         <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
         <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />

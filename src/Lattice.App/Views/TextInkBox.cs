@@ -8,9 +8,9 @@ using Avalonia.Media;
 namespace Lattice.App.Views;
 
 /// <summary>
-/// Collapses a text element's layout box onto the INK box of the digits it shows, so that a
+/// Collapses a text element's layout box onto the INK box of a fixed reference BAND, so that a
 /// sibling icon centred in the same panel is centred on the glyphs the eye sees rather than on
-/// a line box whose height is an accident of the font's ascent/descent metrics (issue #176).
+/// a line box whose height is an accident of the font's ascent/descent metrics (issues #176, #180).
 ///
 /// WHY THIS EXISTS. <c>VerticalAlignment="Center"</c> centres each child's LAYOUT box
 /// independently. A <see cref="Avalonia.Controls.TextBlock"/>'s box is a line box — ascent +
@@ -30,7 +30,7 @@ namespace Lattice.App.Views;
 /// The band is always a FIXED glyph run, never the live text. For the pill that keeps a clock
 /// ticking from "14:30" to "14:31" from resizing it by the fraction of a pixel that separates one
 /// digit's overshoot from another's; for the status cells (issue #180) it is what keeps the icon
-/// still while the status word changes under it — see <see cref="CapHeight"/>.
+/// still while the status word changes under it — see <see cref="Words"/>.
 ///
 /// Consumers must switch layout rounding OFF on the panel that centres the pair. The margin is
 /// fractional by nature, and rounding each child's arrange position back to a whole pixel is the
@@ -39,29 +39,33 @@ namespace Lattice.App.Views;
 /// </summary>
 public sealed class TextInkCollapseConverter : IMultiValueConverter
 {
-    /// <summary>The pill's converter: the band is the digit repertoire (see <see cref="DigitBand"/>).</summary>
-    public static readonly TextInkCollapseConverter Instance = new(DigitBand);
+    /// <summary>The digit converter: the band is the digit repertoire (see <see cref="DigitBand"/>).
+    /// Used by the snooze pill and by any cell whose text is figures only — the Tasks Deadline cell,
+    /// whose "MM-dd HH:mm" is formatted with the invariant culture and so is digits in every
+    /// locale. Named <c>Instance</c> because it was the only one when the pill introduced it
+    /// (#176/#179); the name is kept so that pill markup is not disturbed.</summary>
+    public static readonly TextInkCollapseConverter Instance = new(() => DigitBand);
 
     /// <summary>
-    /// The grid cells' converter: the band is the CAP-HEIGHT band (see <see cref="CapBand"/>).
+    /// The status cells' converter: the band is the one the UI's own script reads against — the
+    /// cap band for Latin, the ideograph em band for Han/Kana/Hangul (see <see cref="WordBandFor"/>).
     ///
-    /// WHY A DIFFERENT BAND, NOT THE SAME ONE (issue #180). The pill shows digits, so its own ink
-    /// IS a fixed band. A status cell shows WORDS, and the words change: "Running" has a descender
+    /// WHY A DIFFERENT BAND FROM THE PILL'S (issue #180). The pill shows digits, so its own ink IS
+    /// a fixed band. A status cell shows WORDS, and the words change: "Running" has a descender
     /// where "Active" has none, so a band read off the live text would re-centre the cell on every
     /// status change — measured under exactly that mutation, 1.24 px of vertical shift between
     /// "Active" and "Suspended" (it moves whichever of the two is not the panel's tallest child, so
     /// at 12 px text beside a 12 px icon it is the LABEL that slides). A twitching cell traded for
-    /// a mis-centred one. The band here is therefore independent of the displayed string in both
-    /// senses: it is a fixed reference glyph, and that glyph is the one the eye aligns against.
+    /// a mis-centred one. The band here is therefore independent of the displayed string: it is a
+    /// fixed reference glyph, and it is the one the eye aligns against.
     ///
-    /// WHY CAP HEIGHT AND NOT X-HEIGHT. Every status string these cells show is sentence case
-    /// ("Running", "No new tasks"), so the tallest thing on the line at the icon's shoulder is a
-    /// capital; centring a 12 px glyph on the cap band is the same rule Fluent/Material/Carbon all
-    /// state for icon-beside-label. An x-height band would seat the icon ~0.6 px lower (x-height
-    /// centre sits below cap centre) and let its box overhang the ascenders on both sides, which
-    /// reads as a sunk icon next to a capitalised word.
+    /// WHY CAP HEIGHT AND NOT X-HEIGHT, for Latin. Every status string is sentence case ("Running",
+    /// "No new tasks"), so the tallest thing on the line at the icon's shoulder is a capital;
+    /// centring a 12 px glyph on the cap band is the same rule Fluent/Material/Carbon all state for
+    /// icon-beside-label. An x-height band would seat the icon ~0.6 px lower and let its box
+    /// overhang the ascenders on both sides, which reads as a sunk icon next to a capital.
     /// </summary>
-    public static readonly TextInkCollapseConverter CapHeight = new(CapBand);
+    public static readonly TextInkCollapseConverter Words = new(() => WordBandFor(CultureInfo.CurrentUICulture));
 
     /// <summary>The glyph repertoire a "HH:mm" time can draw. Its ink box is the band the pill
     /// centres on — fixed, so the measurement does not change as the clock ticks.</summary>
@@ -75,10 +79,40 @@ public sealed class TextInkCollapseConverter : IMultiValueConverter
     /// </summary>
     public const string CapBand = "H";
 
-    private TextInkCollapseConverter(string band) => Band = band;
+    /// <summary>
+    /// The reference for scripts with no cap height, whose glyphs instead fill the em square:
+    /// Han, Kana, Hangul. "国" is a full-width ideograph with flat top and bottom strokes, so its
+    /// ink is the band those scripts read against.
+    /// </summary>
+    public const string IdeographBand = "国";
 
-    /// <summary>The fixed glyph run whose ink box this converter collapses the text's box onto.</summary>
-    public string Band { get; }
+    /// <summary>
+    /// The band a WORD label is read against in <paramref name="uiCulture"/>.
+    ///
+    /// THIS IS NOT COSMETIC (Codex P2 on PR #184). Lattice ships a zh-CN UI whose statuses are Han
+    /// ("运行中", "活动中", "传输中"). Those have no cap height, and — measured in Helvetica at 12 px,
+    /// the shipping face — they do not even share the Latin line box: "H" reports a line height of
+    /// 12.000 while "运行中" falls back to a CJK face and reports 16.800. Collapsing a 16.8 px line
+    /// box by a margin derived from a 12.0 px one puts the label nowhere near the icon. Measuring
+    /// the band through the SAME requested typeface keeps the two consistent, because FormattedText
+    /// resolves the same fallback face for the band that the label itself will draw in.
+    ///
+    /// The UI CULTURE decides this, not the label's own characters: the statuses come from resource
+    /// lookup by UI culture, so culture fixes the script for the whole set, and a band that cannot
+    /// vary with the text cannot re-centre the cell when the status changes — the invariant this
+    /// whole mechanism exists to hold.
+    /// </summary>
+    public static string WordBandFor(CultureInfo uiCulture) =>
+        uiCulture.TwoLetterISOLanguageName is "zh" or "ja" or "ko" ? IdeographBand : CapBand;
+
+    private readonly Func<string> _band;
+
+    private TextInkCollapseConverter(Func<string> band) => _band = band;
+
+    /// <summary>The fixed glyph run whose ink box this converter collapses the text's box onto.
+    /// Fixed with respect to the LABEL — a converter may still resolve it from the UI culture, which
+    /// does not change while the app runs.</summary>
+    public string Band => _band();
 
     /// <summary>Binding order: FontFamily, FontSize, FontWeight, FontStyle — the four properties
     /// that move glyph ink relative to the line box. Anything unresolved (template init hands out

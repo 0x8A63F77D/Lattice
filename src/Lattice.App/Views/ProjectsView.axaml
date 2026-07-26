@@ -282,7 +282,7 @@
                                    SortMemberPath="ByStatus" CanUserSort="True">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate x:DataType="vm:ProjectRow">
-                <!-- UseLayoutRounding=False: the capAligned label below carries a fractional
+                <!-- UseLayoutRounding=False: the wordAligned label below carries a fractional
                      collapse margin, and rounding either child's arrange rect back to whole pixels
                      re-separates the pair (#180). Set here so the ICON inherits it too. -->
                 <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center"
@@ -303,9 +303,9 @@
                   </Panel>
                   <!-- Inherits the grid foreground (TasksView State-column idiom;
                        design: status text 12px #424242, near primary). -->
-                  <!-- capAligned: icon centred on the cap band, not the line box (issue #180) —
+                  <!-- wordAligned: icon centred on the cap band, not the line box (issue #180) —
                        see the class comment in DataGridStyles.axaml. -->
-                  <TextBlock Classes="capAligned" Text="{Binding Data.StatusText}" FontSize="12"
+                  <TextBlock Classes="wordAligned" Text="{Binding Data.StatusText}" FontSize="12"
                              TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Data.StatusText}" />
                 </StackPanel>
               </DataTemplate>
