@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Headless;
 using Lattice.App.Tests;
+using Lattice.Tests;
 using Xunit;
 
 [assembly: AvaloniaTestApplication(typeof(TestAppBuilder))]
@@ -46,5 +47,9 @@ public class TestAppBuilder
 {
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<Lattice.App.App>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions());
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions())
+            // Issue #133: the SplitView pane's animated width otherwise makes the host rail's
+            // container realization a function of wall-clock time. HeadlessPaneMotion carries
+            // the mechanism; NavPaneWidthPolicyTests pins it.
+            .WithoutPaneWidthAnimation();
 }

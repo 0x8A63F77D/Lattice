@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media;
+using Lattice.Tests;
 using Lattice.VisualTests;
 using Xunit;
 
@@ -37,5 +38,9 @@ public static class TestAppBuilder
             .UseSkia()
             .WithInterFont()
             .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            // Issue #133: same reason as Lattice.App.Tests' builder. This assembly shows a real
+            // ShellWindow too (MenuSeparatorVisualTests' hostrail case opens a rail row's menu),
+            // so it needs the same guarantee that a rail row is realized. See HeadlessPaneMotion.
+            .WithoutPaneWidthAnimation();
 }
