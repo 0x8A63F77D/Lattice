@@ -92,6 +92,12 @@ public sealed class UiStateStore
         return updated;
     }
 
+    /// <summary>Same read-modify-write as <see cref="Update"/>, but REPORTS whether the save
+    /// landed. Most preferences can treat persistence as best-effort; one that also changed
+    /// state outside this file (#187 writes an OS login record) cannot — it has to know, so it
+    /// can put the two back in agreement rather than leave them split (Codex P2, PR #188).</summary>
+    public bool TryUpdate(Func<UiState, UiState> mutate) => Save(mutate(Load()));
+
     /// <summary>Saves UI state. Returns false on write failure, never throws.</summary>
     public bool Save(UiState state)
     {
@@ -146,7 +152,15 @@ public sealed record UiState(
     bool? ExitOnClose = null,
     // UI language (#147). Appended LAST with a default: a pre-#147 ui-state.json
     // (JSON-missing "language") loads as System — follow the OS — with no migration.
-    AppLanguage Language = AppLanguage.System)
+    AppLanguage Language = AppLanguage.System,
+    // Start-minimized flag for the login registration (#187), default FALSE — opt-in, like
+    // the login item itself. There is deliberately NO StartAtLogin member here: the OS record
+    // is the single source of truth for "is Lattice registered", so the toggle reads the
+    // record (IStartupRegistration.IsRegistered) rather than a copy that can drift out of
+    // agreement with it — see StartupPreference. This one remains persisted because it must
+    // survive an off/on cycle, during which no record exists to carry it. Appended LAST with
+    // a default, so every pre-#187 ui-state.json loads unchanged.
+    bool StartMinimized = false)
 {
     /// <summary>Factory default: standard density, all columns visible, auto widths.
     /// Fresh instance per call — the dictionaries are mutable, so a shared

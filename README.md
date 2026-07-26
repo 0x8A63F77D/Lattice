@@ -182,6 +182,21 @@ This is an alpha. Known gaps and unverified surfaces a tester is likely to hit:
   Windows and Linux legs are code-complete but untested on real hardware. On Linux,
   close-to-tray is **off by default** and needs a StatusNotifierItem/AppIndicator
   desktop, plus opt-in via **Settings → Tray**.
+- **Start-at-login is hardware-verified on macOS only**
+  ([#116](https://github.com/0x8A63F77D/Lattice/issues/116)). **Settings → Startup**
+  registers Lattice with your desktop session (a LaunchAgent on macOS, an XDG
+  autostart entry on Linux, a per-user `Run` value on Windows); both toggles are
+  **off by default**. The macOS leg was verified end to end; the Windows and Linux
+  legs are code-complete but not yet exercised on real hardware. On a Linux desktop
+  with no autostart support the entry is simply written and ignored.
+- **Turning the login item off *outside* Lattice does not update Lattice's toggle**
+  on macOS or Windows. macOS records that choice in a root-only database (System
+  Settings → Login Items), and Windows in a separate `StartupApproved` registry key;
+  neither is readable to us, so Lattice's switch keeps showing "on" while the OS
+  quietly skips it at login. The OS setting is the one that takes effect. Turning the
+  switch off and on again inside Lattice rewrites the registration and re-syncs them.
+  Linux is unaffected — that opt-out is written into the autostart file itself, which
+  Lattice does read.
 - **Windows 11 Mica material is unverified on real hardware**
   ([#11](https://github.com/0x8A63F77D/Lattice/issues/11)). Lattice requests Mica on
   Windows 11 and falls back to a solid window colour everywhere else; the Mica path

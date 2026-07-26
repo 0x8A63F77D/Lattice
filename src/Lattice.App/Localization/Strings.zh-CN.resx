@@ -434,6 +434,27 @@
   <data name="SettingsFullSpeedHiddenDescription" xml:space="preserve">
     <value>关闭时，隐藏窗口的轮询间隔最低为 30 秒以节省电量。</value>
   </data>
+  <data name="SettingsStartupSection" xml:space="preserve">
+    <value>开机启动</value>
+  </data>
+  <data name="SettingsStartAtLoginLabel" xml:space="preserve">
+    <value>登录时自动启动 Lattice</value>
+  </data>
+  <data name="SettingsStartAtLoginDescription" xml:space="preserve">
+    <value>开启后，Lattice 会向桌面会话注册，登录后自动启动。注册指向当前正在运行的这份程序，并在每次启动时刷新，因此移动或更新程序后会自动修复。</value>
+  </data>
+  <data name="SettingsStartMinimizedLabel" xml:space="preserve">
+    <value>启动时最小化到托盘</value>
+  </data>
+  <data name="SettingsStartMinimizedDescription" xml:space="preserve">
+    <value>仅对登录时的自动启动生效：Lattice 不显示窗口即开始监控，可从托盘打开。手动启动 Lattice 时始终显示窗口。</value>
+  </data>
+  <data name="SettingsStartupUnsupported" xml:space="preserve">
+    <value>当前这种运行方式无法注册自启动：它是通过 .NET 宿主启动的，而不是 Lattice 可执行文件。请运行打包后的应用以使用这些设置。</value>
+  </data>
+  <data name="SettingsStartupSaveFailed" xml:space="preserve">
+    <value>保存开机启动设置失败，设置保持不变。</value>
+  </data>
   <data name="TrayShowWindow" xml:space="preserve">
     <value>显示窗口</value>
   </data>

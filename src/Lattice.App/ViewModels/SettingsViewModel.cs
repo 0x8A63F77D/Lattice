@@ -16,11 +16,16 @@ public sealed partial class SettingsViewModel : ObservableObject
     private readonly LanguagePreference _language;
     private readonly UiStateStore _uiState;
     private readonly Action? _restart;
+    private readonly StartupPreference _startup;
 
     /// <param name="restart">Composition-root callback that relaunches the app (App.axaml.cs owns
     /// the process/single-instance-guard dance). Null off the desktop path (headless tests), which
     /// disables <see cref="RestartNowCommand"/>.</param>
-    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, LanguagePreference language, UiStateStore uiState, Action? restart = null)
+    /// <param name="startup">Owner of the start-at-login pair (#187). Null off the desktop path,
+    /// which — following the <paramref name="restart"/> precedent — yields a preference over an
+    /// <see cref="UnsupportedStartupRegistration"/>: a headless test can exercise the toggles'
+    /// disabled state without ever writing a real login item to the machine running the suite.</param>
+    public SettingsViewModel(HostRegistry registry, Func<IGuiRpcClient> clientFactory, ThemePreference theme, LanguagePreference language, UiStateStore uiState, Action? restart = null, StartupPreference? startup = null)
     {
         _registry = registry;
         _clientFactory = clientFactory;
@@ -28,6 +33,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         _language = language;
         _uiState = uiState;
         _restart = restart;
+        _startup = startup ?? new StartupPreference(uiState, new UnsupportedStartupRegistration());
     }
 
     /// <summary>Exposed for the Add-host dialog, which registers into the same registry/factory.</summary>
@@ -132,6 +138,43 @@ public sealed partial class SettingsViewModel : ObservableObject
         set
         {
             _uiState.Update(s => s with { ExitOnClose = !value });
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Inline error under the startup group when the OS login record could not be
+    /// written or removed.</summary>
+    [ObservableProperty] private string? _startupError;
+
+    /// <summary>False when this launch has no registrable executable (unsupported platform, or a
+    /// framework-dependent <c>dotnet Lattice.dll</c> run). Gates both toggles: a control that
+    /// silently does nothing is worse than a disabled one.</summary>
+    public bool CanStartAtLogin => _startup.IsSupported;
+
+    /// <summary>"Start Lattice at login" (issue #187), default OFF. Writes the platform record
+    /// FIRST and persists only if that succeeded, so the toggle can never read back on with no
+    /// registration behind it; a failure re-raises and the switch snaps back to the stored value
+    /// (same shape as <see cref="PollingIntervalSeconds"/>'s failure path).</summary>
+    public bool StartAtLogin
+    {
+        get => _startup.StartAtLogin;
+        set
+        {
+            StartupError = _startup.SetStartAtLogin(value) ? null : Strings.SettingsStartupSaveFailed;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>"Start minimized to tray" (issue #187), default OFF. The flag rides the REGISTERED
+    /// command line, so it changes login launches only — and flipping it while
+    /// <see cref="StartAtLogin"/> is on must rewrite that record, which
+    /// <see cref="StartupPreference.SetStartMinimized"/> does.</summary>
+    public bool StartMinimized
+    {
+        get => _startup.StartMinimized;
+        set
+        {
+            StartupError = _startup.SetStartMinimized(value) ? null : Strings.SettingsStartupSaveFailed;
             OnPropertyChanged();
         }
     }
