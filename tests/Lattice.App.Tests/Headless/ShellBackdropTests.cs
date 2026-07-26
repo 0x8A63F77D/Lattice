@@ -100,7 +100,7 @@ public class ShellBackdropTests
     private static Control BuildDataView(int view, HostGraphFixture fx) => view switch
     {
         0 => new TasksView { DataContext = new TasksViewModel(fx.Store, fx.Clock, fx.UiState, fx.Density, fx.Control) },
-        1 => new ProjectsView { DataContext = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control) },
+        1 => new ProjectsView { DataContext = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher()) },
         2 => new TransfersView { DataContext = new TransfersViewModel(fx.Store, fx.Clock, fx.Density) },
         3 => new EventLogView { DataContext = new EventLogViewModel(fx.Store) },
         _ => throw new ArgumentOutOfRangeException(nameof(view)),

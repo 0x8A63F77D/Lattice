@@ -45,7 +45,7 @@ public class ProjectsViewTests
         var fx = new HostGraphFixture();
         for (var i = 0; i < hostCount; i++)
             fx.AddHost($"host-{i}");
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         return (fx, window, view, vm);

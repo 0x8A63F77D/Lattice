@@ -29,10 +29,12 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     private readonly IUiClock _clock;
     private readonly HostControlService _control;
     // The attach-flow seam + UI dispatcher for the "Add project…" dialog (M3 PR I).
-    // Null when the shell did not wire them (the pre-attach test call sites): the
-    // AddProject command then stays permanently disabled — never a NRE.
-    private readonly AttachFlowRun? _attachRun;
-    private readonly IUiDispatcher? _ui;
+    // Both are REQUIRED ctor arguments: a VM with a dead AddProject command was a
+    // silent-degrade construction state that only ever existed because the pre-attach
+    // test call sites predated the seam. Tests pass explicit fakes now, so the seams
+    // are non-null everywhere and AddProject is always live.
+    private readonly AttachFlowRun _attachRun;
+    private readonly IUiDispatcher _ui;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
     // The last Rebuild's groups, reused by the control ops to resolve a selected
@@ -58,7 +60,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
     private readonly PartialBarState _partialBar = new();
 
     public ProjectsViewModel(HostStore store, IUiClock clock, HostControlService control,
-        AttachFlowRun? attachRun = null, IUiDispatcher? ui = null)
+        AttachFlowRun attachRun, IUiDispatcher ui)
     {
         _store = store;
         _clock = clock;
@@ -290,11 +292,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
             : null;
 
         // "Add project…" enablement (DI-3): a Connected host must exist in scope;
-        // when attach is wired but none is, surface the reason as a tooltip.
+        // when none is, surface the reason as a tooltip.
         AddProjectCommand.NotifyCanExecuteChanged();
-        AddProjectDisabledReason = _attachRun is not null && !ConnectableHosts().Any()
-            ? Strings.ProjectsAddProjectDisabledReason
-            : null;
+        AddProjectDisabledReason = ConnectableHosts().Any()
+            ? null
+            : Strings.ProjectsAddProjectDisabledReason;
     }
 
     // Hosts a command on the selected row would act on, for ENABLEMENT. A child
@@ -329,13 +331,11 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         (Scope.IsAllHosts ? _store.Hosts : _store.Hosts.Where(h => h.Config.Id == Scope.HostId))
             .Where(h => IsHostConnected(h.Config.Id));
 
-    private bool CanAddProject() => _attachRun is not null && _ui is not null && ConnectableHosts().Any();
+    private bool CanAddProject() => ConnectableHosts().Any();
 
     [RelayCommand(CanExecute = nameof(CanAddProject))]
     private void AddProject()
     {
-        if (_attachRun is null || _ui is null)
-            return;
         // Materialize ONCE: CanExecute already checked ConnectableHosts, but a host
         // can drop between that check and this body (background poll). Bail rather
         // than open an empty, unsubmittable dialog.

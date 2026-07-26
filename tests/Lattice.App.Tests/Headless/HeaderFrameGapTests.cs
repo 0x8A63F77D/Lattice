@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using FluentAvalonia.UI.Controls;
+using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Tests;
@@ -69,7 +70,7 @@ public class HeaderFrameGapTests
     public void Projects_grid_sits_flush_below_the_command_bar()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var window = fx.Host(new ProjectsView { DataContext = vm });
         fx.AddHost("host-a", new FakeGuiRpcClient());
         window.Show();

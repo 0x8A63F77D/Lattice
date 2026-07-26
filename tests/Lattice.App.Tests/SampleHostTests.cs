@@ -1,6 +1,7 @@
 #if DEBUG
 using Avalonia.Media;
 using Lattice.App.Infrastructure;
+using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
@@ -95,7 +96,7 @@ public class SampleHostTests : IAsyncLifetime
     public async Task Projects_grid_shows_a_varies_share_and_a_mixed_status_aggregate()
     {
         SeedFleet();
-        var vm = new ProjectsViewModel(_fx.Store, _fx.Clock, _fx.Control);
+        var vm = new ProjectsViewModel(_fx.Store, _fx.Clock, _fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         _fx.Start();
 
         // Three distinct master URLs → three parent aggregates in All-hosts scope.

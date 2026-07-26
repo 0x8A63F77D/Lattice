@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.VisualTree;
 using Avalonia.Headless.XUnit;
+using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Tests;
@@ -57,7 +58,7 @@ public class LoadingIndicatorActivityTests
     public async Task Projects_loading_bar_stops_when_loading_ends()
     {
         var fx = new HostGraphFixture();
-        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control);
+        var vm = new ProjectsViewModel(fx.Store, fx.Clock, fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
         var view = new ProjectsView { DataContext = vm };
         var window = fx.Host(view);
         fx.AddHost("host-a", new FakeGuiRpcClient());
