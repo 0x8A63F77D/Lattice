@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Lattice.Core;
 
 /// <summary>What a <see cref="HostRegistry.Changed"/> event describes.</summary>
@@ -28,11 +30,16 @@ public sealed record RegistryChangedEventArgs(RegistryChangeKind Kind, HostConfi
 /// thread-pool lane. Three facts make that safe, and all three must hold together:
 /// </para>
 /// <list type="number">
-/// <item><description><see cref="LatticeConfig"/> is an immutable record and the
-/// <see cref="HostConfig"/> list it carries is never mutated in place — <see cref="Mutate"/>
-/// always builds a NEW list inside a NEW record. A reader enumerating the old list therefore
-/// cannot see it change underneath it, so no reader can observe a half-applied edit or throw
-/// a collection-modified exception.</description></item>
+/// <item><description>The published <see cref="HostConfig"/> list cannot be mutated in place
+/// BY ANYONE, which <see cref="Sealed"/> enforces at the boundary rather than leaving to
+/// convention: every config entering this class — through the public constructor as much as
+/// through <see cref="Mutate"/> — is re-published with a fresh
+/// <see cref="ReadOnlyCollection{T}"/> of hosts. A caller that keeps a reference to the
+/// <c>List</c> it passed in holds a reference to a list this registry no longer uses, and
+/// <see cref="Hosts"/> cannot be downcast back to <c>List</c>. So a reader enumerating a
+/// published list on any thread cannot see it change underneath it — no half-applied edit,
+/// no collection-modified exception — and that holds for arbitrary callers, not just the
+/// well-behaved ones in this repo.</description></item>
 /// <item><description>Publication is one reference assignment, and reference writes are
 /// atomic — a reader sees either the whole old config or the whole new one, never a torn
 /// reference to neither.</description></item>
@@ -94,9 +101,22 @@ public sealed class HostRegistry
         // The one place a plain field write is the right one: nothing can observe the
         // instance until the constructor returns, and .NET guarantees that publication
         // barrier already. Going through Config here would only trip CS8618.
-        _config = config;
+        _config = Sealed(config);
         _path = path;
     }
+
+    /// <summary>
+    /// Normalizes a config into publishable form: the host list becomes a fresh
+    /// <see cref="ReadOnlyCollection{T}"/>. This is what makes the class doc's
+    /// immutability leg a property of the TYPE rather than of caller discipline, and it
+    /// closes both ways a caller could otherwise mutate a list a lane is enumerating —
+    /// keeping a reference to the <c>List</c> it passed to the public constructor, or
+    /// downcasting <see cref="Hosts"/> back to <c>List</c>. Copying breaks the first,
+    /// the wrapper breaks the second. Runs once per mutation (a user action), so the
+    /// copy is not on any hot path.
+    /// </summary>
+    private static LatticeConfig Sealed(LatticeConfig config) =>
+        config with { Hosts = new ReadOnlyCollection<HostConfig>([.. config.Hosts]) };
 
     /// <summary>Loads the config at <paramref name="path"/> (missing file ⇒ defaults).</summary>
     public static HostRegistry Load(string path) => new(LatticeConfig.Load(path), path);
@@ -181,6 +201,7 @@ public sealed class HostRegistry
         // directory, full disk), Config must stay at its old value so memory, disk,
         // and every already-connected monitor's config remain consistent. Swapping
         // first would leave memory diverged from disk until the next app start.
+        next = Sealed(next);
         next.Save(_path);
         Config = next;
         Changed?.Invoke(this, new RegistryChangedEventArgs(kind, host));
