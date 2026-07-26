@@ -314,6 +314,52 @@ public class StatisticsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Host_option_instances_live_as_long_as_their_host()
+    {
+        // The invariant behind #175, asserted directly rather than through a symptom: a ComboBox
+        // resolves its selection against item INSTANCES, so an option may never be recreated while
+        // its host is still in the fleet — not by a poll, not by a fleet change, and not by a scope
+        // round-trip that hides the picker. Recreating them is what blanked the picker.
+        var a = _fx.AddHost("host-a", Fake(3));
+        _fx.AddHost("host-b", Fake(3));
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.IsAllHostsScope && vm.HasChart);
+
+        var optionForA = vm.HostOptions.Single(o => o.Key == a.Id);
+
+        vm.Scope = new ScopeSelection(a.Id); // picker hidden
+        await _fx.SettleAsync(() => !vm.IsAllHostsScope);
+        vm.Scope = ScopeSelection.AllHosts; // and back
+        await _fx.SettleAsync(() => vm.IsAllHostsScope);
+        _fx.AddHost("host-c", Fake(3)); // fleet change rebuilds nothing that survived
+        await _fx.SettleAsync(() => vm.HostOptions.Count == 3);
+
+        Assert.Same(optionForA, vm.HostOptions.Single(o => o.Key == a.Id));
+    }
+
+    [Fact]
+    public async Task Host_option_display_name_updates_in_place_on_a_rename()
+    {
+        // The other half of the same invariant: a renamed host keeps its option INSTANCE and has
+        // its display name swapped in place (RowHolder.Data), so the picker's selection survives a
+        // rename instead of being silently dropped with the replaced instance.
+        var a = _fx.AddHost("host-a", Fake(3), name: "Original");
+        _fx.AddHost("host-b", Fake(3));
+        var vm = MakeVm();
+        _fx.Start();
+        await _fx.SettleAsync(() => vm.IsAllHostsScope && vm.HasChart);
+
+        var optionForA = vm.HostOptions.Single(o => o.Key == a.Id);
+        Assert.Equal("Original", optionForA.Data);
+
+        _fx.Registry.UpdateHost(a with { Name = "Renamed" });
+        await _fx.SettleAsync(() => optionForA.Data == "Renamed");
+
+        Assert.Same(optionForA, vm.HostOptions.Single(o => o.Key == a.Id));
+    }
+
+    [Fact]
     public async Task All_hosts_scope_exposes_a_host_picker_defaulting_to_the_first_connected()
     {
         var a = _fx.AddHost("host-a", Fake(3));
@@ -323,10 +369,10 @@ public class StatisticsViewModelTests : IAsyncLifetime
         await _fx.SettleAsync(() => vm.IsAllHostsScope && vm.HasChart);
 
         Assert.Equal(2, vm.HostOptions.Count);
-        Assert.NotNull(vm.SelectedHost);
+        Assert.NotNull(vm.SelectedHostId);
         // The default charts one connected host (3 projects from host-a or 4 from host-b);
         // pin to host-a explicitly and confirm the chart follows the picker.
-        vm.SelectedHost = vm.HostOptions.Single(o => o.HostId == a.Id);
+        vm.SelectedHostId = a.Id;
         await _fx.SettleAsync(() => vm.Chips.Count == 3);
         Assert.Equal(3, SeriesCount(vm));
     }

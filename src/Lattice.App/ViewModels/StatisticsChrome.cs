@@ -1,17 +1,27 @@
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Lattice.App.Aggregation;
+using Lattice.App.Infrastructure;
 
 namespace Lattice.App.ViewModels;
 
 /// <summary>One metric-switcher segment (design contract §4). Wording is Manager parity.</summary>
 public sealed record StatisticsMetricOption(string Label, CreditMetric Metric);
 
-/// <summary>The host picker's entry, shown only in the "All hosts" scope (§4).</summary>
-public sealed record StatisticsHostOption(Guid HostId, string DisplayName)
+/// <summary>
+/// The host picker's entry, shown only in the "All hosts" scope (§4).
+/// <para>A <see cref="RowHolder{TKey,TRow}"/> and NOT a record, on purpose (issue #175): a
+/// ComboBox resolves its selection against item INSTANCES, so an option's instance must live as
+/// long as its host does. The reconciler swaps <c>Data</c> (the display name) in place on a
+/// rename and inserts/removes only what a fleet change actually changed — where rebuilding the
+/// list wholesale silently dropped the control's selection and left the picker blank. Key is the
+/// host id; Data is the display name (bound directly, so an in-place rename re-renders).</para>
+/// </summary>
+public sealed class StatisticsHostOption(Guid hostId, string displayName)
+    : RowHolder<Guid, string>(hostId, displayName)
 {
-    // ComboBox displays this; keep it the plain host name.
-    public override string ToString() => DisplayName;
+    /// <summary>The host this entry selects — the holder's immutable key.</summary>
+    public Guid HostId => Key;
 }
 
 /// <summary>

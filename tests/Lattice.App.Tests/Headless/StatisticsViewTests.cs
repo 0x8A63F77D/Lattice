@@ -96,6 +96,74 @@ public class StatisticsViewTests
         await fx.DisposeAsync();
     }
 
+    // ---- #175: the picker must never keep a selection the CONTROL has silently dropped -----
+    //
+    // Both cases below rebuild HostOptions with value-equal-but-new StatisticsHostOption records,
+    // which is the trap: a value-equality guard on the selection repair short-circuits, no
+    // PropertyChanged fires, and the ComboBox — which tracks INSTANCES and coerced its own
+    // SelectedItem to null while the list was empty/replaced — is never told. Both therefore
+    // assert on `combo.SelectedItem`; a ViewModel-only assertion cannot see this bug at all
+    // (vm.SelectedHostId is correct throughout).
+
+    [AvaloniaFact]
+    public async Task Host_picker_defaults_when_the_session_started_in_a_single_host_scope()
+    {
+        // Trigger 1 (owner report, #175): the shell restores a persisted SINGLE-host scope in its
+        // constructor — the ViewModel is pushed out of "All hosts" BEFORE the view ever binds, so
+        // HostOptions is emptied while the selection is still set — and the user then
+        // switches the rail back to All hosts on the Statistics page.
+        var fx = new HostGraphFixture();
+        var vm = new StatisticsViewModel(fx.Store, fx.Clock);
+        var a = fx.AddHost("host-a", Fake(3));
+        fx.AddHost("host-b", Fake(3));
+        vm.Scope = new ScopeSelection(a.Id); // shell's restore, pre-bind
+        var view = new StatisticsView { DataContext = vm };
+        fx.Host(view);
+        fx.Start();
+        await fx.SettleAsync(() => vm.HasChart);
+        fx.Layout();
+
+        vm.Scope = ScopeSelection.AllHosts; // user clicks "All hosts" in the rail
+        await fx.SettleAsync(() => vm.IsAllHostsScope);
+        fx.Layout();
+
+        var combo = Assert.Single(view.GetVisualDescendants().OfType<ComboBox>());
+        Assert.NotNull(vm.SelectedHostId);
+        Assert.NotNull(combo.SelectedItem);
+        Assert.Equal(vm.SelectedHostId, ((StatisticsHostOption)combo.SelectedItem).HostId);
+
+        await fx.DisposeAsync();
+    }
+
+    [AvaloniaFact]
+    public async Task Host_picker_keeps_its_selection_when_a_host_joins_the_fleet()
+    {
+        // Trigger 2 (same class, #175): still in All hosts scope, a third host arrives. The option
+        // list is rebuilt from scratch, so the control's SelectedItem instance is no longer in
+        // Items — and the user's explicit pick must survive both in the ViewModel and on screen.
+        var (fx, _, view, vm) = MakeView();
+        var a = fx.AddHost("host-a", Fake(3));
+        fx.AddHost("host-b", Fake(4));
+        fx.Start();
+        await fx.SettleAsync(() => vm.IsAllHostsScope && vm.HasChart);
+        fx.Layout();
+
+        vm.SelectedHostId = a.Id;
+        await fx.SettleAsync(() => vm.Chips.Count == 3);
+        fx.Layout();
+
+        fx.AddHost("host-c", Fake(5)); // rebuilds HostOptions with new instances
+        await fx.SettleAsync(() => vm.HostOptions.Count == 3);
+        fx.Layout();
+
+        var combo = Assert.Single(view.GetVisualDescendants().OfType<ComboBox>());
+        Assert.Equal(a.Id, vm.SelectedHostId); // the pick is not reset by the fleet change
+        Assert.NotNull(combo.SelectedItem);
+        Assert.Equal(a.Id, ((StatisticsHostOption)combo.SelectedItem).HostId);
+
+        await fx.DisposeAsync();
+    }
+
     [AvaloniaFact]
     public async Task Loading_progress_bar_animates_only_while_loading()
     {
