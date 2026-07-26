@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
@@ -12,6 +13,7 @@ using Lattice.App.Localization;
 using Lattice.Boinc.GuiRpc;
 using Lattice.Core;
 using Microsoft.FSharp.Collections;
+using Microsoft.FSharp.Core;
 
 namespace Lattice.App.ViewModels;
 
@@ -34,6 +36,14 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     // Visible master URLs and the host they belong to: user toggles persist across the 1 s
     // ticks, but switching the charted host re-derives the top-6 default.
     private readonly HashSet<string> _visible = [];
+
+    // The palette slot each VISIBLE series holds (§2, issue #171). Threaded across rebuilds
+    // because that is what makes a colour stable while its line stays on screen; re-derived by
+    // SeriesColors.allocate from the visible set above, which is the only thing that decides
+    // membership. Reset whenever the charted host changes: slots are per-chart, and two hosts
+    // can share a project URL at different ordinals, so carrying an assignment across a host
+    // switch would hand the new host colours its own ordinals never asked for.
+    private FSharpMap<string, int> _colors = SeriesColors.empty;
     // Whether the user has toggled visibility for the current host. Until they do, the page mirrors
     // the live default (all ≤6, else top-6 by RAC); once they do, their set is authoritative.
     private bool _userOverrode;
@@ -255,6 +265,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         {
             _visibleHostId = null;
             _visible.Clear();
+            _colors = SeriesColors.empty;
             _userOverrode = false;
             if (Chips.Count > 0) Chips.Clear();
             if (Overflow.Count > 0) Overflow.Clear();
@@ -273,6 +284,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         if (_visibleHostId != hostId)
         {
             _userOverrode = false; // a fresh host starts on the default set
+            _colors = SeriesColors.empty; // ...and on a fresh colour allocation (see the field)
             _visibleHostId = hostId;
         }
 
@@ -294,6 +306,14 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             _visible.IntersectWith(masters); // persist the user's set; drop vanished projects
         }
 
+        // Hand the now-settled visible set to the allocator (§2, #171): every series on the chart
+        // gets its own palette slot, series that stayed on screen keep theirs, and a series that
+        // left holds none at all. From here on, _colors IS the visible set as far as the chart and
+        // the chips are concerned — nothing downstream re-derives a colour from an ordinal.
+        _colors = SeriesColors.allocate(
+            histories.Where(h => _visible.Contains(h.MasterUrl)).Select(h => new SeriesKey(h.MasterUrl, h.Ordinal)),
+            _colors);
+
         var partition = StatisticsChart.partition(ListModule.OfSeq(histories));
         SyncChips(partition.Chips);
         SyncOverflow(partition.Overflow);
@@ -310,13 +330,16 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             .Where(h => _visible.Contains(h.MasterUrl))
             .OrderBy(h => h.Ordinal)
             .Select(h => h.Name));
+        // The visible set rides the signature as the COLOUR ASSIGNMENT (url=slot), which subsumes
+        // it: a different set is a different assignment, and a series that changed slot must
+        // repaint even where the set happens to match.
         (Guid, CreditMetric, StatisticsChartTheme, string, string, object?) signature = (hostId,
             SelectedMetric.Metric, Theme,
-            string.Join(",", _visible.OrderBy(u => u, StringComparer.Ordinal)),
+            string.Join(",", _colors.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => $"{c.Key}={c.Value}")),
             visibleNames, snapshot!.Statistics);
         if (!signature.Equals(_chartSignature))
         {
-            var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, SetModule.OfSeq(_visible), ListModule.OfSeq(histories));
+            var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, _colors, ListModule.OfSeq(histories));
             var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme, SelectedMetric.Metric);
             Series = visual.Series;
             XAxes = visual.XAxes;
@@ -343,7 +366,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             Chips.Clear();
             foreach (var p in desired)
             {
-                var chip = new StatisticsLegendChip(p.MasterUrl, p.Name, p.Ordinal, StatisticsPalette.Brush(p.Ordinal), _visible.Contains(p.MasterUrl))
+                var chip = new StatisticsLegendChip(p.MasterUrl, p.Name, p.Ordinal, SwatchFor(p.MasterUrl), _visible.Contains(p.MasterUrl))
                 {
                     Toggled = OnChipToggled,
                 };
@@ -352,9 +375,13 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Same projects: only sync visibility (silently, so the sync itself never re-enters).
+        // Same projects: only sync visibility (silently, so the sync itself never re-enters) and
+        // the swatch, which follows the slot the series currently holds — none while hidden.
         foreach (var (chip, p) in Chips.Zip(desired))
+        {
             chip.SetVisibleSilently(_visible.Contains(p.MasterUrl));
+            chip.Swatch = SwatchFor(p.MasterUrl);
+        }
     }
 
     private void SyncOverflow(FSharpList<ProjectHistory> overflow)
@@ -386,6 +413,15 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             item.SetVisibleSilently(_visible.Contains(p.MasterUrl));
             item.CanCheck = CanCheck(p.MasterUrl);
         }
+    }
+
+    // A chip's swatch is the colour of the line it stands for — and nothing at all when that
+    // series is not on the chart (§2, #171). The view draws the grey "not plotted" swatch for a
+    // null, so a hidden chip never carries a colour it might later contradict.
+    private IBrush? SwatchFor(string master)
+    {
+        var slot = SeriesColors.trySlot(master, _colors);
+        return FSharpOption<int>.get_IsSome(slot) ? StatisticsPalette.Brush(slot.Value) : null;
     }
 
     // A row can be checked if it is already shown or the cap has room (§4).

@@ -57,7 +57,12 @@ snapshot matrix (4 metrics × 2 themes). Small multiples and dual-Y were explore
 
   No data cap — render whatever depth the daemon returns.
 
-### Palette (Fluent UI charting `DataVizPalette`, qualitative.1–6 — same hex both themes)
+### Palette (Fluent UI charting `DataVizPalette`, qualitative.1–10 — same hex both themes)
+
+Ten slots; at most six are ever held at once (the §4 cap), but a slot is chosen by ordinal
+preference, so any of the ten can be on screen — e.g. the eighth project alone shows in
+qualitative.8.
+
 | # | Name | Hex |
 |---|---|---|
 | 1 | Cornflower | `#637CEF` |
@@ -66,12 +71,42 @@ snapshot matrix (4 metrics × 2 themes). Small multiples and dual-Y were explore
 | 4 | Orchid | `#9373C0` |
 | 5 | Light green | `#13A10E` |
 | 6 | Light blue | `#3A96DD` |
+| 7 | — | `#CA5010` |
+| 8 | — | `#57811B` |
+| 9 | — | `#B146C2` |
+| 10 | — | `#AE8C00` |
 
-- Color assignment: **project ordinal in the daemon's project list**, independent of
-  visibility — toggling legend chips never recolors a series.
-- **Hard cap: ≤ 6 series visible simultaneously** (see §4 overflow rule), so colors never
-  repeat. If a later batch raises the cap, continue with official qualitative.7–10
-  (`#CA5010` `#57811B` `#B146C2` `#AE8C00`) — never invent colors.
+Color assignment (owner ruling on issue #171, 2026-07-26 — this REPLACES the original
+"color = ordinal, independent of visibility / the ≤6 cap means colors never repeat" rules,
+which were jointly unsatisfiable past ten projects: with 10 colors keyed to every project for
+life, two projects owned one color before anything decided what to draw, and no visibility cap
+could prevent two same-colored lines):
+
+1. **Only visible series hold a color.** A color belongs to a line on the chart, not to a
+   project. A hidden project holds no palette slot at all.
+2. **Hidden legend chips render grey** (`LatticeDisabledBrush` swatch + struck-through
+   secondary text, §4) — grey means "not on the chart", and it is the only thing a chip
+   without a slot can show.
+3. **Deterministic allocation, home-slot preference.** A series becoming visible takes its
+   *home slot* — `palette[ordinal mod 10]`, its daemon-list ordinal folded into the palette —
+   when that slot is free, otherwise the lowest free slot. No randomness, no wall-clock, no
+   dependence on the order the visible set is enumerated in.
+4. **Stability while visible.** A series' color never changes while it stays on screen;
+   toggling *other* chips can never recolor it. (This is the only stability users actually
+   rely on, and it is what survives from the old rule 1.)
+5. **Hosts with ≤ 10 projects keep today's line colors.** Every home slot is uncontended
+   there, so allocation degenerates exactly to the old `Slot(ordinal)` — which is why the
+   shipped ≤10-project chart baselines stay byte-identical.
+
+**HARD CONSTRAINT: the visible cap must never exceed the palette size** (currently 6 ≤ 10).
+That inequality is what makes two visible series sharing a color structurally impossible —
+there are always enough slots for everything on screen — rather than a rule someone has to
+uphold. Raising the cap past ten would need official palette colors beyond qualitative.10
+adopted FIRST; never invent colors, and never raise the cap past the palette length.
+
+**Accepted cost:** on an 11+ project host, a series hidden and later re-shown may come back in
+a different color if its home slot was claimed while it was off the chart. Deliberate — the
+costume change happens off-stage, never on-stage.
 
 ### Axes
 - Chart background **transparent** (page canvas shows through).
@@ -172,7 +207,10 @@ animation anywhere on the page.
 6. RAC values from the daemon are doubles — do not round them before charting; rounding is
    a display concern (§6 tooltip / §2 axis labeler).
 7. Legend chips and the +N-more flyout are chrome state, not chart state: rebuilding series
-   on toggle is fine, but keep color-by-ordinal stable (§2) so no visual reshuffle occurs.
+   on toggle is fine, but a series that stays visible keeps its color across the rebuild
+   (§2 point 4) so no visual reshuffle occurs. A chip's swatch is the color of the line it
+   stands for and nothing at all when that line is off the chart — never a color it holds
+   in reserve.
 
 ## Snapshot matrix (machine gate)
 
@@ -180,7 +218,9 @@ animation anywhere on the page.
 4 metrics × 2 themes × **gap data** (12-day span: a 3-day gap run, a 1-day gap, one contiguous
 control project) = 8 more, gating the #170 metric split from both sides — the totals' dashed
 bridges and the averages' hard breaks in the same fixture. Plus: Top-6 overflow state (light),
->30-point pure-line state (light), the three §5 states. Culture pinned `en-US` in the harness.
+>30-point pure-line state (light), the **home-slot clash** state (light — 11 projects whose
+default-visible six include two that prefer the same palette slot, the issue #171 case), the
+three §5 states. Culture pinned `en-US` in the harness.
 
 ## Files
 - `README.md` — this contract.

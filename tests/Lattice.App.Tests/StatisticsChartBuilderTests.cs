@@ -25,19 +25,66 @@ public class StatisticsChartBuilderTests
     private static SeriesPoint Point(int dayOffset, double? value) =>
         new(Day0.AddDays(dayOffset), value is { } v ? FSharpOption<double>.Some(v) : FSharpOption<double>.None);
 
+    // Specs carry the palette SLOT the series holds while it is on the chart (issue #171); on a
+    // ≤10-project host the allocator hands out slot == ordinal, which is the shape these fixtures
+    // use unless a case is specifically about a contended slot.
     private static SeriesSpec Spec(string url, string name, int ordinal, params SeriesPoint[] points) =>
-        new(url, name, ordinal, ListModule.OfSeq(points));
+        new(url, name, ordinal, ordinal, ListModule.OfSeq(points));
 
     private static SeriesSpec Ramp(string url, string name, int ordinal, int count) =>
         Spec(url, name, ordinal, [.. Enumerable.Range(0, count).Select(i => Point(i, i))]);
 
     [Fact]
-    public void Palette_is_colour_by_ordinal_and_wraps_past_ten()
+    public void Palette_is_a_lookup_by_slot_and_refuses_to_wrap()
     {
         Assert.Equal(SKColor.Parse("#637CEF"), StatisticsPalette.SkColor(0));
         Assert.Equal(SKColor.Parse("#9373C0"), StatisticsPalette.SkColor(3)); // orchid, LHC in the mock
-        Assert.Equal(StatisticsPalette.SkColor(0), StatisticsPalette.SkColor(10)); // wraps mod 10
+
+        // No modulo fold any more (issue #171): folding an out-of-range index is exactly how two
+        // projects came to own one colour, so slot 10 is an error, not colour 0.
+        Assert.Throws<ArgumentOutOfRangeException>(() => StatisticsPalette.SkColor(StatisticsPalette.SlotCount));
+        Assert.Throws<ArgumentOutOfRangeException>(() => StatisticsPalette.Brush(-1));
     }
+
+    [Fact]
+    public void Palette_length_matches_the_allocator_it_is_indexed_by()
+    {
+        Assert.Equal(SeriesColors.paletteSize, StatisticsPalette.SlotCount);
+    }
+
+    [Fact]
+    public void Two_visible_series_with_the_same_home_slot_still_paint_different_colours()
+    {
+        // The #171 case, end to end on an 11-project host: ordinals 0 and 10 share a home slot.
+        // Both are visible, so both hold their own slot and the two lines cannot look alike.
+        var histories = ElevenProjects();
+        var colors = SeriesColors.ofVisible(ElevenProjects()
+            .Where(h => VisibleOrdinals.Contains(h.Ordinal))
+            .Select(h => new SeriesKey(h.MasterUrl, h.Ordinal)));
+        var specs = StatisticsChart.seriesFor(CreditMetric.UserTotal, colors, histories);
+
+        var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), StatisticsChartTheme.Light, CreditMetric.UserTotal);
+        var strokes = visual.Series
+            .Cast<LineSeries<DateTimePoint>>()
+            .Select(line => ((SolidColorPaint)line.Stroke!).Color)
+            .ToList();
+
+        Assert.Equal(VisibleOrdinals.Length, strokes.Count);
+        Assert.Equal(strokes.Count, strokes.Distinct().Count());
+        // Ordinal 0 keeps cornflower; ordinal 10, whose home slot it holds, takes the lowest free
+        // slot (qualitative.6 — 0..4 are held by ordinals 0..4).
+        Assert.Equal(SKColor.Parse("#637CEF"), strokes[0]);
+        Assert.Equal(SKColor.Parse("#3A96DD"), strokes[^1]);
+    }
+
+    // Ordinals 0-4 plus 10: six visible series on an eleven-project host, with one home-slot clash.
+    private static readonly int[] VisibleOrdinals = [0, 1, 2, 3, 4, 10];
+
+    private static FSharpList<ProjectHistory> ElevenProjects() => ListModule.OfSeq(
+        Enumerable.Range(0, 11).Select(i => new ProjectHistory(
+            $"https://p{i}.org/", $"Project {i}", i, 100 - i,
+            ListModule.OfSeq(Enumerable.Range(0, 5).Select(d =>
+                new DailyCredit(Day0.AddDays(d), 1000 + d + i, 10 + d, 500 + d, 5 + d))))));
 
     [Fact]
     public void Every_line_pins_the_section_two_style()

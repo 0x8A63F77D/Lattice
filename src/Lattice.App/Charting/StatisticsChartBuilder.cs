@@ -113,7 +113,7 @@ public static class StatisticsChartBuilder
 
     private static LineSeries<DateTimePoint> BuildSeries(SeriesSpec spec, double marker, CreditMetric metric)
     {
-        var color = StatisticsPalette.SkColor(spec.Ordinal);
+        var color = StatisticsPalette.SkColor(spec.Slot);
         var points = ListModule
             .ToArray(spec.Points)
             .Select(p => new DateTimePoint(p.Day.UtcDateTime, ToNullable(p.Value)))
@@ -157,7 +157,7 @@ public static class StatisticsChartBuilder
     /// </summary>
     private static IEnumerable<ISeries> BuildBridges(SeriesSpec spec, CreditMetric metric)
     {
-        var color = StatisticsPalette.SkColor(spec.Ordinal);
+        var color = StatisticsPalette.SkColor(spec.Slot);
         return ListModule
             .ToArray(StatisticsChart.gapBridges(metric, spec.Points))
             .Select(bridge => (ISeries)new LineSeries<DateTimePoint>
