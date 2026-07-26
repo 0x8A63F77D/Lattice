@@ -126,18 +126,18 @@ internal sealed class JourneyHarness : IAsyncDisposable
     /// <summary>
     /// Headless Show() does not run a full layout pass, so the NavigationView's
     /// PaneCustomContent presenter (which hosts the rail) and page content stay
-    /// unrealized until measured — a single measure/arrange realizes the tree,
-    /// matching what a real render loop does at startup (precedent: every fixture's
-    /// private Layout() helper in this directory). Also drains any HostStore events
-    /// background monitors posted since the last drain (see class doc), so a
-    /// Layout() call right after a synchronous mutation observes its effects.
+    /// unrealized until measured. The layout step itself is delegated to
+    /// <see cref="HeadlessLayout.Layout"/> — a hand-rolled measure/arrange plus a bare
+    /// RunJobs() is NOT a settle (see that helper: the real layout pass rides the headless
+    /// 60 fps render timer, and property transitions run off the wall clock). This wrapper
+    /// adds the journey-specific part: draining any HostStore events background monitors
+    /// posted since the last drain (see class doc), so a Layout() call right after a
+    /// synchronous mutation observes its effects.
     /// </summary>
     public void Layout()
     {
         _dispatcher.Drain();
-        Window.Measure(new Size(Window.Width, Window.Height));
-        Window.Arrange(new Rect(0, 0, Window.Width, Window.Height));
-        Dispatcher.UIThread.RunJobs();
+        HeadlessLayout.Layout(Window);
         _dispatcher.Drain();
     }
 

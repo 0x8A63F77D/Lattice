@@ -45,17 +45,7 @@ public static class HeadlessLayout
         // Pass 1 applies control templates, so the transition-bearing template children exist to
         // be detached below.
         MeasureArrange(window);
-
-        List<(Animatable Target, Transitions Saved)> detached = Detach(window);
-        try
-        {
-            MeasureArrange(window);
-            Pump();
-        }
-        finally
-        {
-            Reattach(detached);
-        }
+        Settle(window, () => MeasureArrange(window));
     }
 
     /// <summary>
@@ -63,12 +53,31 @@ public static class HeadlessLayout
     /// opened into the window's overlay layer, whose entrance transition would otherwise still be
     /// running when the test reads geometry or captures a frame.
     /// </summary>
-    public static void Settle(Visual root)
+    public static void Settle(Visual root) => Settle(root, static () => { });
+
+    private static void Settle(Visual root, Action relayout)
     {
-        List<(Animatable Target, Transitions Saved)> detached = Detach(root);
+        var detached = new List<(Animatable Target, Transitions Saved)>();
         try
         {
-            Pump();
+            for (var round = 0; round < 20; round++)
+            {
+                // Re-scan every round, not once up front: a pump applies queued templates and
+                // realizes virtualized children, and each of those arrives with its OWN
+                // transitions live. Detaching only the visuals that existed before the first
+                // pump would let a late-materialized popup or row animate right through the
+                // settle and hand the test an intermediate frame anyway (Codex P2).
+                DetachNew(root, detached);
+                relayout();
+                Dispatcher.UIThread.RunJobs();
+                AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+
+                // Settled = nothing left to run AND nothing new appeared to detach.
+                if (!Dispatcher.UIThread.HasJobsWithPriority(DispatcherPriority.SystemIdle)
+                    && DetachNew(root, detached) == 0)
+                    break;
+            }
+            Dispatcher.UIThread.RunJobs();
         }
         finally
         {
@@ -101,20 +110,22 @@ public static class HeadlessLayout
         window.Arrange(new Rect(0, 0, window.Width, window.Height));
     }
 
-    private static List<(Animatable Target, Transitions Saved)> Detach(Visual root)
+    // Detaches every transition currently live under <paramref name="root"/> and appends it to
+    // <paramref name="sink"/>, returning how many were found. Already-detached visuals filter
+    // themselves out (their Transitions is now null), so repeated calls only pick up newcomers.
+    private static int DetachNew(Visual root, List<(Animatable Target, Transitions Saved)> sink)
     {
         List<Animatable> animated = root.GetSelfAndVisualDescendants()
             .OfType<Animatable>()
             .Where(a => a.Transitions is { Count: > 0 })
             .ToList();
 
-        var detached = new List<(Animatable, Transitions)>(animated.Count);
         foreach (Animatable a in animated)
         {
-            detached.Add((a, a.Transitions!));
+            sink.Add((a, a.Transitions!));
             a.Transitions = null;
         }
-        return detached;
+        return animated.Count;
     }
 
     private static void Reattach(List<(Animatable Target, Transitions Saved)> detached)
