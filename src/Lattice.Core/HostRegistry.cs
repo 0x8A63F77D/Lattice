@@ -19,7 +19,36 @@ public sealed record RegistryChangedEventArgs(RegistryChangeKind Kind, HostConfi
 /// <summary>
 /// The mutable collection of monitored hosts plus the polling interval.
 /// Every mutation persists to disk and raises <see cref="Changed"/>.
-/// Not thread-safe: mutate from one thread (the UI thread in the app).
+/// <para>
+/// <b>Publication protocol.</b> WRITES are single-threaded: mutate from one thread only
+/// (the UI thread in the app) — two concurrent mutators would lose one another's edit,
+/// because each builds its next state from the <c>_config</c> it read (read-modify-write
+/// with no lock). READS are free from any thread and need no lock, which is what
+/// <c>HostControlService.FindConfig</c> relies on when it walks <see cref="Hosts"/> on a
+/// thread-pool lane. Three facts make that safe, and all three must hold together:
+/// </para>
+/// <list type="number">
+/// <item><description><see cref="LatticeConfig"/> is an immutable record and the
+/// <see cref="HostConfig"/> list it carries is never mutated in place — <see cref="Mutate"/>
+/// always builds a NEW list (<c>[.. _config.Hosts, host]</c>) inside a NEW record. A reader
+/// enumerating the old list therefore cannot see it change underneath it, so no reader can
+/// observe a half-applied edit or throw a collection-modified exception.</description></item>
+/// <item><description>Publication is one reference assignment (<c>_config = next</c>),
+/// and reference writes are atomic — a reader sees either the whole old config or the
+/// whole new one, never a torn reference to neither.</description></item>
+/// <item><description>The reference is published AFTER the record it points at is fully
+/// built (the record is constructed and its list materialized before <see cref="Mutate"/>
+/// even runs), so a reader that observes the new reference observes complete contents.</description></item>
+/// </list>
+/// <para>
+/// The field is deliberately NOT <c>volatile</c>: the only thing volatility would add here
+/// is a freshness bound, and no consumer needs one. Every reader is either edge-driven —
+/// it acts on a <see cref="Changed"/> event, which is raised after the swap by the mutating
+/// thread — or, like <c>FindConfig</c>, tolerant of one stale read by construction: a host
+/// removed a microsecond ago still yields a connection attempt that the caller must already
+/// handle failing (<c>HostRemovedException</c> covers the converse). Reading a stale
+/// snapshot is a semantic outcome here, not a data race.
+/// </para>
 /// </summary>
 public sealed class HostRegistry
 {
@@ -27,6 +56,10 @@ public sealed class HostRegistry
     public static readonly IReadOnlyList<int> AllowedPollingIntervals = LatticeConfig.AllowedPollingIntervals;
 
     private readonly string _path;
+    // Single-writer, any-reader: swapped whole by Mutate on the one mutating thread,
+    // read lock-free from any thread. See the class doc's publication protocol for why
+    // that is safe without volatile — it hangs on this field only ever holding a fully
+    // built immutable record.
     private LatticeConfig _config;
 
     /// <summary>Wraps an in-memory config; <paramref name="path"/> is where mutations are saved.</summary>
