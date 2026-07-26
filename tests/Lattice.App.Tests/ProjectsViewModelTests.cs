@@ -1,3 +1,4 @@
+using System.Globalization;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
@@ -30,7 +31,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
 
     private HostConfig AddHost(string address, FakeGuiRpcClient fake) => _fx.AddHost(address, fake);
 
-    private ProjectsViewModel MakeVm() => new(_fx.Store, _fx.Clock, _fx.Control);
+    private ProjectsViewModel MakeVm() =>
+        new(_fx.Store, _fx.Clock, _fx.Control, FakeAttachFlow.NoopRun, new ImmediateUiDispatcher());
 
     // Projects arrive via get_state (cached once per connection), so a project
     // row needs only the project present in the state — no results required.
@@ -43,6 +45,19 @@ public class ProjectsViewModelTests : IAsyncLifetime
     private static FakeGuiRpcClient FakeWithProject(string url, string name, double rac = 0) =>
         FakeWithProjects(Proj(url, name, rac));
 
+    /// <summary>
+    /// "This group has aggregated exactly <paramref name="hosts"/> attachments" — the
+    /// settle condition for any MULTI-host case. A parent row's HostsText IS its
+    /// attachment count (<see cref="ProjectRowViewModel.Parent"/>), so unlike a row
+    /// COUNT this cannot be satisfied while a second host's snapshot is still in
+    /// flight: hosts sharing a project merge into ONE row, which the first host alone
+    /// already produces (issue #150). Written as a predicate over Rows rather than a
+    /// Single() lookup so it is safe to evaluate before the row exists.
+    /// </summary>
+    private static bool Aggregates(ProjectsViewModel vm, string masterUrl, int hosts) =>
+        vm.Rows.Any(r => r.Data.IsParent && r.Data.MasterUrl == masterUrl
+                         && r.Data.HostsText == hosts.ToString(CultureInfo.InvariantCulture));
+
     [Fact]
     public async Task Same_master_url_aggregates_and_expands_to_children()
     {
@@ -50,7 +65,8 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-b", FakeWithProject("http://p/", "P", rac: 5));
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1, "two hosts on one URL collapse to a single parent");
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2),
+            "two hosts on one URL collapse to a single parent");
 
         var parent = vm.Rows[0];
         Assert.True(parent.Data.IsParent);
@@ -110,7 +126,7 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-b", FakeWithProject("http://p/", "P", rac: 5));
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2));
 
         vm.ToggleExpandCommand.Execute("http://p/");
         await _fx.SettleAsync(() => vm.Rows.Count == 3);
@@ -136,7 +152,7 @@ public class ProjectsViewModelTests : IAsyncLifetime
         var hostB = AddHost("host-b", fakeB);
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 1);
+        await _fx.SettleAsync(() => vm.Rows.Count == 1 && Aggregates(vm, "http://p/", hosts: 2));
 
         vm.ToggleExpandCommand.Execute("http://p/");
         await _fx.SettleAsync(() => vm.Rows.Count == 3, "expanding shows both hosts' children");
@@ -267,7 +283,15 @@ public class ProjectsViewModelTests : IAsyncLifetime
         AddHost("host-b", FakeWithProjects(Proj("u-b", "Beta", rac: 5)));
         var vm = MakeVm();
         _fx.Start();
-        await _fx.SettleAsync(() => vm.Rows.Count == 2, "two parent groups aggregate");
+        // NOT `Rows.Count == 2`: Beta lives on both hosts and merges into ONE row, so that
+        // count goes true the instant host-a alone has landed (Alpha + Beta) — while host-b's
+        // Beta attachment is still in flight. The expand below would then produce 3 rows, not
+        // the 4 asserted, which is exactly the ubuntu-CI failure in issue #150. Settling on
+        // both groups' attachment counts is the fully-aggregated end state, unreachable from
+        // one host.
+        await _fx.SettleAsync(
+            () => vm.Rows.Count == 2 && Aggregates(vm, "u-a", hosts: 1) && Aggregates(vm, "u-b", hosts: 2),
+            "Alpha aggregates host-a and Beta aggregates BOTH hosts");
         // compute's default is RAC descending: Beta (5+5=10) before Alpha (1).
         // Order is the VIEW's (RowsView), not the source Rows collection.
         Assert.Equal(new[] { "Beta", "Alpha" }, ViewNames(vm));
