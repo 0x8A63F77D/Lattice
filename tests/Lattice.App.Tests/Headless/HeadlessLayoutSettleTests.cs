@@ -1,4 +1,7 @@
+using Avalonia.Animation;
 using Avalonia.Controls;
+using Avalonia.Data;
+using Avalonia.Diagnostics;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
@@ -108,8 +111,42 @@ public class HeadlessLayoutSettleTests
         Layout(window);
 
         Assert.Contains(
-            window.GetSelfAndVisualDescendants().OfType<Avalonia.Animation.Animatable>(),
+            window.GetSelfAndVisualDescendants().OfType<Animatable>(),
             a => a.Transitions is { Count: > 0 });
+        window.Close();
+    }
+
+    // ...and restores the value's SOURCE, not just its value. App.axaml, TasksView.axaml and
+    // ProjectsView.axaml all declare Transitions from a STYLE setter. Detaching by assignment and
+    // writing the effective value back would promote it to a LOCAL value, which outranks styles —
+    // a later class or theme change could then no longer restyle it, and the test would quietly
+    // stop reproducing production behaviour (Codex P2). Falsification: swap the settle's
+    // Animation-priority override back for `a.Transitions = saved` and this goes RED.
+    [AvaloniaFact]
+    public void Layout_leaves_style_sourced_transitions_at_style_priority()
+    {
+        (ShellWindow window, ShellViewModel shell, HostRegistry registry) = MakeShell();
+        registry.AddHost(TestData.MakeHostConfig(name: "a"));
+        window.Show();
+        Layout(window);
+
+        List<Animatable> styled = window.GetSelfAndVisualDescendants()
+            .OfType<Animatable>()
+            .Where(a => a.Transitions is { Count: > 0 })
+            .ToList();
+        Assert.NotEmpty(styled);
+
+        Assert.All(styled, a =>
+        {
+            BindingPriority priority = a.GetDiagnostic(Animatable.TransitionsProperty).Priority;
+            Assert.True(priority != BindingPriority.Animation,
+                $"{a.GetType().Name}.Transitions is still held at Animation priority — the settle "
+                + "did not dispose its override.");
+        });
+
+        // The concrete style-sourced case the finding names: the Tasks progress fill.
+        Assert.Contains(styled, a =>
+            a.GetDiagnostic(Animatable.TransitionsProperty).Priority == BindingPriority.Style);
         window.Close();
     }
 }

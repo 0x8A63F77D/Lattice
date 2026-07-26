@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Animation;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Headless;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -57,7 +58,7 @@ public static class HeadlessLayout
 
     private static void Settle(Visual root, Action relayout)
     {
-        var detached = new List<(Animatable Target, Transitions Saved)>();
+        var detached = new List<IDisposable>();
         try
         {
             for (var round = 0; round < 20; round++)
@@ -110,10 +111,20 @@ public static class HeadlessLayout
         window.Arrange(new Rect(0, 0, window.Width, window.Height));
     }
 
-    // Detaches every transition currently live under <paramref name="root"/> and appends it to
-    // <paramref name="sink"/>, returning how many were found. Already-detached visuals filter
-    // themselves out (their Transitions is now null), so repeated calls only pick up newcomers.
-    private static int DetachNew(Visual root, List<(Animatable Target, Transitions Saved)> sink)
+    // Detaches every transition currently live under <paramref name="root"/>, appending one undo
+    // handle per visual to <paramref name="sink"/>, and returns how many were found.
+    // Already-detached visuals filter themselves out (their effective Transitions is now null), so
+    // repeated calls only pick up newcomers.
+    //
+    // The override goes in at Animation priority — the top of the value-precedence stack — rather
+    // than as a plain `a.Transitions = null` assignment. Two reasons. It has to outrank a LOCAL
+    // value, which is what a ControlTemplate's inline <Panel.Transitions> is (SplitView's
+    // PART_PaneRoot); and disposing it must REVEAL the original value rather than overwrite it,
+    // because App.axaml / TasksView.axaml / ProjectsView.axaml declare Transitions from a STYLE
+    // setter. Writing the effective value back by assignment would promote it to a local value,
+    // after which a later class or theme change could no longer restyle it and the test would
+    // silently stop reproducing production behaviour (Codex P2).
+    private static int DetachNew(Visual root, List<IDisposable> sink)
     {
         List<Animatable> animated = root.GetSelfAndVisualDescendants()
             .OfType<Animatable>()
@@ -121,16 +132,15 @@ public static class HeadlessLayout
             .ToList();
 
         foreach (Animatable a in animated)
-        {
-            sink.Add((a, a.Transitions!));
-            a.Transitions = null;
-        }
+            if (a.SetValue(Animatable.TransitionsProperty, null, BindingPriority.Animation) is { } undo)
+                sink.Add(undo);
+
         return animated.Count;
     }
 
-    private static void Reattach(List<(Animatable Target, Transitions Saved)> detached)
+    private static void Reattach(List<IDisposable> detached)
     {
-        foreach ((Animatable target, Transitions saved) in detached)
-            target.Transitions = saved;
+        foreach (IDisposable undo in detached)
+            undo.Dispose();
     }
 }
