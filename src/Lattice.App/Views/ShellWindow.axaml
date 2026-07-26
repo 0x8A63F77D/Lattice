@@ -353,14 +353,32 @@
                         <Binding Path="#Nav.IsPaneOpen" />
                       </MultiBinding>
                     </Border.IsVisible>
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                      <PathIcon Width="10" Height="10" VerticalAlignment="Center"
+                    <!-- Alignment invariant (#176): the time text's layout box is collapsed onto
+                         the INK box of the digit band (TextInkCollapseConverter), so centring the
+                         two children centres the pause bars on the digits themselves — in ANY
+                         font — instead of on a line box whose height is an ascent/descent
+                         accident. Layout rounding is off here because the collapse margin is
+                         fractional: rounding each child back to a whole pixel is the other half
+                         of the same defect (it put the two boxes 0.5px apart in Helvetica, the
+                         family the app actually renders with on macOS). -->
+                    <StackPanel Orientation="Horizontal" Spacing="4" UseLayoutRounding="False">
+                      <PathIcon x:Name="SnoozePillIcon" Width="10" Height="10" VerticalAlignment="Center"
                                 Data="{StaticResource IconPauseRegular}"
                                 Foreground="{DynamicResource LatticeWarningFgBrush}" />
                       <!-- tnum so the minutes don't jitter the pill width as they tick. -->
-                      <TextBlock Text="{Binding SnoozedUntilTimeText}" FontSize="11" FontFeatures="+tnum"
+                      <TextBlock x:Name="SnoozePillTime" Text="{Binding SnoozedUntilTimeText}"
+                                 FontSize="11" FontFeatures="+tnum"
                                  VerticalAlignment="Center"
-                                 Foreground="{DynamicResource LatticeWarningFgBrush}" />
+                                 Foreground="{DynamicResource LatticeWarningFgBrush}">
+                        <TextBlock.Margin>
+                          <MultiBinding Converter="{x:Static v:TextInkCollapseConverter.Instance}">
+                            <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
+                            <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
+                            <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
+                            <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
+                          </MultiBinding>
+                        </TextBlock.Margin>
+                      </TextBlock>
                     </StackPanel>
                   </Border>
                   <!-- Form B — icon chip (degraded) -->
