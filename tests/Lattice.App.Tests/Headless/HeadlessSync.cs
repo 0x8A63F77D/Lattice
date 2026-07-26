@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Avalonia.Threading;
+using Lattice.Tests;
 
 namespace Lattice.App.Tests.Headless;
 
@@ -12,8 +12,11 @@ namespace Lattice.App.Tests.Headless;
 /// a genuinely hung dialog.
 ///
 /// Responsibility split (don't invent a third helper): this is the dispatcher-pumped
-/// UI end-state poll — it RunJobs()-pumps the Avalonia dispatcher between polls. The
-/// non-dispatcher, background-loop equivalent is <c>Lattice.Tests.Wait.UntilAsync</c>,
+/// UI end-state poll — it drives the Avalonia dispatcher AND the headless render loop
+/// between polls via <see cref="HeadlessLayout.Pump"/>. A bare <c>RunJobs()</c> is not
+/// enough: it executes a layout pass only when the headless 60 fps render DispatcherTimer
+/// happens to be due, so a dialog could be present but unlaid-out (see HeadlessLayout).
+/// The non-dispatcher, background-loop equivalent is <c>Lattice.Tests.Wait.UntilAsync</c>,
 /// which never touches the UI dispatcher.
 /// </summary>
 internal static class HeadlessSync
@@ -21,13 +24,13 @@ internal static class HeadlessSync
     public static async Task WaitUntilAsync(Func<bool> condition, int timeoutMs = 5000)
     {
         var stopwatch = Stopwatch.StartNew();
-        Dispatcher.UIThread.RunJobs();
+        HeadlessLayout.Pump();
         while (!condition())
         {
             if (stopwatch.ElapsedMilliseconds > timeoutMs)
                 throw new TimeoutException($"Condition not reached after {timeoutMs} ms of dispatcher pumping.");
             await Task.Delay(25);
-            Dispatcher.UIThread.RunJobs();
+            HeadlessLayout.Pump();
         }
     }
 }

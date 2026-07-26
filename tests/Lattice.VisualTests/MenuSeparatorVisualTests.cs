@@ -138,7 +138,11 @@ public class MenuSeparatorVisualTests
         {
             Dispatcher.UIThread.RunJobs();
             flyout.ShowAt(anchor, showAtPointer: false);
-            Dispatcher.UIThread.RunJobs();
+            // The popup opens with an entrance transition, and headless drives animations off the
+            // REAL clock — a bare RunJobs() captures whatever frame the wall clock happens to be on,
+            // which intermittently renders the menu before its dividers paint ("found 0 rules").
+            // Settle detaches the transitions for the capture, so the frame is the end state.
+            HeadlessLayout.Settle(window);
 
             var presenter = window.GetVisualDescendants().OfType<MenuFlyoutPresenter>().First();
             var frame = window.CaptureRenderedFrame()
