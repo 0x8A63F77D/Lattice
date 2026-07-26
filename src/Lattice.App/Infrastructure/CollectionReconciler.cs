@@ -18,11 +18,17 @@ public static class CollectionReconciler
         where TKey : notnull
         => Apply(rows, ops, (key, row) => new RowHolder<TKey, TRow>(key, row));
 
-    /// <summary>Overload for closed holder subclasses (XAML-bindable rows).</summary>
-    public static void Apply<TKey, TRow>(
-        ObservableCollection<RowHolder<TKey, TRow>> rows,
+    /// <summary>
+    /// Overload for closed holder subclasses (XAML-bindable rows). Generic in the HOLDER, so a
+    /// collection may be declared as its own row type when the rows carry state of their own —
+    /// the Statistics legend chips hold the two-way <c>IsVisible</c> binding (#191). A collection
+    /// declared as the base holder still binds here with <c>THolder</c> inferred as that base.
+    /// </summary>
+    public static void Apply<THolder, TKey, TRow>(
+        ObservableCollection<THolder> rows,
         FSharpList<ReconcileOp<TKey, TRow>> ops,
-        Func<TKey, TRow, RowHolder<TKey, TRow>> createHolder)
+        Func<TKey, TRow, THolder> createHolder)
+        where THolder : RowHolder<TKey, TRow>
         where TKey : notnull
     {
         foreach (var op in ops)

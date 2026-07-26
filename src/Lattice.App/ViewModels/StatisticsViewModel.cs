@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using LiveChartsCore;
@@ -33,21 +32,12 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private readonly IUiClock _clock;
     private ScopeSelection _scope = ScopeSelection.AllHosts;
 
-    // Visible master URLs and the host they belong to: user toggles persist across the 1 s
-    // ticks, but switching the charted host re-derives the top-6 default.
-    private readonly HashSet<string> _visible = [];
-
-    // The palette slot each VISIBLE series holds (§2, issue #171). Threaded across rebuilds
-    // because that is what makes a colour stable while its line stays on screen; re-derived by
-    // SeriesColors.allocate from the visible set above, which is the only thing that decides
-    // membership. Reset whenever the charted host changes: slots are per-chart, and two hosts
-    // can share a project URL at different ordinals, so carrying an assignment across a host
-    // switch would hand the new host colours its own ordinals never asked for.
-    private FSharpMap<string, int> _colors = SeriesColors.empty;
-    // Whether the user has toggled visibility for the current host. Until they do, the page mirrors
-    // the live default (all ≤6, else top-6 by RAC); once they do, their set is authoritative.
-    private bool _userOverrode;
-    private Guid? _visibleHostId;
+    // The page's whole visibility/colour state — which series are on the chart, the palette slot
+    // each of them holds, whether the user has overridden the default set, and the host all of
+    // that belongs to. Every transition over it is <see cref="StatisticsVisibility.step"/>'s
+    // (issue #191): this class holds the state and renders it, and decides nothing. It used to be
+    // four inline fields threaded through Rebuild(), which is what produced #170/#171/#175.
+    private VisibilityState _visibility = StatisticsVisibility.initial;
 
     // Last chart-input signature (host, metric, theme, visible set, visible names, statistics ref);
     // the chart is reassigned only when this changes, so idle polls/ticks don't re-run the enter
@@ -76,18 +66,20 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     /// <summary>The four metric-switcher segments (§4), Manager wording and order.</summary>
     public IReadOnlyList<StatisticsMetricOption> MetricOptions { get; }
 
-    /// <summary>Legend chips for the ≤6 default-visible projects (§4).</summary>
+    /// <summary>
+    /// Legend chips for the ≤6 default-visible projects (§4). Reconciled IN PLACE, never rebuilt
+    /// (#191) — see <see cref="StatisticsLegendChip"/> for why a Reset here is a defect.
+    /// </summary>
     public ObservableCollection<StatisticsLegendChip> Chips { get; } = [];
 
-    /// <summary>Overflow-flyout rows for projects beyond the cap (§4).</summary>
+    /// <summary>Overflow-flyout rows for projects beyond the cap (§4). Reconciled in place (#191).</summary>
     public ObservableCollection<StatisticsOverflowItem> Overflow { get; } = [];
 
     /// <summary>
     /// Host picker entries, shown only in the "All hosts" scope (§4). Reconciled IN PLACE, never
-    /// rebuilt (#175) — hence the holder element type, which CollectionReconciler.Apply's
-    /// signature requires exactly; the items are <see cref="StatisticsHostOption"/>.
+    /// rebuilt (#175).
     /// </summary>
-    public ObservableCollection<RowHolder<Guid, string>> HostOptions { get; } = [];
+    public ObservableCollection<StatisticsHostOption> HostOptions { get; } = [];
 
     // Chart-content wiring for the CartesianChart binding (built by the shared renderer).
     [ObservableProperty] private IEnumerable<ISeries> _series = [];
@@ -230,6 +222,16 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     // ---- projection ------------------------------------------------------
 
+    /// <summary>
+    /// The charted host's credit histories — the page's only data input, and the same projection
+    /// the snapshot harness uses. Empty when there is no host or no cached snapshot.
+    /// </summary>
+    private static FSharpList<ProjectHistory> HistoriesOf(HostEntry? host) =>
+        host?.Snapshot is { } snapshot
+            ? ListModule.OfSeq(StatisticsProjection.FromProjects(
+                [.. snapshot.Projects.Select(p => p.Project)], snapshot.Statistics))
+            : FSharpList<ProjectHistory>.Empty;
+
     // ---- rebuild ---------------------------------------------------------
 
     private void Rebuild()
@@ -239,10 +241,8 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
         var host = EffectiveHost();
         var snapshot = host?.Snapshot;
-        List<ProjectHistory> histories = snapshot is null
-            ? []
-            : StatisticsProjection.FromProjects([.. snapshot.Projects.Select(p => p.Project)], snapshot.Statistics);
-        var hasHistory = histories.Count > 0;
+        var histories = HistoriesOf(host);
+        var hasHistory = !histories.IsEmpty;
 
         // Overlay choice reuses the shared per-host taxonomy: loading = first fetch still
         // plausibly in flight, empty = a Connected host answered with no history (§5).
@@ -261,16 +261,23 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
         UpdatedText = snapshot is not null ? TimeText.UpdatedAgo(snapshot.Timestamp, _clock.Now) : "";
 
+        // Every visibility/colour transition is the policy's (#191): a fresh host re-derives the
+        // ≤6 default, an unchanged host keeps the user's set (minus vanished projects), and the
+        // palette slots follow the visible series in both cases. Nothing to chart settles back to
+        // the initial state, which is why the branch below only has chrome left to clear.
+        _visibility = StatisticsVisibility.step(
+            StatisticsVisibility.charted(host?.Config.Id, histories),
+            VisibilityEvent.Settle,
+            _visibility).State;
+
+        // Chips and the overflow flyout reconcile in place on both paths — an empty partition
+        // removes the rows one by one rather than Clear()ing the collections (#191).
+        var partition = StatisticsChart.partition(histories);
+        SyncChips(partition.Chips);
+        SyncOverflow(partition.Overflow);
+
         if (!hasHistory)
         {
-            _visibleHostId = null;
-            _visible.Clear();
-            _colors = SeriesColors.empty;
-            _userOverrode = false;
-            if (Chips.Count > 0) Chips.Clear();
-            if (Overflow.Count > 0) Overflow.Clear();
-            HasOverflow = false;
-            IsAtCap = false;
             Series = [];
             XAxes = [];
             YAxes = [];
@@ -279,67 +286,25 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var hostId = host!.Config.Id;
-        var masters = histories.Select(h => h.MasterUrl).ToHashSet();
-        if (_visibleHostId != hostId)
-        {
-            _userOverrode = false; // a fresh host starts on the default set
-            _colors = SeriesColors.empty; // ...and on a fresh colour allocation (see the field)
-            _visibleHostId = hostId;
-        }
-
-        // Visibility model (Codex P2 family, PR #167): until the user toggles anything, the page
-        // always mirrors the LIVE default — all projects when ≤6, else the current top-6 by RAC —
-        // so a mid-session refetch that adds a project, or a RAC reorder that changes the top-6,
-        // is reflected immediately (no stuck unchecked chip, no stale top-6). The moment the user
-        // toggles a chip/overflow row their choice is authoritative: it persists across polls, and
-        // only vanished projects are dropped. (The signature gate above still rebuilds the chart
-        // only when this SET actually changes, so an idle page never re-animates.)
-        if (!_userOverrode)
-        {
-            _visible.Clear();
-            foreach (var url in StatisticsChart.defaultVisible(ListModule.OfSeq(histories)))
-                _visible.Add(url);
-        }
-        else
-        {
-            _visible.IntersectWith(masters); // persist the user's set; drop vanished projects
-        }
-
-        // Hand the now-settled visible set to the allocator (§2, #171): every series on the chart
-        // gets its own palette slot, series that stayed on screen keep theirs, and a series that
-        // left holds none at all. From here on, _colors IS the visible set as far as the chart and
-        // the chips are concerned — nothing downstream re-derives a colour from an ordinal.
-        _colors = SeriesColors.allocate(
-            histories.Where(h => _visible.Contains(h.MasterUrl)).Select(h => new SeriesKey(h.MasterUrl, h.Ordinal)),
-            _colors);
-
-        var partition = StatisticsChart.partition(ListModule.OfSeq(histories));
-        SyncChips(partition.Chips);
-        SyncOverflow(partition.Overflow);
-
         // Reassign the LiveCharts series/axes ONLY when a chart INPUT changed — the effective
         // host, metric, theme, visible set, or the statistics history itself (carried forward by
         // reference between the 6h refetches). A steady-state store poll (~5s, updates only RAC)
         // or a freshness tick leaves the signature unchanged, so the plot is not recreated and the
         // 200ms enter animation does not re-run on an idle page (Codex P2, PR #167). The chrome
         // above (chips/overflow RAC) still refreshes in place; only the animated chart is gated.
-        // The visible series' names ride the signature too, so a late-filled project name
-        // refreshes the LineSeries label/tooltip even though the history reference is unchanged.
-        var visibleNames = string.Join("", histories
-            .Where(h => _visible.Contains(h.MasterUrl))
-            .OrderBy(h => h.Ordinal)
-            .Select(h => h.Name));
-        // The visible set rides the signature as the COLOUR ASSIGNMENT (url=slot), which subsumes
-        // it: a different set is a different assignment, and a series that changed slot must
-        // repaint even where the set happens to match.
-        (Guid, CreditMetric, StatisticsChartTheme, string, string, object?) signature = (hostId,
-            SelectedMetric.Metric, Theme,
-            string.Join(",", _colors.OrderBy(c => c.Key, StringComparer.Ordinal).Select(c => $"{c.Key}={c.Value}")),
-            visibleNames, snapshot!.Statistics);
+        // Both string halves are the policy's (#191): the COLOUR ASSIGNMENT (url=slot) subsumes
+        // the visible set — a different set is a different assignment, and a series that changed
+        // slot must repaint even where the set happens to match — and the visible series' NAMES
+        // ride along, so a late-filled project name refreshes the LineSeries label/tooltip even
+        // though the history reference is unchanged.
+        (Guid, CreditMetric, StatisticsChartTheme, string, string, object?) signature = (
+            host!.Config.Id, SelectedMetric.Metric, Theme,
+            StatisticsVisibility.colourKey(_visibility),
+            StatisticsVisibility.nameKey(histories, _visibility),
+            snapshot!.Statistics);
         if (!signature.Equals(_chartSignature))
         {
-            var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, _colors, ListModule.OfSeq(histories));
+            var specs = StatisticsChart.seriesFor(SelectedMetric.Metric, _visibility.Colors, histories);
             var visual = StatisticsChartBuilder.Build(ListModule.ToArray(specs), Theme, SelectedMetric.Metric);
             Series = visual.Series;
             XAxes = visual.XAxes;
@@ -349,90 +314,66 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
         CountsText = string.Format(
             CultureInfo.CurrentCulture, Strings.StatisticsCountsFmt,
-            histories.Count, StatisticsChart.historyDepthDays(ListModule.OfSeq(histories)));
+            histories.Length, StatisticsChart.historyDepthDays(histories));
     }
 
+    // The legend reconciles IN PLACE, keyed by master URL (#191). Clear()-and-refill raises a
+    // CollectionChanged Reset, which destroys and rebuilds every container in the bound
+    // ItemsControl — for the flyout below, the very checkboxes the user may be clicking. The
+    // rendered facts (label, ordinal, palette slot) live in the row's immutable Data, so a
+    // re-label or a re-colour swaps that record on the surviving row and only real membership or
+    // order changes move rows.
     private void SyncChips(FSharpList<ProjectHistory> chips)
     {
-        var desired = chips.ToList();
-        // Name is part of the shape: a chip's label is immutable, so a project whose blank name
-        // BOINC later fills in must trigger a rebuild, not just a visibility sync (Codex P2, #167).
-        var sameShape = Chips.Count == desired.Count
-            && Chips.Zip(desired).All(pair =>
-                pair.First.MasterUrl == pair.Second.MasterUrl && pair.First.Name == pair.Second.Name);
+        var target = chips
+            .Select(p => (p.MasterUrl, new StatisticsChipData(p.Name, p.Ordinal, SlotFor(p.MasterUrl))))
+            .ToArray();
+        var existing = Chips.Select(c => (c.Key, c.Data)).ToArray();
+        CollectionReconciler.Apply(Chips, Reconcile.diff(existing, target),
+            (key, row) => new StatisticsLegendChip(key, row) { Toggled = OnChipToggled });
 
-        if (!sameShape)
-        {
-            Chips.Clear();
-            foreach (var p in desired)
-            {
-                var chip = new StatisticsLegendChip(p.MasterUrl, p.Name, p.Ordinal, SwatchFor(p.MasterUrl), _visible.Contains(p.MasterUrl))
-                {
-                    Toggled = OnChipToggled,
-                };
-                Chips.Add(chip);
-            }
-            return;
-        }
-
-        // Same projects: only sync visibility (silently, so the sync itself never re-enters) and
-        // the swatch, which follows the slot the series currently holds — none while hidden.
-        foreach (var (chip, p) in Chips.Zip(desired))
-        {
-            chip.SetVisibleSilently(_visible.Contains(p.MasterUrl));
-            chip.Swatch = SwatchFor(p.MasterUrl);
-        }
+        // Visibility is holder state (the two-way binding target), not part of the reconciled
+        // data, so it is pushed onto every row — new or surviving — silently, so that the sync
+        // itself never re-enters the toggle path.
+        foreach (var chip in Chips)
+            chip.SetVisibleSilently(StatisticsVisibility.isVisible(chip.Key, _visibility));
     }
 
     private void SyncOverflow(FSharpList<ProjectHistory> overflow)
     {
-        var desired = overflow.ToList();
-        HasOverflow = desired.Count > 0;
-        OverflowLabel = string.Format(Strings.StatisticsOverflowFmt, desired.Count);
-        IsAtCap = !StatisticsChart.canAddSeries(_visible.Count);
+        HasOverflow = !overflow.IsEmpty;
+        OverflowLabel = string.Format(Strings.StatisticsOverflowFmt, overflow.Length);
+        IsAtCap = !StatisticsVisibility.canAdd(_visibility);
 
-        var sameShape = Overflow.Count == desired.Count
-            && Overflow.Zip(desired).All(pair =>
-                pair.First.MasterUrl == pair.Second.MasterUrl && pair.First.Name == pair.Second.Name);
+        var target = overflow
+            .Select(p => (p.MasterUrl, new StatisticsOverflowData(p.Name, RacText(p.Rac), CanCheck(p.MasterUrl))))
+            .ToArray();
+        var existing = Overflow.Select(o => (o.Key, o.Data)).ToArray();
+        CollectionReconciler.Apply(Overflow, Reconcile.diff(existing, target),
+            (key, row) => new StatisticsOverflowItem(key, row) { Toggled = OnOverflowToggled });
 
-        if (!sameShape)
-        {
-            Overflow.Clear();
-            foreach (var p in desired)
-                Overflow.Add(new StatisticsOverflowItem(
-                    p.MasterUrl, p.Name, RacText(p.Rac), _visible.Contains(p.MasterUrl), CanCheck(p.MasterUrl))
-                {
-                    Toggled = OnOverflowToggled,
-                });
-            return;
-        }
-
-        foreach (var (item, p) in Overflow.Zip(desired))
-        {
-            item.RacText = RacText(p.Rac);
-            item.SetVisibleSilently(_visible.Contains(p.MasterUrl));
-            item.CanCheck = CanCheck(p.MasterUrl);
-        }
+        foreach (var item in Overflow)
+            item.SetVisibleSilently(StatisticsVisibility.isVisible(item.Key, _visibility));
     }
 
-    // A chip's swatch is the colour of the line it stands for — and nothing at all when that
-    // series is not on the chart (§2, #171). The view draws the grey "not plotted" swatch for a
-    // null, so a hidden chip never carries a colour it might later contradict.
-    private IBrush? SwatchFor(string master)
+    // The palette slot a chip's line holds — and none at all when that series is not on the chart
+    // (§2, #171). The row renders the grey "not plotted" swatch for a null, so a hidden chip never
+    // carries a colour it might later contradict.
+    private int? SlotFor(string master)
     {
-        var slot = SeriesColors.trySlot(master, _colors);
-        return FSharpOption<int>.get_IsSome(slot) ? StatisticsPalette.Brush(slot.Value) : null;
+        var slot = StatisticsVisibility.slotOf(master, _visibility);
+        return FSharpOption<int>.get_IsSome(slot) ? slot.Value : null;
     }
 
     // A row can be checked if it is already shown or the cap has room (§4).
-    private bool CanCheck(string master) => _visible.Contains(master) || StatisticsChart.canAddSeries(_visible.Count);
+    private bool CanCheck(string master) => StatisticsVisibility.canCheck(master, _visibility);
 
     private static string RacText(double rac) =>
         ((long)Math.Round(rac)).ToString("N0", CultureInfo.CurrentCulture);
 
     private void OnChipToggled(StatisticsLegendChip chip)
     {
-        if (!TryApplyToggle(chip.MasterUrl, chip.IsVisible))
+        if (!TryApplyToggle(chip.Key, chip.IsVisible))
         {
             chip.SetVisibleSilently(false);
             return;
@@ -442,7 +383,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
 
     private void OnOverflowToggled(StatisticsOverflowItem item)
     {
-        if (!TryApplyToggle(item.MasterUrl, item.IsVisible))
+        if (!TryApplyToggle(item.Key, item.IsVisible))
         {
             item.SetVisibleSilently(false);
             return;
@@ -450,19 +391,22 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         Rebuild();
     }
 
-    // The SINGLE cap-guarded visibility mutation (§4 ≤6): a check that would exceed the cap is
-    // refused (the caller snaps the control back). Both the chip and the overflow toggle route
-    // through here so the cap can never be enforced on one path and forgotten on the other — the
-    // overflow flyout disables its rows at six, but a re-checked chip is the same invariant and
-    // must not slip past it (Codex P2, PR #167).
+    // The SINGLE cap-guarded visibility mutation (§4 ≤6), now the policy's decision (#191): a check
+    // that would exceed the cap is refused and the caller snaps the control back. Both the chip and
+    // the overflow toggle route through here so the cap can never be enforced on one path and
+    // forgotten on the other — the overflow flyout disables its rows at six, but a re-checked chip
+    // is the same invariant and must not slip past it (Codex P2, PR #167). An applied toggle is
+    // followed by the caller's Rebuild, whose settle lands on this very state (the policy's tests
+    // pin that round trip as idempotent), so the user sees one transition, not two.
     private bool TryApplyToggle(string master, bool visible)
     {
-        if (visible && !CanCheck(master))
-            return false;
-        if (visible) _visible.Add(master);
-        else _visible.Remove(master);
-        _userOverrode = true; // the user's set is now authoritative over the live default
-        return true;
+        var host = EffectiveHost();
+        var decision = StatisticsVisibility.step(
+            StatisticsVisibility.charted(host?.Config.Id, HistoriesOf(host)),
+            StatisticsVisibility.toggle(master, visible),
+            _visibility);
+        _visibility = decision.State;
+        return !decision.Refused;
     }
 
     public void Dispose()

@@ -13,6 +13,7 @@
     <Compile Include="ProjectRowsTests.fs" />
     <Compile Include="SeriesColorsTests.fs" />
     <Compile Include="StatisticsChartTests.fs" />
+    <Compile Include="StatisticsVisibilityTests.fs" />
     <Compile Include="MessageLogTests.fs" />
     <Compile Include="ControlConfirmationTests.fs" />
   </ItemGroup>
