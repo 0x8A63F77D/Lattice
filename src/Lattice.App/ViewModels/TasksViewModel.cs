@@ -7,10 +7,10 @@ using Lattice.App.Infrastructure;
 using Lattice.App.Localization;
 using Lattice.App.Views;
 using Lattice.Core;
-// The F# policy DUs deliberately duplicate the GuiRpc enums (Aggregation is
-// GuiRpc-free by module rule); alias both so neither is ever named bare.
+// The F# policy DU is aliased so it is never named bare against the same-named
+// GuiRpc wire enum. This VM names only the policy op: the wire op is derived from
+// it by ControlOpWire, so GuiRpc.TaskOp is no longer referenced here at all (#192).
 using AggTaskOp = Lattice.App.Aggregation.TaskOp;
-using GuiTaskOp = Lattice.Boinc.GuiRpc.TaskOp;
 
 namespace Lattice.App.ViewModels;
 
@@ -224,17 +224,20 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
     private Task SuspendSelectedAsync() =>
-        RunTaskOpAsync(AggTaskOp.TaskSuspend, GuiTaskOp.Suspend, Strings.Suspend);
+        RunTaskOpAsync(AggTaskOp.TaskSuspend, Strings.Suspend);
 
     [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
     private Task ResumeSelectedAsync() =>
-        RunTaskOpAsync(AggTaskOp.TaskResume, GuiTaskOp.Resume, Strings.Resume);
+        RunTaskOpAsync(AggTaskOp.TaskResume, Strings.Resume);
 
     [RelayCommand(CanExecute = nameof(CanControlSelectedTask))]
     private Task AbortSelectedAsync() =>
-        RunTaskOpAsync(AggTaskOp.TaskAbort, GuiTaskOp.Abort, Strings.Abort);
+        RunTaskOpAsync(AggTaskOp.TaskAbort, Strings.Abort);
 
-    private async Task RunTaskOpAsync(AggTaskOp intentOp, GuiTaskOp wireOp, string opLabel)
+    // The wire op is DERIVED from the policy op (ControlOpWire), never passed
+    // alongside it — that is what makes a classify/wire mispairing unrepresentable
+    // here rather than something the wire-string tests have to catch (#192).
+    private async Task RunTaskOpAsync(AggTaskOp intentOp, string opLabel)
     {
         if (SelectedTask is not { } task)
             return;
@@ -254,8 +257,8 @@ public sealed partial class TasksViewModel : ObservableObject, IDisposable
                 return;
         }
 
-        ControlOpResult result =
-            await _control.PerformTaskOpAsync(task.HostId, wireOp, task.ProjectUrl, task.Name);
+        ControlOpResult result = await _control.PerformTaskOpAsync(
+            task.HostId, ControlOpWire.ToWire(intentOp), task.ProjectUrl, task.Name);
         if (result.Outcome == ControlOpOutcome.Succeeded)
             ControlFailure.Clear();
         else

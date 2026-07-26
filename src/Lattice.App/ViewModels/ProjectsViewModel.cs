@@ -8,10 +8,10 @@ using Lattice.App.Localization;
 using Lattice.App.Views;
 using Lattice.Core;
 using Microsoft.FSharp.Collections;
-// The F# policy DUs deliberately duplicate the GuiRpc enums (Aggregation is
-// GuiRpc-free by module rule); alias both so neither is ever named bare.
+// The F# policy DU is aliased so it is never named bare against the same-named
+// GuiRpc wire enum. This VM names only the policy op: the wire op is derived from
+// it by ControlOpWire, so GuiRpc.ProjectOp is no longer referenced here at all (#192).
 using AggProjectOp = Lattice.App.Aggregation.ProjectOp;
-using GuiProjectOp = Lattice.Boinc.GuiRpc.ProjectOp;
 
 namespace Lattice.App.ViewModels;
 
@@ -170,21 +170,24 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
 
     [RelayCommand(CanExecute = nameof(CanControlSelected))]
     private Task UpdateSelectedAsync() =>
-        RunProjectOpAsync(AggProjectOp.ProjectUpdate, GuiProjectOp.Update, Strings.ProjectsUpdate);
+        RunProjectOpAsync(AggProjectOp.ProjectUpdate, Strings.ProjectsUpdate);
 
     [RelayCommand(CanExecute = nameof(CanControlSelected))]
     private Task SuspendSelectedAsync() =>
-        RunProjectOpAsync(AggProjectOp.ProjectSuspend, GuiProjectOp.Suspend, Strings.Suspend);
+        RunProjectOpAsync(AggProjectOp.ProjectSuspend, Strings.Suspend);
 
     [RelayCommand(CanExecute = nameof(CanControlSelected))]
     private Task ResumeSelectedAsync() =>
-        RunProjectOpAsync(AggProjectOp.ProjectResume, GuiProjectOp.Resume, Strings.Resume);
+        RunProjectOpAsync(AggProjectOp.ProjectResume, Strings.Resume);
 
     [RelayCommand(CanExecute = nameof(CanControlSelected))]
     private Task DetachSelectedAsync() =>
-        RunProjectOpAsync(AggProjectOp.ProjectDetach, GuiProjectOp.Detach, Strings.Detach);
+        RunProjectOpAsync(AggProjectOp.ProjectDetach, Strings.Detach);
 
-    private async Task RunProjectOpAsync(AggProjectOp intentOp, GuiProjectOp wireOp, string opLabel)
+    // The wire op is DERIVED from the policy op (ControlOpWire), never passed
+    // alongside it — that is what makes a classify/wire mispairing unrepresentable
+    // here rather than something the wire-string tests have to catch (#192).
+    private async Task RunProjectOpAsync(AggProjectOp intentOp, string opLabel)
     {
         if (SelectedProjectRow is not { } row || ResolveTarget(row) is not { } target)
             return;
@@ -202,6 +205,7 @@ public sealed partial class ProjectsViewModel : ObservableObject, IDisposable
         // failures into one surface message so a two-host partial failure is one
         // InfoBar naming the host that failed, not two racing reports.
         var failures = new List<(string HostName, string Error)>();
+        var wireOp = ControlOpWire.ToWire(intentOp);
         foreach (var attachment in target.Hosts)
         {
             var result = await _control.PerformProjectOpAsync(attachment.HostId, wireOp, target.ProjectUrl);
