@@ -189,17 +189,68 @@ public class StartupRegistrationTests : IDisposable
     }
 
     [Fact]
-    public void The_macos_factory_treats_presence_as_registration()
+    public void The_macos_factory_reads_the_opt_out_from_launchd_not_from_the_file()
     {
+        // macOS keeps the disable outside the plist, so the file content is irrelevant both
+        // ways: a stray Linux-style line must not disable it, and launchd's answer must.
+        var enabled = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
+            homeDirectory: _dir, xdgConfigHome: null, isDisabledInLaunchd: () => false);
+        Assert.True(enabled.Apply(enabled: true, startMinimized: false));
+        File.AppendAllText(enabled.Path, "Hidden=true\n");
+        Assert.True(enabled.IsRegistered);
+
+        var disabled = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
+            homeDirectory: _dir, xdgConfigHome: null, isDisabledInLaunchd: () => true);
+        Assert.False(disabled.IsRegistered);
+    }
+
+    [Fact]
+    public void A_test_that_supplies_no_launchd_reader_never_spawns_one()
+    {
+        // The default must be hermetic: presence alone is registration, so the suite can never
+        // depend on what this machine happens to have in its launchd override database.
         var reg = (FileStartupRegistration)StartupRegistration.Create(
             TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
             homeDirectory: _dir, xdgConfigHome: null);
         Assert.True(reg.Apply(enabled: true, startMinimized: false));
 
-        // No in-file opt-out exists on macOS, so an appended stray line must not be read as one.
-        File.AppendAllText(reg.Path, "Hidden=true\n");
-
         Assert.True(reg.IsRegistered);
+    }
+
+    [Fact]
+    public void A_read_only_record_is_still_replaced()
+    {
+        // The observable signature of the write-then-rename: rename() needs write permission
+        // on the DIRECTORY, not on the file, so a record left read-only (by a sync tool, a
+        // restore, a cautious user) can still be healed — where a truncating WriteAllText
+        // would fail outright. Unix-only semantics: Windows refuses to replace a read-only
+        // file either way, so the Windows CI leg skips this and the atomic write is pinned
+        // there only by the no-leftover-temp test below.
+        if (OperatingSystem.IsWindows())
+            return;
+
+        var reg = Make();
+        reg.Apply(enabled: true, startMinimized: false);
+        File.SetUnixFileMode(RecordPath, UnixFileMode.UserRead | UnixFileMode.GroupRead | UnixFileMode.OtherRead);
+
+        Assert.True(reg.Apply(enabled: true, startMinimized: true));
+
+        Assert.Contains("--minimized", File.ReadAllText(RecordPath));
+    }
+
+    [Fact]
+    public void A_rewrite_leaves_no_temporary_file_behind()
+    {
+        // The write is now rename-based; the temp name must not linger where launchd and the
+        // autostart scanner look, and must not be mistaken for a second registration.
+        var reg = Make();
+        reg.Apply(enabled: true, startMinimized: false);
+        reg.Apply(enabled: true, startMinimized: true);
+
+        Assert.False(File.Exists(RecordPath + ".tmp"));
+        Assert.Contains("--minimized", File.ReadAllText(RecordPath));
     }
 
     [Fact]

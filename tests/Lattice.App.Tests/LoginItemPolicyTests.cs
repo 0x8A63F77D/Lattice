@@ -272,6 +272,62 @@ public class LoginItemPolicyTests
         Assert.False(LoginItemPolicy.IsAutostartDisabledByDesktop("[Desktop Entry]\n" + line + "\n"));
     }
 
+    [Fact]
+    public void Desktop_entry_doubles_a_literal_percent_in_the_exec_path()
+    {
+        // %f, %U and friends are field codes the launcher expands even inside quotes, so a
+        // path under a "100%" directory must be written %% or it expands to something else
+        // entirely (Codex P2, PR #188).
+        Assert.Contains(
+            "Exec=/opt/100%%/Lattice",
+            LoginItemPolicy.DesktopEntry("/opt/100%/Lattice", false).Split('\n'));
+        // …and it survives the quoting path too, when the same argument also needs quotes.
+        Assert.Contains(
+            "Exec=\"/opt/my 100%%/Lattice\" --minimized",
+            LoginItemPolicy.DesktopEntry("/opt/my 100%/Lattice", true).Split('\n'));
+    }
+
+    // ---- launchd override state (Codex P2, PR #188) ------------------------
+
+    // Real `launchctl print-disabled gui/<uid>` output, captured on this machine.
+    private const string PrintDisabledSample = """
+
+        	disabled services = {
+        		"com.apple.ManagedClientAgent.enrollagent" => disabled
+        		"io.github.0x8a63f77d.lattice" => disabled
+        		"com.example.other" => enabled
+        	}
+        """;
+
+    [Fact]
+    public void A_label_listed_as_disabled_is_recognised()
+    {
+        Assert.True(LoginItemPolicy.IsDisabledInLaunchdOverrides(
+            PrintDisabledSample, "io.github.0x8a63f77d.lattice"));
+    }
+
+    [Fact]
+    public void A_label_listed_as_enabled_is_not_disabled()
+    {
+        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "com.example.other"));
+    }
+
+    [Fact]
+    public void A_label_with_no_override_at_all_is_not_disabled()
+    {
+        // The common case: no entry means no override, i.e. launchd will run it.
+        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "com.example.absent"));
+        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides("", "io.github.0x8a63f77d.lattice"));
+    }
+
+    [Fact]
+    public void A_label_that_is_only_a_prefix_of_another_is_not_matched()
+    {
+        // "io.github.0x8a63f77d" must not pick up "io.github.0x8a63f77d.lattice"; the quotes
+        // in the needle are what make the match exact.
+        Assert.False(LoginItemPolicy.IsDisabledInLaunchdOverrides(PrintDisabledSample, "io.github.0x8a63f77d"));
+    }
+
     // ---- Windows Run value -------------------------------------------------
 
     [Fact]

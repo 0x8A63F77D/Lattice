@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.Versioning;
 using Microsoft.Win32;
 
@@ -48,10 +49,11 @@ public sealed class FileStartupRegistration : IStartupRegistration
     /// <param name="path">Absolute path of the record file.</param>
     /// <param name="target">Executable to launch, or null when this launch has none.</param>
     /// <param name="render">Content renderer from <see cref="LoginItemPolicy"/>.</param>
-    /// <param name="isDisabledByOs">Reads an existing record and reports whether the OS's own
-    /// startup settings switched it off. Linux records carry that state INSIDE the file
-    /// (<see cref="LoginItemPolicy.IsAutostartDisabledByDesktop"/>); macOS keeps it in the
-    /// Background Task Management database instead, so the macOS registration passes null.</param>
+    /// <param name="isDisabledByOs">Given an existing record's content, reports whether the
+    /// OS's own startup settings switched it off. Linux carries that state INSIDE the file
+    /// (<see cref="LoginItemPolicy.IsAutostartDisabledByDesktop"/>); macOS keeps it outside
+    /// the plist, so its reader ignores the content it is handed and asks launchd
+    /// (<see cref="LaunchdOverrides"/>). Null means "nothing can switch it off but us".</param>
     public FileStartupRegistration(
         string path, string? target, Func<string, bool, string> render,
         Func<string, bool>? isDisabledByOs = null)
@@ -108,10 +110,17 @@ public sealed class FileStartupRegistration : IStartupRegistration
                 return true; // already correct — do not touch it (see IStartupRegistration.Apply)
 
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_path)!);
-            // Plain write, not the tmp+rename UiStateStore uses: a torn record simply fails
-            // the content comparison above on the next launch and is rewritten, so the
-            // self-heal already covers the only failure a rename would prevent.
-            File.WriteAllText(_path, desired);
+            // Write-then-rename, the same doctrine UiStateStore uses (Codex P2, PR #188). A
+            // plain WriteAllText truncates first, so a full disk or a killed process leaves a
+            // previously VALID registration empty — and the launch-time self-heal only repairs
+            // it on the next MANUAL launch, which is precisely the launch that was supposed to
+            // be automatic. rename() is atomic, so the live record is either the old one or
+            // the new one, never a stub. The temp name keeps its own extension out of the way:
+            // launchd scans for *.plist and autostart for *.desktop, so a stray *.tmp is
+            // ignored by both.
+            string tmp = _path + ".tmp";
+            File.WriteAllText(tmp, desired);
+            File.Move(tmp, _path, overwrite: true);
             return true;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException)
@@ -188,6 +197,56 @@ public sealed class UnsupportedStartupRegistration : IStartupRegistration
     public bool Apply(bool enabled, bool startMinimized) => !enabled;
 }
 
+/// <summary>
+/// Asks launchd whether our job is switched off (Codex P2, PR #188). macOS records that
+/// choice outside the plist, so the file cannot answer it; <c>launchctl print-disabled</c>
+/// can, needs no root, and — unlike inferring from a UI's behaviour — answers the question
+/// that actually matters: will launchd run this at login.
+///
+/// <para>Every failure degrades to "not disabled", which is exactly the behaviour we had
+/// before this reader existed, so a launchctl that is missing, slow, or reformatted by a
+/// future macOS can only cost accuracy, never correctness.</para>
+/// </summary>
+internal static class LaunchdOverrides
+{
+    // DllImport, not the newer LibraryImport: the source-generated variant demands
+    // AllowUnsafeBlocks project-wide, which is far too big a lever for one uid lookup.
+    [System.Runtime.InteropServices.DllImport("libc")]
+    private static extern uint getuid();
+
+    public static bool IsDisabled(string label)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo("/bin/launchctl")
+            {
+                ArgumentList = { "print-disabled", $"gui/{getuid()}" },
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            };
+            using Process? process = Process.Start(psi);
+            if (process is null)
+                return false;
+            // Read before waiting: the output is a few KB and the pipe would deadlock a
+            // wait-then-read. The bounded wait then covers a launchctl that never exits.
+            string output = process.StandardOutput.ReadToEnd();
+            if (!process.WaitForExit(TimeSpan.FromSeconds(2)))
+            {
+                process.Kill(entireProcessTree: true);
+                return false;
+            }
+            return process.ExitCode == 0
+                && LoginItemPolicy.IsDisabledInLaunchdOverrides(output, label);
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException
+            or PlatformNotSupportedException or IOException or ObjectDisposedException)
+        {
+            return false;
+        }
+    }
+}
+
 /// <summary>Platform factory. The environment is read HERE and nowhere else, so
 /// <see cref="Create"/> stays a pure-input decision a test can drive for any platform.</summary>
 public static class StartupRegistration
@@ -198,23 +257,29 @@ public static class StartupRegistration
         Environment.GetEnvironmentVariable("APPIMAGE"),
         Environment.ProcessPath,
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"));
+        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
+        () => LaunchdOverrides.IsDisabled(LoginItemPolicy.LaunchAgentLabel));
 
     /// <summary>Internal seam for tests: same decision, explicit inputs.</summary>
+    /// <param name="isDisabledInLaunchd">macOS only. Null — the default — means "never
+    /// disabled", so a test never spawns launchctl and never depends on what this machine
+    /// happens to have in its override database. The composition root passes the real reader.</param>
     internal static IStartupRegistration Create(
         TrayPlatform platform, string? appImagePath, string? processPath,
-        string homeDirectory, string? xdgConfigHome)
+        string homeDirectory, string? xdgConfigHome, Func<bool>? isDisabledInLaunchd = null)
     {
         string? target = LoginItemPolicy.ResolveTarget(appImagePath, processPath);
 #pragma warning disable CS8524 // Domain enum: CS8509 must stay live so a new TrayPlatform
         // member forces this mapping to be revisited. Same pattern as TrayResidencyDefaults.
         return platform switch
         {
-            // macOS: no isDisabledByOs reader — Background Task Management records the user's
-            // opt-out in its own database, leaving the plist byte-identical, so there is
-            // nothing in the file to consult.
+            // macOS: the opt-out is not in the file — Background Task Management leaves the
+            // plist byte-identical — so the reader ignores the content it is handed and asks
+            // launchd instead. The content parameter is part of the seam's shape, not of this
+            // platform's answer.
             TrayPlatform.MacOS => new FileStartupRegistration(
-                LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist),
+                LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist,
+                isDisabledInLaunchd is null ? null : _ => isDisabledInLaunchd()),
             TrayPlatform.Linux => new FileStartupRegistration(
                 LoginItemPolicy.AutostartPath(LoginItemPolicy.ConfigHome(xdgConfigHome, homeDirectory)),
                 target,
