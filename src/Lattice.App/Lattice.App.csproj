@@ -97,6 +97,17 @@
          18 pt on Retina (2x backing) and downsamples cleanly on 1x. The 18 px PNG and
          the SVG master sit alongside as provenance, un-embedded. -->
     <AvaloniaResource Include="../../docs/design/icon/macos/tray/latticeTrayTemplate@2x.png" Link="Assets/latticeTrayTemplate@2x.png" />
+    <!-- Inter Regular for the snooze pill's time digits (issue #181): a LOCAL pin, so the one
+         element whose layout is measured off glyph ink renders the same face on every platform
+         AND is the face the pixel gates already probe. Only the Regular static face is embedded —
+         one weight, ~300 KB — because that is the only one the pill draws; see Assets/Fonts/README.md
+         for provenance and Assets/Fonts/OFL.txt for the license the OFL requires us to ship. -->
+    <AvaloniaResource Include="Assets/Fonts/Inter-Regular.ttf" />
+    <!-- The license travels as a plain file next to the binary (OFL §2 wants it human-readable),
+         so every packaging surface picks it up from the publish directory it already copies
+         wholesale: Lattice.app/Contents/MacOS/Assets/Fonts/OFL.txt, the same relative path in the
+         Windows zip and the Linux AppDir/tarball. -->
+    <Content Include="Assets/Fonts/OFL.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../Lattice.Core/Lattice.Core.csproj" />

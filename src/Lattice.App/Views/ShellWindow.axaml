@@ -365,8 +365,17 @@
                       <PathIcon x:Name="SnoozePillIcon" Width="10" Height="10" VerticalAlignment="Center"
                                 Data="{StaticResource IconPauseRegular}"
                                 Foreground="{DynamicResource LatticeWarningFgBrush}" />
-                      <!-- tnum so the minutes don't jitter the pill width as they tick. -->
+                      <!-- tnum so the minutes don't jitter the pill width as they tick.
+                           The face is pinned to the EMBEDDED Inter Regular (#181), deliberately
+                           only here: this is the one element sized off glyph ink, so pinning it
+                           makes the rendered result the same on every platform and makes it the
+                           face the visual gates already render (they pin Inter as their default).
+                           The digits then differ from the neighbouring host-name text, which the
+                           owner accepted for an isolated digit chip. This is NOT the app-wide font
+                           decision (#152) — Inter carries no CJK, so widening it needs that call
+                           first. Alignment stays font-independent regardless (converter below). -->
                       <TextBlock x:Name="SnoozePillTime" Text="{Binding SnoozedUntilTimeText}"
+                                 FontFamily="avares://Lattice/Assets/Fonts#Inter"
                                  FontSize="11" FontFeatures="+tnum"
                                  VerticalAlignment="Center"
                                  Foreground="{DynamicResource LatticeWarningFgBrush}">
