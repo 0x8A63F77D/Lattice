@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using Avalonia;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using Lattice.App.Localization;
 
 namespace Lattice.App.Views;
 
@@ -65,7 +67,9 @@ public sealed class TextInkCollapseConverter : IMultiValueConverter
     /// icon-beside-label. An x-height band would seat the icon ~0.6 px lower and let its box
     /// overhang the ascenders on both sides, which reads as a sunk icon next to a capital.
     /// </summary>
-    public static readonly TextInkCollapseConverter Words = new(() => WordBandFor(CultureInfo.CurrentUICulture));
+    /// <remarks>The reference string is a status these very cells display, pulled from the same
+    /// resource set at the same moment, so its script IS the labels' script whatever resolved.</remarks>
+    public static readonly TextInkCollapseConverter Words = new(() => WordBandFor(Strings.TaskStateRunning));
 
     /// <summary>The glyph repertoire a "HH:mm" time can draw. Its ink box is the band the pill
     /// centres on — fixed, so the measurement does not change as the clock ticks.</summary>
@@ -87,23 +91,32 @@ public sealed class TextInkCollapseConverter : IMultiValueConverter
     public const string IdeographBand = "国";
 
     /// <summary>
-    /// The band a WORD label is read against in <paramref name="uiCulture"/>.
+    /// The band a WORD label is read against, given <paramref name="resolvedLabel"/> — any ONE
+    /// string from the same resource set the cells display.
     ///
     /// THIS IS NOT COSMETIC (Codex P2 on PR #184). Lattice ships a zh-CN UI whose statuses are Han
     /// ("运行中", "活动中", "传输中"). Those have no cap height, and — measured in Helvetica at 12 px,
     /// the shipping face — they do not even share the Latin line box: "H" reports a line height of
     /// 12.000 while "运行中" falls back to a CJK face and reports 16.800. Collapsing a 16.8 px line
-    /// box by a margin derived from a 12.0 px one puts the label nowhere near the icon. Measuring
-    /// the band through the SAME requested typeface keeps the two consistent, because FormattedText
-    /// resolves the same fallback face for the band that the label itself will draw in.
+    /// box by a margin derived from a 12.0 px one puts the label nowhere near the icon.
     ///
-    /// The UI CULTURE decides this, not the label's own characters: the statuses come from resource
-    /// lookup by UI culture, so culture fixes the script for the whole set, and a band that cannot
-    /// vary with the text cannot re-centre the cell when the status changes — the invariant this
-    /// whole mechanism exists to hold.
+    /// WHY A RESOLVED STRING AND NOT THE UI CULTURE (Codex P2, round 2). The culture is not the
+    /// question — the SCRIPT THAT RESOLVED is. With the language preference on System,
+    /// <see cref="Lattice.App.Infrastructure.LanguageCulture.Resolve"/> deliberately leaves the OS
+    /// culture in place, and the app ships only neutral-English and zh-CN resource sets: a ja-JP,
+    /// ko-KR or zh-TW machine therefore displays the ENGLISH statuses while its culture reads as
+    /// CJK. Branching on the culture would hand those users an ideograph band for Latin labels —
+    /// the very mismatch this method exists to remove, in the other direction. Asking a string that
+    /// actually came out of the resource set cannot get that wrong.
+    ///
+    /// This still does not make the band depend on the LABEL: the caller passes a fixed reference
+    /// string, not the status on screen, so the band cannot change as the status changes — the
+    /// invariant the whole mechanism exists to hold.
     /// </summary>
-    public static string WordBandFor(CultureInfo uiCulture) =>
-        uiCulture.TwoLetterISOLanguageName is "zh" or "ja" or "ko" ? IdeographBand : CapBand;
+    public static string WordBandFor(string resolvedLabel) =>
+        resolvedLabel.Any(c => char.GetUnicodeCategory(c) == UnicodeCategory.OtherLetter)
+            ? IdeographBand
+            : CapBand;
 
     private readonly Func<string> _band;
 

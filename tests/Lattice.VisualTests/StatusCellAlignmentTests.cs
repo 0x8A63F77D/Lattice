@@ -14,6 +14,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Lattice.App.Aggregation;
 using Lattice.App.Infrastructure;
+using Lattice.App.Localization;
 using Lattice.App.ViewModels;
 using Lattice.App.Views;
 using Lattice.Core;
@@ -132,6 +133,11 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
     [
         ("en-US", p => p.BoundText),
         ("zh-CN", p => p.BoundText.Any(char.IsLetter) ? "运行中" : p.BoundText),
+        // ja-JP has no resource set, so with the language preference on System it displays the
+        // NEUTRAL ENGLISH statuses on a CJK machine (LanguageCulture.Resolve returns null for
+        // System). Branching the band on the culture rather than on what resolved would hand this
+        // case an ideograph band for Latin labels; this row is the gate on that (Codex P2 round 2).
+        ("ja-JP", p => p.BoundText),
     ];
 
     /// <summary>
@@ -231,24 +237,41 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
     // window (rescaled between passes) rather than as a theory: a window per case is the thing
     // #179 measured to destabilise the neighbouring pixel gate, and this class already carries the
     // heaviest window in the assembly.
+    //
+    // The SCRIPT sweep runs here too, not only in the arranged gate (Codex P1 on PR #184): the CJK
+    // case is the one where a fallback face draws the label, so leaving it to exact geometry alone
+    // would ship the localized fix with no end-state pixel verification of the very path — fallback
+    // resolution and its rasterisation — that is special about it.
     [AvaloniaFact]
     public void Rendered_icon_ink_sits_on_the_cap_band()
     {
         AssertAcrossFamilies(scaling: 1.0, (cells, family, report) =>
         {
-            foreach (double scaling in Scalings)
+            foreach (var script in Scripts)
             {
-                cells.Rescale(scaling);
-                foreach (var (probe, ink) in cells.MeasureRenderedInk())
+                if (!cells.UseUiCulture(script.Culture)) continue;
+                foreach (var probe in cells.Probes)
+                    cells.Show(probe, script.Label(probe));
+
+                foreach (double scaling in Scalings)
                 {
-                    double expected = probe.ShownTextOffsetFromBand;
-                    double delta = ink.IconCentre - ink.TextCentre;
-                    if (Math.Abs(delta - expected) > MaxInkDeviationDip(scaling))
-                        report($"{family} @{scaling}x · {probe.Label}: the icon's ink centre sits " +
-                               $"{delta:+0.000;-0.000} px from the label's (expected {expected:+0.000;-0.000} px, " +
-                               $"cap ±{MaxInkDeviationDip(scaling)}). icon={ink.IconTop:F3}..{ink.IconBottom:F3}, " +
-                               $"text={ink.TextTop:F3}..{ink.TextBottom:F3}.");
+                    cells.Rescale(scaling);
+                    foreach (var (probe, ink) in cells.MeasureRenderedInk())
+                    {
+                        double expected = probe.ShownTextOffsetFromBand;
+                        double delta = ink.IconCentre - ink.TextCentre;
+                        if (Math.Abs(delta - expected) > MaxInkDeviationDip(scaling))
+                            report($"{family} @{scaling}x · {script.Culture} · {probe.Label}: the icon's " +
+                                   $"ink centre sits {delta:+0.000;-0.000} px from the label's (expected " +
+                                   $"{expected:+0.000;-0.000} px, cap ±{MaxInkDeviationDip(scaling)}). " +
+                                   $"icon={ink.IconTop:F3}..{ink.IconBottom:F3}, " +
+                                   $"text={ink.TextTop:F3}..{ink.TextBottom:F3}.");
+                    }
                 }
+
+                cells.Rescale(1.0);
+                foreach (var probe in cells.Probes)
+                    cells.Restore(probe);
             }
         });
     }
@@ -363,7 +386,7 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
         /// (Codex P2 on PR #184 was exactly a wrong choice here).
         /// </summary>
         public string Band => BoundText.Any(char.IsLetter)
-            ? TextInkCollapseConverter.WordBandFor(CultureInfo.CurrentUICulture)
+            ? TextInkCollapseConverter.WordBandFor(Strings.TaskStateRunning)
             : TextInkCollapseConverter.DigitBand;
 
         /// <summary>Window-space centre of that band's ink, as arranged.</summary>
@@ -535,17 +558,22 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
         /// </summary>
         public bool UseUiCulture(string culture)
         {
-            var ui = CultureInfo.GetCultureInfo(culture);
-            var band = TextInkCollapseConverter.WordBandFor(ui);
+            var previous = CultureInfo.CurrentUICulture;
+            CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
+
+            // Asked AFTER the switch and through the resource set, exactly as production does — for
+            // a culture with no satellite (ja-JP) that is the neutral English string, and the band
+            // is the Latin one however CJK the culture reads.
+            var band = TextInkCollapseConverter.WordBandFor(Strings.TaskStateRunning);
             if (!FontManager.Current.TryMatchCharacter(
                     char.ConvertToUtf32(band, 0), FontStyle.Normal, FontWeight.Normal, FontStretch.Normal,
                     _family, null, out _))
             {
+                CultureInfo.CurrentUICulture = previous;
                 _skippedScripts.Add($"{culture} in {_family.Name}");
                 return false;
             }
 
-            CultureInfo.CurrentUICulture = ui;
             // Two notifications that land back where they started, so the MultiBinding re-evaluates
             // under the new culture. Italic is guaranteed to differ from these cells' Normal.
             foreach (var probe in Probes)
