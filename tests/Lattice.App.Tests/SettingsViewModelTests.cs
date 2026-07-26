@@ -75,14 +75,25 @@ public class SettingsViewModelTests : IAsyncLifetime
     }
 
     [Fact]
-    public void StartAtLogin_registers_and_persists()
+    public void StartAtLogin_registers_and_reads_back_from_the_OS_record()
     {
         _settings.StartAtLogin = true;
 
         Assert.Equal([(true, false)], _startupRegistration.Calls);
-        Assert.True(_uiStore.Load().StartAtLogin);
+        Assert.True(_startupRegistration.IsRegistered);
         Assert.True(_settings.StartAtLogin);
         Assert.Null(_settings.StartupError);
+    }
+
+    [Fact]
+    public void StartAtLogin_follows_a_change_made_outside_Lattice()
+    {
+        // The desktop's own startup settings switched it off; the toggle must show that
+        // rather than a stale persisted "on" (Codex P2, PR #188).
+        _settings.StartAtLogin = true;
+        _startupRegistration.IsRegistered = false;
+
+        Assert.False(_settings.StartAtLogin);
     }
 
     [Fact]
@@ -105,8 +116,8 @@ public class SettingsViewModelTests : IAsyncLifetime
         _settings.StartAtLogin = true;
 
         Assert.NotNull(_settings.StartupError);
-        Assert.False(_settings.StartAtLogin);        // the bound switch reads the stored value back
-        Assert.False(_uiStore.Load().StartAtLogin);
+        Assert.False(_settings.StartAtLogin);        // the bound switch reads the OS record back
+        Assert.False(_startupRegistration.IsRegistered);
     }
 
     [Fact]

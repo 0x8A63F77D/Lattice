@@ -366,23 +366,40 @@ public class UiStateStoreTests
         Assert.Equal(RailGroupingMode.Auto, loaded.RailGrouping);
         Assert.Equal(AppTheme.System, loaded.Theme);
         Assert.Null(loaded.ScopeHostId);   // absent field => All hosts
-        // #187: a file written before the start-at-login pair existed must load as opt-OUT.
-        Assert.False(loaded.StartAtLogin);
+        // #187: a file written before the start-minimized flag existed must load as opt-OUT.
         Assert.False(loaded.StartMinimized);
         File.Delete(path);
     }
 
     [Fact]
-    public void Startup_preferences_round_trip()
+    public void Start_minimized_preference_round_trips()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
+        new UiStateStore(path).Update(s => s with { StartMinimized = true });
+
+        Assert.True(new UiStateStore(path).Load().StartMinimized);
+        File.Delete(path);
+    }
+
+    [Fact]
+    public void TryUpdate_reports_whether_the_save_landed()
     {
         var path = Path.Combine(Path.GetTempPath(), $"lattice-ui-{Guid.NewGuid():N}.json");
         var store = new UiStateStore(path);
-        store.Update(s => s with { StartAtLogin = true, StartMinimized = true });
+        Assert.True(store.TryUpdate(s => s with { StartMinimized = true }));
 
-        UiState loaded = new UiStateStore(path).Load();
-
-        Assert.True(loaded.StartAtLogin);
-        Assert.True(loaded.StartMinimized);
+        // A directory where the file belongs: the rename onto it fails, and unlike Update
+        // the caller gets to know (#187 needs it to keep an OS record in agreement).
         File.Delete(path);
+        Directory.CreateDirectory(path);
+        try
+        {
+            Assert.False(store.TryUpdate(s => s with { StartMinimized = false }));
+        }
+        finally
+        {
+            Directory.Delete(path);
+            File.Delete(path + ".tmp");
+        }
     }
 }

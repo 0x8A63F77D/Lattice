@@ -134,15 +134,65 @@ public static class LoginItemPolicy
     }
 
     /// <summary>
+    /// Whether the login record must force AppImage extract-and-run (Codex P2, PR #188).
+    /// An AppImage needs FUSE on the host; without it, it only starts via extract-and-run
+    /// (README's Linux install notes), so a plain <c>Exec</c> would leave a login entry that
+    /// silently never starts.
+    ///
+    /// The default is the SAFE direction — force it — and we downgrade only on direct positive
+    /// evidence that FUSE works: this very process running out of a FUSE mount, which the
+    /// AppImage runtime names <c>/tmp/.mount_*</c> (the same convention
+    /// <see cref="App.PlanRelaunch"/> already documents). A misread can then only cost an
+    /// extraction at boot, never a dead login item.
+    /// </summary>
+    public static bool NeedsExtractAndRun(string? appImagePath, string? processPath) =>
+        !string.IsNullOrWhiteSpace(appImagePath)
+        && (processPath is null || !processPath.Contains("/.mount_", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Whether an EXISTING autostart entry has been switched off through the desktop's own
+    /// startup-app settings (Codex P2, PR #188). GNOME's session tooling writes
+    /// <c>X-GNOME-Autostart-enabled=false</c> and other desktops write <c>Hidden=true</c>,
+    /// both INSIDE our file — so unlike macOS, where Background Task Management records the
+    /// opt-out outside the plist, an unchanged-content check cannot protect the user's choice
+    /// here. The launch-time self-heal consults this so it never flips a user's explicit
+    /// OS-level "off" back on.
+    /// </summary>
+    public static bool IsAutostartDisabledByDesktop(string content)
+    {
+        foreach (ReadOnlySpan<char> raw in content.AsSpan().EnumerateLines())
+        {
+            ReadOnlySpan<char> line = raw.Trim();
+            int eq = line.IndexOf('=');
+            if (eq < 0)
+                continue;
+            // Keys are case-sensitive per the Desktop Entry spec; values are read leniently
+            // because hand-edited files and older tooling are not consistent about case.
+            ReadOnlySpan<char> key = line[..eq].Trim();
+            ReadOnlySpan<char> value = line[(eq + 1)..].Trim();
+            if (key.SequenceEqual("X-GNOME-Autostart-enabled") && value.Equals("false", StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (key.SequenceEqual("Hidden") && value.Equals("true", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// The XDG autostart record, derived from <c>packaging/linux/lattice.desktop</c> with an
     /// ABSOLUTE <c>Exec</c> (the packaged file relies on <c>$PATH</c>; an autostart entry
     /// cannot). <c>X-GNOME-Autostart-enabled</c> is the toggle GNOME's own UI writes — set it
-    /// explicitly so a previous "off" left by the user's session tooling does not silently
-    /// win over our file.
+    /// explicitly, which is safe precisely because
+    /// <see cref="IsAutostartDisabledByDesktop"/> keeps the self-heal from ever rewriting a
+    /// record the user disabled there.
     /// </summary>
-    public static string DesktopEntry(string executable, bool startMinimized)
+    public static string DesktopEntry(string executable, bool startMinimized, bool extractAndRun = false)
     {
         string exec = QuoteExecArgument(executable);
+        if (extractAndRun)
+            // Same mechanism as App.RestartApp's relaunch: set the runtime's env var rather
+            // than pass --appimage-extract-and-run, so the flag can never reach our own argv.
+            exec = "/usr/bin/env APPIMAGE_EXTRACT_AND_RUN=1 " + exec;
         if (startMinimized)
             exec += " " + MinimizedArgument;
         var sb = new StringBuilder();

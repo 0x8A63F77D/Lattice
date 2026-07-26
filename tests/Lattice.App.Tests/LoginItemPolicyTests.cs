@@ -204,6 +204,74 @@ public class LoginItemPolicyTests
             LoginItemPolicy.DesktopEntry(@"/opt/a\b/Lattice", false).Split('\n'));
     }
 
+    // ---- AppImage extract-and-run (Codex P2, PR #188) ----------------------
+
+    [Fact]
+    public void A_non_appimage_launch_never_forces_extract_and_run()
+    {
+        Assert.False(LoginItemPolicy.NeedsExtractAndRun(null, "/opt/lattice/Lattice"));
+    }
+
+    [Fact]
+    public void An_appimage_running_from_a_fuse_mount_registers_plainly()
+    {
+        // Positive evidence that FUSE works on this host: we are executing out of the mount.
+        Assert.False(LoginItemPolicy.NeedsExtractAndRun(
+            "/home/u/Lattice.AppImage", "/tmp/.mount_LatticeAbc/usr/bin/Lattice"));
+    }
+
+    [Theory]
+    [InlineData("/tmp/appimage_extracted_9f2/usr/bin/Lattice")] // launched with extract-and-run
+    [InlineData(null)]                                          // no evidence either way
+    public void An_appimage_with_no_fuse_evidence_forces_extract_and_run(string? processPath)
+    {
+        // Safe direction by default: a misread costs an extraction at boot, never a login
+        // entry that silently never starts.
+        Assert.True(LoginItemPolicy.NeedsExtractAndRun("/home/u/Lattice.AppImage", processPath));
+    }
+
+    [Fact]
+    public void Desktop_entry_carries_the_extract_and_run_mode_into_Exec()
+    {
+        Assert.Contains(
+            "Exec=/usr/bin/env APPIMAGE_EXTRACT_AND_RUN=1 /home/u/Lattice.AppImage --minimized",
+            LoginItemPolicy.DesktopEntry("/home/u/Lattice.AppImage", startMinimized: true, extractAndRun: true)
+                .Split('\n'));
+    }
+
+    // ---- Desktop-level opt-out (Codex P2, PR #188) -------------------------
+
+    [Fact]
+    public void A_freshly_written_entry_does_not_read_as_disabled()
+    {
+        Assert.False(LoginItemPolicy.IsAutostartDisabledByDesktop(
+            LoginItemPolicy.DesktopEntry("/opt/lattice/Lattice", false)));
+    }
+
+    [Theory]
+    [InlineData("X-GNOME-Autostart-enabled=false")]
+    [InlineData("X-GNOME-Autostart-enabled = FALSE")]
+    [InlineData("Hidden=true")]
+    [InlineData("Hidden = True")]
+    public void A_desktop_disabled_entry_is_recognised(string disablingLine)
+    {
+        // GNOME's session tooling writes the first form, other desktops the second — both
+        // INSIDE our own file, which is why an unchanged-content check cannot protect them.
+        string content = LoginItemPolicy.DesktopEntry("/opt/lattice/Lattice", false) + disablingLine + "\n";
+
+        Assert.True(LoginItemPolicy.IsAutostartDisabledByDesktop(content));
+    }
+
+    [Theory]
+    [InlineData("X-GNOME-Autostart-enabled=true")]
+    [InlineData("Hidden=false")]
+    [InlineData("NotHidden=true")]
+    [InlineData("# Hidden=true")]
+    public void An_enabled_or_unrelated_key_does_not_read_as_disabled(string line)
+    {
+        Assert.False(LoginItemPolicy.IsAutostartDisabledByDesktop("[Desktop Entry]\n" + line + "\n"));
+    }
+
     // ---- Windows Run value -------------------------------------------------
 
     [Fact]

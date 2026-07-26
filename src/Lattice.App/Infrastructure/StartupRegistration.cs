@@ -17,8 +17,12 @@ public interface IStartupRegistration
     /// itself rather than pretending to register.</summary>
     bool IsSupported { get; }
 
-    /// <summary>Whether a registration record currently exists. Read from the OS, never
-    /// cached — the user can delete it behind our back.</summary>
+    /// <summary>
+    /// Whether Lattice is registered to start at login RIGHT NOW: a record exists and has not
+    /// been switched off through the OS's own startup settings. Read from the OS on every
+    /// call, never cached, and it is the single source of truth — the UI toggle reads this
+    /// rather than a persisted copy, so the two can never disagree (Codex P2, PR #188).
+    /// </summary>
     bool IsRegistered { get; }
 
     /// <summary>
@@ -39,15 +43,23 @@ public sealed class FileStartupRegistration : IStartupRegistration
     private readonly string _path;
     private readonly string? _target;
     private readonly Func<string, bool, string> _render;
+    private readonly Func<string, bool>? _isDisabledByOs;
 
     /// <param name="path">Absolute path of the record file.</param>
     /// <param name="target">Executable to launch, or null when this launch has none.</param>
     /// <param name="render">Content renderer from <see cref="LoginItemPolicy"/>.</param>
-    public FileStartupRegistration(string path, string? target, Func<string, bool, string> render)
+    /// <param name="isDisabledByOs">Reads an existing record and reports whether the OS's own
+    /// startup settings switched it off. Linux records carry that state INSIDE the file
+    /// (<see cref="LoginItemPolicy.IsAutostartDisabledByDesktop"/>); macOS keeps it in the
+    /// Background Task Management database instead, so the macOS registration passes null.</param>
+    public FileStartupRegistration(
+        string path, string? target, Func<string, bool, string> render,
+        Func<string, bool>? isDisabledByOs = null)
     {
         _path = path;
         _target = target;
         _render = render;
+        _isDisabledByOs = isDisabledByOs;
     }
 
     /// <summary>Exposed so a test can assert WHERE the platform factory decided to write.</summary>
@@ -55,7 +67,24 @@ public sealed class FileStartupRegistration : IStartupRegistration
 
     public bool IsSupported => _target is not null;
 
-    public bool IsRegistered => File.Exists(_path);
+    public bool IsRegistered
+    {
+        get
+        {
+            try
+            {
+                if (!File.Exists(_path))
+                    return false;
+                return _isDisabledByOs is null || !_isDisabledByOs(File.ReadAllText(_path));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // A record we cannot read is one we cannot honour: report it as not
+                // registered rather than let an exception escape a property getter the UI binds.
+                return false;
+            }
+        }
+    }
 
     public bool Apply(bool enabled, bool startMinimized)
     {
@@ -181,11 +210,19 @@ public static class StartupRegistration
         // member forces this mapping to be revisited. Same pattern as TrayResidencyDefaults.
         return platform switch
         {
+            // macOS: no isDisabledByOs reader — Background Task Management records the user's
+            // opt-out in its own database, leaving the plist byte-identical, so there is
+            // nothing in the file to consult.
             TrayPlatform.MacOS => new FileStartupRegistration(
                 LoginItemPolicy.LaunchAgentPath(homeDirectory), target, LoginItemPolicy.LaunchAgentPlist),
             TrayPlatform.Linux => new FileStartupRegistration(
                 LoginItemPolicy.AutostartPath(LoginItemPolicy.ConfigHome(xdgConfigHome, homeDirectory)),
-                target, LoginItemPolicy.DesktopEntry),
+                target,
+                // extract-and-run is a property of THIS launch, so it is bound once here
+                // rather than threaded through every render call.
+                (exe, minimized) => LoginItemPolicy.DesktopEntry(
+                    exe, minimized, LoginItemPolicy.NeedsExtractAndRun(appImagePath, processPath)),
+                LoginItemPolicy.IsAutostartDisabledByDesktop),
             // The runtime guard is what satisfies the platform-compatibility analyzer: the
             // enum arm alone does not prove to it that we are on Windows.
             TrayPlatform.Windows => OperatingSystem.IsWindows()

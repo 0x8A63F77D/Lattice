@@ -118,6 +118,37 @@ public class StartupRegistrationTests : IDisposable
         Assert.False(Make().Apply(enabled: true, startMinimized: false));
     }
 
+    // ---- Desktop-level opt-out (Codex P2, PR #188) -------------------------
+
+    [Fact]
+    public void An_entry_the_desktop_disabled_reads_as_not_registered()
+    {
+        // The Linux shape: the opt-out lives inside our own file, so presence alone is not
+        // "registered". Reporting it as registered would make the toggle read on and let the
+        // self-heal rewrite the record back to enabled.
+        var reg = new FileStartupRegistration(
+            RecordPath, "/opt/lattice/Lattice",
+            (exe, minimized) => LoginItemPolicy.DesktopEntry(exe, minimized),
+            LoginItemPolicy.IsAutostartDisabledByDesktop);
+        reg.Apply(enabled: true, startMinimized: false);
+        Assert.True(reg.IsRegistered);
+
+        File.AppendAllText(RecordPath, "X-GNOME-Autostart-enabled=false\n");
+
+        Assert.False(reg.IsRegistered);
+    }
+
+    [Fact]
+    public void Without_a_reader_presence_alone_is_registration()
+    {
+        // macOS: Background Task Management records the opt-out in its own database and leaves
+        // the plist byte-identical, so there is nothing in the file to consult.
+        var reg = Make();
+        reg.Apply(enabled: true, startMinimized: false);
+
+        Assert.True(reg.IsRegistered);
+    }
+
     // ---- Platform factory --------------------------------------------------
 
     [Fact]
@@ -139,6 +170,55 @@ public class StartupRegistrationTests : IDisposable
             homeDirectory: "/home/u", xdgConfigHome: "/home/u/cfg"));
 
         Assert.Equal(LoginItemPolicy.AutostartPath("/home/u/cfg"), reg.Path);
+    }
+
+    [Fact]
+    public void The_linux_factory_wires_the_desktop_opt_out_reader()
+    {
+        // The reader is only useful if the factory actually attaches it — asserting it on a
+        // hand-built registration alone would leave the production wiring unproven.
+        var reg = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.Linux, appImagePath: null, processPath: "/opt/lattice/Lattice",
+            homeDirectory: _dir, xdgConfigHome: _dir);
+        Assert.True(reg.Apply(enabled: true, startMinimized: false));
+        Assert.True(reg.IsRegistered);
+
+        File.AppendAllText(reg.Path, "Hidden=true\n");
+
+        Assert.False(reg.IsRegistered);
+    }
+
+    [Fact]
+    public void The_macos_factory_treats_presence_as_registration()
+    {
+        var reg = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.MacOS, appImagePath: null, processPath: "/Applications/Lattice.app/Contents/MacOS/Lattice",
+            homeDirectory: _dir, xdgConfigHome: null);
+        Assert.True(reg.Apply(enabled: true, startMinimized: false));
+
+        // No in-file opt-out exists on macOS, so an appended stray line must not be read as one.
+        File.AppendAllText(reg.Path, "Hidden=true\n");
+
+        Assert.True(reg.IsRegistered);
+    }
+
+    [Fact]
+    public void The_linux_factory_binds_this_launchs_appimage_extraction_mode()
+    {
+        // Launched by extraction (no FUSE evidence) ⇒ the record must force it too, or the
+        // login entry silently never starts on that host (Codex P2, PR #188).
+        var extracted = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.Linux, "/home/u/Lattice.AppImage", "/tmp/appimage_extracted_1/usr/bin/Lattice",
+            _dir, xdgConfigHome: _dir);
+        Assert.True(extracted.Apply(enabled: true, startMinimized: false));
+        Assert.Contains("APPIMAGE_EXTRACT_AND_RUN=1", File.ReadAllText(extracted.Path));
+
+        // Launched from a FUSE mount ⇒ plain Exec, no extraction cost at every boot.
+        var mounted = (FileStartupRegistration)StartupRegistration.Create(
+            TrayPlatform.Linux, "/home/u/Lattice.AppImage", "/tmp/.mount_LatticeAbc/usr/bin/Lattice",
+            _dir, xdgConfigHome: _dir);
+        Assert.True(mounted.Apply(enabled: true, startMinimized: false));
+        Assert.DoesNotContain("APPIMAGE_EXTRACT_AND_RUN", File.ReadAllText(mounted.Path));
     }
 
     [Fact]

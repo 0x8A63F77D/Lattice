@@ -25,20 +25,26 @@ public sealed class StartupPreference
     /// <see cref="IStartupRegistration.IsSupported"/>).</summary>
     public bool IsSupported => _registration.IsSupported;
 
-    /// <summary>Read LIVE from the store at call time, never cached — the read-modify-write
-    /// doctrine <see cref="UiStateStore.Update"/> exists for.</summary>
-    public bool StartAtLogin => _store.Load().StartAtLogin;
+    /// <summary>
+    /// Read from the OS RECORD, not from a persisted copy (Codex P2, PR #188). Storing this
+    /// alongside the record gave one fact two owners, and every way they could drift was a bug:
+    /// a ui-state save that failed after the record was written left the toggle contradicting
+    /// the OS, and a user who switched the login item off in their desktop's own settings still
+    /// read back "on". With the record as the sole source of truth those states cannot be
+    /// constructed. (It is also why <see cref="LoginItemPolicy"/>'s LaunchAgent choice matters:
+    /// SMAppService reports a user-disabled item as "not found", which would make this
+    /// derivation impossible.)
+    /// </summary>
+    public bool StartAtLogin => _registration.IsRegistered;
 
+    /// <summary>Read LIVE from the store at call time, never cached — the read-modify-write
+    /// doctrine <see cref="UiStateStore.Update"/> exists for. This one IS persisted: it has to
+    /// survive an off/on cycle, during which no record exists to carry it.</summary>
     public bool StartMinimized => _store.Load().StartMinimized;
 
-    /// <summary>Registers or removes the OS record, then persists on success.</summary>
-    public bool SetStartAtLogin(bool value)
-    {
-        if (!_registration.Apply(value, StartMinimized))
-            return false;
-        _store.Update(s => s with { StartAtLogin = value });
-        return true;
-    }
+    /// <summary>Registers or removes the OS record. Nothing to persist — the record itself is
+    /// what <see cref="StartAtLogin"/> reads back.</summary>
+    public bool SetStartAtLogin(bool value) => _registration.Apply(value, StartMinimized);
 
     /// <summary>
     /// Persists the minimized-start choice, re-writing the login record when one is live.
@@ -48,24 +54,38 @@ public sealed class StartupPreference
     /// </summary>
     public bool SetStartMinimized(bool value)
     {
-        if (StartAtLogin && !_registration.Apply(true, value))
+        bool registered = _registration.IsRegistered;
+        if (registered && !_registration.Apply(true, value))
             return false;
-        _store.Update(s => s with { StartMinimized = value });
-        return true;
+        if (_store.TryUpdate(s => s with { StartMinimized = value }))
+            return true;
+
+        // The record now carries a flag the preference does not (Codex P2, PR #188). Put the
+        // record back so the two never disagree — otherwise the login item would keep starting
+        // minimized while the toggle, restored from the un-saved preference, reads off.
+        if (registered)
+            _registration.Apply(true, !value);
+        return false;
     }
 
     /// <summary>
     /// Path self-heal (#187 requirement 3), called once from the composition root. A moved,
     /// reinstalled or updated app leaves a record pointing at a path that no longer exists;
-    /// re-applying on every launch while the toggle is on rewrites it to the binary that is
-    /// actually running. Best-effort by design — a failure here has no user-visible surface
-    /// to report into, and the next launch tries again. Does nothing while the toggle is off,
-    /// so a user who turned the login item off in the OS's own settings is never fought with.
+    /// rewriting it on launch points it back at the binary that is actually running.
+    ///
+    /// <para>It REPAIRS an existing registration and never creates one. That is the exact
+    /// scope of the requirement — a stale path — and it is what keeps the self-heal from
+    /// undoing an OS-level opt-out (Codex P2, PR #188): a user who deleted the entry in their
+    /// desktop's startup settings does not get it silently recreated, and one who merely
+    /// disabled it reads as unregistered here (see <see cref="StartAtLogin"/>), so it is left
+    /// alone rather than rewritten back to enabled.</para>
+    ///
+    /// <para>Best-effort by design — a failure here has no user-visible surface to report
+    /// into, and the next launch tries again.</para>
     /// </summary>
     public void SyncOnLaunch()
     {
-        UiState state = _store.Load();
-        if (state.StartAtLogin)
-            _registration.Apply(true, state.StartMinimized);
+        if (_registration.IsRegistered)
+            _registration.Apply(true, _store.Load().StartMinimized);
     }
 }

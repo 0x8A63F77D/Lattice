@@ -58,10 +58,11 @@ public partial class App : Application
             // Start-at-login (#187): the platform seam is resolved once, here, from the running
             // process — everything below it is pure policy over explicit inputs.
             var startup = new StartupPreference(uiState, StartupRegistration.ForCurrentPlatform());
-            // Path self-heal: while the toggle is on, rewrite the OS record to point at the
-            // binary that is actually running, so a moved/updated app repairs its own
-            // registration. Idempotent — an unchanged record is left untouched, which is what
-            // keeps macOS's "background item added" notification from firing on every boot.
+            // Path self-heal: repoint an EXISTING login record at the binary that is actually
+            // running, so a moved/updated app repairs its own registration. It never creates
+            // one, so a record the user removed through the OS's own startup settings stays
+            // removed. Idempotent — an unchanged record is left untouched, which is what keeps
+            // macOS's "background item added" notification from firing on every boot.
             startup.SyncOnLaunch();
             var shell = new ShellViewModel(registry, store, clock, uiState, factory, () => RestartApp(desktop), startup);
             // Apply the persisted theme once, here at the composition root on the UI thread

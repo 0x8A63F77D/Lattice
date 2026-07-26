@@ -10,7 +10,10 @@ namespace Lattice.App.Tests.Fakes;
 public sealed class FakeStartupRegistration : IStartupRegistration
 {
     public bool IsSupported { get; set; } = true;
-    public bool IsRegistered { get; private set; }
+
+    /// <summary>Settable so a test can stage "a record exists that this session did not
+    /// write" — the launch-time self-heal case — and "the OS switched it off behind us".</summary>
+    public bool IsRegistered { get; set; }
 
     /// <summary>When true, every <see cref="Apply"/> reports failure and changes nothing.</summary>
     public bool Fails { get; set; }
