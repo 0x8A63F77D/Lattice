@@ -149,4 +149,32 @@ public class HeadlessLayoutSettleTests
             a.GetDiagnostic(Animatable.TransitionsProperty).Priority == BindingPriority.Style);
         window.Close();
     }
+
+    // ...but the nav pane's PART_PaneRoot is the ONE part that must come out of a settle with NO
+    // transition at all, and this is the deterministic pin on HeadlessLayout's TemplateApplied
+    // lever (issue #198's fold of #195).
+    //
+    // Why it discriminates. The lever nulls PART_PaneRoot.Transitions as the template is applied,
+    // so the settle's scan never sees it, never detaches it and therefore never re-attaches it —
+    // it is still null here. Drop the lever and the opposite holds exactly: the pane root arrives
+    // with the theme's inline DoubleTransition, the settle detaches it for the duration and
+    // RESTORES it on the way out, and this assert goes red. That makes it a red-first falsification
+    // that does not depend on the wall clock, unlike the #133 flake itself.
+    //
+    // The pin is here rather than in NavPaneWidthPolicyTests because the mechanism now belongs to
+    // HeadlessLayout; NavPaneWidthPolicyTests asserts only the user-visible invariant it buys.
+    [AvaloniaFact]
+    public void Layout_leaves_the_nav_pane_root_without_a_width_transition()
+    {
+        (ShellWindow window, ShellViewModel shell, HostRegistry registry) = MakeShell();
+        registry.AddHost(TestData.MakeHostConfig(name: "a"));
+        window.Show();
+        Layout(window);
+
+        Panel paneRoot = window.Nav.GetVisualDescendants().OfType<SplitView>().Single()
+            .GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "PART_PaneRoot");
+
+        Assert.Null(paneRoot.Transitions);
+        window.Close();
+    }
 }

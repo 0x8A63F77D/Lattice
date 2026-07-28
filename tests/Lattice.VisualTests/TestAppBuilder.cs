@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Headless;
 using Avalonia.Media;
@@ -33,14 +34,20 @@ namespace Lattice.VisualTests;
 /// </summary>
 public static class TestAppBuilder
 {
+    // Issue #133 / #198 — the identical trigger Lattice.App.Tests carries; keep the two in step.
+    // This assembly needs it for the same reason and one more: MenuSeparatorVisualTests' hostrail
+    // case shows a real ShellWindow and opens a rail ROW's menu, so the row must be realized, and
+    // its fixture measures the window directly rather than through HeadlessLayout.Layout. The
+    // mechanism and its evidence live in HeadlessLayout.SuppressPaneWidthAnimation.
+#pragma warning disable CA2255 // The deadline is before any code in this assembly runs; that is precisely what a module initializer is for.
+    [ModuleInitializer]
+    internal static void InstallHeadlessLayoutPolicy() => HeadlessLayout.SuppressPaneWidthAnimation();
+#pragma warning restore CA2255
+
     public static AppBuilder BuildAvaloniaApp() =>
         AppBuilder.Configure<Lattice.App.App>()
             .UseSkia()
             .WithInterFont()
             .With(new FontManagerOptions { DefaultFamilyName = "fonts:Inter#Inter" })
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-            // Issue #133: same reason as Lattice.App.Tests' builder. This assembly shows a real
-            // ShellWindow too (MenuSeparatorVisualTests' hostrail case opens a rail row's menu),
-            // so it needs the same guarantee that a rail row is realized. See HeadlessPaneMotion.
-            .WithoutPaneWidthAnimation();
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
 }
