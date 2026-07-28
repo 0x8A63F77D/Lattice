@@ -1,9 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
-using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
-using Avalonia.VisualTree;
 using Lattice.App.Infrastructure;
 using Lattice.App.Tests.Fakes;
 using Lattice.App.ViewModels;
@@ -17,10 +15,16 @@ using static Lattice.Tests.HeadlessLayout;
 namespace Lattice.App.Tests.Headless;
 
 /// <summary>
-/// Structural pin for the issue #133 fix, in the shape of <see cref="HeadlessSessionPolicyTests"/>:
-/// the damage is a load-dependent flake, so nothing else in the suite goes reliably red if the
-/// harness style is dropped. These assert the enforcement mechanism and the invariant it buys.
-/// TestAppBuilder.StaticNavPaneWidth carries the full mechanism and the rejected alternatives.
+/// The USER-VISIBLE invariant the issue #133 fix buys, at both pane states: one
+/// <c>Layout(window)</c> leaves every rail entry with a realized container. The damage is a
+/// load-dependent flake, so nothing else in the suite goes reliably red if the guarantee is lost —
+/// hence a pin of its own.
+///
+/// The mechanism that delivers it, and the alternatives that were measured and rejected, live with
+/// the settle helper: <c>HeadlessLayout.SuppressPaneWidthAnimation</c> (the pane is born without a
+/// width transition) plus the settle's own transition detach. <c>HeadlessLayoutSettleTests</c> pins
+/// those. Issue #198 converged what used to be two separate mechanisms; this file deliberately
+/// asserts only the outcome, so it stays honest if the mechanism is ever reshaped again.
 /// </summary>
 public class NavPaneWidthPolicyTests
 {
@@ -42,23 +46,9 @@ public class NavPaneWidthPolicyTests
         return (window, shell);
     }
 
-    // The mechanism: PART_PaneRoot's Width must not be under a transition, or the pane's width —
-    // and with it the rail's effective viewport — becomes a function of wall-clock time.
-    [AvaloniaFact]
-    public void The_nav_pane_root_has_no_width_transition()
-    {
-        var (window, _) = TwoHostShell(1280);
-
-        var paneRoot = window.Nav.GetVisualDescendants().OfType<SplitView>().Single()
-            .GetVisualDescendants().OfType<Panel>().Single(p => p.Name == "PART_PaneRoot");
-
-        Assert.Null(paneRoot.Transitions);
-        window.Close();
-    }
-
-    // The invariant that buys: one Layout(window) realizes a container for EVERY rail entry, at
-    // both pane states. Under the animated width the panel realizes only the anchor row and never
-    // recovers, which is what reddened ShellRailTests / RailScopeSelectionTests / AuthFailedLinkage.
+    // One Layout(window) realizes a container for EVERY rail entry, at both pane states. Under the
+    // animated width the panel realizes only the anchor row and never recovers, which is what
+    // reddened ShellRailTests / RailScopeSelectionTests / AuthFailedLinkage.
     [AvaloniaTheory]
     [InlineData(1280)]   // Expanded pane
     [InlineData(1050)]   // Compact pane (the 1000–1099 band)
