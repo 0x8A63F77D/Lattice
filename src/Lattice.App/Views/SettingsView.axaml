@@ -7,6 +7,47 @@
              xmlns:v="using:Lattice.App.Views"
              x:Class="Lattice.App.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
+  <UserControl.Styles>
+    <!-- One reserved width for every dropdown on this page (issue #200).
+         FluentAvalonia's ComboBox theme aligns the control Left and fills the closed box
+         from SelectionBoxItem — the SELECTED item only — so an unconstrained ComboBox is
+         exactly as wide as whatever is currently picked. Avalonia documents that as
+         by-design ("the length and height of the combo box are determined by the selected
+         item, unless you define them explicitly"), and defining the width is the documented
+         remedy. Without it the language row measured 144 / 92 / 72 px across its three
+         options under en (100 / 92 / 72 under zh-CN), and the three rows disagreed with
+         each other as well — the owner's hardware report.
+
+         200 = comfortably past the widest label any shipped language produces (en
+         "System default" at 144 px including the box's padding and glyph column), so the
+         box never resizes; MinWidth rather than Width so a future translation that
+         outgrows it grows the box instead of clipping — and trips
+         SettingsDropdownGeometryTests, which measures every option of every row under a
+         real (pinned Inter) font. A per-row width would be denser but would leave the
+         three rows ragged; one column width is the Fluent settings-page idiom. -->
+    <Style Selector="ComboBox">
+      <Setter Property="MinWidth" Value="200" />
+    </Style>
+    <!-- One row height for every option, whatever script it is written in (issue #200,
+         second defect). A CJK label has no glyph coverage in the UI font, so it comes from
+         a fallback CJK face whose LINE BOX is taller — 20 px against 17 px for Latin at
+         FontSize 14 — and FA's ComboBoxItem template derives the row height from its
+         content. The language menu is the one list that mixes scripts (System default /
+         English / 中文), so exactly one of its three options rendered 34 px tall against
+         31 px for the others: a visibly deeper highlight block, 6 device px on a 2x
+         display (owner's hardware report). Same root cause as the #147 version-label fix
+         further down this file.
+
+         Pinning LineHeight makes the line box a constant instead of a function of which
+         face supplied the glyphs, so the rows are equal by construction rather than by a
+         height that happens to be big enough. 20 = the tallest natural line box measured
+         across the fonts in play (Inter, SF Pro Text, Helvetica Neue and their CJK
+         fallbacks), so no glyph has to overflow its row to fit. The selector also reaches
+         the polling menu, whose plain integer items have no ItemTemplate of their own. -->
+    <Style Selector="ComboBoxItem TextBlock">
+      <Setter Property="LineHeight" Value="20" />
+    </Style>
+  </UserControl.Styles>
   <!-- Opaque content surface (design: content is always opaque). PageHost is transparent so the
        command-bar strip can reveal Mica; Settings has no command bar, so it paints the canvas across
        its whole area. Same canvas colour as before → fallback unchanged. -->
