@@ -74,7 +74,7 @@ namespace Lattice.VisualTests;
 /// painted ink really lands where layout put it, which layout numbers cannot promise: the rasterizer
 /// hints glyph edges onto the device pixel grid, so ink can sit a device pixel off the arranged
 /// geometry in a font-dependent direction. That quantisation, not the layout, sets the pixel
-/// tolerance (see <see cref="MaxInkDeviationDip"/>).
+/// tolerance (see <c>InkAlignment.MaxInkDeviationDip</c>).
 ///
 /// NOT env-gated: like <see cref="SnoozePillAlignmentTests"/> these assert geometry, not committed
 /// screenshots, so they gate the fix in the normal <c>dotnet test</c> lane on every CI OS.
@@ -82,36 +82,15 @@ namespace Lattice.VisualTests;
 [Trait("Category", "Visual")]
 public class StatusCellAlignmentTests(ITestOutputHelper output)
 {
-    /// <summary>The arranged geometry is computed, not rasterised, so it is exact up to floating
-    /// point; a thousandth of a pixel is slack for the arithmetic, not for the layout.</summary>
-    private const double ArrangedTolerance = 0.001;
-
-    /// <summary>
-    /// TWO DEVICE PIXELS, in DIPs. Hinting grid-fits a glyph's top and bottom edges onto the device
-    /// pixel grid independently and may shift the whole run as it does so, so each edge can move by
-    /// up to a device pixel and the ink CENTRE this gate measures — their midpoint — inherits that
-    /// same bound in each direction. The cap is the mechanism's, not a fit to the observations, and
-    /// the observations sit inside it with room: post-fix the worst deviation is 0.852 px @1x /
-    /// 0.311 px @2x on macOS and 1.194 px @1x on Windows, whose hinting is the more aggressive of
-    /// the two (Times New Roman there renders a cap band a full pixel taller than its outline).
-    /// A one-device-pixel cap was tried first and was red on the Windows runner alone.
-    ///
-    /// This layer is the weaker of the two by construction, and deliberately so: it proves the
-    /// painted pixels follow the layout, and is not the detector. The EXACT gate is
-    /// <see cref="Icon_is_centred_on_the_reference_band"/>, which is red pre-fix in every family on
-    /// every runner; this one is red pre-fix only where the arranged error clears two device pixels.
-    /// </summary>
-    private static double MaxInkDeviationDip(double scaling) => 2.0 / scaling;
-
-    /// <summary>Families worth probing: metrically different from each other and from Inter. Ones
-    /// this runner lacks are skipped (see <see cref="Resolve"/>); Inter is embedded, so at least it
-    /// is always measured — and the arranged assertions are red pre-fix in Inter too, so the gate
-    /// does not go vacuous on a runner with a bare font stack.</summary>
-    private static readonly string[] FamilyNames =
-    [
-        "Inter", "Helvetica", "Helvetica Neue", ".AppleSystemUIFont", "Arial",
-        "Verdana", "Georgia", "Courier New", "Times New Roman", "Menlo", "Trebuchet MS", "Segoe UI",
-    ];
+    // The tolerances, the family list, the family resolver and the ink scanner live in
+    // InkAlignment: #185 put a second gate on this same defect class at the command bars, and the
+    // project's rule is that the second instance of a pattern extracts the machinery rather than
+    // transcribing it. What stays here is what is specific to the CELLS.
+    //
+    // On the two layers: the EXACT gate is Icon_is_centred_on_the_reference_band, red pre-fix in
+    // every family on every runner. Rendered_icon_ink_sits_on_the_cap_band is the weaker of the two
+    // by construction — it proves the painted pixels follow the layout and is red pre-fix only
+    // where the arranged error clears two device pixels.
 
     /// <summary>Labels chosen for their ink shape, not their prose: no descender / one descender /
     /// ascender + descender / mixed with a space. If the icon's position depended on the label at
@@ -165,7 +144,7 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
                 {
                     cells.Show(probe, script.Label(probe));
                     double delta = probe.IconBoxCentre - probe.BandCentre;
-                    if (Math.Abs(delta) > ArrangedTolerance)
+                    if (Math.Abs(delta) > InkAlignment.ArrangedTolerance)
                         report($"{family} · {script.Culture} · {probe.Label}: the icon's box centre sits " +
                                $"{delta:+0.000;-0.000} px from the '{probe.Band}' band's centre — the " +
                                "layout centres boxes, not ink.");
@@ -206,7 +185,7 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
                 void Spread(string what, Func<(string Word, double Icon, double Band), double> pick)
                 {
                     double spread = seen.Max(pick) - seen.Min(pick);
-                    if (spread > ArrangedTolerance)
+                    if (spread > InkAlignment.ArrangedTolerance)
                         report($"{family} · {probe.Label}: the {what} moves {spread:F3} px across status " +
                                $"words ({string.Join(", ", seen.Select(s => $"{s.Word}={pick(s):F3}"))}) — " +
                                "nothing in this cell may depend on the label's own ink.");
@@ -260,10 +239,10 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
                     {
                         double expected = probe.ShownTextOffsetFromBand;
                         double delta = ink.IconCentre - ink.TextCentre;
-                        if (Math.Abs(delta - expected) > MaxInkDeviationDip(scaling))
+                        if (Math.Abs(delta - expected) > InkAlignment.MaxInkDeviationDip(scaling))
                             report($"{family} @{scaling}x · {script.Culture} · {probe.Label}: the icon's " +
                                    $"ink centre sits {delta:+0.000;-0.000} px from the label's (expected " +
-                                   $"{expected:+0.000;-0.000} px, cap ±{MaxInkDeviationDip(scaling)}). " +
+                                   $"{expected:+0.000;-0.000} px, cap ±{InkAlignment.MaxInkDeviationDip(scaling)}). " +
                                    $"icon={ink.IconTop:F3}..{ink.IconBottom:F3}, " +
                                    $"text={ink.TextTop:F3}..{ink.TextBottom:F3}.");
                     }
@@ -303,9 +282,9 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
         // Transfers' Status.
         Assert.Equal(4, cells.Probes.Count);
 
-        foreach (var family in FamilyNames)
+        foreach (var family in InkAlignment.FamilyNames)
         {
-            if (Resolve(family) is not { } resolved)
+            if (InkAlignment.Resolve(family) is not { } resolved)
                 continue;
             probed.Add(family);
             cells.UseFont(resolved);
@@ -320,30 +299,15 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
         // Coverage this runner could not give is ANNOUNCED, never silently dropped: a green from a
         // sweep that skipped the CJK script (a runner with no Han face) must not read like a green
         // from the full one.
-        output.WriteLine($"probed {probed.Count}/{FamilyNames.Length} families: {string.Join(", ", probed)}");
+        output.WriteLine($"probed {probed.Count}/{InkAlignment.FamilyNames.Length} families: {string.Join(", ", probed)}");
         output.WriteLine(cells.SkippedScripts.Count == 0
             ? $"probed all {Scripts.Length} UI scripts"
             : $"SKIPPED scripts (runner cannot draw their band): {string.Join(", ", cells.SkippedScripts)}");
 
         Assert.True(failures.Count == 0,
-            $"probed {probed.Count} of {FamilyNames.Length} families ({string.Join(", ", probed)}) " +
+            $"probed {probed.Count} of {InkAlignment.FamilyNames.Length} families ({string.Join(", ", probed)}) " +
             $"over {cells.Probes.Count} cells:" +
             Environment.NewLine + string.Join(Environment.NewLine, failures));
-    }
-
-    /// <summary>The family, or null when this runner does not have it. A font manager that cannot
-    /// find a family silently substitutes the default one — which would re-probe Inter under another
-    /// name and manufacture a green. (Same rule, same reasoning, as the pill gate's.)</summary>
-    private static FontFamily? Resolve(string family)
-    {
-        var candidate = new FontFamily(family);
-        if (!FontManager.Current.TryGetGlyphTypeface(new Typeface(candidate), out var typeface))
-            return null;
-        if (typeface.FamilyName == family)
-            return candidate;
-        return family.StartsWith('.') && typeface.FamilyName != FontManager.Current.DefaultFontFamily.Name
-            ? candidate
-            : null;
     }
 
     private readonly record struct RenderedInk(
@@ -366,10 +330,7 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
 
         private double Top(Visual visual) => visual.TranslatePoint(new Point(0, 0), window)!.Value.Y;
 
-        private Rect InkOf(string content) =>
-            new FormattedText(content, CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-                new Typeface(Text.FontFamily, Text.FontStyle, Text.FontWeight), Text.FontSize,
-                Brushes.Black).BuildGeometry(default)!.Bounds;
+        private Rect InkOf(string content) => InkAlignment.InkOf(Text, content);
 
         public double IconBoxCentre => Top(Icon) + Icon.Bounds.Height / 2;
 
@@ -642,9 +603,9 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
                 int y0 = (int)Math.Ceiling(row.Top + _scaling), y1 = (int)Math.Floor(row.Bottom - _scaling) - 1;
 
                 // The row's own fill, sampled from a column strip with no content in it.
-                var background = Modal(pixels, (int)row.Left + 2, (int)row.Left + 6, y0, y1);
-                var icon = Ink(pixels, background, Device(probe.Icon), y0, y1, $"{probe.Label} icon");
-                var text = Ink(pixels, background, Device(probe.Text), y0, y1, $"{probe.Label} label");
+                var background = InkAlignment.Modal(pixels, (int)row.Left + 2, (int)row.Left + 6, y0, y1);
+                var icon = InkAlignment.Extent(pixels, background, Device(probe.Icon), y0, y1, $"{probe.Label} icon");
+                var text = InkAlignment.Extent(pixels, background, Device(probe.Text), y0, y1, $"{probe.Label} label");
 
                 results.Add((probe, new RenderedInk(
                     (icon.Top - row.Top) / _scaling, (icon.Bottom - row.Top) / _scaling,
@@ -653,57 +614,6 @@ public class StatusCellAlignmentTests(ITestOutputHelper output)
                     (text.Centre - row.Top) / _scaling)));
             }
             return results;
-        }
-
-        private static (int r, int g, int b) Modal(PixelBuffer pixels, int x0, int x1, int y0, int y1)
-        {
-            var histogram = new Dictionary<(int, int, int), int>();
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++)
-                    histogram[pixels.Rgb(x, y)] = histogram.GetValueOrDefault(pixels.Rgb(x, y)) + 1;
-            return histogram.MaxBy(entry => entry.Value).Key;
-        }
-
-        /// <summary>
-        /// Sub-pixel ink extents and coverage centre for one element's column range. Coverage is a
-        /// pixel's distance from the row's fill normalised by the strongest ink in the same columns,
-        /// so a partly covered edge row's coverage IS the fraction of that row the mark covers —
-        /// which is what makes the extents sub-pixel instead of integer-quantised. The centre is the
-        /// midpoint of those extents (not the coverage centroid): the two elements have different
-        /// ink densities, and a centroid would weigh a bold word's mass against a thin outline's.
-        /// </summary>
-        private static (double Top, double Bottom, double Centre) Ink(
-            PixelBuffer pixels, (int r, int g, int b) background, Rect element, int y0, int y1, string what)
-        {
-            int x0 = (int)Math.Floor(element.Left), x1 = (int)Math.Ceiling(element.Right) - 1;
-
-            int Distance(int x, int y)
-            {
-                var (r, g, b) = pixels.Rgb(x, y);
-                return Math.Abs(r - background.r) + Math.Abs(g - background.g) + Math.Abs(b - background.b);
-            }
-
-            int strongest = 0;
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++)
-                    strongest = Math.Max(strongest, Distance(x, y));
-            Assert.True(strongest > 0, $"{what} painted no ink in its own columns.");
-
-            var rows = new double[y1 - y0 + 1];
-            for (int y = y0; y <= y1; y++)
-                for (int x = x0; x <= x1; x++)
-                    rows[y - y0] = Math.Max(rows[y - y0], Math.Clamp(Distance(x, y) / (double)strongest, 0, 1));
-
-            // A floor above anti-aliasing noise but below any real glyph row (the pill gate's value).
-            const double InkFloor = 0.10;
-            int first = Array.FindIndex(rows, row => row > InkFloor);
-            int last = Array.FindLastIndex(rows, row => row > InkFloor);
-            Assert.True(first >= 0,
-                $"no row in {what}'s columns x={x0}..{x1} cleared the {InkFloor:P0} ink floor, so its " +
-                "extent cannot be measured — it painted nothing, or only anti-aliasing fringe.");
-
-            double top = y0 + first + (1 - rows[first]), bottom = y0 + last + rows[last];
-            return (top, bottom, (top + bottom) / 2);
         }
 
         public void Dispose()

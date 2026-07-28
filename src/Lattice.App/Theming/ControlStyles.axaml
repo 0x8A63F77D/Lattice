@@ -31,22 +31,28 @@
                        FontSize="12"
                        VerticalAlignment="Center"
                        Margin="0,0,12,0" />
-            <!-- Warning section (icon + text, visible only when WarningText is non-empty) -->
+            <!-- Warning section (icon + text, visible only when WarningText is non-empty).
+                 wordAligned + UseLayoutRounding=False is the #180 pair contract: the warning
+                 triangle is centred on the caption's reference band, not on its line box. Approved
+                 as #185's fifth site, outside that issue's own list — the status bar is in EVERY
+                 view, so leaving the one remaining instance of the class unfixed would have left a
+                 known gap outside the gate. See Theming/InkAlignmentStyles.axaml. -->
             <StackPanel x:Name="WarningBlock"
                         DockPanel.Dock="Left"
                         Orientation="Horizontal"
                         Spacing="4"
                         Margin="12,0,0,0"
+                        UseLayoutRounding="False"
                         IsVisible="{Binding WarningText, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
               <PathIcon Width="12"
                         Height="12"
                         Data="{DynamicResource IconWarningFilled}"
                         Foreground="{DynamicResource LatticeWarningFgBrush}"
                         VerticalAlignment="Center" />
-              <TextBlock Text="{TemplateBinding WarningText}"
+              <TextBlock Classes="wordAligned"
+                         Text="{TemplateBinding WarningText}"
                          Foreground="{DynamicResource LatticeWarningFgBrush}"
-                         FontSize="12"
-                         VerticalAlignment="Center" />
+                         FontSize="12" />
             </StackPanel>
           </DockPanel>
         </Grid>

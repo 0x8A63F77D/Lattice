@@ -149,13 +149,21 @@
                    legend. IsVisible stays on the holder — it is the two-way binding target. -->
               <DataTemplate x:DataType="vm:StatisticsLegendChip">
                 <ToggleButton Classes="legendChip" IsChecked="{Binding IsVisible, Mode=TwoWay}">
-                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                  <!-- wordAligned + UseLayoutRounding=False is the #180 pair contract (#185): the
+                       swatch is a glyph-sized mark and was being centred against the name's LINE
+                       BOX, which sat it 1.06 px off in Helvetica and 0.74 px off in Inter. It is
+                       centred on the name's reference band instead — the band of the UI's own
+                       script, not of the project name, which is arbitrary user data and would make
+                       every chip in the row seat its swatch at a different height. See
+                       Theming/InkAlignmentStyles.axaml. -->
+                  <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                              UseLayoutRounding="False">
                     <Panel Width="12" Height="12">
                       <Border CornerRadius="3" Background="{Binding Data.Swatch}" IsVisible="{Binding IsVisible}" />
                       <Border CornerRadius="3" Background="{DynamicResource LatticeDisabledBrush}"
                               IsVisible="{Binding !IsVisible}" />
                     </Panel>
-                    <TextBlock Classes="chipText" Text="{Binding Data.Name}" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Classes="chipText wordAligned" Text="{Binding Data.Name}" FontSize="12" />
                   </StackPanel>
                 </ToggleButton>
               </DataTemplate>
