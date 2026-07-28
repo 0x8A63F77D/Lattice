@@ -1,6 +1,5 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:views="using:Lattice.App.Views">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!-- DataGrid infrastructure: Lattice-themed column headers, row styling, and cell layout.
        Design truth: docs/design/m2/README.md §Design Tokens.
        All colors and dimensions reference Tokens.axaml only; no literal values here. -->
