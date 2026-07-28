@@ -5,7 +5,6 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
-using Avalonia.VisualTree;
 using Xunit;
 
 namespace Lattice.VisualTests;

@@ -233,9 +233,12 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         // The construction is what is under test, so a shrunken probe set is a broken harness, not
         // a clean bill of health — a binding change that hid one of these marks would otherwise
         // retire its site from the gate silently.
-        Assert.Equal(
-            string.Join(Environment.NewLine, Chrome.ExpectedSites),
-            string.Join(Environment.NewLine, chrome.Probes.Select(p => p.Label)));
+        var found = chrome.Probes.Select(p => p.Label).ToList();
+        Assert.True(found.SequenceEqual(Chrome.ExpectedSites),
+            "the probed site list drifted — a site was added, renamed, or (the dangerous one) " +
+            "stopped being discovered because something hid its mark:" + Environment.NewLine +
+            $"  expected: {string.Join(", ", Chrome.ExpectedSites)}" + Environment.NewLine +
+            $"  found:    {string.Join(", ", found)}");
 
         foreach (var family in InkAlignment.FamilyNames)
         {
@@ -521,7 +524,6 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         /// </summary>
         private static Visual Backdrop(StackPanel panel) =>
             panel.GetVisualAncestors()
-                .OfType<Visual>()
                 .FirstOrDefault(v => v is Border or TemplatedControl
                                      && v.Bounds.Height >= panel.Bounds.Height + 6)
             ?? panel;
