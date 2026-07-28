@@ -273,11 +273,16 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
     /// <summary>One mark-and-label pairing: the mark, the label, and the surface they are painted
     /// on (the command bar, the pill, the chip) — which is the region the pixel sweep scans and
     /// takes its background colour from.</summary>
-    private sealed class Probe(string label, Control mark, TextBlock text, Visual backdrop, Window window)
+    private sealed class Probe(
+        string label, Control mark, TextBlock text, StackPanel panel, Visual backdrop, Window window)
     {
         public string Label { get; } = label;
         public Control Mark { get; } = mark;
         public TextBlock Text { get; } = text;
+
+        /// <summary>The panel holding the pair — the basis of the pixel sweep's scan band.</summary>
+        public StackPanel Panel { get; } = panel;
+
         public Visual Backdrop { get; } = backdrop;
 
         /// <summary>The label the markup or binding put there, restored after a caption sweep.</summary>
@@ -342,11 +347,23 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             "StatisticsView[Panel+LHC@home]",
             "TasksView[IconChevronDownRegular+Computing]",
             "TasksView[IconPlaySettingsRegular+Computing]",
+            // The status bar's warning block — #185's fifth site, and the one that proves an
+            // app-level style class reaches into a ControlTemplate's children.
+            "TasksView[IconWarningFilled+3 deadlines at risk]",
             "TasksView[IconWarningFilled+Updated 4 m ago]",
             "TransfersView[IconWarningFilled+Updated 4 m ago]",
         ];
 
+        /// <summary>DIPs of scan band added above and below the holding panel. After the fix the
+        /// label's box IS its reference band, so its descenders paint outside the panel; six DIPs
+        /// clears them at every size these sites use (12-13 px text) without reaching a surface
+        /// edge. Clamped to the backdrop regardless, so it can never over-reach.</summary>
+        private const double Slack = 6;
+
         private const string StaleCaption = "Updated 4 m ago";
+
+        /// <summary>What the Tasks status bar's warning channel shows: an at-risk deadline count.</summary>
+        private const string StatusBarWarning = "3 deadlines at risk";
 
         private readonly Window _window;
         private readonly HostStore _store;
@@ -436,6 +453,15 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             // A scoped host is what shows the Computing button.
             tasks.ScopedHost = new HostRailItemViewModel(store.Hosts[0], clock, control);
 
+            // The status bar's warning block renders ONLY while its text is non-empty, and an
+            // invisible pair has no arranged box to centre anything on — so with the views in their
+            // ordinary state this site would silently sit outside the sweep. It is #185's fifth
+            // site, approved outside that issue's own list. The block lives in the shared
+            // StatusBarControl TEMPLATE, so every view carries it structurally, but Tasks is the
+            // only view that binds WarningText today (its at-risk-deadline count) — so Tasks is
+            // where the gate can see it, and a second view growing a warning inherits the fix.
+            tasks.AtRiskText = StatusBarWarning;
+
             // A chart with two series: the legend row appears and carries two chips.
             statistics.HasChart = true;
             statistics.Chips.Add(new StatisticsLegendChip("https://einstein.phys.uwm.edu/",
@@ -477,7 +503,8 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
                 foreach (var mark in marks)
                     foreach (var label in labels)
                         probes.Add(new Probe(
-                            $"{view.GetType().Name}[{Name(mark, icons)}+{label.Text}]", mark, label, backdrop, window));
+                            $"{view.GetType().Name}[{Name(mark, icons)}+{label.Text}]",
+                            mark, label, panel, backdrop, window));
             }
             return probes.OrderBy(p => p.Label, StringComparer.Ordinal).ToList();
         }
@@ -516,17 +543,22 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         }
 
         /// <summary>
-        /// The surface a pair is painted on: the nearest ancestor that fills a box of its own (the
-        /// command bar Border, the pill's ToggleButton, the chip's Border) and is tall enough to
-        /// scan the pair's ink in without clipping a descender. Its interior — inset below — is
-        /// both the pixel sweep's vertical range and where its background colour is read from, so a
-        /// probe inside a tinted pill measures against the pill's fill and not the bar's.
+        /// The surface a pair is painted on: the NEAREST ancestor that fills a box of its own — the
+        /// command bar Border, the pill's ToggleButton, the chip's Border, the status bar. It bounds
+        /// the pixel sweep and supplies its background colour, so a probe inside a tinted pill
+        /// measures against the pill's fill and not the bar's.
+        ///
+        /// No "tall enough to hold the pair" condition, deliberately. An earlier version required
+        /// the ancestor to be at least six DIPs taller than the panel, on the theory that the scan
+        /// band had to have slack for descenders. That is false whenever the panel already FILLS its
+        /// surface — the status bar's warning block is docked, so it stretches to the full 27 px
+        /// strip, failed the test against its own 28 px status bar, and the search ran on to the
+        /// 180 px view, whose fill and whose ink are somebody else's. The slack belongs to the scan
+        /// band (see <see cref="MeasureRenderedInk"/>), which inflates around the panel and CLAMPS
+        /// to this surface, not to the choice of surface.
         /// </summary>
         private static Visual Backdrop(StackPanel panel) =>
-            panel.GetVisualAncestors()
-                .FirstOrDefault(v => v is Border or TemplatedControl
-                                     && v.Bounds.Height >= panel.Bounds.Height + 6)
-            ?? panel;
+            panel.GetVisualAncestors().FirstOrDefault(v => v is Border or TemplatedControl) ?? panel;
 
         /// <summary>Re-renders every probed label in <paramref name="family"/>. Set on the text
         /// elements, so the margin binding sees the same change an inherited font change would
@@ -627,11 +659,16 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             foreach (var probe in Probes)
             {
                 var surface = Device(probe.Backdrop);
-                // Inset two DIPs at each edge: a backdrop paints its own border and corner arcs
-                // INSIDE its bounds, and those clear any ink floor in every column they touch.
-                // Nothing real is lost — a 12 px mark is nowhere near either edge of a 32 px pill.
-                int y0 = (int)Math.Ceiling(surface.Top + 2 * _scaling);
-                int y1 = (int)Math.Floor(surface.Bottom - 2 * _scaling) - 1;
+                var band = Device(probe.Panel);
+
+                // The scan band is the PANEL, inflated for the ink that paints outside it — after
+                // the fix the label's box IS its band, so descenders fall below the box and a
+                // box-clipped scan would measure the band instead of the ink — then CLAMPED to the
+                // surface, inset two DIPs. The inset matters because a backdrop paints its own
+                // border and corner arcs inside its bounds, and those clear any ink floor in every
+                // column they touch.
+                int y0 = (int)Math.Ceiling(Math.Max(band.Top - Slack * _scaling, surface.Top + 2 * _scaling));
+                int y1 = (int)Math.Floor(Math.Min(band.Bottom + Slack * _scaling, surface.Bottom - 2 * _scaling)) - 1;
 
                 // The surface's own fill, taken as the modal colour over the region being scanned.
                 var background = InkAlignment.Modal(
@@ -641,10 +678,10 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
                 var text = InkAlignment.Extent(pixels, background, Device(probe.Text), y0, y1, $"{probe.Label} label");
 
                 results.Add((probe, new RenderedInk(
-                    (mark.Top - surface.Top) / _scaling, (mark.Bottom - surface.Top) / _scaling,
-                    (mark.Centre - surface.Top) / _scaling,
-                    (text.Top - surface.Top) / _scaling, (text.Bottom - surface.Top) / _scaling,
-                    (text.Centre - surface.Top) / _scaling)));
+                    (mark.Top - band.Top) / _scaling, (mark.Bottom - band.Top) / _scaling,
+                    (mark.Centre - band.Top) / _scaling,
+                    (text.Top - band.Top) / _scaling, (text.Bottom - band.Top) / _scaling,
+                    (text.Centre - band.Top) / _scaling)));
             }
             return results;
         }
