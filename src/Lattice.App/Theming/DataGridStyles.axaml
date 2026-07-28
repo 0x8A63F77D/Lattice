@@ -138,69 +138,11 @@
     <Setter Property="FontFeatures" Value="+tnum" />
   </Style>
 
-  <!-- Cell text that a fixed-size ICON is centred against (issue #180): Tasks' State, Projects'
-       and Transfers' Status (words — this class), and Tasks' Deadline (figures — .digitAligned
-       below). Those cells put the icon and this TextBlock in one
-       horizontal StackPanel and centre both — but VerticalAlignment centres LAYOUT BOXES, and a
-       TextBlock's box is a line box (ascent + descent + line gap) whose glyph ink sits at a
-       PER-FONT offset inside it. "Centre both boxes" therefore aligns in one font and misaligns in
-       the next: measured at these very cells, icon centre to cap-band centre was 1.063 px off in
-       Helvetica, 0.739 px in Inter, 0.438 px in Courier New and 0.024 px in Times New Roman. The
-       defect is that whole spread — a pixel of drift with nothing but the font changing — and
-       Helvetica is the worst of it AND what the app actually renders with on macOS, since Lattice
-       pins no font and Avalonia's Skia font manager resolves the platform default to it (#179).
-
-       This collapses the text's layout box onto the band its own script is read against — the cap
-       band for Latin, the ideograph em band for the zh-CN UI, whose statuses are Han and do not
-       share the Latin line box at all (see TextInkCollapseConverter.WordBandFor). Centring the pair
-       then centres the icon on that band, by construction, in any font. The band is a fixed
-       reference glyph, NOT the live word: the statuses differ in descender content ("Suspended" has
-       one, "Running" does not), so a band read off the live text would re-centre the cell every
-       time a task changed state (measured under that mutation: 1.24 px of shift) — the reason the
-       snooze pill's digit-band remedy (#176/#179) could not simply be copied here.
-
-       VerticalAlignment=Center is load-bearing, not decoration: the cell panels carry
-       VerticalAlignment=Center, but that centres the PANEL in the cell — a StackPanel child
-       defaults to Stretch, so the label's box was being stretched back to the panel's height with
-       the text drawn at its top. Collapsing a box that is then stretched again changes nothing
-       (measured: the margin applied and the icon did not move by a thousandth). The band only
-       becomes the box when the box is centred.
-
-       THE CELL OWES ONE THING BACK: UseLayoutRounding="False" on the StackPanel that holds the
-       pair. The collapse margin is fractional by nature, and snapping an arrange rect back to whole
-       pixels is the other half of the same defect — it must be off for the ICON too, which carries
-       no class of its own and inherits the panel's value. A cell that applies this class without it
-       is caught by the rendered half of StatusCellAlignmentTests. -->
-  <Style Selector="TextBlock.wordAligned">
-    <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="Margin">
-      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Words}">
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
-      </MultiBinding>
-    </Setter>
-  </Style>
-
-  <!-- The same mechanism for a cell whose text is FIGURES, not words: Tasks' Deadline, whose
-       "MM-dd HH:mm" is formatted with the invariant culture and so never contains a letter in any
-       locale. The band is therefore the digit repertoire — the one the snooze pill uses — and not
-       the cap band (Codex P2 on PR #184): a face with old-style figures (Georgia) draws digits that
-       descend below the baseline and are shorter than its capitals, so aligning the warning glyph
-       to "H" there would centre it on ink the cell never shows. Everything else about the class is
-       identical, the panel's UseLayoutRounding="False" included. -->
-  <Style Selector="TextBlock.digitAligned">
-    <Setter Property="VerticalAlignment" Value="Center" />
-    <Setter Property="Margin">
-      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Instance}">
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
-        <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
-      </MultiBinding>
-    </Setter>
-  </Style>
+  <!-- The .wordAligned / .digitAligned classes the four #180 status cells wear are NOT here: the
+       invariant they carry is not grid-scoped (the command bars, the Computing button and the
+       Statistics legend chips wear them too — #185), so they live in the shared
+       Theming/InkAlignmentStyles.axaml. Cells still owe the same UseLayoutRounding="False" on the
+       StackPanel holding the pair; that contract is documented with the classes. -->
 
   <!-- Gutter/icon columns suppress their column divider. EnsureGridLine owns the part's
        IsVisible as a local value, so collapse the divider by zeroing its Width (the part is

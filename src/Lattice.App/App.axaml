@@ -101,6 +101,9 @@
       <Setter Property="Margin" Value="16,0,16,8" />
     </Style>
     <StyleInclude Source="avares://Avalonia.Controls.DataGrid/Themes/Fluent.xaml" />
+    <!-- App-wide, not grid-scoped: the mark-on-band alignment classes (#180, #185) are worn by
+         command bars and the Statistics legend as well as by the data cells. -->
+    <StyleInclude Source="avares://Lattice/Theming/InkAlignmentStyles.axaml" />
     <StyleInclude Source="avares://Lattice/Theming/DataGridStyles.axaml" />
   </Application.Styles>
   <Application.Resources>

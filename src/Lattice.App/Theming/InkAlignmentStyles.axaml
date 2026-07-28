@@ -1,0 +1,85 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:Lattice.App.Views">
+  <!-- Marker classes for the one alignment invariant that spans the whole app (issues #180, #185):
+       wherever a FIXED-SIZE MARK is centred beside a text label, the mark must sit on the label's
+       reference BAND, not on its line box.
+
+       WHY THE MARKUP CANNOT JUST CENTRE BOTH. VerticalAlignment="Center" centres each child's
+       LAYOUT BOX, and a TextBlock's box is a line box (ascent + descent + line gap) whose glyph ink
+       sits at a PER-FONT offset inside it. "Centre both boxes" therefore aligns in one font and
+       misaligns in the next. Measured at the sites these classes serve, mark-box centre to band
+       centre: 1.241 px off in Helvetica at the Event Log's priority pills, 1.063 px at the data
+       cells and the command-bar freshness caption, against 0.024 px in Times New Roman. The defect
+       is that whole SPREAD — over a pixel of drift with nothing but the font changing — and
+       Helvetica is both the worst of it and what the app actually renders with on macOS, since
+       Lattice pins no font and Avalonia's Skia font manager resolves the platform default to it
+       (#179).
+
+       These classes collapse the label's layout box onto a fixed reference band, so centring the
+       pair centres the mark on that band by construction, in any font. Which band is the site's
+       business — see the two classes below.
+
+       THEY LIVE HERE, NOT IN DataGridStyles.axaml. They were born there with the four data cells
+       #184 fixed, but the invariant was never grid-scoped: #185's sites are command bars, a
+       button, and the Statistics legend chips. Rather than pull chrome into the grid's style sheet
+       the classes moved to this shared surface — single-copy, as they always were.
+
+       EVERY CONSUMER OWES ONE THING BACK: UseLayoutRounding="False" on the panel that holds the
+       pair. The collapse margin is fractional by nature, and snapping an arrange rect back to whole
+       pixels is the other half of the same defect. It must be off for the MARK too, which carries
+       no class of its own and inherits the panel's value. A site that applies a class without it is
+       caught by the rendered layer of StatusCellAlignmentTests / ChromeAlignmentTests.
+
+       VerticalAlignment=Center is likewise load-bearing, not decoration, and is why these classes
+       set it rather than leaving it to the call site: a StackPanel child defaults to STRETCH, so
+       the label's box would be stretched back to the panel's height with the text drawn at its
+       top, and collapsing a box that is then stretched again changes nothing (measured: the margin
+       applied and the mark did not move by a thousandth). The band only becomes the box when the
+       box is centred. -->
+
+  <!-- WORDS. The band is the one the label's own script is read against: the cap band for Latin,
+       the ideograph em band for the zh-CN UI, whose strings are Han and do not share the Latin line
+       box at all (see TextInkCollapseConverter.WordBandFor). The band is a fixed reference glyph,
+       NOT the live word: labels differ in descender content ("Suspended" has one, "Running" does
+       not; the freshness caption rewrites itself on every poll), so a band read off the live text
+       would re-centre the pair every time the text changed — measured under that mutation, 1.24 px
+       of shift. That is the reason the snooze pill's digit-band remedy (#176/#179) could not simply
+       be copied here.
+
+       WHY CAP HEIGHT AND NOT X-HEIGHT, for Latin. These labels are sentence case ("Running",
+       "Computing", "Updated 4 m ago"), so the tallest thing on the line at the mark's shoulder is a
+       capital; centring the mark on the cap band is the rule Fluent/Material/Carbon all state for
+       icon-beside-label. An x-height band would seat the mark ~0.6 px lower and let its box overhang
+       the ascenders on both sides, which reads as a sunk icon next to a capital. -->
+  <Style Selector="TextBlock.wordAligned">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Margin">
+      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Words}">
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
+      </MultiBinding>
+    </Setter>
+  </Style>
+
+  <!-- FIGURES. The same mechanism for a label that is digits, not words: Tasks' Deadline, whose
+       "MM-dd HH:mm" is formatted with the invariant culture and so never contains a letter in any
+       locale. The band is therefore the digit repertoire — the one the snooze pill uses — and not
+       the cap band (Codex P2 on PR #184): a face with old-style figures (Georgia) draws digits that
+       descend below the baseline and are shorter than its capitals, so aligning a warning glyph to
+       "H" there would centre it on ink the site never shows. Everything else about the class is
+       identical, the panel's UseLayoutRounding="False" included. -->
+  <Style Selector="TextBlock.digitAligned">
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Margin">
+      <MultiBinding Converter="{x:Static views:TextInkCollapseConverter.Instance}">
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontFamily" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontSize" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontWeight" />
+        <Binding RelativeSource="{RelativeSource Self}" Path="FontStyle" />
+      </MultiBinding>
+    </Setter>
+  </Style>
+</Styles>
