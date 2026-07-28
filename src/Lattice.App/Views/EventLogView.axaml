@@ -108,26 +108,31 @@
                        IsVisible="{Binding IsAllHostsScope}" />
           </StackPanel>
           <Separator Margin="8,0" />
-          <!-- Priority pills: two-way bound to the VM filter bools. -->
+          <!-- Priority pills: two-way bound to the VM filter bools.
+               wordAligned + UseLayoutRounding=False is the #180 pair contract (#185): the check
+               mark is centred on the pill word's reference band, not on its line box. These were
+               the WORST-measured instance of the class — mark-box centre to band centre ran from
+               −0.60 px in .AppleSystemUIFont to +1.24 px in Helvetica, a 1.8 px swing with nothing
+               but the font changing. See Theming/InkAlignmentStyles.axaml. -->
           <ToggleButton Classes="pill" IsChecked="{Binding ShowInfo, Mode=TwoWay}">
-            <StackPanel Orientation="Horizontal" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="4" UseLayoutRounding="False">
               <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
                         IsVisible="{Binding ShowInfo}" />
-              <TextBlock Text="{x:Static loc:Strings.EventLogPillInfo}" VerticalAlignment="Center" />
+              <TextBlock Classes="wordAligned" Text="{x:Static loc:Strings.EventLogPillInfo}" />
             </StackPanel>
           </ToggleButton>
           <ToggleButton Classes="pill" IsChecked="{Binding ShowWarning, Mode=TwoWay}">
-            <StackPanel Orientation="Horizontal" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="4" UseLayoutRounding="False">
               <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
                         IsVisible="{Binding ShowWarning}" />
-              <TextBlock Text="{x:Static loc:Strings.EventLogPillWarning}" VerticalAlignment="Center" />
+              <TextBlock Classes="wordAligned" Text="{x:Static loc:Strings.EventLogPillWarning}" />
             </StackPanel>
           </ToggleButton>
           <ToggleButton Classes="pill" IsChecked="{Binding ShowError, Mode=TwoWay}">
-            <StackPanel Orientation="Horizontal" Spacing="4">
+            <StackPanel Orientation="Horizontal" Spacing="4" UseLayoutRounding="False">
               <PathIcon Data="{StaticResource IconCheckmarkFilled}" Width="12" Height="12"
                         IsVisible="{Binding ShowError}" />
-              <TextBlock Text="{x:Static loc:Strings.EventLogPillError}" VerticalAlignment="Center" />
+              <TextBlock Classes="wordAligned" Text="{x:Static loc:Strings.EventLogPillError}" />
             </StackPanel>
           </ToggleButton>
           <TextBox x:Name="FilterBox" x:FieldModifier="public" Width="220" Margin="8,0,0,0"

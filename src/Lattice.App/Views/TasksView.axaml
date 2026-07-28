@@ -86,11 +86,16 @@
                32px tall centered in the 52px bar. -->
           <Button x:Name="ComputingButton" IsVisible="{Binding HasScopedHost}"
                   Height="32" VerticalAlignment="Center">
-            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <!-- wordAligned + UseLayoutRounding=False (#185, the #180 pair contract): ONE label
+                 seats two marks of different sizes here, and centring boxes put the 16px glyph and
+                 the 12px chevron at different distances from the word's ink. Collapsing the label
+                 onto its band centres both on the same reference, in any font. -->
+            <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                        UseLayoutRounding="False">
               <PathIcon Data="{StaticResource IconPlaySettingsRegular}" Width="16" Height="16"
                         VerticalAlignment="Center" />
-              <TextBlock Text="{x:Static loc:Strings.ComputingMenu}" FontSize="13" FontWeight="SemiBold"
-                         VerticalAlignment="Center" />
+              <TextBlock Classes="wordAligned" Text="{x:Static loc:Strings.ComputingMenu}"
+                         FontSize="13" FontWeight="SemiBold" />
               <PathIcon Data="{StaticResource IconChevronDownRegular}" Width="12" Height="12"
                         VerticalAlignment="Center" />
             </StackPanel>
@@ -183,14 +188,20 @@
         </StackPanel>
 
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0">
+          <!-- Freshness caption (#185). wordAligned + UseLayoutRounding=False is the #180 pair
+               contract: the stale triangle is centred on the caption's reference band rather than
+               on its line box, so the two stay together in any font — see the class comment in
+               Theming/InkAlignmentStyles.axaml. Both captions carry the class; only one is ever
+               visible, and the invisible one must not be the odd sibling out when they swap. -->
+          <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Margin="0,0,8,0"
+                      UseLayoutRounding="False">
             <PathIcon Data="{StaticResource IconWarningFilled}" Width="12" Height="12"
                       Foreground="{DynamicResource LatticeWarningFgBrush}"
                       IsVisible="{Binding IsUpdateStale}" />
-            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+            <TextBlock Classes="wordAligned" Text="{Binding UpdatedText}" FontSize="12"
                        Foreground="{DynamicResource LatticeWarningFgBrush}"
                        IsVisible="{Binding IsUpdateStale}" />
-            <TextBlock Text="{Binding UpdatedText}" FontSize="12" VerticalAlignment="Center"
+            <TextBlock Classes="wordAligned" Text="{Binding UpdatedText}" FontSize="12"
                        Foreground="{DynamicResource LatticeTextSecondaryBrush}"
                        IsVisible="{Binding !IsUpdateStale}" />
           </StackPanel>
