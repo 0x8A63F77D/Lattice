@@ -502,9 +502,6 @@
   <data name="ProjectsEmpty" xml:space="preserve">
     <value>尚未添加任何项目 — 使用“添加项目…”来添加。</value>
   </data>
-  <data name="ProjectsNoNewTasks" xml:space="preserve">
-    <value>禁止下载新任务</value>
-  </data>
   <data name="ProjectsPartialFmt" xml:space="preserve">
     <value>{1} 台主机中有 {0} 台无法访问 — 下方项目涵盖 {2} 台主机。</value>
   </data>

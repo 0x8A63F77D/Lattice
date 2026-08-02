@@ -502,9 +502,6 @@
   <data name="ProjectsEmpty" xml:space="preserve">
     <value>No projects attached yet — use “Add project…” to attach one.</value>
   </data>
-  <data name="ProjectsNoNewTasks" xml:space="preserve">
-    <value>No new tasks</value>
-  </data>
   <data name="ProjectsPartialFmt" xml:space="preserve">
     <value>{0} of {1} hosts aren't reachable — projects below cover {2} hosts.</value>
   </data>
