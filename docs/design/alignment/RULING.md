@@ -51,14 +51,29 @@ class:
 
 The same rules select the face for R2's capHeight.
 
-The BASELINE in these formulas is derived the same way: from the
-SELECTED face's metrics at the resolved size, anchored to the label's
-layout box — never read from the live shaped text. Fallback runs move
-the live line metrics with content (the shipped stack records a Latin
-string at a 12.0 DIP line where a CJK-fallback string reports 16.8), so
-a live baseline would let the band follow user data even under a fixed
-capHeight. With face and baseline both fixed, the band cannot move with
-content.
+The BASELINE in these formulas is TOP-ANCHORED on the label's layout
+box, from the SELECTED face's metrics at the resolved size — never read
+from the live shaped text:
+
+      baseline      = labelBox.Top + A(face, size)
+      bandTop       = baseline − capHeight
+      bandBottom    = baseline
+
+`A(face, size)` is the SELECTED face's top-to-baseline distance at the
+resolved size, as the platform's text layout reports it FOR THAT FACE
+ALONE — a per-face, per-size constant (e.g. the baseline a line layout
+reports for a reference string set wholly in the selected face). All
+extra leading — the face's line gap, plus any surplus label-box height —
+falls BELOW the descent. Half-leading distribution and bottom-anchoring
+(`labelBox.Bottom − descent`) are BANNED: the two anchorings differ by
+exactly that leading, so naming the layout box without naming the anchor
+does not identify a baseline at all.
+
+Fallback runs move the live line metrics with content (the shipped stack
+records a Latin string at a 12.0 DIP line where a CJK-fallback string
+reports 16.8), so a live baseline would let the band follow user data
+even under a fixed capHeight. With face, anchor and baseline all fixed,
+the band cannot move with content.
 
 The gate must exercise both shipped configurations of the localized
 rule: the real default-plus-fallback configuration (a CJK-resolved
@@ -68,7 +83,11 @@ fallback → Latin band) — not only CJK-primary test pins. At user-data
 sites the gate must additionally assert the ABSOLUTE mark and band
 positions are unchanged across a Latin → CJK/mixed content swap:
 checking each sample only against its own current baseline would still
-pass a content-following baseline.
+pass a content-following baseline. And at every site the gate asserts
+the band's EXPECTED ABSOLUTE position, computed from the baseline
+equation above — not merely mark-to-band consistency, which a
+bottom-anchored baseline would satisfy just as well as the ruled
+top-anchored one.
 
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.

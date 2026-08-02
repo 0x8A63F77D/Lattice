@@ -89,12 +89,28 @@ centerY(mark) = baseline − capHeight / 2
     the **primary face** of the label's font stack regardless of content; a
     mixed-script or fallback-forcing name gets the same band as every other
     label at that site.
-- **The baseline is derived the same way as the face** (normative text in
-  `RULING.md`): from the selected face's metrics at the resolved size,
-  anchored to the label's layout box — never read from the live shaped text.
-  Fallback runs move live line metrics with content (Latin 12.0 DIP line vs
-  CJK-fallback 16.8 in the shipped stack), so a live baseline would let the
-  band follow user data even with a fixed capHeight.
+- **The baseline is TOP-ANCHORED on the label's layout box**, from the
+  selected face's metrics at the resolved size — never read from the live
+  shaped text (normative text in `RULING.md`):
+
+  ```
+  baseline   = labelBox.Top + A(face, size)
+  bandTop    = baseline − capHeight
+  bandBottom = baseline
+  ```
+
+  `A(face, size)` is the selected face's top-to-baseline distance at the
+  resolved size, as the platform's text layout reports it **for that face
+  alone** — a per-face, per-size constant (e.g. the baseline a line layout
+  reports for a reference string set wholly in the selected face). All extra
+  leading (the face's line gap, plus any surplus label-box height) falls
+  **below** the descent; half-leading distribution and bottom-anchoring
+  (`labelBox.Bottom − descent`) are **banned** — the two anchorings differ by
+  exactly that leading, so naming the layout box without naming the anchor
+  does not identify a baseline. Fallback runs move live line metrics with
+  content (Latin 12.0 DIP line vs CJK-fallback 16.8 in the shipped stack), so
+  a live baseline would let the band follow user data even with a fixed
+  capHeight.
   The gate must include a fallback-forcing, mixed-script label sample at the
   user-data sites (legend swatch, overflow checkbox), assert the ABSOLUTE
   mark and band positions are unchanged across a Latin → CJK/mixed content
@@ -103,7 +119,10 @@ centerY(mark) = baseline − capHeight / 2
   both shipped configurations: the real default-plus-fallback configuration
   (a CJK-resolved resource set whose primary family lacks Han) and the
   unsupported-CJK/System configuration (CJK OS culture, English resource
-  fallback → Latin band) — rather than only CJK-primary test pins.
+  fallback → Latin band) — rather than only CJK-primary test pins. At every
+  site the gate asserts the band's **expected absolute position** computed
+  from the baseline equation above, not merely mark-to-band consistency — a
+  bottom-anchored baseline would satisfy consistency just as well.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.
