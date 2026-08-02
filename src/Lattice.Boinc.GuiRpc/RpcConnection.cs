@@ -36,7 +36,12 @@ internal sealed class RpcConnection : IAsyncDisposable
     internal async Task<string> PerformRpcAsync(string requestBody, CancellationToken ct)
     {
         string request = "<boinc_gui_rpc_request>\n" + requestBody + "\n</boinc_gui_rpc_request>\n\x03";
-        byte[] sendBuffer = Encoding.ASCII.GetBytes(request);
+        // UTF-8, not ASCII: the wire is byte-transparent (the daemon send()s and recv()s
+        // raw bytes) and UTF-8 is what BOINC declares its own GUI RPC payloads to be —
+        // client/gui_rpc_server_ops.cpp labels the HTTP form of this very buffer
+        // "Content-Type: text/xml; charset=utf-8". ASCII silently folded every non-ASCII
+        // character in a caller-supplied project name or email address to '?'.
+        byte[] sendBuffer = Encoding.UTF8.GetBytes(request);
         try
         {
             await _stream.WriteAsync(sendBuffer, ct).ConfigureAwait(false);
