@@ -21,10 +21,16 @@ are its supporting evidence. If the two ever disagree, `RULING.md` wins.
 `evidence/alignment-evidence.html` is a **design reference created in HTML** — a
 measurement and evidence page used to reach the ruling, not production code and
 not a component to port. It renders live specimens under each candidate rule and
-measures them in the browser. Open it to see why the ruling is what it is, or to
-re-run the comparison on another platform's fonts (this is the tool for the two
-open items below: the unmeasured Windows/Linux Latin faces and the PingFang SC
-real-hardware confirmation). Do not copy code from it.
+measures them in the browser. Open it to see why the ruling is what it is. For
+the open items below its reach is uneven: the PingFang SC real-hardware
+confirmation IS within it (the page carries named CJK probes and detects local
+faces), but the Windows/Linux Latin item is NOT — the page's Latin probe
+hard-codes the macOS stack (`Helvetica, 'Helvetica Neue', Arial`), so on other
+platforms it silently measures an unidentified browser fallback, not the face
+Avalonia resolves. The instrument for open item 1 is the implementation gate
+itself, reading the cap-height metric of the face Avalonia actually resolves —
+which the limitation note below makes authoritative anyway. Do not copy code
+from it.
 
 **Known measurement limitation.** The page reads capHeight as the ink bounds of
 an `H` glyph (`measureText('H').actualBoundingBoxAscent`) because canvas
@@ -66,6 +72,15 @@ centerY(mark) = baseline − capHeight / 2
   resolved size**. It is never measured from the label's actual glyphs. Two
   labels in the same face and size get the same band even if one has descenders
   and the other does not.
+- **Face selection is deterministic and content-blind.** The "resolved face" is
+  the primary face the label's `FontFamily` resolves to — never a face picked
+  from the per-glyph fallback runs the text shaper adds for glyphs the primary
+  face lacks. String content therefore never participates in face selection: a
+  user-data label that mixes scripts or forces font fallback gets the same band
+  as every other label at that site. (Choosing a face by content would
+  re-introduce the per-string dependence this ruling exists to remove.) The
+  gate must include a fallback-forcing, mixed-script label sample at the
+  user-data sites (legend swatch, overflow checkbox) to pin this rule.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.
@@ -103,7 +118,7 @@ swatch, ruled by R2.
 
 ## Registered sites
 
-The gate must cover all seventeen. Names follow the alignment lab's
+The gate must cover all eighteen. Names follow the alignment lab's
 `measurements.tsv` convention (`View[Mark+Label]`).
 
 | Group | Site | Rule |
@@ -121,6 +136,7 @@ The gate must cover all seventeen. Names follow the alignment lab's
 | cells | `ProjectsView[Active]` | R1 |
 | cells | `TransfersView[Active]` | R1 |
 | cells | `TasksView[07-11 00:00]` | R3 (digit band, unchanged) |
+| snooze pill | `ShellWindow[IconPauseRegular+SnoozeTime]` | R3 (digit band, unchanged) |
 | legend / swatch | `StatisticsView[Panel+Einstein@Home]` | R2 |
 | legend / swatch | `StatisticsView[Panel+LHC@home]` | R2 |
 | overflow | `StatisticsView[OverflowCheckBox+ProjectName]` | R1 |
@@ -129,10 +145,13 @@ The gate must cover all seventeen. Names follow the alignment lab's
 The two `TasksView[...+Computing]` sites are the two-mark case: chevron and play
 share one label and therefore one band.
 
-The last two rows were added after the alignment lab ran (Codex review on the
-landing PR flagged them as shipped sites the lab missed), so they have **no rows
-in `measurements.tsv`** — the registry is normative for gate coverage;
-`measurements.tsv` is historical evidence for the lab-measured sites only.
+The overflow, rail-group-header and snooze-pill rows were added after the
+alignment lab ran (Codex review rounds on the landing PR each flagged a shipped
+site the lab missed), so they have **no rows in `measurements.tsv`** —
+`measurements.tsv` is historical evidence for the lab-measured sites only. The
+snooze pill (`ShellWindow.axaml`, 10 px pause mark beside the pinned-Inter time
+label) is a second digit-band construction alongside the Deadline cell — R3,
+already aligned, no code change; registered so the gate exercises it.
 
 - `StatisticsView[OverflowCheckBox+ProjectName]` is the "+N more" flyout row
   (`Views/StatisticsView.axaml`): a 20 px checkbox beside a user-data project
@@ -172,8 +191,20 @@ R2  cornerRadius == 2
 - Assert on **arranged layout geometry**, not on rendered pixels — pixel
   snapping is platform noise and will make the gate flaky at this tolerance.
 - Run every registered site × every registered UI font.
-- The registry is data, not code paths: adding a font or a site must not require
-  touching R1/R2 logic.
+- **The table above is a point-in-time census, not the gate's source of
+  truth.** Three review rounds each surfaced a shipped in-class site the
+  hand-maintained table had missed; a hand table cannot hold this invariant.
+  Every in-class site already wears the alignment mechanism itself (the band
+  style class / collapse converter today, the R1/R2 primitives after
+  implementation), so the gate must **enumerate its sites by that structural
+  marker** across the app's views. A site that adopts the mechanism is gated
+  automatically; editing this table is never a precondition for coverage. The
+  census keeps two roles: the implementation-time conversion checklist, and
+  the record reviewers diff against. The residual risk — an in-class site that
+  never adopts the mechanism — is a code-review invariant (a new mark beside a
+  label must wear the mechanism), which no table could gate either.
+- The registry stays data, not code paths: adding a font or a site must not
+  require touching R1/R2 logic.
 
 ### Registered UI fonts
 
@@ -193,7 +224,9 @@ vertical metrics**. Register both; do not collapse them.
 1. **Latin runtime faces on Windows and Linux were never measured.** The
    alignment lab covered macOS runtime (Helvetica) plus the pinned test font
    (Inter). Register and measure whatever the Windows and Linux stacks actually
-   resolve for Latin labels before claiming three-platform gate coverage. R1 is
+   resolve for Latin labels before claiming three-platform gate coverage —
+   using the implementation gate's own metric readout on those platforms, not
+   the evidence page (its Latin probe is macOS-specific; see above). R1 is
    unaffected in form — `t = 0` reads `capHeight` from whichever face resolves,
    so adding faces is mechanical.
 2. **PingFang SC figures come from a third-party webfont subset.** One
@@ -274,7 +307,8 @@ the swatch is a plain filled rectangle.
 ## How to verify an implementation against this bundle
 
 1. Implement R1/R2 from the formulas above.
-2. Add the gate over the seventeen registered sites × registered fonts.
+2. Add the gate over the registered sites × registered fonts — enumerated by
+   the structural marker, cross-checked against the eighteen-site census above.
 3. Cross-check a handful of sites against `measurements.tsv`: filter
    `candidate == "a"` and compare your arranged `vsCap` against the column of
    the same name. Ruled geometry means `vsCap == 0` by construction; `vsWordInk`
