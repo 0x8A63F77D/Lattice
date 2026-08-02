@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using Xunit;
@@ -184,18 +185,52 @@ public class LocalizationParityTests
     [InlineData("{name}")]
     [InlineData("0}")]
     [InlineData("{0} }")]
+    // Alignment must be an integer. An index-only scanner reads the 0 and calls these
+    // well formed; string.Format throws on both, so the grammar is the framework's.
+    [InlineData("{0,abc}")]
+    [InlineData("{0,}")]
     public void Scanner_rejects_malformed_format_strings(string value)
     {
         Assert.NotNull(ResxCatalog.ScanPlaceholders(value).Error);
+        Assert.Throws<FormatException>(() => string.Format(CultureInfo.InvariantCulture, value, "x", "y"));
+    }
+
+    /// <summary>
+    /// The dead-key scan must read code, not prose. These are the cases where a naive
+    /// text scan and a comment-aware one disagree — in both directions: a comment that
+    /// names a resource must NOT keep it alive, and a string literal that happens to
+    /// contain <c>//</c> (every URL in the codebase) must not swallow the real
+    /// reference that follows it.
+    /// </summary>
+    [Theory]
+    // C#: comments do not count.
+    [InlineData("var a = Strings.Live; // Strings.Ghost", false, "Live")]
+    [InlineData("/* Strings.Ghost */ var a = Strings.Live;", false, "Live")]
+    [InlineData("/// <summary>Strings.Ghost</summary>\nvar a = Strings.Live;", false, "Live")]
+    // C#: literals are not comments — the URL must not eat the rest of the line.
+    [InlineData("var u = \"http://x/y\"; var a = Strings.Live;", false, "Live")]
+    [InlineData("var v = @\"C:\\p // q\"; var a = Strings.Live;", false, "Live")]
+    [InlineData("var q = '\"'; var a = Strings.Live;", false, "Live")]
+    [InlineData("var e = \"a\\\"// b\"; var a = Strings.Live;", false, "Live")]
+    // XAML: same rule, XML syntax.
+    [InlineData("<!-- {x:Static loc:Strings.Ghost} -->\n<T Text=\"{x:Static loc:Strings.Live}\" />", true, "Live")]
+    public void Comment_stripping_keeps_code_and_drops_prose(string source, bool isXaml, string expected)
+    {
+        string stripped = ResxCatalog.StripComments(source, isXaml);
+        Assert.Contains($"Strings.{expected}", stripped, StringComparison.Ordinal);
+        Assert.DoesNotContain("Strings.Ghost", stripped, StringComparison.Ordinal);
     }
 
     private static IReadOnlySet<string> ReferencedNames()
     {
         // Matches both dialects at once: C# `Strings.ColProject` and XAML
-        // `{x:Static loc:Strings.ColProject}`.
+        // `{x:Static loc:Strings.ColProject}` — over comment-stripped text, so a comment
+        // that names a resource cannot keep the resource alive after its code is gone.
         Regex reference = new(@"\bStrings\.(\w+)", RegexOptions.CultureInvariant);
         return ResxCatalog.AppSourceFiles()
-            .SelectMany(path => reference.Matches(File.ReadAllText(path)))
+            .SelectMany(path => reference.Matches(ResxCatalog.StripComments(
+                File.ReadAllText(path),
+                isXaml: path.EndsWith(".axaml", StringComparison.Ordinal))))
             .Select(match => match.Groups[1].Value)
             .ToHashSet(StringComparer.Ordinal);
     }

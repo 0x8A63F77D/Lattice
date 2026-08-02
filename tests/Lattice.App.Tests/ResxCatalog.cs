@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace Lattice.App.Tests;
@@ -77,13 +80,44 @@ internal static class ResxCatalog
 
     /// <summary>
     /// Scans a value as a .NET composite format string and returns the SET of argument
-    /// indexes it consumes. <c>{{</c> and <c>}}</c> are literal braces, not placeholders;
-    /// alignment and format specifiers (<c>{0,-8:F2}</c>) are stripped down to the index.
+    /// indexes it consumes, plus whatever <see cref="string.Format(string, object?[])"/>
+    /// would reject about it.
+    /// <para>
     /// The set — not the order — is what must agree across languages: CJK word order
     /// legitimately reorders arguments, while a missing index is a runtime
     /// <see cref="FormatException"/> under exactly one culture.
+    /// </para>
+    /// <para>
+    /// Validity is delegated to <see cref="CompositeFormat"/>, i.e. to the very parser
+    /// <c>string.Format</c> runs on. Owning the grammar here would mean re-deriving it:
+    /// an index-only scanner happily accepts <c>{0,abc}</c> and <c>{0,}</c>, which throw
+    /// at runtime — a well-formedness check that green-lights a crash is worse than none.
+    /// Index extraction below stays local because the framework exposes an argument
+    /// COUNT, not the set of indexes; it runs only for its indexes, never as the verdict.
+    /// </para>
     /// </summary>
     internal static PlaceholderScan ScanPlaceholders(string value)
+    {
+        string? error = null;
+        try
+        {
+            CompositeFormat.Parse(value);
+        }
+        catch (FormatException ex)
+        {
+            error = ex.Message;
+        }
+
+        return new PlaceholderScan(ExtractIndexes(value), error);
+    }
+
+    /// <summary>
+    /// Argument indexes of every format item, treating <c>{{</c> / <c>}}</c> as literal
+    /// braces and discarding alignment / format specifiers (<c>{0,-8:F2}</c> → 0). Only
+    /// meaningful for a value <see cref="CompositeFormat"/> accepts; on a malformed one
+    /// it returns what it could read and leaves the verdict to the parser above.
+    /// </summary>
+    private static IReadOnlySet<int> ExtractIndexes(string value)
     {
         var indexes = new SortedSet<int>();
         for (int i = 0; i < value.Length; i++)
@@ -94,10 +128,9 @@ internal static class ResxCatalog
                 if (i + 1 < value.Length && value[i + 1] == '}')
                 {
                     i++;
-                    continue;
                 }
 
-                return new PlaceholderScan(indexes, $"unescaped '}}' at index {i}");
+                continue;
             }
 
             if (c != '{')
@@ -114,23 +147,21 @@ internal static class ResxCatalog
             int close = value.IndexOf('}', i + 1);
             if (close < 0)
             {
-                return new PlaceholderScan(indexes, $"unterminated format item at index {i}");
+                break;
             }
 
             string body = value[(i + 1)..close];
             int specifier = body.IndexOfAny([',', ':']);
-            string digits = specifier < 0 ? body : body[..specifier];
-            if (digits.Length == 0 || !digits.All(char.IsAsciiDigit) || !int.TryParse(digits, out int index))
+            string digits = (specifier < 0 ? body : body[..specifier]).Trim();
+            if (int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out int index))
             {
-                return new PlaceholderScan(indexes,
-                    $"format item '{{{body}}}' at index {i} has no numeric argument index");
+                indexes.Add(index);
             }
 
-            indexes.Add(index);
             i = close;
         }
 
-        return new PlaceholderScan(indexes, null);
+        return indexes;
     }
 
     /// <summary>Every C# and XAML source file under <c>src/</c>, obj/bin excluded.</summary>
@@ -141,6 +172,107 @@ internal static class ResxCatalog
             .Where(path => path.EndsWith(".cs", StringComparison.Ordinal)
                 || path.EndsWith(".axaml", StringComparison.Ordinal))
             .Where(path => !IsBuildOutput(path, src));
+    }
+
+    /// <summary>
+    /// A source file's text with its comments removed, so a reference scan sees only
+    /// syntax-bearing code. This codebase comments densely and names specific resources
+    /// while doing it (<c>TasksView.axaml.cs</c> discusses <c>Strings.ColX</c> in prose),
+    /// so a raw-text scan would keep a key alive on the strength of a comment that
+    /// outlived the code it described.
+    /// <para>
+    /// Both strippers are string-literal aware, because the bias has to run one way: an
+    /// over-eager strip would drop a real reference and red the gate for a key that IS
+    /// used, which is a worse failure than the miss it fixes. Hence the C# pass tracks
+    /// <c>"…"</c>, <c>@"…"</c> and <c>'…'</c> before honouring a <c>//</c> — otherwise
+    /// every <c>"http://…"</c> literal would swallow the rest of its line. C# 11 raw
+    /// string literals (<c>"""</c>) are NOT modelled; src/ has none, and one would break
+    /// loudly (a red naming a live key), never silently.
+    /// </para>
+    /// </summary>
+    internal static string StripComments(string text, bool isXaml) =>
+        isXaml ? XmlComment.Replace(text, " ") : StripCSharpComments(text);
+
+    private static readonly Regex XmlComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.CultureInvariant);
+
+    private static string StripCSharpComments(string text)
+    {
+        StringBuilder code = new(text.Length);
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            char next = i + 1 < text.Length ? text[i + 1] : '\0';
+
+            if (c == '/' && next == '/')
+            {
+                while (i < text.Length && text[i] != '\n')
+                {
+                    i++;
+                }
+
+                code.Append('\n');
+                continue;
+            }
+
+            if (c == '/' && next == '*')
+            {
+                int end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
+                i = end < 0 ? text.Length : end + 1;
+                code.Append(' ');
+                continue;
+            }
+
+            if (c is '"' or '\'')
+            {
+                bool verbatim = c == '"' && code.Length > 0 && code[^1] == '@';
+                int close = FindLiteralEnd(text, i, c, verbatim);
+                code.Append(text, i, close - i + 1);
+                i = close;
+                continue;
+            }
+
+            code.Append(c);
+        }
+
+        return code.ToString();
+    }
+
+    /// <summary>Index of the quote that closes a literal opened at <paramref name="start"/>.</summary>
+    private static int FindLiteralEnd(string text, int start, char quote, bool verbatim)
+    {
+        for (int i = start + 1; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (verbatim)
+            {
+                if (c != quote)
+                {
+                    continue;
+                }
+
+                // "" inside a verbatim literal is an escaped quote, not the end.
+                if (i + 1 < text.Length && text[i + 1] == quote)
+                {
+                    i++;
+                    continue;
+                }
+
+                return i;
+            }
+
+            if (c == '\\')
+            {
+                i++;
+                continue;
+            }
+
+            if (c == quote || c == '\n')
+            {
+                return i;
+            }
+        }
+
+        return text.Length - 1;
     }
 
     private static bool IsBuildOutput(string path, string sourceRoot)
