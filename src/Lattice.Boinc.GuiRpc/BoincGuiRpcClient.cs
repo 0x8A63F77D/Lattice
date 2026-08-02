@@ -82,13 +82,16 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     }
 
     /// <summary>
-    /// Exchanges version information with the daemon and stores it.
+    /// Exchanges version information with the daemon and stores it in
+    /// <see cref="DaemonVersion"/>. Gate version-dependent ops on that value: an
+    /// unsupported op fails with a <see cref="BoincRpcException"/> indistinguishable
+    /// from any other daemon error, so it cannot be detected after the fact.
     /// </summary>
     public async Task<VersionInfo> ExchangeVersionsAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<exchange_versions/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement versionElement = reply.Element("server_version") ?? reply;
-        VersionInfo version = VersionInfo.Parse(versionElement);
+        VersionInfo version = VersionInfo.Parse(
+            RpcReplyParser.RequireContainer(reply, "server_version", "exchange_versions"));
         DaemonVersion = version;
         return version;
     }
@@ -97,16 +100,14 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     public async Task<CcState> GetStateAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_state/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        if (reply.Element("client_state") is not { } clientState)
-            throw new BoincProtocolException("get_state reply is missing <client_state>.", reply.ToString());
-        return CcState.Parse(clientState);
+        return CcState.Parse(RpcReplyParser.RequireContainer(reply, "client_state", "get_state"));
     }
 
     /// <summary>Returns the core client status: task mode, network status, suspend reasons.</summary>
     public async Task<CcStatus> GetCcStatusAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_cc_status/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        return CcStatus.Parse(reply.Element("cc_status") ?? reply);
+        return CcStatus.Parse(RpcReplyParser.RequireContainer(reply, "cc_status", "get_cc_status"));
     }
 
     /// <summary>Returns the list of results (tasks) on the core client.</summary>
@@ -114,7 +115,7 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     {
         string body = $"<get_results>\n<active_only>{(activeOnly ? 1 : 0)}</active_only>\n</get_results>";
         XElement reply = await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement container = reply.Element("results") ?? reply;
+        XElement container = RpcReplyParser.RequireContainer(reply, "results", "get_results");
         return [.. container.Elements("result").Select(Result.Parse)];
     }
 
@@ -123,7 +124,7 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     {
         string body = $"<get_messages>\n<seqno>{seqno}</seqno>\n</get_messages>";
         XElement reply = await PerformRpcAsync(body, throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement container = reply.Element("msgs") ?? reply;
+        XElement container = RpcReplyParser.RequireContainer(reply, "msgs", "get_messages");
         return [.. container.Elements("msg").Select(Message.Parse)];
     }
 
@@ -131,7 +132,7 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     public async Task<IReadOnlyList<FileTransfer>> GetFileTransfersAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_file_transfers/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement container = reply.Element("file_transfers") ?? reply;
+        XElement container = RpcReplyParser.RequireContainer(reply, "file_transfers", "get_file_transfers");
         return [.. container.Elements("file_transfer").Select(FileTransfer.Parse)];
     }
 
@@ -139,7 +140,7 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     public async Task<IReadOnlyList<Project>> GetProjectStatusAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_project_status/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement container = reply.Element("projects") ?? reply;
+        XElement container = RpcReplyParser.RequireContainer(reply, "projects", "get_project_status");
         return [.. container.Elements("project").Select(Project.Parse)];
     }
 
@@ -147,7 +148,7 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     public async Task<IReadOnlyList<ProjectStatistics>> GetStatisticsAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<get_statistics/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        XElement container = reply.Element("statistics") ?? reply;
+        XElement container = RpcReplyParser.RequireContainer(reply, "statistics", "get_statistics");
         return [.. container.Elements("project_statistics").Select(ProjectStatistics.Parse)];
     }
 
@@ -254,7 +255,8 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
             // return in RPC::parse_reply (lib/gui_rpc_client.cpp) — not a new code.
             return new AccountLookupReply(-1, ((string)error).Trim(), string.Empty);
 
-        AccountLookupReply parsed = AccountLookupReply.Parse(reply.Element("account_out") ?? reply);
+        AccountLookupReply parsed = AccountLookupReply.Parse(
+            RpcReplyParser.RequireContainer(reply, "account_out", "lookup_account_poll"));
         // Success MUST carry the account key: a zero error_num without an authenticator
         // (e.g. an empty <account_out/> from a poll with no pending lookup) is a
         // contract-breaking reply, not a state the caller may attach from.
@@ -286,7 +288,8 @@ public sealed class BoincGuiRpcClient : IGuiRpcClient
     public async Task<ProjectAttachReply> PollProjectAttachAsync(CancellationToken ct = default)
     {
         XElement reply = await PerformRpcAsync("<project_attach_poll/>", throwOnUnauthorized: true, ct).ConfigureAwait(false);
-        return ProjectAttachReply.Parse(reply.Element("project_attach_reply") ?? reply);
+        return ProjectAttachReply.Parse(
+            RpcReplyParser.RequireContainer(reply, "project_attach_reply", "project_attach_poll"));
     }
 
     // Caller-supplied values (URLs, task names, emails, authenticators) are interpolated

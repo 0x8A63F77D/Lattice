@@ -28,4 +28,18 @@ internal static class RpcReplyParser
 
         return reply;
     }
+
+    /// <summary>
+    /// Returns a reply's payload container, which every op's handler is contractually
+    /// required to emit (client/gui_rpc_server_ops.cpp: each handler unconditionally
+    /// prints its own container tag — an idle host still sends an empty
+    /// &lt;results&gt;&lt;/results&gt;).
+    /// Absence is therefore contract-breaking and is reported as such rather than
+    /// falling back to the reply root. That fallback fabricated data: parsing a
+    /// containerless reply as a record yields an all-default one, so a missing
+    /// &lt;project_attach_reply&gt; read as error_num 0 — "the attach succeeded".
+    /// </summary>
+    internal static XElement RequireContainer(XElement reply, string name, string op) =>
+        reply.Element(name)
+            ?? throw new BoincProtocolException($"{op} reply is missing <{name}>.", reply.ToString());
 }

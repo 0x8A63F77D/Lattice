@@ -13,7 +13,15 @@ public interface IGuiRpcClient : IAsyncDisposable
     /// <summary>Authenticates with the daemon using a password. Returns true on success.</summary>
     Task<bool> AuthorizeAsync(string password, CancellationToken ct = default);
 
-    /// <summary>Exchanges version information with the daemon.</summary>
+    /// <summary>
+    /// Exchanges version information with the daemon. Call this once after connecting:
+    /// the protocol has no versioned API, so the returned version is the ONLY way to
+    /// decide whether a newer op is available. A daemon that does not know an op answers
+    /// with an &lt;error&gt; tag that is structurally identical to any other failure
+    /// (client/gui_rpc_server_ops.cpp falls through to "unrecognized op: ..."), and its
+    /// wording must never be branched on — so gate ahead of the call rather than
+    /// interpreting the failure after it.
+    /// </summary>
     Task<VersionInfo> ExchangeVersionsAsync(CancellationToken ct = default);
 
     /// <summary>Full state snapshot. Several MB on busy hosts — call once per connection, then poll deltas.</summary>
