@@ -255,8 +255,8 @@ internal static class ResxCatalog
         };
 
     /// <summary>
-    /// The resources named by the format parameter: argument 0, or argument 1 when a
-    /// culture is passed first. Never a later argument — those are the values being
+    /// The resources named by the format parameter: argument 0, or argument 1 for the
+    /// provider-first overload. Never a later argument — those are the values being
     /// formatted INTO the string, not the format itself.
     /// <para>
     /// Plural because the parameter is an expression, not necessarily a bare reference:
@@ -264,13 +264,45 @@ internal static class ResxCatalog
     /// BOTH resources format strings. Reading only a top-level member access missed exactly
     /// that pair, and the placeholders-must-be-formatted check is what caught it.
     /// </para>
+    /// <para>
+    /// Which overload is in play is decided by testing argument 0, NOT by falling through
+    /// when argument 0 happens to name no resource: with the fall-through,
+    /// <c>string.Format("{0}", Strings.Plain)</c> promoted a plain display string to a
+    /// format string, which would then fail the grammar check for a brace it is entitled
+    /// to contain. An unrecognised provider shape errs the other way — a format string
+    /// goes unchecked — and that direction is caught loudly by
+    /// <c>LocalizationParityTests.Values_with_placeholders_are_used_as_format_strings</c>.
+    /// </para>
     /// </summary>
     private static IEnumerable<string> FormatArguments(InvocationExpressionSyntax invocation)
     {
         SeparatedSyntaxList<ArgumentSyntax> arguments = invocation.ArgumentList.Arguments;
-        string[] format = ResourceNames(arguments.ElementAtOrDefault(0)?.Expression).ToArray();
-        return format.Length > 0 ? format : ResourceNames(arguments.ElementAtOrDefault(1)?.Expression);
+        ExpressionSyntax? first = arguments.ElementAtOrDefault(0)?.Expression;
+        return IsFormatProvider(first)
+            ? ResourceNames(arguments.ElementAtOrDefault(1)?.Expression)
+            : ResourceNames(first);
     }
+
+    /// <summary>
+    /// Syntactic recognition of the <see cref="IFormatProvider"/> a provider-first
+    /// <c>string.Format</c> takes — no semantic model, so it goes by the names the call
+    /// site spells (<c>CultureInfo.InvariantCulture</c>, <c>…Culture</c>, <c>…Provider</c>).
+    /// </summary>
+    private static bool IsFormatProvider(ExpressionSyntax? expression) => expression switch
+    {
+        MemberAccessExpressionSyntax access =>
+            IsFormatProvider(access.Expression) || IsProviderName(access.Name.Identifier.ValueText),
+        IdentifierNameSyntax identifier => IsProviderName(identifier.Identifier.ValueText),
+        InvocationExpressionSyntax invocation => IsFormatProvider(invocation.Expression),
+        _ => false,
+    };
+
+    // Case-insensitive on purpose: the local `provider` and the property `CurrentCulture`
+    // are the same shape at a call site.
+    private static bool IsProviderName(string name) =>
+        name is "CultureInfo"
+            || name.EndsWith("Culture", StringComparison.OrdinalIgnoreCase)
+            || name.EndsWith("Provider", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<string> ResourceNames(ExpressionSyntax? expression) =>
         expression is null

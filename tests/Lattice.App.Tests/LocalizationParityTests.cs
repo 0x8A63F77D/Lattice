@@ -308,6 +308,13 @@ public class LocalizationParityTests
     [InlineData("class C { void M() { var s = string.Format(edit ? Strings.AFmt : Strings.BFmt, x); } }", new[] { "AFmt", "BFmt" })]
     // Later arguments are values being formatted IN, not formats.
     [InlineData("class C { void M() { var s = string.Format(Strings.AFmt, Strings.Plain); } }", new[] { "AFmt" })]
+    // …including when argument 0 is a literal format, which is NOT a provider: promoting
+    // the value argument here would demand composite-format syntax of a display string.
+    [InlineData("""class C { void M() { var s = string.Format("{0}", Strings.Plain); } }""", new string[0])]
+    [InlineData("""class C { void M() { var s = string.Format($"{x}", Strings.Plain); } }""", new string[0])]
+    // A named provider does select argument 1.
+    [InlineData("class C { void M() { var s = string.Format(provider, Strings.AFmt, x); } }", new[] { "AFmt" })]
+    [InlineData("class C { void M() { var s = string.Format(CultureInfo.GetCultureInfo(\"en\"), Strings.AFmt, x); } }", new[] { "AFmt" })]
     // A plain read is not a format use.
     [InlineData("class C { void M() { var s = Strings.Plain; } }", new string[0])]
     public void Format_strings_are_identified_by_use(string source, string[] expected)
