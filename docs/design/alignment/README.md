@@ -200,9 +200,18 @@ R2  cornerRadius == 2
   marker** across the app's views. A site that adopts the mechanism is gated
   automatically; editing this table is never a precondition for coverage. The
   census keeps two roles: the implementation-time conversion checklist, and
-  the record reviewers diff against. The residual risk — an in-class site that
-  never adopts the mechanism — is a code-review invariant (a new mark beside a
-  label must wear the mechanism), which no table could gate either.
+  the record reviewers diff against.
+- **A second, independent census guards against unmarked sites.** Marker
+  enumeration alone cannot catch an in-class site that never adopts the
+  mechanism — so the gate pairs it with an independent discovery pass: walk
+  the instantiated views' Lattice-authored templates for mark-beside-label
+  candidates (an icon / checkbox / swatch primitive sharing a line container
+  with a text element), and assert every candidate either wears the mechanism
+  or appears on an explicit, adjudicated exclusion list. The two enumerations
+  check each other: geometry is gated over the marker set; mechanism adoption
+  is gated over the discovered set. Note this assertion is EXPECTED to fail
+  for the overflow checkbox and rail group header until the implementation
+  converts them — that failure is the census doing its job, not noise.
 - The registry stays data, not code paths: adding a font or a site must not
   require touching R1/R2 logic.
 
@@ -291,9 +300,9 @@ the swatch is a plain filled rectangle.
 - `RULING.md` — the contract. Normative.
 - `README.md` — this file.
 - `measurements.tsv` — the alignment lab's raw data: 2 fonts × 4 candidates ×
-  the 15 lab-measured sites, arranged and rendered-pixel values. The two
-  post-lab registry sites (overflow checkbox, rail group header) have no rows
-  here.
+  the 15 lab-measured sites, arranged and rendered-pixel values. The three
+  post-lab registry sites (overflow checkbox, rail group header, snooze pill)
+  have no rows here.
 - `shipped-band-verdict.tsv` — shipped-band verdict for the 11 lab-measured
   mark-bearing sites (see the verification notes below for what it omits).
 - `evidence/alignment-evidence.html` — evidence page (design reference, not
@@ -312,9 +321,9 @@ the swatch is a plain filled rectangle.
 3. Cross-check a handful of sites against `measurements.tsv`: filter
    `candidate == "a"` and compare your arranged `vsCap` against the column of
    the same name. Ruled geometry means `vsCap == 0` by construction; `vsWordInk`
-   is the optical error and is expected to be non-zero. The two post-lab
-   registry sites have no rows to cross-check against — the gate itself is
-   their evidence.
+   is the optical error and is expected to be non-zero. The three post-lab
+   registry sites (overflow checkbox, rail group header, snooze pill) have no
+   rows to cross-check against — the gate itself is their evidence.
 4. `shipped-band-verdict.tsv` gives the per-site top/bottom verdict for the
    shipped band — the quickest regression reference for the 11 sites it covers.
    It omits the four grid-cell sites (`TasksView[Running]`,
