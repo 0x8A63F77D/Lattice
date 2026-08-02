@@ -21,8 +21,10 @@ Lattice is a cross-platform desktop app that monitors many
 [BOINC](https://boinc.berkeley.edu/) hosts from one window — aggregating tasks,
 projects, transfers, and event logs across your whole fleet.
 
-It is an open-source alternative to the closed-source, Windows-centric
-[BOINCTasks](https://efmer.com/boinctasks/). It is **not** another single-machine
+It is a native cross-platform alternative to
+[BOINCTasks](https://efmer.com/boinctasks/) — itself open source (GPL) and actively
+maintained, but with its mature classic build Windows-only and its cross-platform
+Electron rewrite not yet at that build's feature parity. It is **not** another single-machine
 BOINC Manager replacement — that niche is already filled by the official Manager
 and Fresco.
 
@@ -49,7 +51,8 @@ on each host; Lattice connects over TCP and renders the state it reads back.
 ## What makes it different
 
 - **Multi-host aggregation** — one view over every host, not one window per machine.
-- **Data visualization** *(M4)* — credit history, task timelines, per-project throughput.
+- **Data visualization** *(M4)* — credit history (shipped), task timelines and
+  per-project throughput (scoped, not built).
 - **Modern Fluent UI** — an information-dense, scannable monitoring surface built on
   Fluent 2, with light and dark themes from day one.
 
@@ -62,14 +65,13 @@ Lattice is under active development. Milestones track on GitHub:
 | **M1 — Protocol layer** | `Lattice.Boinc.GuiRpc`: connect, frame, auth, `get_state` / `get_cc_status` / `get_results` / `get_messages`, typed models. NuGet-publishable. | ✅ Done |
 | **[M2 — Read-only dashboard](https://github.com/0x8A63F77D/Lattice/milestone/1)** | NavigationView shell, per-host state machines, and the read-only views: Tasks (Wave 1), plus Projects / Transfers / Event log (Wave 2). | ✅ Functionally complete |
 | **[M3 — Control operations](https://github.com/0x8A63F77D/Lattice/milestone/2)** | Suspend/resume, task abort, project update/attach/detach, run modes, snooze, with confirmation UX. | ✅ Functionally complete |
-| **[M4 — Differentiators](https://github.com/0x8A63F77D/Lattice/milestone/3)** | Charts (first batch — the per-project credit Statistics page — on `main`; task timeline and throughput later). Host groups and the notification surface are deferred; a built-in SSH tunnel manager was cut. | 🚧 In progress |
+| **[M4 — Differentiators](https://github.com/0x8A63F77D/Lattice/milestone/3)** | Charts: the per-project credit Statistics page has shipped; the task timeline and per-project throughput are scoped but not built. Host groups and the notification surface are deferred; a built-in SSH tunnel manager was cut. | 🚧 In progress |
 
 This alpha covers read-only monitoring (M2) **and** control operations (M3):
 suspend/resume, task abort, per-host run modes, snooze, and project
 attach/detach/update — all with confirmation prompts on the destructive ones. The
-first M4 charts (the Statistics page) landed on `main` after this alpha was cut
-and ship in the next build; the remaining M4 surface is deferred or cut — see
-[Known limitations](#known-limitations).
+first M4 charts (the Statistics page) are in the current alpha; the remaining M4
+surface is scoped, deferred or cut — see [Known limitations](#known-limitations).
 
 ## Try the alpha
 
@@ -170,9 +172,10 @@ it in Lattice's add-host dialog).
 
 This is an alpha. Known gaps and unverified surfaces a tester is likely to hit:
 
-- **Charts are not in this build.** The per-project credit Statistics page merged
-  after this alpha was cut and ships in the next one; task timelines and
-  per-project throughput are not built yet.
+- **Only the first chart batch exists.** The per-project credit Statistics page
+  ships in the current alpha; task timelines and per-project throughput are
+  scoped ([#202](https://github.com/0x8A63F77D/Lattice/issues/202)) but not built
+  yet.
 - **No built-in SSH tunnel manager (by design).** Remote hosts over an untrusted
   network need your own SSH tunnel or VPN/overlay (see [Remote hosts](#remote-hosts)).
 - **No host groups or desktop/tray notifications yet (M4).**
@@ -234,12 +237,16 @@ client can ship as a standalone NuGet package.
 | [`src/Lattice.Boinc.GuiRpc`](src/Lattice.Boinc.GuiRpc) | C# | Protocol layer: connection, framing, auth, RPC ops, strongly-typed models. **Single-host semantics only.** Publishable as the `Lattice.Boinc.GuiRpc` NuGet package. Knows nothing about multiple hosts, polling policy, or the app. |
 | [`src/Lattice.Core`](src/Lattice.Core) | C# | Multi-host domain: host registry, polling scheduler, reconnect/backoff, state cache + diff. Depends on GuiRpc — never the reverse. |
 | [`src/Lattice.Core.Machine`](src/Lattice.Core.Machine) | F# | Pure decision core for the per-host monitor (`HostMachine.step`). No I/O, no dependencies. |
-| [`src/Lattice.App.Aggregation`](src/Lattice.App.Aggregation) | F# | Pure app-side aggregation: parent/child row rollups, status summaries, view-slice projection. No UI or GuiRpc types. |
+| [`src/Lattice.App.Aggregation`](src/Lattice.App.Aggregation) | F# | Pure app-side policy: parent/child row rollups, view-slice projection, grid reconciliation, host-rail layout, message-log keying, control-op confirmation, and the Statistics chart/legend rules. No UI or GuiRpc types. |
 | [`src/Lattice.App`](src/Lattice.App) | C# | Avalonia UI: views, viewmodels, theming. Contains no protocol logic — ViewModels consume `Lattice.Core`. |
 
 Tests and tooling live alongside:
 
-- `tests/Lattice.Tests`, `tests/Lattice.App.Tests`, `tests/Lattice.Aggregation.Tests` — xUnit suites.
+- `tests/Lattice.Tests`, `tests/Lattice.App.Tests`, `tests/Lattice.Aggregation.Tests`,
+  `tests/Lattice.Machine.Tests` — xUnit suites (`tests/Lattice.TestSupport` holds the
+  shared headless helpers and fakes).
+- `tests/Lattice.VisualTests` — screenshot-baseline and pixel-geometry gates, run by
+  the macOS-only `visual-tests.yml` workflow.
 - `tests/Lattice.Verification` — an F# executable spec that drives the production
   `HostMachine.step` directly.
 - `verification/HostMonitor.pml` — a [Promela](https://spinroot.com/) model of the
@@ -259,6 +266,9 @@ Tests and tooling live alongside:
 Design specs and deep-dives live under [`docs/`](docs/):
 
 - [`docs/design/m2`](docs/design/m2) — M2 read-only dashboard design.
+- [`docs/design/m3`](docs/design/m3) — M3 control-operations walkthrough checklist.
+- [`docs/design/m4`](docs/design/m4) — the Statistics page design contract and its
+  reference renders.
 - [`docs/superpowers/specs`](docs/superpowers/specs) and
   [`docs/superpowers/plans`](docs/superpowers/plans) — per-milestone design and
   execution records.

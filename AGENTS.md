@@ -12,6 +12,11 @@ done by the official `boinc` daemon on each host; Lattice connects over TCP and 
   Depends on GuiRpc, never the reverse. No UI dependencies, no direct socket code.
 - `Lattice.Core.Machine` — pure F# decision core (`HostMachine.step`). No I/O, no deps.
 - `Lattice.App` — Avalonia UI. No protocol logic; ViewModels consume Core observables/events.
+  It does declare a `ProjectReference` to `Lattice.Boinc.GuiRpc` and name its types (snapshot
+  models, control-op enums), because Core's public surface hands them over — deliberate,
+  adjudicated on #139. So the reviewable rule is "no RPC calls outside Core", not "no GuiRpc
+  reference in the App"; the DEBUG-only `Infrastructure/SampleHost.cs` canned-data
+  `IGuiRpcClient` at the composition root is not a violation.
 
 ## F# style canon — review-blocking gates
 
@@ -68,9 +73,10 @@ change is needed.
 ## Mutation gates (Stryker.NET pilot, issue #77)
 
 - Tier 0 (`dotnet test` per-PR) is unchanged. Tier 1 runs incremental Stryker on PRs touching the
-  mutation scope — report-only during calibration. Tier 2 is a nightly full run posting the score
-  to issue #77. Scope is pinned in `tests/Lattice.Tests/stryker-config.json`; never widen it
-  repo-wide.
+  mutation scope — **enforcing** since #111: `stryker-config.json` sets `thresholds.break = 80`,
+  so a PR whose changed-code mutation score falls below it fails. Tier 2 is a nightly full run
+  posting the score to issue #77. Scope is pinned in `tests/Lattice.Tests/stryker-config.json`;
+  never widen it repo-wide.
 - Never add assertions solely to kill a surviving mutant or raise the mutation score — equivalent
   mutants exist, and survivor adjudication belongs to the controller session, not the implementer.
 

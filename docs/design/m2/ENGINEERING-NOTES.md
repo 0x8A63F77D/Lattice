@@ -15,7 +15,7 @@ Column and field names split into what exists today vs. what the M2 milestone mu
 
 **Application-column derivation (Tasks view):** `Result` carries no application name. Application = join `Result.WorkunitName` → `Workunit.AppName` → `App.UserFriendlyName`, falling back to `AppName` when the friendly name is absent, using the cached `get_state` snapshot.
 
-**(b) New M2 data requirements (standard BOINC GUI RPC fields — to be added in M2, not yet implemented):**
+**(b) New M2 data requirements (standard BOINC GUI RPC fields — listed here as not yet implemented at rev. B; all four have since shipped):**
 - Remaining/ETA: parse `estimated_cpu_time_remaining` from `<active_task>` in `get_results`
 - `Project.ResourceShare` (from get_state / get_project_status)
 - `FileTransfer` model + `get_file_transfers` RPC (Transfers view)

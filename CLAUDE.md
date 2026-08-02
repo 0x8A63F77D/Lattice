@@ -11,21 +11,21 @@ Lattice is a GUI RPC *client*. It does not schedule, download, or compute anythi
 ```
 lattice/
 ├── Lattice.App/            # Avalonia UI (views, viewmodels, theming)
-├── Lattice.App.Aggregation/ # Pure F# core for the App layer: multi-host scope + row slicing, keyed grid reconciliation, rail layout. Consumed by Lattice.App ViewModels; no UI deps.
+├── Lattice.App.Aggregation/ # Pure F# core for the App layer: multi-host scope + row slicing, keyed grid reconciliation, rail layout, project rows, message-log keying, control-op confirmation, Statistics chart + visibility policy. Consumed by Lattice.App ViewModels; no UI deps.
 ├── Lattice.Core/           # Domain: host registry, polling scheduler, state cache + diff. NO UI deps, NO direct socket code.
 ├── Lattice.Core.Machine/    # Pure F# decision core for HostMonitor (HostMachine.step). No I/O, no deps.
 ├── Lattice.Boinc.GuiRpc/   # Protocol layer: connection, auth, RPC ops, strongly-typed models. Single-host semantics only.
-└── Lattice.Tests/
+└── Lattice.Tests/          # plus tests/{Lattice.App.Tests, Lattice.Aggregation.Tests, Lattice.Machine.Tests, Lattice.VisualTests, Lattice.Verification, Lattice.TestSupport} and tools/Lattice.SmokeTest
 ```
 
 Boundary discipline:
 - `Lattice.Boinc.GuiRpc` knows nothing about multiple hosts, polling policy, or the app. It is publishable as a standalone NuGet package (that is the M1 deliverable). Keep it that way.
 - `Lattice.Core` owns multi-host aggregation, polling cadence, reconnect/backoff, and state diffing. It depends on GuiRpc, never the reverse.
-- `Lattice.App` contains no protocol logic. ViewModels consume `Lattice.Core` observables/events.
+- `Lattice.App` contains no protocol logic. ViewModels consume `Lattice.Core` observables/events. It does carry a declared `ProjectReference` to `Lattice.Boinc.GuiRpc` and names its types directly (snapshot models, control-op enums), because Core's public surface hands those types to the App — deliberate, adjudicated on #139. So the reviewable rule is "no RPC calls outside Core", not "no GuiRpc reference in the App". (The DEBUG-only sample fleet in `Infrastructure/SampleHost.cs` implements `IGuiRpcClient` with canned data at the composition root; it is excluded from Release builds.)
 
 ## Tech stack
 
-- .NET 10, C# (latest LTS at project start; verify)
+- .NET 10 (`net10.0`), C# at the SDK default language version (no explicit `LangVersion` anywhere in the tree)
 - Avalonia 12.x
 - FluentAvaloniaUI 3.x (NuGet `FluentAvaloniaUI`, requires Avalonia >= 12) — Fluent 2 theming + WinUI-ported controls (NavigationView, TabView, InfoBar, InfoBadge, NumberBox, TaskDialog)
 - MVVM via CommunityToolkit.Mvvm (source-generated `[ObservableProperty]`, `[RelayCommand]`)
@@ -43,7 +43,7 @@ Wire protocol:
 - XML request/reply. Request wrapped in `<boinc_gui_rpc_request>`, reply in `<boinc_gui_rpc_reply>`. Each message terminated by byte `\x03`. Framing = accumulate until 0x03.
 - Strictly request-reply on a persistent connection. No pipelining. No server push — all UI state comes from polling.
 - **Parser landmine:** self-closing tags must have NO space before the slash. Send `<authorized/>`, never `<authorized />`. The C++ parser on the other end is not a real XML parser.
-- BOINC's XML output is not guaranteed strictly compliant (historically unescaped chars in message bodies). Parse leniently; never use a strict validating parser.
+- BOINC's XML output is not guaranteed strictly compliant (historically unescaped chars in message bodies). Parse leniently; never use a strict validating parser. But leniency is segmented: the daemon wraps every event-log message body in CDATA (`client/client_msgs.cpp`, `MESSAGE_DESCS::write`), where `&` and `<` are literal — markup repairs applied there corrupt the payload instead of rescuing it (#211).
 
 Auth:
 - Challenge-response: send `<auth1/>` → receive nonce → send `<auth2><nonce_hash>MD5(nonce + password)</nonce_hash></auth2>` → `<authorized/>` or `<unauthorized/>`.
@@ -52,11 +52,11 @@ Auth:
 - **Never parse error message text.** Wording changes between versions. Branch only on structural tags (`<error>`, `<unauthorized/>`, `<success/>`).
 
 Versioning:
-- The protocol has no versioned API. Call `exchange_versions` after connect, store the daemon version, gate newer RPCs on it. Target BOINC 8.x; degrade gracefully on older.
+- The protocol has no versioned API. Call `exchange_versions` after connect, store the daemon version, gate newer RPCs on it. Target BOINC 8.x; degrade gracefully on older. Gate *ahead* of the call: a daemon that does not know an op answers with an `<error>` tag structurally identical to any other failure (`gui_rpc_server_ops.cpp` falls through to "unrecognized op"), so the failure itself carries nothing to branch on (pinned by #207/#211). Shipped today: the version is fetched on connect and surfaced on `ConnectionStatus`, but no RPC is version-gated.
 
 State model (this drives Core's design):
-- `get_state` returns the full CC_STATE (projects, apps, app_versions, workunits, results). Can be several MB on busy hosts. Call once per connection (and on reconnect), cache it.
-- Steady-state polling uses cheap deltas: `get_cc_status` (run modes, network, suspend reasons), `get_results` (task list w/ progress), `get_messages` with a `seqno` param (returns only messages with seqno > given; monotonic).
+- `get_state` returns the full CC_STATE (projects, apps, app_versions, workunits, results). Can be several MB on busy hosts. Call once per connection (and on reconnect), cache it. Core also refetches it mid-connection when a result names a workunit missing from the cached snapshot.
+- Steady-state polling uses cheap deltas: `get_cc_status` (run modes, network, suspend reasons), `get_results` (task list w/ progress), `get_messages` with a `seqno` param (returns only messages with seqno > given; monotonic), `get_file_transfers` and `get_project_status`. `get_statistics` rides the same tick but on its own low-frequency cadence (`StatisticsCadencePolicy`) — credit history changes ~daily.
 - Official Manager polls at ~1s for the visible tab. Lattice polls per-host with configurable cadence; back off aggressively for unreachable hosts (exponential, capped).
 - Project attach flow is the one async part: `lookup_account` → poll `lookup_account_poll` → `project_attach`. Model it as such.
 
@@ -119,13 +119,13 @@ Practical, readable, .NET-idiomatic functional style — not purity maximalism. 
 - Tier 0: the plain `dotnet test` per-PR gate — unchanged, still the default quality bar.
 - Tier 1 (test admission): PR job path-filtered to the mutation scope + its test project, runs Stryker incrementally (`--since:origin/main`). **ENFORCING as of #111 (calibration complete):** `break = 80`, set from the observed **88.89% calibration floor** (not guessed up front) — a PR whose mutation score drops below 80 fails. The 3 SnapshotBuilder survivors surfaced during calibration were **adjudicated genuine coverage gaps and killed** (`stryker-config.json` thresholds `high 90 / low 80 / break 80`). The companion screenshot gate `visual-tests.yml` is also **enforcing** post-#82 calibration (`MeanErrorThreshold 1.0` / `PixelErrorCountGuard 400`; macOS-only, skipped on the cross-platform `ci.yml`).
 - Tier 2 (regression audit): nightly full run over the scope; posts/updates a score comment on #77 (`scripts/post-mutation-report.sh`). Never blocks PRs.
-- Scope is pinned in `tests/Lattice.Tests/stryker-config.json` (currently `src/Lattice.Core/SnapshotBuilder.cs`) — never repo-wide. Two tooling limits shape it: Stryker.NET has no F# support (`Lattice.Core.Machine`, `Lattice.App.Aggregation` excluded), and its Roslyn-only recompile cannot build Avalonia projects (XamlIl-injected `InitializeComponent` doesn't exist ⇒ CS0103), so the `Lattice.App` ViewModels policy modules stay out until extracted to a non-UI assembly.
+- Scope is pinned in `tests/Lattice.Tests/stryker-config.json` (currently `SnapshotBuilder.cs`, `HostControlService.cs` and `ControlOpResult.cs`, all under `src/Lattice.Core/`; `mutation-tier1.yml`'s path filter lists the same three) — never repo-wide. Two tooling limits shape it: Stryker.NET has no F# support (`Lattice.Core.Machine`, `Lattice.App.Aggregation` excluded), and its Roslyn-only recompile cannot build Avalonia projects (XamlIl-injected `InitializeComponent` doesn't exist ⇒ CS0103), so the `Lattice.App` ViewModels policy modules stay out until extracted to a non-UI assembly.
 - Survivor adjudication is a controller judgment call: equivalent mutants exist and cannot be killed; adding assertions solely to raise the score is banned — that is false-green in a new costume.
 
 ## Milestones
 
 **M1 — Protocol layer** (`Lattice.Boinc.GuiRpc`)
-Connect, frame, auth, `exchange_versions`, `get_state`, `get_cc_status`, `get_results`, `get_messages`. Strongly-typed models. Fixture-based unit tests. Acceptance: a console smoke test authenticates against a local BOINC daemon and dumps typed state. Publishable to NuGet (check ID availability first).
+Connect, frame, auth, `exchange_versions`, `get_state`, `get_cc_status`, `get_results`, `get_messages`. Strongly-typed models. Fixture-based unit tests. Acceptance: a console smoke test authenticates against a local BOINC daemon and dumps typed state. Publishable to NuGet: package metadata is staged at version 0.9.0 and `nuget-publish.yml` packs and pushes on a `guirpc-v*` tag; nothing has been published yet.
 
 **M2 — Read-only dashboard**
 Single + multi-host: task list with progress, project list, transfers, message log. Polling scheduler with per-host state machines (connected / retrying / unreachable) in Core. NavigationView shell, Fluent theming, Mica where available.
@@ -134,7 +134,7 @@ Single + multi-host: task list with progress, project list, transfers, message l
 Suspend/resume (task, project, global run modes), task abort, project update/attach/detach (incl. the async lookup_account flow), snooze. Confirmation UX for destructive ops.
 
 **M4 — Differentiators**
-Charts: first batch SHIPPED (#148 ruling; Statistics page merged in PR #167, 2026-07-24) — official-Manager Statistics parity (per-project user/host total & average credit history); later batches (task timeline, per-project throughput) not yet scoped. SSH tunnel manager: CUT (owner ruling 2026-07-26: pseudo-need — cross-network users run their own tunnel/VPN; reopen only on real-user demand). Host groups: DEFERRED (reopen trigger: real-user demand at 10+ host fleets). Notification surface (task failures, unreachable hosts) via InfoBar/tray: DEFERRED, revisit later. See #148 for the ruling.
+Charts: first batch SHIPPED (#148 ruling; Statistics page merged in PR #167, 2026-07-25) — official-Manager Statistics parity (per-project user/host total & average credit history). Batch 2 (task timeline + per-project throughput) is SCOPED on #202, not yet designed or dispatched: both surfaces ship together; task observation events persist to a local SQLite store with user-configurable retention (owner ruling 2026-08-02, revising the original "no local persistence" line); credit history stays daemon-side (`get_statistics` on demand, no Lattice storage) and throughput derives from its deltas; the ≤1 h `get_old_results` window backfills observations at connect. The daemon exposes no durable task history, so periods when Lattice was not watching stay permanently unobserved — the timeline has to distinguish idle / unobserved / observed. SSH tunnel manager: CUT (owner ruling 2026-07-26: pseudo-need — cross-network users run their own tunnel/VPN; reopen only on real-user demand). Host groups: DEFERRED (reopen trigger: real-user demand at 10+ host fleets). Notification surface (task failures, unreachable hosts) via InfoBar/tray: DEFERRED, revisit later. See #148 for the ruling.
 
 ## Naming
 
