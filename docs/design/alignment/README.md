@@ -74,23 +74,28 @@ centerY(mark) = baseline − capHeight / 2
   and the other does not.
 - **Face selection is deterministic and content-blind**, resolved per label
   class (normative text in `RULING.md`):
-  - *Localized chrome labels* — script is known from the UI locale, so the
-    metric face is the face the font stack resolves **for the locale's
-    script**: under a CJK locale whose primary family lacks Han, that is the
-    CJK fallback face actually rendering the text, not the invisible Latin
-    primary. A locale-level decision, made once per font configuration —
-    string content still never participates. (The shipped word-band converter
-    already selects its band by UI script; the ruling's CJK figures were
-    measured with the CJK face defining the band.)
+  - *Localized chrome labels* — the anchor is the script of the **resolved
+    resource set** (the language whose strings actually loaded), NOT the OS
+    locale: under System preference on an unsupported CJK locale (ja-JP,
+    ko-KR, zh-TW) the culture stays CJK while neutral-English resources load,
+    so the labels are Latin and so is the band — the shipped word-band
+    mechanism already anchors on a resource-set string for exactly this
+    reason. The metric face is the face the font stack resolves for that
+    script: under a CJK-resolved resource set whose primary family lacks Han,
+    the CJK fallback face actually rendering the text, not the invisible
+    Latin primary. Per-resource-set, per-font-configuration; the live label's
+    content still never participates.
   - *User-data labels* (project names) — script unknown, so the metric face is
     the **primary face** of the label's font stack regardless of content; a
     mixed-script or fallback-forcing name gets the same band as every other
     label at that site.
   The gate must include a fallback-forcing, mixed-script label sample at the
   user-data sites (legend swatch, overflow checkbox), AND must run the
-  localized-label sites under a real default-plus-fallback configuration (a
-  CJK locale whose primary family lacks Han) rather than only CJK-primary
-  test pins.
+  localized-label sites under both shipped configurations: the real
+  default-plus-fallback configuration (a CJK-resolved resource set whose
+  primary family lacks Han) and the unsupported-CJK/System configuration
+  (CJK OS culture, English resource fallback → Latin band) — rather than
+  only CJK-primary test pins.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.

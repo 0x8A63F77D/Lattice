@@ -25,15 +25,20 @@ that same band.
 Face selection is DETERMINISTIC and CONTENT-BLIND, resolved per label
 class:
 
-  Localized chrome labels (script known from the UI locale): the metric
-  face is the face the label's font stack resolves FOR THE LOCALE'S
-  SCRIPT — under a CJK locale whose primary family carries no Han, that
-  is the CJK fallback face actually rendering the text, not the
-  invisible Latin primary. This is a locale-level decision made once per
-  font configuration; string content still never participates. (This
-  ruling's CJK accuracy figures were measured with the CJK face defining
-  the band; reading a Latin primary there would centre marks on a band
-  no visible glyph paints.)
+  Localized chrome labels: the anchor is the script of the RESOLVED
+  RESOURCE SET — the language whose localized strings actually loaded —
+  not the OS locale. (With the language preference on System atop an
+  unsupported CJK locale such as ja-JP, ko-KR or zh-TW, the OS culture
+  stays CJK while the app falls back to neutral-English resources: the
+  labels display Latin text, and the band must be Latin. The shipped
+  word-band mechanism already anchors on a string resolved from the
+  resource set for exactly this reason.) The metric face is then the
+  face the label's font stack resolves FOR THAT SCRIPT — under a
+  CJK-resolved resource set whose primary family carries no Han, that is
+  the CJK fallback face actually rendering the text, not the invisible
+  Latin primary. This is a per-resource-set, per-font-configuration
+  decision, determinable from a fixed reference string of that resource
+  set; the live label's content still never participates.
 
   User-data labels (script unknown — project names): the metric face is
   the primary face of the label's font stack, regardless of content. A
@@ -42,9 +47,11 @@ class:
   the per-string dependence this clause removes.)
 
 The same rules select the face for R2's capHeight. The gate must
-exercise the real default-plus-fallback configuration — a CJK locale
-whose primary family lacks Han — so the localized rule is pinned against
-the shipped font stack, not only against CJK-primary test pins.
+exercise both shipped configurations of the localized rule: the real
+default-plus-fallback configuration (a CJK-resolved resource set whose
+primary family lacks Han), and the unsupported-CJK/System configuration
+(CJK OS culture, English resource fallback → Latin band) — not only
+CJK-primary test pins.
 
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.
