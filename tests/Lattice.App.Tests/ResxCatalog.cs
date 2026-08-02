@@ -494,74 +494,140 @@ internal static class ResxCatalog
             return [];
         }
 
+        IReadOnlyList<MarkupToken> tokens = Tokenize(trimmed);
         List<string> names = [];
         int index = 0;
-        ParseExtension(trimmed, ref index, names, staticExtensions);
+        if (tokens.Count > 0 && tokens[0].Kind == MarkupTokenKind.Open)
+        {
+            ParseExtension(tokens, ref index, names, staticExtensions);
+        }
+
         return names;
     }
 
     /// <summary>
-    /// Consumes one <c>{Name arg, Prop=value}</c> item starting at <paramref name="index"/>,
-    /// recursing into nested extensions and skipping quoted arguments, and records the
-    /// member of every <c>x:Static</c> it meets that names a resource.
+    /// Splits a markup value into the grammar's atoms — braces, commas, equals signs,
+    /// quoted literals and bare text — discarding whitespace.
+    /// <para>
+    /// Lexing first is what makes the parser whitespace-insensitive by construction.
+    /// Deciding "is the next character an equals sign?" straight off the raw string got
+    /// this wrong twice: <c>{Binding Converter = {…}}</c> and then
+    /// <c>{x:Static Member = loc:Strings.Foo}</c>, where the space before <c>=</c> made a
+    /// property name look like a positional argument and lost the reference. Whitespace is
+    /// meaningless between atoms here, so it stops existing before the grammar is applied.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<MarkupToken> Tokenize(string value)
+    {
+        List<MarkupToken> tokens = [];
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (char.IsWhiteSpace(c))
+            {
+                continue;
+            }
+
+            switch (c)
+            {
+                case '{':
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Open, "{"));
+                    continue;
+                case '}':
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Close, "}"));
+                    continue;
+                case ',':
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Comma, ","));
+                    continue;
+                case '=':
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Equals, "="));
+                    continue;
+                case '\'' or '"':
+                    SkipQuoted(value, ref i);
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Quoted, string.Empty));
+                    i--; // the loop's own increment steps past the closing quote
+                    continue;
+                default:
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Text, ReadToken(value, ref i)));
+                    i--; // ReadToken already stopped ON the delimiter
+                    continue;
+            }
+        }
+
+        return tokens;
+    }
+
+    private enum MarkupTokenKind
+    {
+        Open,
+        Close,
+        Comma,
+        Equals,
+        Quoted,
+        Text,
+    }
+
+    private readonly record struct MarkupToken(MarkupTokenKind Kind, string Text);
+
+    /// <summary>
+    /// Consumes one <c>{Name arg, Prop=value}</c> item, recursing into nested extensions
+    /// and ignoring quoted literals, and records the member of every <c>Static</c>
+    /// extension it meets that names a resource.
     /// </summary>
     private static void ParseExtension(
-        string value, ref int index, ICollection<string> names, IReadOnlySet<string> staticExtensions)
+        IReadOnlyList<MarkupToken> tokens, ref int index, ICollection<string> names,
+        IReadOnlySet<string> staticExtensions)
     {
         index++; // the opening brace
-        string extension = ReadToken(value, ref index);
+        string extension = index < tokens.Count && tokens[index].Kind == MarkupTokenKind.Text
+            ? tokens[index++].Text
+            : string.Empty;
         string? member = null;
         string? property = null;
 
-        while (index < value.Length && value[index] != '}')
+        while (index < tokens.Count && tokens[index].Kind != MarkupTokenKind.Close)
         {
-            char c = value[index];
-            if (char.IsWhiteSpace(c) || c == ',')
+            MarkupToken token = tokens[index];
+            switch (token.Kind)
             {
-                index++;
-                if (c == ',')
-                {
+                case MarkupTokenKind.Open:
+                    ParseExtension(tokens, ref index, names, staticExtensions);
                     property = null;
-                }
-
-                continue;
+                    continue;
+                case MarkupTokenKind.Comma or MarkupTokenKind.Quoted:
+                    property = null;
+                    index++;
+                    continue;
+                case MarkupTokenKind.Equals:
+                    index++;
+                    continue;
+                case MarkupTokenKind.Text:
+                    break;
+                case MarkupTokenKind.Close:
+                    continue;
             }
 
-            if (c == '{')
+            if (index + 1 < tokens.Count && tokens[index + 1].Kind == MarkupTokenKind.Equals)
             {
-                ParseExtension(value, ref index, names, staticExtensions);
-                property = null;
+                property = token.Text;
+                index += 2;
                 continue;
             }
 
-            if (c is '\'' or '"')
-            {
-                SkipQuoted(value, ref index);
-                property = null;
-                continue;
-            }
-
-            string token = ReadToken(value, ref index);
-            if (index < value.Length && value[index] == '=')
-            {
-                index++; // the token was a property name; its value comes next
-                property = token;
-                continue;
-            }
-
-            // A positional argument, or the value of Member= — x:Static's positional
-            // argument IS its Member property, so `{x:Static Member=loc:Strings.Foo}`
+            // A positional argument, or the value of Member= — a Static extension's
+            // positional argument IS its Member property, so `{x:Static Member=loc:Strings.Foo}`
             // binds exactly what `{x:Static loc:Strings.Foo}` does. Any other property's
             // value is not the member.
             if (property is null || property == "Member")
             {
-                member ??= token;
+                member ??= token.Text;
             }
 
             property = null;
+            index++;
         }
 
-        if (index < value.Length)
+        if (index < tokens.Count)
         {
             index++; // the closing brace
         }
@@ -602,8 +668,6 @@ internal static class ResxCatalog
         }
     }
 
-    // The prefix is an XML NCName, which admits '-' and '.' — `xmlns:app-loc` is a legal
-    // spelling Avalonia resolves, and rejecting it would report the key it binds as dead.
     private static readonly Regex StaticMember = new(
         @"^(?:[\w.-]+:)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
 

@@ -284,8 +284,12 @@ public class LocalizationParityTests
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the interior phrase without its delimiters.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
-    // Whitespace around an assignment is legal inside an extension.
+    // Whitespace around an assignment is legal inside an extension, in either position —
+    // the lexer removes it before the grammar runs, so neither shape can lose a reference.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{Binding Converter = {x:Static loc:Strings.Live}}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member = loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{ x:Static  loc:Strings.Live }" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X , FallbackValue = 'q'}" />""", "Live")]
     // x:Static's positional argument is its Member property, so the named form binds too.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member=loc:Strings.Live}" />""", "Live")]
     // …but another property's value is not the member.
