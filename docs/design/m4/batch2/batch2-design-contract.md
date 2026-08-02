@@ -114,8 +114,11 @@ that outage renders as an ordinary hole (reason via label/hover).
 - Status strip: `N hosts · N intervals in view · N days retained` left,
   `Polling every 5s` right.
 - Page reads the shell host scope; `All hosts` renders every **configured host in scope**
-  as a lane. An unreachable host keeps its lane — live-unreachable InfoBar + hole per §2 —
-  it is never dropped from the timeline while its outage is in progress.
+  as a lane. An unreachable host keeps its lane and is never dropped from the timeline
+  while its outage is in progress: the live outage surfaces via the §2 InfoBar, and on the
+  lane the time after that host's last observation is **bare canvas** — per the §2
+  definition a live outage has no right-bound observation, so the interval becomes an
+  ordinary hole only once observations resume.
 
 ### 5. States (issue #88 idiom)
 
@@ -126,9 +129,12 @@ that outage renders as an ordinary hole (reason via label/hover).
   events, not intervals); they are written to the observation store, but the concurrency
   density band does **not** render them: the pre-connect window stays unobserved (a hole
   where bounded by observations, bare canvas otherwise), and backfill never changes hole
-  geometry. No visual element on this page consumes backfill data.
+  geometry. This prohibition is scoped to chart geometry — no chart element renders
+  backfill data and no new visual element may be added to consume it — but non-geometry
+  predicates may read completion observations: the Empty state's `none completed in the
+  last hour` claim is established from them.
 - **No hosts:** shown only when **zero hosts are configured** (an all-unreachable fleet
-  renders its lanes with InfoBars and holes, never this state) — centered — `ServerMultiple`
+  renders its lanes — InfoBars plus retained history — never this state) — centered — `ServerMultiple`
   icon 28px `#C7C7C7`, `No hosts connected`, caption `Add a host to start observing task
   activity.`
 - **Empty:** `No task activity yet` + `No tasks running since {time}, and none completed in
@@ -238,7 +244,9 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
   into running intervals would fabricate execution geometry (a task preempted several times
   would render as continuously running) — violating this contract's own no-fabricated-data
   rule. Ruling: backfill writes completion observations to the store; the density band
-  renders nothing from them and hole geometry is unchanged by backfill. This also clarifies
+  renders nothing from them and hole geometry is unchanged by backfill (non-geometry
+  predicates, e.g. the Empty state's completed-in-last-hour claim, may consume completion
+  observations). This also clarifies
   the #202 ruling's "backfills observations at connect": observations = completion events,
   not intervals. (Raised by Codex review round 1 on the landing PR.)
 - **Narrow-hole visibility: minimum rendered width, not contrast (round-1 review; owner
@@ -260,10 +268,14 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
   landing; landing edits: this Files section, the evidence-base pointer, and the round-1
   review rulings — backfill semantics, configured-host lanes, minimum hole width — each
   recorded in the decision log).
-- `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable).
+- `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable; predates
+  the round-1 minimum-width ruling — where its hole-ladder depiction disagrees with §2,
+  §2 is authoritative).
 - `hole-rendering-research.md` — evidence base for the hole-rendering decisions.
 - `img/timeline-light.png`, `img/timeline-dark.png` — Timeline full page, both themes.
-- `img/timeline-dense-10hosts.png` — 10-host × 7 d density state.
+- `img/timeline-dense-10hosts.png` — 10-host × 7 d density state (predates the round-1
+  minimum-width ruling: its narrow holes render unlabelled — §2 and the snapshot matrix
+  are authoritative for the shipped treatment).
 - `img/timeline-cold-start.png`, `img/timeline-empty-states.png` — states.
 - `img/degradation-ladder.png` — label-ladder reference (device-px rungs; predates the
   round-1 minimum-width ruling — the `< 3 px` rung it shows is superseded, §2 is
