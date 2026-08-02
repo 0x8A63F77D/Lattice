@@ -72,15 +72,25 @@ centerY(mark) = baseline − capHeight / 2
   resolved size**. It is never measured from the label's actual glyphs. Two
   labels in the same face and size get the same band even if one has descenders
   and the other does not.
-- **Face selection is deterministic and content-blind.** The "resolved face" is
-  the primary face the label's `FontFamily` resolves to — never a face picked
-  from the per-glyph fallback runs the text shaper adds for glyphs the primary
-  face lacks. String content therefore never participates in face selection: a
-  user-data label that mixes scripts or forces font fallback gets the same band
-  as every other label at that site. (Choosing a face by content would
-  re-introduce the per-string dependence this ruling exists to remove.) The
-  gate must include a fallback-forcing, mixed-script label sample at the
-  user-data sites (legend swatch, overflow checkbox) to pin this rule.
+- **Face selection is deterministic and content-blind**, resolved per label
+  class (normative text in `RULING.md`):
+  - *Localized chrome labels* — script is known from the UI locale, so the
+    metric face is the face the font stack resolves **for the locale's
+    script**: under a CJK locale whose primary family lacks Han, that is the
+    CJK fallback face actually rendering the text, not the invisible Latin
+    primary. A locale-level decision, made once per font configuration —
+    string content still never participates. (The shipped word-band converter
+    already selects its band by UI script; the ruling's CJK figures were
+    measured with the CJK face defining the band.)
+  - *User-data labels* (project names) — script unknown, so the metric face is
+    the **primary face** of the label's font stack regardless of content; a
+    mixed-script or fallback-forcing name gets the same band as every other
+    label at that site.
+  The gate must include a fallback-forcing, mixed-script label sample at the
+  user-data sites (legend swatch, overflow checkbox), AND must run the
+  localized-label sites under a real default-plus-fallback configuration (a
+  CJK locale whose primary family lacks Han) rather than only CJK-primary
+  test pins.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.

@@ -22,14 +22,29 @@ ink. The band is therefore invariant under text change, under locale change,
 and under user data. A label seating multiple marks centres every mark on
 that same band.
 
-Face selection is DETERMINISTIC and CONTENT-BLIND: the metric is read from
-the primary face the label's font stack resolves to, never from a face in
-the per-glyph fallback runs the text shaper adds for glyphs the primary
-face lacks. String content never participates in face selection — a
-mixed-script or fallback-forcing user-data label gets the same band as any
-other label at that site. (Content-dependent face selection would
-re-introduce the per-string dependence this clause removes.) The same rule
-selects the face for R2's capHeight.
+Face selection is DETERMINISTIC and CONTENT-BLIND, resolved per label
+class:
+
+  Localized chrome labels (script known from the UI locale): the metric
+  face is the face the label's font stack resolves FOR THE LOCALE'S
+  SCRIPT — under a CJK locale whose primary family carries no Han, that
+  is the CJK fallback face actually rendering the text, not the
+  invisible Latin primary. This is a locale-level decision made once per
+  font configuration; string content still never participates. (This
+  ruling's CJK accuracy figures were measured with the CJK face defining
+  the band; reading a Latin primary there would centre marks on a band
+  no visible glyph paints.)
+
+  User-data labels (script unknown — project names): the metric face is
+  the primary face of the label's font stack, regardless of content. A
+  mixed-script or fallback-forcing name gets the same band as any other
+  label at that site. (Content-dependent selection would re-introduce
+  the per-string dependence this clause removes.)
+
+The same rules select the face for R2's capHeight. The gate must
+exercise the real default-plus-fallback configuration — a CJK locale
+whose primary family lacks Han — so the localized rule is pinned against
+the shipped font stack, not only against CJK-primary test pins.
 
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.
