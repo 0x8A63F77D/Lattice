@@ -60,9 +60,13 @@
     <AllowedReferenceRelatedFileExtensions>.none</AllowedReferenceRelatedFileExtensions>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Avalonia" Version="12.1.0" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <!-- DataGrid trails the rest of the Avalonia family on purpose: it ships out of
+         band and 12.1.1 was never published for it (12.1.0 is the newest). Its own
+         dependency is Avalonia >= 12.1.0, so the 12.1.1 core resolves cleanly. Bump
+         this to match once a 12.1.1+ DataGrid exists; do not "align" it downward. -->
     <PackageReference Include="Avalonia.Controls.DataGrid" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Desktop" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="FluentAvaloniaUI" Version="3.0.1" />
     <!-- Charting for the M4 Statistics page (issue #148 ruling). Pinned to the exact

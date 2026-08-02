@@ -25,11 +25,11 @@
          notes / TolerantPngComparer). The rest of the #81 stack is unchanged. -->
     <PackageReference Include="Verify.XunitV3" Version="31.28.0" />
     <!-- Real renderer: headless Skia produces pixels; base Avalonia.Headless does not. -->
-    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.0" />
-    <PackageReference Include="Avalonia.Skia" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Skia" Version="12.1.1" />
     <!-- Embedded font for the render path so captures do not depend on the macOS
          system font stack (mirrors Avalonia's own render tests). App ships unchanged. -->
-    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.0" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
     <!-- Tolerant image comparison engine (the engine behind Verify.ImageSharp.Compare).
          We register our own dual-tolerance comparer on it — see TolerantPngComparer. -->
     <PackageReference Include="Codeuctivity.ImageSharpCompare" Version="4.1.390" />
