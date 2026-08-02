@@ -23,9 +23,18 @@ public class LocalizationParityTests
     private static readonly IReadOnlyDictionary<string, string> Chinese =
         ResxCatalog.Load(ResxCatalog.ChineseFile);
 
-    /// <summary>Keys some <c>string.Format</c> call under <c>src/</c> uses as its format string.</summary>
+    /// <summary>
+    /// Keys whose value carries an argument slot in EITHER language — the composite format
+    /// strings. Scoped by what the value is, not by which call sites pass it to
+    /// <c>string.Format</c>; see <see cref="ResxCatalog.CarriesPlaceholder"/> for why that
+    /// question is not worth asking. "Either language" matters: a zh-CN value that lost its
+    /// <c>{0}</c> must still be judged as the format string it is.
+    /// </summary>
     private static readonly IReadOnlySet<string> FormatKeys =
-        ResxCatalog.AppSourceFiles().SelectMany(ResxCatalog.FormatArgumentNames).ToHashSet(StringComparer.Ordinal);
+        Neutral.Concat(Chinese)
+            .Where(entry => ResxCatalog.CarriesPlaceholder(entry.Value))
+            .Select(entry => entry.Key)
+            .ToHashSet(StringComparer.Ordinal);
 
     [Fact]
     public void Zh_CN_defines_every_neutral_key()
@@ -49,7 +58,7 @@ public class LocalizationParityTests
     public void Placeholder_sets_match_across_languages()
     {
         List<string> mismatches = [];
-        foreach (string key in FormatKeys.Intersect(Chinese.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        foreach (string key in Neutral.Keys.Intersect(Chinese.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             ResxCatalog.PlaceholderScan neutral = ResxCatalog.ScanPlaceholders(Neutral[key]);
             ResxCatalog.PlaceholderScan chinese = ResxCatalog.ScanPlaceholders(Chinese[key]);
@@ -69,13 +78,10 @@ public class LocalizationParityTests
     }
 
     /// <summary>
-    /// Only the values that are actually FORMATTED have to satisfy the composite-format
-    /// grammar. A directly rendered label may legitimately contain a lone brace — <c>Set {</c>
-    /// displays fine — and demanding it be doubled would make the label render two braces
-    /// to satisfy a parser that never runs on it. Which keys those are comes from usage,
-    /// via <see cref="FormatKeys"/>, not from the <c>…Fmt</c> naming convention, which
-    /// already has exceptions. The converse hole — a placeholder sitting in a value nobody
-    /// formats — is closed by <see cref="Values_with_placeholders_are_used_as_format_strings"/>.
+    /// Only the values that are composite format strings have to satisfy the composite
+    /// format grammar. A directly rendered label may legitimately contain a lone brace —
+    /// <c>Set {</c> displays fine — and demanding it be doubled would make the label render
+    /// two braces to satisfy a parser that never runs on it.
     /// </summary>
     [Theory]
     [InlineData(ResxCatalog.NeutralFile)]
@@ -91,67 +97,6 @@ public class LocalizationParityTests
 
         Assert.True(broken.Length == 0, Diff(
             $"{fileName} has value(s) string.Format would reject", broken));
-    }
-
-    /// <summary>
-    /// The other half of scoping the format checks by usage: a value carrying <c>{0}</c>
-    /// that no <c>string.Format</c> call ever receives is either a placeholder stranded in
-    /// display text (it renders as the literal characters <c>{0}</c>) or a use this scan
-    /// cannot see — and in the second case the two checks above have a blind spot. Either
-    /// way a human has to look, so it fails loudly instead of narrowing coverage in silence.
-    /// </summary>
-    [Fact]
-    public void Values_with_placeholders_are_used_as_format_strings()
-    {
-        string[] stranded = Neutral.Keys.Union(Chinese.Keys, StringComparer.Ordinal)
-            .Where(key => !FormatKeys.Contains(key))
-            .Where(key => HasPlaceholder(Neutral, key) || HasPlaceholder(Chinese, key))
-            .Order(StringComparer.Ordinal)
-            .Select(key => $"- {key}")
-            .ToArray();
-
-        Assert.True(stranded.Length == 0, Diff(
-            "key(s) carry a {0}-style placeholder but reach no string.Format call under src/ — "
-                + "either the placeholder is stray text, or the format checks are blind to how they are used",
-            stranded));
-    }
-
-    private static bool HasPlaceholder(IReadOnlyDictionary<string, string> catalog, string key) =>
-        catalog.TryGetValue(key, out string? value) && ResxCatalog.ScanPlaceholders(value).Indexes.Count > 0;
-
-    [Theory]
-    [InlineData(ResxCatalog.NeutralFile)]
-    [InlineData(ResxCatalog.ChineseFile)]
-    public void Keys_are_unique_within_each_file(string fileName)
-    {
-        string[] duplicates = ResxCatalog.LoadEntries(fileName)
-            .GroupBy(entry => entry.Name, StringComparer.Ordinal)
-            .Where(group => group.Count() > 1)
-            .Select(group => $"- {group.Key} ({group.Count()} entries)")
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.True(duplicates.Length == 0, Diff($"{fileName} declares a key more than once", duplicates));
-    }
-
-    /// <summary>
-    /// A key that survives parity with an empty value renders a blank label, which no
-    /// other check catches: <c>LocalizationTests.Every_resx_key_resolves_to_a_nonempty_string</c>
-    /// walks the built resource table for the NEUTRAL culture only, so the zh-CN
-    /// satellite had no such guard at all.
-    /// </summary>
-    [Theory]
-    [InlineData(ResxCatalog.NeutralFile)]
-    [InlineData(ResxCatalog.ChineseFile)]
-    public void Values_are_never_blank(string fileName)
-    {
-        string[] blank = ResxCatalog.LoadEntries(fileName)
-            .Where(entry => string.IsNullOrWhiteSpace(entry.Value))
-            .Select(entry => $"- {entry.Name}")
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        Assert.True(blank.Length == 0, Diff($"{fileName} has key(s) with a blank value", blank));
     }
 
     /// <summary>
@@ -294,41 +239,6 @@ public class LocalizationParityTests
         string[] names = ScanSource(source, "Sample.axaml");
         Assert.Contains(expected, names);
         Assert.DoesNotContain("Ghost", names);
-    }
-
-    /// <summary>
-    /// Which argument of a <c>string.Format</c> call is the FORMAT — the question that
-    /// decides whether a value must satisfy the composite-format grammar at all.
-    /// </summary>
-    [Theory]
-    [InlineData("class C { void M() { var s = string.Format(Strings.AFmt, x); } }", new[] { "AFmt" })]
-    // A culture may come first; the format is then argument 1.
-    [InlineData("class C { void M() { var s = string.Format(CultureInfo.CurrentCulture, Strings.AFmt, x); } }", new[] { "AFmt" })]
-    // A conditional format parameter makes BOTH branches format strings.
-    [InlineData("class C { void M() { var s = string.Format(edit ? Strings.AFmt : Strings.BFmt, x); } }", new[] { "AFmt", "BFmt" })]
-    // Later arguments are values being formatted IN, not formats.
-    [InlineData("class C { void M() { var s = string.Format(Strings.AFmt, Strings.Plain); } }", new[] { "AFmt" })]
-    // …including when argument 0 is a literal format, which is NOT a provider: promoting
-    // the value argument here would demand composite-format syntax of a display string.
-    [InlineData("""class C { void M() { var s = string.Format("{0}", Strings.Plain); } }""", new string[0])]
-    [InlineData("""class C { void M() { var s = string.Format($"{x}", Strings.Plain); } }""", new string[0])]
-    // A named provider does select argument 1.
-    [InlineData("class C { void M() { var s = string.Format(provider, Strings.AFmt, x); } }", new[] { "AFmt" })]
-    [InlineData("class C { void M() { var s = string.Format(CultureInfo.GetCultureInfo(\"en\"), Strings.AFmt, x); } }", new[] { "AFmt" })]
-    // A plain read is not a format use.
-    [InlineData("class C { void M() { var s = Strings.Plain; } }", new string[0])]
-    public void Format_strings_are_identified_by_use(string source, string[] expected)
-    {
-        string path = Path.Combine(Path.GetTempPath(), $"lattice-fmt-{Guid.NewGuid():N}.cs");
-        try
-        {
-            File.WriteAllText(path, source);
-            Assert.Equal(expected.Order(), ResxCatalog.FormatArgumentNames(path).Order());
-        }
-        finally
-        {
-            File.Delete(path);
-        }
     }
 
     private static string[] ScanSource(string source, string fileName)

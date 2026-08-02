@@ -221,96 +221,26 @@ internal static class ResxCatalog
             .Select(access => access.Name.Identifier.ValueText);
 
     /// <summary>
-    /// Resources this file passes to <see cref="string.Format(string, object?[])"/> as the
-    /// format string — the keys, and only those, that must parse as composite formats.
+    /// Whether a value carries an argument slot, i.e. whether it is a composite format
+    /// string that <c>string.Format</c> will parse.
     /// <para>
-    /// A resource is a format string because of how it is USED, not how it is named (the
-    /// codebase's own <c>…Fmt</c> convention already has two exceptions), and the
-    /// distinction is not cosmetic: a directly rendered label may legitimately read
-    /// <c>Set {</c>, which is fine on screen and would be mangled, not fixed, by doubling
-    /// the brace to satisfy a parser that had no business reading it.
-    /// </para>
-    /// </summary>
-    internal static IEnumerable<string> FormatArgumentNames(string path)
-    {
-        if (!path.EndsWith(".cs", StringComparison.Ordinal))
-        {
-            return [];
-        }
-
-        return CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
-            .DescendantNodes()
-            .OfType<InvocationExpressionSyntax>()
-            .Where(IsStringFormat)
-            .SelectMany(FormatArguments);
-    }
-
-    private static bool IsStringFormat(InvocationExpressionSyntax invocation) =>
-        invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Format" } access
-        && access.Expression switch
-        {
-            PredefinedTypeSyntax predefined => predefined.Keyword.IsKind(SyntaxKind.StringKeyword),
-            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "String",
-            _ => false,
-        };
-
-    /// <summary>
-    /// The resources named by the format parameter: argument 0, or argument 1 for the
-    /// provider-first overload. Never a later argument — those are the values being
-    /// formatted INTO the string, not the format itself.
-    /// <para>
-    /// Plural because the parameter is an expression, not necessarily a bare reference:
-    /// <c>string.Format(edit ? Strings.EditFailedFmt : Strings.AddFailedFmt, err)</c> makes
-    /// BOTH resources format strings. Reading only a top-level member access missed exactly
-    /// that pair, and the placeholders-must-be-formatted check is what caught it.
+    /// This replaces asking the CALL SITES which resources are used as formats. That
+    /// question needs C# overload resolution, and re-deriving it syntactically produced
+    /// the same finding three times over — argument 0 vs 1, the provider-first overload,
+    /// then named arguments — each time as a risk of failing CI over a display string
+    /// that was never formatted. The value itself answers it without any of that: a
+    /// format string carries <c>{0}</c>, and a label that merely displays <c>Set {</c>
+    /// does not, which is exactly the distinction the checks need.
     /// </para>
     /// <para>
-    /// Which overload is in play is decided by testing argument 0, NOT by falling through
-    /// when argument 0 happens to name no resource: with the fall-through,
-    /// <c>string.Format("{0}", Strings.Plain)</c> promoted a plain display string to a
-    /// format string, which would then fail the grammar check for a brace it is entitled
-    /// to contain. An unrecognised provider shape errs the other way — a format string
-    /// goes unchecked — and that direction is caught loudly by
-    /// <c>LocalizationParityTests.Values_with_placeholders_are_used_as_format_strings</c>.
+    /// The residual gap is a value used as a format that carries no slot at all (say
+    /// <c>Set {</c> passed to <c>string.Format</c>): unchecked here, and it throws at
+    /// runtime. A format string with nothing to format is a contradiction in terms, and
+    /// paying for it in false CI failures on ordinary labels is the trade this deliberately
+    /// refuses.
     /// </para>
     /// </summary>
-    private static IEnumerable<string> FormatArguments(InvocationExpressionSyntax invocation)
-    {
-        SeparatedSyntaxList<ArgumentSyntax> arguments = invocation.ArgumentList.Arguments;
-        ExpressionSyntax? first = arguments.ElementAtOrDefault(0)?.Expression;
-        return IsFormatProvider(first)
-            ? ResourceNames(arguments.ElementAtOrDefault(1)?.Expression)
-            : ResourceNames(first);
-    }
-
-    /// <summary>
-    /// Syntactic recognition of the <see cref="IFormatProvider"/> a provider-first
-    /// <c>string.Format</c> takes — no semantic model, so it goes by the names the call
-    /// site spells (<c>CultureInfo.InvariantCulture</c>, <c>…Culture</c>, <c>…Provider</c>).
-    /// </summary>
-    private static bool IsFormatProvider(ExpressionSyntax? expression) => expression switch
-    {
-        MemberAccessExpressionSyntax access =>
-            IsFormatProvider(access.Expression) || IsProviderName(access.Name.Identifier.ValueText),
-        IdentifierNameSyntax identifier => IsProviderName(identifier.Identifier.ValueText),
-        InvocationExpressionSyntax invocation => IsFormatProvider(invocation.Expression),
-        _ => false,
-    };
-
-    // Case-insensitive on purpose: the local `provider` and the property `CurrentCulture`
-    // are the same shape at a call site.
-    private static bool IsProviderName(string name) =>
-        name is "CultureInfo"
-            || name.EndsWith("Culture", StringComparison.OrdinalIgnoreCase)
-            || name.EndsWith("Provider", StringComparison.OrdinalIgnoreCase);
-
-    private static IEnumerable<string> ResourceNames(ExpressionSyntax? expression) =>
-        expression is null
-            ? []
-            : expression.DescendantNodesAndSelf()
-                .OfType<MemberAccessExpressionSyntax>()
-                .Where(access => NamesStringsType(access.Expression))
-                .Select(access => access.Name.Identifier.ValueText);
+    internal static bool CarriesPlaceholder(string value) => ExtractIndexes(value).Count > 0;
 
     /// <summary>True for <c>Strings</c> and for any qualified form ending in it.</summary>
     private static bool NamesStringsType(ExpressionSyntax expression) => expression switch
