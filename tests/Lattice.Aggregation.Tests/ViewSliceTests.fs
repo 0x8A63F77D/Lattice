@@ -3,6 +3,7 @@ module Lattice.Aggregation.Tests.ViewSliceTests
 open System
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.App.Aggregation
 
@@ -69,10 +70,10 @@ let factsGen =
         let! n = Gen.choose (0, 6)
         let! hosts =
             Gen.listOfLength n (gen {
-                let! inScope = Arb.generate<bool>
-                let! rowSource = Arb.generate<bool>
-                let! unreachable = Arb.generate<bool>
-                let! stale = Arb.generate<bool>
+                let! inScope = ArbMap.defaults |> ArbMap.generate<bool>
+                let! rowSource = ArbMap.defaults |> ArbMap.generate<bool>
+                let! unreachable = ArbMap.defaults |> ArbMap.generate<bool>
+                let! stale = ArbMap.defaults |> ArbMap.generate<bool>
                 let! seconds = Gen.choose (0, 1000)
                 let! rowCount = Gen.choose (0, 3)
                 // Modeled invariant: row-source hosts always carry a timestamp

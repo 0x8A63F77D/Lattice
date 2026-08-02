@@ -4,6 +4,7 @@ open System
 open System.Globalization
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.App.Aggregation
 

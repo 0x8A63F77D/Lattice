@@ -2,6 +2,7 @@ module Lattice.Core.AttachMachineTests
 
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.Core
 open Lattice.Core.AttachMachine

@@ -71,6 +71,7 @@ let ``force-grouped groups even when it fits, and keeps the toggle`` () =
     Assert.True layout.ShowToggle
 
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 
 let private grouped hosts healthyExp =
@@ -144,7 +145,7 @@ let private railInputGen =
         let hosts = [| for t in tiers -> { Id = Guid.NewGuid(); Tier = t } |]
         let! height = Gen.choose (0, 600) |> Gen.map float
         let! ov = Gen.elements [ Auto; ForceFlat; ForceGrouped ]
-        let! he = Arb.generate<bool>
+        let! he = ArbMap.defaults |> ArbMap.generate<bool>
         return { Hosts = hosts; AvailableHeight = height; RowHeight = 40.0
                  Override = ov; HealthyExpanded = he }
     }
