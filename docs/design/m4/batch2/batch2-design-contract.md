@@ -12,7 +12,8 @@
 
 Data rulings fixed by #202: SQLite persists **task observation events only** (retention
 user-configurable); credit history stays daemon-side (`get_statistics` on demand); ≤1 h
-`get_old_results` backfill at connect. Never render fabricated data: unobserved time is a
+`get_old_results` backfill at connect (**completion observations** — point events, not
+intervals; see §5 and the decision log). Never render fabricated data: unobserved time is a
 hole, shown as such; nothing is ever interpolated, bridged, or connected across a hole.
 
 ---
@@ -101,16 +102,24 @@ that outage renders as an ordinary hole (reason via label/hover).
   border `#D1D1D1` / `#525252`; the border is a chrome affordance, not chart grammar).
 - Status strip: `N hosts · N intervals in view · N days retained` left,
   `Polling every 5s` right.
-- Page reads the shell host scope; `All hosts` renders every connected host as a lane.
+- Page reads the shell host scope; `All hosts` renders every **configured host in scope**
+  as a lane. An unreachable host keeps its lane — live-unreachable InfoBar + hole per §2 —
+  it is never dropped from the timeline while its outage is in progress.
 
 ### 5. States (issue #88 idiom)
 
 - **Cold start / first run:** axis starts at store's first observation; left of it is bare
   canvas with caption `no history before {time}`; dashed accent marker at connect time;
-  status strip: `history starts 14:32 (1 h backfilled at connect)`. Backfilled intervals get
-  no special visual; tooltip marks `backfilled`.
-- **No hosts:** centered — `ServerMultiple` icon 28px `#C7C7C7`, `No hosts connected`,
-  caption `Add a host to start observing task activity.`
+  status strip: `history starts 14:32`. The ≤1 h `get_old_results` backfill at connect
+  yields **completion observations** (task finished at T with final elapsed E — point
+  events, not intervals); they are written to the observation store, but the concurrency
+  density band does **not** render them: the pre-connect window stays unobserved (a hole
+  where bounded by observations, bare canvas otherwise), and backfill never changes hole
+  geometry. No visual element on this page consumes backfill data.
+- **No hosts:** shown only when **zero hosts are configured** (an all-unreachable fleet
+  renders its lanes with InfoBars and holes, never this state) — centered — `ServerMultiple`
+  icon 28px `#C7C7C7`, `No hosts connected`, caption `Add a host to start observing task
+  activity.`
 - **Empty:** `No task activity yet` + `No tasks running since {time}, and none completed in
   the last hour.`
 - **Loading:** batch-1 ProgressRing idiom, `Loading timeline…`
@@ -210,11 +219,22 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 18 snapsho
 - **Terminology:** exactly two reason strings, both pre-existing plain language
   (`Lattice not running`, `Host unreachable`); "not observed" and all invented glyphs (⊘)
   removed.
+- **Backfill = completion observations, not intervals (round-1 review narrowing).**
+  `get_old_results` carries only terminal records (completion time + final elapsed); no
+  sequence of running/suspended/preempted states exists to reconstruct, so expanding them
+  into running intervals would fabricate execution geometry (a task preempted several times
+  would render as continuously running) — violating this contract's own no-fabricated-data
+  rule. Ruling: backfill writes completion observations to the store; the density band
+  renders nothing from them and hole geometry is unchanged by backfill. This also clarifies
+  the #202 ruling's "backfills observations at connect": observations = completion events,
+  not intervals. (Raised by Codex review round 1 on the landing PR.)
 
 ## Files
 
 - `batch2-design-contract.md` — this contract (the handoff `README.md`, file renamed on
-  landing; content unchanged apart from this Files section and the evidence-base pointer).
+  landing; landing edits: this Files section, the evidence-base pointer, and the Controller-
+  ruled round-1 review narrowings — backfill semantics and configured-host lanes — recorded
+  in the decision log).
 - `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable).
 - `hole-rendering-research.md` — evidence base for the hole-rendering decisions.
 - `img/timeline-light.png`, `img/timeline-dark.png` — Timeline full page, both themes.
