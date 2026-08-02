@@ -18,12 +18,13 @@ are its supporting evidence. If the two ever disagree, `RULING.md` wins.
 
 ## About the design files
 
-`Lattice 206 Alignment Ruling Draft.dc.html` is a **design reference created in
-HTML** — a measurement and evidence page used to reach the ruling, not
-production code and not a component to port. It renders live specimens under
-each candidate rule and measures them in the browser. Open it to see why the
-ruling is what it is, or to re-run the comparison on another platform's fonts.
-Do not copy code from it.
+`evidence/alignment-evidence.html` is a **design reference created in HTML** — a
+measurement and evidence page used to reach the ruling, not production code and
+not a component to port. It renders live specimens under each candidate rule and
+measures them in the browser. Open it to see why the ruling is what it is, or to
+re-run the comparison on another platform's fonts (this is the tool for the two
+open items below: the unmeasured Windows/Linux Latin faces and the PingFang SC
+real-hardware confirmation). Do not copy code from it.
 
 The implementation target is the existing Lattice codebase and its existing
 layout primitives. Nothing here should introduce a new styling mechanism.
@@ -90,8 +91,8 @@ swatch, ruled by R2.
 
 ## Registered sites
 
-The gate must cover all fifteen. Names are as they appear in the alignment lab's
-`measurements.tsv` (`View[Mark+Label]`).
+The gate must cover all seventeen. Names follow the alignment lab's
+`measurements.tsv` convention (`View[Mark+Label]`).
 
 | Group | Site | Rule |
 |---|---|---|
@@ -110,9 +111,34 @@ The gate must cover all fifteen. Names are as they appear in the alignment lab's
 | cells | `TasksView[07-11 00:00]` | R3 (digit band, unchanged) |
 | legend / swatch | `StatisticsView[Panel+Einstein@Home]` | R2 |
 | legend / swatch | `StatisticsView[Panel+LHC@home]` | R2 |
+| overflow | `StatisticsView[OverflowCheckBox+ProjectName]` | R1 |
+| status bar | `StatusBar[IconWarningFilled+WarningText]` | R1 |
 
 The two `TasksView[...+Computing]` sites are the two-mark case: chevron and play
 share one label and therefore one band.
+
+The last two rows were added after the alignment lab ran (Codex review on the
+landing PR flagged them as shipped sites the lab missed), so they have **no rows
+in `measurements.tsv`** — the registry is normative for gate coverage;
+`measurements.tsv` is historical evidence for the lab-measured sites only.
+
+- `StatisticsView[OverflowCheckBox+ProjectName]` is the "+N more" flyout row
+  (`Views/StatisticsView.axaml`): a 20 px checkbox beside a user-data project
+  name — the checkbox class R1 itself names. The label is user data; R1 applies
+  unchanged (capHeight of the label's resolved face — no per-site exception,
+  per R4).
+- `StatusBar[IconWarningFilled+WarningText]` is the shared status-bar template
+  (`Theming/ControlStyles.axaml`), one site appearing in every view. It already
+  wears the shipped band (it was #185's fifth site), so a gate that skipped it
+  would let it silently diverge from the re-ruled band.
+
+**Scope boundary.** The ruling's "every chrome mark that sits beside a text
+label" governs marks whose position Lattice's own XAML determines — the class
+above. Marks inside third-party control templates (NavigationView item icons,
+FluentAvalonia-internal chrome) follow the framework's own alignment and are out
+of scope; so are icons not sharing a line box with a label (icon-only buttons,
+the first-run hero icon stacked above its caption). Adding a NEW in-class site
+without registering it here is the regression this table exists to prevent.
 
 ## The gate
 
@@ -210,24 +236,34 @@ the swatch is a plain filled rectangle.
 
 - `RULING.md` — the contract. Normative.
 - `README.md` — this file.
-- `Lattice 206 Alignment Ruling Draft.dc.html` — evidence page (design
-  reference, not production code). Open in a browser; it measures the live
-  fonts on whatever machine opens it.
 - `measurements.tsv` — the alignment lab's raw data: 2 fonts × 4 candidates ×
-  15 sites, arranged and rendered-pixel values.
-- `shipped-band-verdict.tsv` — per-site verdict for the shipped band.
-- `support.js`, `_ds/` — runtime and Fluent token/icon CSS the evidence page
-  loads. Present only so it opens offline; not part of the deliverable. The icon
-  CSS pulls the Fluent System Icons webfont from a CDN, so the evidence page
-  needs network access to render glyphs.
+  the 15 lab-measured sites, arranged and rendered-pixel values. The two
+  post-lab registry sites (overflow checkbox, status bar) have no rows here.
+- `shipped-band-verdict.tsv` — shipped-band verdict for the 11 lab-measured
+  mark-bearing sites (see the verification notes below for what it omits).
+- `evidence/alignment-evidence.html` — evidence page (design reference, not
+  production code). Open in a browser; it measures the live fonts on whatever
+  machine opens it.
+- `evidence/support.js`, `evidence/_ds/` — runtime and token/icon CSS the
+  evidence page loads. Present only so it opens from the repo; not part of the
+  deliverable. The icon CSS pulls the Fluent System Icons webfont from a CDN,
+  so the evidence page needs network access to render glyphs.
 
 ## How to verify an implementation against this bundle
 
 1. Implement R1/R2 from the formulas above.
-2. Add the gate over the fifteen registered sites × registered fonts.
+2. Add the gate over the seventeen registered sites × registered fonts.
 3. Cross-check a handful of sites against `measurements.tsv`: filter
    `candidate == "a"` and compare your arranged `vsCap` against the column of
    the same name. Ruled geometry means `vsCap == 0` by construction; `vsWordInk`
-   is the optical error and is expected to be non-zero.
+   is the optical error and is expected to be non-zero. The two post-lab
+   registry sites have no rows to cross-check against — the gate itself is
+   their evidence.
 4. `shipped-band-verdict.tsv` gives the per-site top/bottom verdict for the
-   shipped band and is the quickest regression reference.
+   shipped band — the quickest regression reference for the 11 sites it covers.
+   It omits the four grid-cell sites (`TasksView[Running]`,
+   `ProjectsView[Active]`, `TransfersView[Active]`, and the R3 digit cell
+   `TasksView[07-11 00:00]`): the digit cell is unchanged by this ruling so no
+   verdict applies, and the three status cells were lab-measured (they are in
+   `measurements.tsv`) but got no verdict rows. Re-run
+   `evidence/alignment-evidence.html` if a verdict for those cells is needed.

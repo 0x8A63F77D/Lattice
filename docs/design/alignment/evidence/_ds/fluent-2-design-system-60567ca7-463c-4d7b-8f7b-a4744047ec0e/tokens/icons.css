@@ -1,0 +1,9 @@
+/* Fluent System Icons (MIT, microsoft/fluentui-system-icons) served from jsDelivr.
+   Provides classes like .icon-ic_fluent_add_24_regular / _filled.
+   Use via the Icon component: <Icon name="add" size={24} filled /> */
+@import url("https://cdn.jsdelivr.net/gh/microsoft/fluentui-system-icons@main/fonts/FluentSystemIcons-Regular.css");
+@import url("https://cdn.jsdelivr.net/gh/microsoft/fluentui-system-icons@main/fonts/FluentSystemIcons-Filled.css");
+
+/* Both CDN files claim every icon-* glyph with !important; re-map by suffix. */
+i[class*="_regular"]:before { font-family: "FluentSystemIcons-Regular" !important; }
+i[class*="_filled"]:before { font-family: "FluentSystemIcons-Filled" !important; }
