@@ -43,7 +43,7 @@ Wire protocol:
 - XML request/reply. Request wrapped in `<boinc_gui_rpc_request>`, reply in `<boinc_gui_rpc_reply>`. Each message terminated by byte `\x03`. Framing = accumulate until 0x03.
 - Strictly request-reply on a persistent connection. No pipelining. No server push — all UI state comes from polling.
 - **Parser landmine:** self-closing tags must have NO space before the slash. Send `<authorized/>`, never `<authorized />`. The C++ parser on the other end is not a real XML parser.
-- BOINC's XML output is not guaranteed strictly compliant (historically unescaped chars in message bodies). Parse leniently; never use a strict validating parser.
+- BOINC's XML output is not guaranteed strictly compliant (historically unescaped chars in message bodies). Parse leniently; never use a strict validating parser. But leniency is segmented: the daemon wraps every event-log message body in CDATA (`client/client_msgs.cpp`, `MESSAGE_DESCS::write`), where `&` and `<` are literal — markup repairs applied there corrupt the payload instead of rescuing it (#211).
 
 Auth:
 - Challenge-response: send `<auth1/>` → receive nonce → send `<auth2><nonce_hash>MD5(nonce + password)</nonce_hash></auth2>` → `<authorized/>` or `<unauthorized/>`.
@@ -52,7 +52,7 @@ Auth:
 - **Never parse error message text.** Wording changes between versions. Branch only on structural tags (`<error>`, `<unauthorized/>`, `<success/>`).
 
 Versioning:
-- The protocol has no versioned API. Call `exchange_versions` after connect, store the daemon version, gate newer RPCs on it. Target BOINC 8.x; degrade gracefully on older. Shipped today: the version is fetched on connect and surfaced on `ConnectionStatus`; no RPC is version-gated yet (#207 covers the degradation paths).
+- The protocol has no versioned API. Call `exchange_versions` after connect, store the daemon version, gate newer RPCs on it. Target BOINC 8.x; degrade gracefully on older. Gate *ahead* of the call: a daemon that does not know an op answers with an `<error>` tag structurally identical to any other failure (`gui_rpc_server_ops.cpp` falls through to "unrecognized op"), so the failure itself carries nothing to branch on (pinned by #207/#211). Shipped today: the version is fetched on connect and surfaced on `ConnectionStatus`, but no RPC is version-gated.
 
 State model (this drives Core's design):
 - `get_state` returns the full CC_STATE (projects, apps, app_versions, workunits, results). Can be several MB on busy hosts. Call once per connection (and on reconnect), cache it. Core also refetches it mid-connection when a result names a workunit missing from the cached snapshot.
