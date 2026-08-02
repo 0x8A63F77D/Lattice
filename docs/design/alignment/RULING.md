@@ -22,6 +22,15 @@ ink. The band is therefore invariant under text change, under locale change,
 and under user data. A label seating multiple marks centres every mark on
 that same band.
 
+Face selection is DETERMINISTIC and CONTENT-BLIND: the metric is read from
+the primary face the label's font stack resolves to, never from a face in
+the per-glyph fallback runs the text shaper adds for glyphs the primary
+face lacks. String content never participates in face selection — a
+mixed-script or fallback-forcing user-data label gets the same band as any
+other label at that site. (Content-dependent face selection would
+re-introduce the per-string dependence this clause removes.) The same rule
+selects the face for R2's capHeight.
+
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.
 
