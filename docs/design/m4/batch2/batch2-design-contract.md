@@ -52,10 +52,20 @@ Pure fill only: **no border/hairline, no hatch or dash pattern, no red frame, no
 grey.** Banned tokens: `Stencil*` (semantics = "content is loading"), all alpha `*Disabled`
 fills (invisible over a chart canvas). The neutral is reserved — never assigned to a project.
 
-**Label ladder** — treatment = f(rendered hole width in **device px**), a pure function
-(no wall clock, no DPI-dependent branches beyond the device-px input):
+**Minimum rendered width + label ladder** — treatment = f(hole width in **device px**), a
+pure function (no wall clock, no DPI-dependent branches beyond the device-px input):
 
-- `< 3` → exaggerate to 3 (detection floor; an invisible hole silently fabricates continuity)
+- **Minimum rendered width = 48 device px (the label threshold).** A hole whose true width
+  is `< 48` is exaggerated to 48, anchored on the centre of its true interval — so **every
+  rendered hole carries a duration label** and visibility rides the label, with the fill,
+  no-hairline and no-pattern rulings untouched. Accepted, explicit cost: **scale
+  distortion** — a short hole renders wider than its true share and may cover pixels of
+  adjacent observed data; the tooltip and accessible name always carry the true values.
+- **Merge rule.** If two holes' exaggerated render intervals overlap or touch, they merge
+  into one rendered hole. Its label shows the **sum of the member holes' true durations**;
+  at `≥ 170` the reason is shown only when all members share one (mixed reasons → duration
+  only). Hover lists each member hole's true range and reason (same style as the Daily
+  output gap-span tooltip).
 - `≥ 48` → duration label, one decimal: `8.2 h`
 - `≥ 170` → reason + duration: `Lattice not running · 8.2 h` / `Host unreachable · 2.5 h`
 
@@ -72,7 +82,8 @@ grey fill = no data.
 
 **Accessibility.** Every hole region carries an accessible name:
 `Lattice not running · 23:30 → 07:41 (8.2 h)`. WCAG 1.4.11 conformance rides the text
-channel (labelled-graphic exemption) + tooltip/accessible name — see decision log.
+channel: the minimum-width rule means every hole is a **labelled graphic** (exemption
+applies to all holes, none unlabelled) + tooltip/accessible name — see decision log.
 
 **Live unreachable host:** batch-1 §5 InfoBar idiom (severity=Warning, not dismissable,
 `Retry` wired to reconnect): `rack-02 unreachable since 15:02.` The historical record of
@@ -190,10 +201,12 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
 ## Snapshot matrix (machine gate)
 
 Timeline: 2 themes × {24 h baseline (overnight hole + historical unreachable + idle span),
-7 d dense (10 hosts, 41px holes — no-label rung), cold start, no-hosts, empty} + a synthetic
-**ladder fixture** (one hole per width rung) rendered at 1× and 2× DPI.
+7 d dense (10 hosts, 41px true-width holes — exaggerated to the 48px minimum, labelled),
+cold start, no-hosts, empty} + a synthetic **ladder fixture** (one hole per width rung,
+including a sub-48px hole exaggerated to the minimum width, a two-hole merge, and a
+mixed-reason merge) rendered at 1× and 2× DPI.
 Daily output: 2 themes × {12-day baseline containing a 3-day gap}.
-Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 18 snapshots.
+Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapshots.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -228,19 +241,33 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 18 snapsho
   renders nothing from them and hole geometry is unchanged by backfill. This also clarifies
   the #202 ruling's "backfills observations at connect": observations = completion events,
   not intervals. (Raised by Codex review round 1 on the landing PR.)
+- **Narrow-hole visibility: minimum rendered width, not contrast (round-1 review; owner
+  ruling).** A sub-48px hole with the muted fill and no label is effectively invisible
+  (≈1.14–1.20:1 vs the canvas per the research report), collapsing the three-way
+  running/idle/no-data distinction exactly where holes are common (7 d / 30 d windows).
+  Fix: minimum rendered width = the 48px label threshold, so an unlabelled hole cannot
+  exist and WCAG 1.4.11 rides the labelled-graphic path for **every** hole. Explicit
+  accepted cost: scale distortion (a short hole renders wider than its true share and may
+  cover adjacent observed pixels); tooltip/accessible name carry the true values. Rejected
+  alternatives: restoring 3:1 boundary hairlines (violates the standing aesthetic ruling
+  above) and raising fill contrast (changes the reserved neutral). The former
+  `< 3 px → 3 px` detection-floor rung is superseded by this rule. (Raised by Codex review
+  round 1 on the landing PR.)
 
 ## Files
 
 - `batch2-design-contract.md` — this contract (the handoff `README.md`, file renamed on
-  landing; landing edits: this Files section, the evidence-base pointer, and the Controller-
-  ruled round-1 review narrowings — backfill semantics and configured-host lanes — recorded
-  in the decision log).
+  landing; landing edits: this Files section, the evidence-base pointer, and the round-1
+  review rulings — backfill semantics, configured-host lanes, minimum hole width — each
+  recorded in the decision log).
 - `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable).
 - `hole-rendering-research.md` — evidence base for the hole-rendering decisions.
 - `img/timeline-light.png`, `img/timeline-dark.png` — Timeline full page, both themes.
 - `img/timeline-dense-10hosts.png` — 10-host × 7 d density state.
 - `img/timeline-cold-start.png`, `img/timeline-empty-states.png` — states.
-- `img/degradation-ladder.png` — label-ladder reference (device-px rungs).
+- `img/degradation-ladder.png` — label-ladder reference (device-px rungs; predates the
+  round-1 minimum-width ruling — the `< 3 px` rung it shows is superseded, §2 is
+  authoritative).
 - `img/settings-retention.png` — retention Settings row.
 - `img/daily-output-light.png`, `img/daily-output-dark.png` — Statistics fifth metric with
   the 3-day gap rendering.
