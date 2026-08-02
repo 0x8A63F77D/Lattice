@@ -237,8 +237,14 @@ public class LocalizationParityTests
     [InlineData("""class C { void M() { var s = "http://x/y"; var a = Strings.Live; } }""", "Live")]
     // …and a raw string literal, which the previous hand-rolled scanner could not model.
     [InlineData("class C { void M() { var s = \"\"\"Strings.Ghost\"\"\"; var a = Strings.Live; } }", "Live")]
-    // Disabled code is trivia too.
+    // A branch NO shipped configuration compiles is trivia…
     [InlineData("class C { void M() {\n#if NEVER\nvar b = Strings.Ghost;\n#endif\nvar a = Strings.Live; } }", "Live")]
+    // …but a DEBUG-only region is real code in the Debug build, and this repo has some.
+    [InlineData("class C { void M() {\n#if DEBUG\nvar a = Strings.Live;\n#endif\n} }", "Live")]
+    // Both sides of a conditional are read, since both ship in some configuration.
+    [InlineData("class C { void M() {\n#if DEBUG\nvar a = Strings.Live;\n#else\nvar b = Strings.Live;\n#endif\n} }", "Live")]
+    // An aliased import of the resource type is still the resource type.
+    [InlineData("using Text = Lattice.App.Localization.Strings;\nclass C { void M() { var a = Text.Live; } }", "Live")]
     // nameof compiles to a literal and reads no resource, so it keeps none alive.
     [InlineData("class C { void M() { var n = nameof(Strings.Ghost); var a = Strings.Live; } }", "Live")]
     // …but a real read elsewhere in the same call still counts.
@@ -274,6 +280,8 @@ public class LocalizationParityTests
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the interior phrase without its delimiters.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
+    // A prefix may contain punctuation: NCName admits '-' and '.'.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:app-loc="using:Lattice.App.Localization" Text="{x:Static app-loc:Strings.Live}" />""", "Live")]
     // The prefix is whatever the document binds to the XAML language namespace — `x` is a
     // convention, not a rule, and a key bound through another prefix is NOT dead.
     [InlineData("""<T xmlns:lang="http://schemas.microsoft.com/winfx/2006/xaml" Text="{lang:Static loc:Strings.Live}" />""", "Live")]

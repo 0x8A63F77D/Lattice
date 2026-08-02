@@ -209,17 +209,87 @@ internal static class ResxCatalog
 
     /// <summary>
     /// <c>Strings.Foo</c> as a member access anywhere in the tree — including inside an
-    /// interpolation hole, which is an expression like any other. Trivia (comments, doc
-    /// comments, disabled <c>#if</c> regions) and literal tokens are not expressions and
-    /// so never appear here.
+    /// interpolation hole, which is an expression like any other. Trivia (comments and
+    /// doc comments) and literal tokens are not expressions and so never appear here.
+    /// <para>
+    /// Read once per build configuration, because a conditional region is disabled TRIVIA
+    /// in the configuration that excludes it: with no symbols defined, everything inside
+    /// this repo's <c>#if DEBUG</c> blocks (<c>SampleHost</c>, <c>App.axaml.cs</c>) would
+    /// be invisible, and a resource used only there would be declared dead. A key is live
+    /// if any shipped configuration reads it; a branch no configuration compiles — the
+    /// <c>#if NEVER</c> case — stays invisible in both, which is the point.
+    /// </para>
     /// </summary>
     private static IEnumerable<string> CSharpReferences(string text) =>
-        CSharpSyntaxTree.ParseText(text).GetRoot()
-            .DescendantNodes()
+        BuildConfigurations
+            .SelectMany(options => ReferencesIn(CSharpSyntaxTree.ParseText(text, options).GetRoot()))
+            .Distinct(StringComparer.Ordinal);
+
+    private static readonly CSharpParseOptions[] BuildConfigurations =
+    [
+        CSharpParseOptions.Default.WithPreprocessorSymbols("DEBUG"),
+        CSharpParseOptions.Default,
+    ];
+
+    private static IEnumerable<string> ReferencesIn(SyntaxNode root)
+    {
+        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root);
+        IEnumerable<string> qualified = root.DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
-            .Where(access => NamesStringsType(access.Expression))
+            .Where(access => NamesStringsType(access.Expression, resourceTypeNames))
             .Where(access => !IsNameofOperand(access))
             .Select(access => access.Name.Identifier.ValueText);
+
+        if (!ImportsResourcesStatically(root))
+        {
+            return qualified;
+        }
+
+        // `using static …Strings;` puts every resource in scope as a BARE identifier, and
+        // syntax alone cannot tell `Live` the resource from `Live` the local. Counting all
+        // identifiers over-approximates, which points the safe way: at worst a dead key
+        // survives the inventory in this one file, where the alternative is recommending
+        // the deletion of a translation that is in use.
+        return qualified.Concat(root.DescendantNodes()
+            .OfType<IdentifierNameSyntax>()
+            .Where(identifier => !IsNameofOperand(identifier))
+            .Select(identifier => identifier.Identifier.ValueText));
+    }
+
+    /// <summary>
+    /// The names under which this file can reach the generated resource type: its own, plus
+    /// any <c>using Text = …Localization.Strings;</c> alias. Aliasing is an established
+    /// idiom here (<c>ControlOpWire</c>, <c>ShellViewModel</c>), so treating the source
+    /// spelling <c>Strings</c> as the only possibility would declare an aliased read dead.
+    /// </summary>
+    private static IReadOnlySet<string> ResourceTypeNames(SyntaxNode root)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal) { "Strings" };
+        foreach (UsingDirectiveSyntax directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
+        {
+            if (directive.Alias is { Name.Identifier.ValueText: { } alias }
+                && RightmostIdentifier(directive.NamespaceOrType) == "Strings")
+            {
+                names.Add(alias);
+            }
+        }
+
+        return names;
+    }
+
+    private static bool ImportsResourcesStatically(SyntaxNode root) =>
+        root.DescendantNodes()
+            .OfType<UsingDirectiveSyntax>()
+            .Any(directive => directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)
+                && RightmostIdentifier(directive.NamespaceOrType) == "Strings");
+
+    private static string? RightmostIdentifier(SyntaxNode? node) => node switch
+    {
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText,
+        QualifiedNameSyntax qualified => RightmostIdentifier(qualified.Right),
+        AliasQualifiedNameSyntax aliasQualified => RightmostIdentifier(aliasQualified.Name),
+        _ => null,
+    };
 
     /// <summary>
     /// <c>nameof(Strings.Foo)</c> is a member access in the tree but evaluates no getter —
@@ -253,11 +323,11 @@ internal static class ResxCatalog
     /// </summary>
     internal static bool CarriesPlaceholder(string value) => ExtractIndexes(value).Count > 0;
 
-    /// <summary>True for <c>Strings</c> and for any qualified form ending in it.</summary>
-    private static bool NamesStringsType(ExpressionSyntax expression) => expression switch
+    /// <summary>True for a name the file can use for the resource type, plain or qualified.</summary>
+    private static bool NamesStringsType(ExpressionSyntax expression, IReadOnlySet<string> names) => expression switch
     {
-        IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "Strings",
-        MemberAccessExpressionSyntax qualified => qualified.Name.Identifier.ValueText == "Strings",
+        IdentifierNameSyntax identifier => names.Contains(identifier.Identifier.ValueText),
+        MemberAccessExpressionSyntax qualified => names.Contains(qualified.Name.Identifier.ValueText),
         _ => false,
     };
 
@@ -420,8 +490,10 @@ internal static class ResxCatalog
         }
     }
 
+    // The prefix is an XML NCName, which admits '-' and '.' — `xmlns:app-loc` is a legal
+    // spelling Avalonia resolves, and rejecting it would report the key it binds as dead.
     private static readonly Regex StaticMember = new(
-        @"^(?:\w+:)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
+        @"^(?:[\w.-]+:)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
 
     private static bool IsBuildOutput(string path, string sourceRoot)
     {
