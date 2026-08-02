@@ -181,13 +181,31 @@
                       <!-- Holder rows (#191): these checkboxes are under the user's pointer while
                            the flyout is open, so the list is reconciled in place — never rebuilt. -->
                       <DataTemplate x:DataType="vm:StatisticsOverflowItem">
-                        <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,3">
+                        <!-- ONE ROW, ONE BAND (#204). This row carries the #180 defect — the
+                             checkbox was centred against the name's LINE BOX, which sat it 1.241 px
+                             off in Helvetica against −0.603 px in .AppleSystemUIFont, a 1.844 px
+                             swing with nothing but the face changing — but it does NOT ask #185's
+                             question. It has THREE columns, and collapsing only the name onto its
+                             cap band would seat the checkbox while leaving the RAC figure centring
+                             its own line box: one mark aligned, two columns of text at different
+                             heights. So BOTH text columns take the same band and the checkbox
+                             centres on it, which is a baseline the row shares by construction.
+                             Deliberately NOT .digitAligned on the RAC despite its figures: a face
+                             with old-style figures (Georgia) draws digits that descend below the
+                             baseline and fall short of its capitals, so a per-repertoire band would
+                             split the very baseline this is here to hold — measured 1.138 px.
+                             ColumnSpacing carries the gap the name's Margin used to: a LOCAL margin
+                             outranks the class's setter and would silently disable the collapse.
+                             UseLayoutRounding=False is the pair contract — see
+                             Theming/InkAlignmentStyles.axaml. Gated by ChromeAlignmentTests. -->
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4" Margin="4,3"
+                              UseLayoutRounding="False">
                           <CheckBox Grid.Column="0" MinWidth="0"
                                     IsChecked="{Binding IsVisible, Mode=TwoWay}"
                                     IsEnabled="{Binding Data.CanCheck}" VerticalAlignment="Center" />
-                          <TextBlock Grid.Column="1" Text="{Binding Data.Name}" Margin="4,0" VerticalAlignment="Center"
+                          <TextBlock Grid.Column="1" Classes="wordAligned" Text="{Binding Data.Name}"
                                      TextTrimming="CharacterEllipsis" />
-                          <TextBlock Grid.Column="2" Text="{Binding Data.RacText}" Classes="numeric" VerticalAlignment="Center"
+                          <TextBlock Grid.Column="2" Classes="numeric wordAligned" Text="{Binding Data.RacText}"
                                      Foreground="{DynamicResource LatticeTextSecondaryBrush}" />
                         </Grid>
                       </DataTemplate>
