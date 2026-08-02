@@ -469,30 +469,61 @@ internal static class ResxCatalog
     private static IEnumerable<string> XamlReferences(string text)
     {
         XDocument doc = XDocument.Parse(text);
-        IReadOnlySet<string> staticExtensions = StaticExtensionNames(doc);
-        return doc.Descendants()
-            .SelectMany(element => element.Attributes().Select(attribute => attribute.Value)
-                .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)))
-            .SelectMany(value => MarkupReferences(value, staticExtensions));
+        return doc.Descendants().SelectMany(element =>
+            element.Attributes().Select(attribute => attribute.Value)
+                .Concat(element.Nodes().OfType<XText>().Select(node => node.Value))
+                .SelectMany(value => MarkupReferences(value, element)));
+    }
+
+    private const string XamlLanguageNamespace = "http://schemas.microsoft.com/winfx/2006/xaml";
+
+    /// <summary>
+    /// Resolves a <c>prefix:Name</c> the way XAML does — through the namespace declarations
+    /// in scope at <paramref name="element"/> — and reports whether the prefix denotes
+    /// <paramref name="target"/>.
+    /// <para>
+    /// Prefixes are arbitrary on both halves of a binding, so neither half can be matched
+    /// as a spelling. <c>x</c> is only conventional for the XAML language namespace, and on
+    /// the member side <c>{x:Static other:Strings.Foo}</c> with <c>other</c> bound to some
+    /// library is a different <c>Strings</c> entirely — counting it would keep a dead app
+    /// translation green.
+    /// </para>
+    /// </summary>
+    private static bool ResolvesTo(XElement element, string? prefix, string target)
+    {
+        XNamespace? resolved = prefix is null
+            ? element.GetDefaultNamespace()
+            : element.GetNamespaceOfPrefix(prefix);
+        return resolved is not null && DenotesNamespace(resolved.NamespaceName, target);
     }
 
     /// <summary>
-    /// Every spelling of the <c>Static</c> extension this document can use, derived from
-    /// its own namespace declarations. <c>x</c> is a convention, not a rule: a view may
-    /// bind the XAML language namespace to any prefix, and
-    /// <c>{lang:Static loc:Strings.Foo}</c> is then a real binding. Hard-coding
-    /// <c>x:Static</c> would report the key it names as DEAD — the dangerous direction,
-    /// since the remedy the failure implies is deleting a translation that is in use.
+    /// True when a XAML namespace declaration denotes the given CLR namespace, in either
+    /// spelling Avalonia accepts (<c>using:</c>, or <c>clr-namespace:</c> with an optional
+    /// assembly), or when it IS the given URI.
     /// </summary>
-    private static IReadOnlySet<string> StaticExtensionNames(XDocument doc) =>
-        doc.Descendants()
-            .SelectMany(element => element.Attributes())
-            .Where(attribute => attribute.IsNamespaceDeclaration
-                && attribute.Value == "http://schemas.microsoft.com/winfx/2006/xaml")
-            .Select(attribute => attribute.Name.LocalName == "xmlns"
-                ? "Static"
-                : $"{attribute.Name.LocalName}:Static")
-            .ToHashSet(StringComparer.Ordinal);
+    private static bool DenotesNamespace(string declared, string target)
+    {
+        if (declared == target)
+        {
+            return true;
+        }
+
+        string body = declared.StartsWith("using:", StringComparison.Ordinal)
+            ? declared["using:".Length..]
+            : declared.StartsWith("clr-namespace:", StringComparison.Ordinal)
+                ? declared["clr-namespace:".Length..]
+                : string.Empty;
+
+        int assembly = body.IndexOf(';');
+        return (assembly < 0 ? body : body[..assembly]) == target;
+    }
+
+    private static (string? Prefix, string Name) SplitPrefix(string qualified)
+    {
+        int colon = qualified.IndexOf(':');
+        return colon < 0 ? (null, qualified) : (qualified[..colon], qualified[(colon + 1)..]);
+    }
 
     /// <summary>
     /// Resource names an attribute value or text node BINDS, by parsing it as a markup
@@ -512,7 +543,7 @@ internal static class ResxCatalog
     /// braces and all.
     /// </para>
     /// </summary>
-    internal static IEnumerable<string> MarkupReferences(string value, IReadOnlySet<string> staticExtensions)
+    internal static IEnumerable<string> MarkupReferences(string value, XElement element)
     {
         string trimmed = value.TrimStart();
         if (!trimmed.StartsWith('{') || trimmed.StartsWith("{}", StringComparison.Ordinal))
@@ -525,7 +556,7 @@ internal static class ResxCatalog
         int index = 0;
         if (tokens.Count > 0 && tokens[0].Kind == MarkupTokenKind.Open)
         {
-            ParseExtension(tokens, ref index, names, staticExtensions);
+            ParseExtension(tokens, ref index, names, element);
         }
 
         return names;
@@ -600,8 +631,7 @@ internal static class ResxCatalog
     /// extension it meets that names a resource.
     /// </summary>
     private static void ParseExtension(
-        IReadOnlyList<MarkupToken> tokens, ref int index, ICollection<string> names,
-        IReadOnlySet<string> staticExtensions)
+        IReadOnlyList<MarkupToken> tokens, ref int index, ICollection<string> names, XElement element)
     {
         index++; // the opening brace
         string extension = index < tokens.Count && tokens[index].Kind == MarkupTokenKind.Text
@@ -616,7 +646,7 @@ internal static class ResxCatalog
             switch (token.Kind)
             {
                 case MarkupTokenKind.Open:
-                    ParseExtension(tokens, ref index, names, staticExtensions);
+                    ParseExtension(tokens, ref index, names, element);
                     property = null;
                     continue;
                 case MarkupTokenKind.Comma:
@@ -661,13 +691,23 @@ internal static class ResxCatalog
             index++; // the closing brace
         }
 
-        if (staticExtensions.Contains(extension) && member is not null)
+        if (member is null)
         {
-            Match match = StaticMember.Match(member);
-            if (match.Success)
-            {
-                names.Add(match.Groups["name"].Value);
-            }
+            return;
+        }
+
+        (string? extensionPrefix, string extensionName) = SplitPrefix(extension);
+        if (extensionName != "Static" || !ResolvesTo(element, extensionPrefix, XamlLanguageNamespace))
+        {
+            return;
+        }
+
+        Match match = StaticMember.Match(member);
+        if (match.Success
+            && ResolvesTo(element, match.Groups["prefix"].Success ? match.Groups["prefix"].Value : null,
+                "Lattice.App.Localization"))
+        {
+            names.Add(match.Groups["name"].Value);
         }
     }
 
@@ -703,7 +743,7 @@ internal static class ResxCatalog
     }
 
     private static readonly Regex StaticMember = new(
-        @"^(?:[\w.-]+:)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
+        @"^(?:(?<prefix>[\w.-]+):)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
 
     private static bool IsBuildOutput(string path, string sourceRoot)
     {

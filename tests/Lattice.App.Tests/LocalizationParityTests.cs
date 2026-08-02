@@ -273,45 +273,51 @@ public class LocalizationParityTests
 
     [Theory]
     // The binding form counts, in an attribute or in element text…
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" />""", "Live")]
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"><T.Text>{x:Static loc:Strings.Live}</T.Text></T>""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization"><T.Text>{x:Static loc:Strings.Live}</T.Text></T>""", "Live")]
     // …including nested inside another markup extension, which is how converters read.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{Binding X, Converter={x:Static loc:Strings.Live}}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{Binding X, Converter={x:Static loc:Strings.Live}}" />""", "Live")]
     // An XML comment does not — it is not in the element tree.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}"><!-- {x:Static loc:Strings.Ghost} --></T>""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}"><!-- {x:Static loc:Strings.Ghost} --></T>""", "Live")]
     // Nor does prose that spells the name…
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="see Strings.Ghost" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="see Strings.Ghost" />""", "Live")]
     // …nor prose that spells the whole binding form: a value not opening with '{' is
     // literal text in XAML, braces and all.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="use {x:Static loc:Strings.Ghost} here" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="use {x:Static loc:Strings.Ghost} here" />""", "Live")]
     // …nor a value whose leading brace is the {} literal escape.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the interior phrase without its delimiters.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
     // Whitespace around an assignment is legal inside an extension, in either position —
     // the lexer removes it before the grammar runs, so neither shape can lose a reference.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{Binding Converter = {x:Static loc:Strings.Live}}" />""", "Live")]
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member = loc:Strings.Live}" />""", "Live")]
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{ x:Static  loc:Strings.Live }" />""", "Live")]
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X , FallbackValue = 'q'}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{Binding Converter = {x:Static loc:Strings.Live}}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static Member = loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{ x:Static  loc:Strings.Live }" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" Tag="{Binding X , FallbackValue = 'q'}" />""", "Live")]
     // x:Static's positional argument is its Member property, so the named form binds too.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member=loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static Member=loc:Strings.Live}" />""", "Live")]
+    // A prefix bound to a DIFFERENT namespace is a different Strings type entirely.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" xmlns:other="using:Some.Library" Text="{x:Static loc:Strings.Live}" Tag="{x:Static other:Strings.Ghost}" />""", "Live")]
+    // …and an undeclared prefix resolves to nothing at all.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" Tag="{x:Static nope:Strings.Ghost}" />""", "Live")]
+    // clr-namespace with an assembly is the same namespace.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="clr-namespace:Lattice.App.Localization;assembly=Lattice" Text="{x:Static loc:Strings.Live}" />""", "Live")]
     // A quoted member value binds what the bare form binds…
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member='loc:Strings.Live'}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static Member='loc:Strings.Live'}" />""", "Live")]
     // …while quoted PROSE still cannot, because a member must match end to end.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here'}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here'}" />""", "Live")]
     // …but another property's value is not the member.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue=loc:Strings.Ghost}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue=loc:Strings.Ghost}" />""", "Live")]
     // A prefix may contain punctuation: NCName admits '-' and '.'.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:app-loc="using:Lattice.App.Localization" Text="{x:Static app-loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" xmlns:app-loc="using:Lattice.App.Localization" Text="{x:Static app-loc:Strings.Live}" />""", "Live")]
     // The prefix is whatever the document binds to the XAML language namespace — `x` is a
     // convention, not a rule, and a key bound through another prefix is NOT dead.
-    [InlineData("""<T xmlns:lang="http://schemas.microsoft.com/winfx/2006/xaml" Text="{lang:Static loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:lang="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{lang:Static loc:Strings.Live}" />""", "Live")]
     // …while a prefix bound to some other namespace is not the Static extension at all.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:other="urn:other" Text="{x:Static loc:Strings.Live}" Tag="{other:Static loc:Strings.Ghost}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" xmlns:other="urn:other" Text="{x:Static loc:Strings.Live}" Tag="{other:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the whole form quoted as a literal ARGUMENT of a real markup extension, which
     // is markup on the outside and text on the inside.
-    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here', Converter={x:Static loc:Strings.Live}}" />""", "Live")]
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:loc="using:Lattice.App.Localization" Text="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here', Converter={x:Static loc:Strings.Live}}" />""", "Live")]
     public void Xaml_references_require_the_binding_form(string source, string expected)
     {
         string[] names = ScanSource(source, "Sample.axaml");
