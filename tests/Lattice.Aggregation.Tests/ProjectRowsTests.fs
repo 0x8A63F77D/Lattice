@@ -3,6 +3,7 @@ module Lattice.Aggregation.Tests.ProjectRowsTests
 open System
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.App.Aggregation
 
@@ -80,8 +81,8 @@ let attachmentsGen =
             Gen.listOfLength n (gen {
                 let! url = Gen.elements [ "u1"; "u2"; "u3" ]
                 let! hostIdx = Gen.choose (0, 2)
-                let! susp = Arb.generate<bool>
-                let! noNew = Arb.generate<bool>
+                let! susp = ArbMap.defaults |> ArbMap.generate<bool>
+                let! noNew = ArbMap.defaults |> ArbMap.generate<bool>
                 let! share = Gen.elements [ 50.0; 100.0; 200.0 ]
                 let! rac = Gen.choose (0, 100)
                 return att url "P" (string hostIdx) hostIds[hostIdx] susp noNew share (float rac) 1.0 1
@@ -178,7 +179,7 @@ type OrderedRowsCase =
 let orderedRowsCaseGen =
     gen {
         let! sort = projectSortGen
-        let! aggregate = Arb.generate<bool>
+        let! aggregate = ArbMap.defaults |> ArbMap.generate<bool>
         let! groups = groupsGen
         let! expanded = expandedGen groups
         return { Sort = sort; Aggregate = aggregate; Expanded = expanded; Groups = groups }
@@ -198,7 +199,7 @@ type ColumnCase =
 let columnCaseGen =
     gen {
         let! column = Gen.elements allColumns
-        let! aggregate = Arb.generate<bool>
+        let! aggregate = ArbMap.defaults |> ArbMap.generate<bool>
         let! groups = groupsGen
         let! expanded = expandedGen groups
         return { Column = column; Aggregate = aggregate; Expanded = expanded; Groups = groups }

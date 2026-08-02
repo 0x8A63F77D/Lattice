@@ -3,6 +3,7 @@ module Lattice.Aggregation.Tests.MessageLogTests
 open System
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.App.Aggregation
 

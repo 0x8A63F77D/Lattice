@@ -3,6 +3,7 @@ module Lattice.Aggregation.Tests.ReconcileTests
 open System.Collections.Generic
 open Xunit
 open FsCheck
+open FsCheck.FSharp
 open FsCheck.Xunit
 open Lattice.App.Aggregation
 
