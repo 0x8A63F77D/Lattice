@@ -99,15 +99,20 @@ centerY(mark) = baseline − capHeight / 2
   bandBottom = baseline
   ```
 
-  `A(face, size)` is the selected face's top-to-baseline distance at the
-  resolved size, as the platform's text layout reports it **for that face
-  alone** — a per-face, per-size constant (e.g. the baseline a line layout
-  reports for a reference string set wholly in the selected face). All extra
-  leading (the face's line gap, plus any surplus label-box height) falls
-  **below** the descent; half-leading distribution and bottom-anchoring
-  (`labelBox.Bottom − descent`) are **banned** — the two anchorings differ by
-  exactly that leading, so naming the layout box without naming the anchor
-  does not identify a baseline. Fallback runs move live line metrics with
+  `A(face, size)` is the **magnitude of the selected face's ascent**, read at
+  the resolved size from the **same font-metrics source that supplies
+  `capHeight`** — one metrics struct read on one face, both quantities out of
+  it (`SKFontMetrics` on the shipped stack). Line gap is excluded from
+  above-baseline space entirely, so all extra leading (the face's line gap,
+  plus any surplus label-box height) falls **below** the descent by
+  construction, not as a second constraint to reconcile; half-leading
+  distribution and bottom-anchoring (`labelBox.Bottom − descent`) are
+  **banned** — the two anchorings differ by exactly that leading, so naming
+  the layout box without naming the anchor does not identify a baseline.
+  "Ascent" means whatever that metrics struct reports (hhea and OS/2 typo
+  metrics differ per face) — the same single-axis commitment already made for
+  `capHeight`: one struct per face, both quantities from it, no second source
+  and no per-face table. Fallback runs move live line metrics with
   content (Latin 12.0 DIP line vs CJK-fallback 16.8 in the shipped stack), so
   a live baseline would let the band follow user data even with a fixed
   capHeight.
@@ -121,8 +126,10 @@ centerY(mark) = baseline − capHeight / 2
   unsupported-CJK/System configuration (CJK OS culture, English resource
   fallback → Latin band) — rather than only CJK-primary test pins. At every
   site the gate asserts the band's **expected absolute position** computed
-  from the baseline equation above, not merely mark-to-band consistency — a
-  bottom-anchored baseline would satisfy consistency just as well.
+  from the baseline equation above out of that face's `(ascent, capHeight)`
+  pair, not merely mark-to-band consistency — a bottom-anchored baseline
+  would satisfy consistency just as well, so two conforming implementations
+  could otherwise still land the band in different places.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.

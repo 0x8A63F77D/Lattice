@@ -59,15 +59,23 @@ from the live shaped text:
       bandTop       = baseline − capHeight
       bandBottom    = baseline
 
-`A(face, size)` is the SELECTED face's top-to-baseline distance at the
-resolved size, as the platform's text layout reports it FOR THAT FACE
-ALONE — a per-face, per-size constant (e.g. the baseline a line layout
-reports for a reference string set wholly in the selected face). All
-extra leading — the face's line gap, plus any surplus label-box height —
-falls BELOW the descent. Half-leading distribution and bottom-anchoring
+`A(face, size)` is the MAGNITUDE of the SELECTED face's ASCENT, read at
+the resolved size from the SAME font-metrics source that supplies R1's
+capHeight — one metrics struct read on one face, both quantities out of
+it (on the shipped stack, `SKFontMetrics`). Line gap is excluded from
+above-baseline space entirely. All extra leading — the face's line gap,
+plus any surplus label-box height — therefore falls BELOW the descent,
+by construction, not as a separate constraint an implementation has to
+reconcile. Half-leading distribution and bottom-anchoring
 (`labelBox.Bottom − descent`) are BANNED: the two anchorings differ by
 exactly that leading, so naming the layout box without naming the anchor
 does not identify a baseline at all.
+
+"Ascent" means whatever the resolved face's metrics struct reports —
+hhea and OS/2 typo metrics differ per face. That is the same single-axis
+commitment this ruling already makes for capHeight: one metrics struct
+per face, both quantities from it, no second source. No per-face table,
+no hhea/OS2 selection rule; the struct is the pin.
 
 Fallback runs move the live line metrics with content (the shipped stack
 records a Latin string at a 12.0 DIP line where a CJK-fallback string
@@ -85,9 +93,10 @@ positions are unchanged across a Latin → CJK/mixed content swap:
 checking each sample only against its own current baseline would still
 pass a content-following baseline. And at every site the gate asserts
 the band's EXPECTED ABSOLUTE position, computed from the baseline
-equation above — not merely mark-to-band consistency, which a
-bottom-anchored baseline would satisfy just as well as the ruled
-top-anchored one.
+equation above out of that face's (ascent, capHeight) pair — not merely
+mark-to-band consistency, which a bottom-anchored baseline would satisfy
+just as well as the ruled top-anchored one. Two conforming
+implementations therefore cannot land the band in different places.
 
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.
