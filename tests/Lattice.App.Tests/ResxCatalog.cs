@@ -218,7 +218,18 @@ internal static class ResxCatalog
             .DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(access => NamesStringsType(access.Expression))
+            .Where(access => !IsNameofOperand(access))
             .Select(access => access.Name.Identifier.ValueText);
+
+    /// <summary>
+    /// <c>nameof(Strings.Foo)</c> is a member access in the tree but evaluates no getter —
+    /// it compiles to the literal "Foo". Diagnostics and telemetry spell resources that way,
+    /// and such a mention keeps no translation alive: nothing ever reads the resource.
+    /// </summary>
+    private static bool IsNameofOperand(SyntaxNode node) =>
+        node.Ancestors()
+            .OfType<InvocationExpressionSyntax>()
+            .Any(invocation => invocation.Expression is IdentifierNameSyntax { Identifier.ValueText: "nameof" });
 
     /// <summary>
     /// Whether a value carries an argument slot, i.e. whether it is a composite format

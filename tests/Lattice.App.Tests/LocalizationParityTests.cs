@@ -239,6 +239,10 @@ public class LocalizationParityTests
     [InlineData("class C { void M() { var s = \"\"\"Strings.Ghost\"\"\"; var a = Strings.Live; } }", "Live")]
     // Disabled code is trivia too.
     [InlineData("class C { void M() {\n#if NEVER\nvar b = Strings.Ghost;\n#endif\nvar a = Strings.Live; } }", "Live")]
+    // nameof compiles to a literal and reads no resource, so it keeps none alive.
+    [InlineData("class C { void M() { var n = nameof(Strings.Ghost); var a = Strings.Live; } }", "Live")]
+    // …but a real read elsewhere in the same call still counts.
+    [InlineData("class C { void M() { Log(nameof(Strings.Ghost), Strings.Live); } }", "Live")]
     // An interpolation hole IS an expression, so it counts.
     [InlineData("""class C { void M() { var s = $"{Strings.Live}"; } }""", "Live")]
     // Fully qualified access counts.
