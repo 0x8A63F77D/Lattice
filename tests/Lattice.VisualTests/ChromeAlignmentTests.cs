@@ -30,7 +30,7 @@ using static Lattice.Tests.HeadlessLayout;
 namespace Lattice.VisualTests;
 
 /// <summary>
-/// Issue #185 — the issue-#180 defect class OUTSIDE the data grids.
+/// Issues #185 and #204 — the issue-#180 defect class OUTSIDE the data grids.
 ///
 /// THE DEFECT is the one <see cref="StatusCellAlignmentTests"/> documents in full, and it is not
 /// specific to a grid cell: <c>VerticalAlignment="Center"</c> centres each child's LAYOUT box, and
@@ -46,20 +46,27 @@ namespace Lattice.VisualTests;
 /// Log has no freshness caption, which #185's site list assumed it did;</item>
 /// <item>the Tasks Computing button (a 16 px glyph and a 12 px chevron either side of a 13 px
 /// SemiBold label, so ONE label seats two marks of different sizes);</item>
-/// <item>the Statistics legend chips (a 12 px colour swatch beside the project name).</item>
+/// <item>the Statistics legend chips (a 12 px colour swatch beside the project name);</item>
+/// <item>the Statistics overflow flyout's rows (#204) — a checkbox and TWO text columns, which is
+/// a different question from all of the above and has its own assertion below.</item>
 /// </list>
 ///
 /// WHAT IS PROBED, AND WHY IT IS FOUND STRUCTURALLY. <see cref="Chrome.Probes"/> does not look for
-/// the marker class the fix applies; it looks for the CONSTRUCTION — a horizontal StackPanel,
-/// outside any grid row, whose visible children are glyph-sized marks and TextBlocks and nothing
-/// else. Every (mark, label) pairing in such a panel becomes a probe. So the sweep covers the
-/// defect class rather than the sites that were known to have it, and a new command bar built the
-/// same way joins the gate by existing. Panels holding a progress RULE are excluded by
-/// <see cref="InkAlignment.IsGlyphSizedMark"/> for the reason #180 gave: a 56x3 bar is not a
-/// glyph-sized mark and where it should sit against text is a separate design question.
+/// the marker class the fix applies; it looks for the CONSTRUCTION — a container laying glyph-sized
+/// marks out beside TextBlocks on one line, outside any data-grid row, holding nothing else. Every
+/// (mark, label) pairing in such a container becomes a probe. So the sweep covers the defect class
+/// rather than the sites that were known to have it, and a new command bar built the same way joins
+/// the gate by existing. Two container shapes are recognised, a horizontal StackPanel
+/// (<see cref="Chrome.PairPanels"/>) and a single grid ROW of columns
+/// (<see cref="Chrome.PairRows"/>, whose bounds that method justifies). Containers holding a
+/// progress RULE are excluded by <see cref="InkAlignment.IsGlyphSizedMark"/> for the reason #180
+/// gave: a 56x3 bar is not a glyph-sized mark and where it should sit against text is a separate
+/// design question.
 ///
-/// TWO LAYERS, as in the cell gate: an EXACT arranged assertion (no rasterizer in the loop, red
-/// pre-fix in every family) plus a rendered-ink sweep proving the painted pixels follow the layout.
+/// THREE LAYERS. An EXACT arranged assertion that each mark sits on its container's band (no
+/// rasterizer in the loop, red pre-fix in every family); the row-level assertion #204 added, that a
+/// container's text columns share ONE band; and a rendered-ink sweep proving the painted pixels
+/// follow the layout.
 ///
 /// NOT env-gated: these assert geometry, not committed screenshots, so they gate the fix in the
 /// normal <c>dotnet test</c> lane on every CI OS.
@@ -449,10 +456,19 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             "TransfersView[IconWarningFilled+Updated 4 m ago]",
         ];
 
-        /// <summary>DIPs of scan band added above and below the holding panel. After the fix the
-        /// label's box IS its reference band, so its descenders paint outside the panel; six DIPs
-        /// clears them at every size these sites use (12-13 px text) without reaching a surface
-        /// edge. Clamped to the backdrop regardless, so it can never over-reach.</summary>
+        /// <summary>
+        /// DIPs of scan band added above and below the holding container. After the fix the label's
+        /// box IS its reference band, so its descenders paint outside the container; six DIPs clears
+        /// them at every size these sites use (12-14 px text) without reaching a surface edge.
+        /// Clamped to the backdrop regardless, so it can never over-reach.
+        ///
+        /// A STACKED container's NEIGHBOUR is the other thing this could over-reach into, and the
+        /// overflow flyout is the first site with one (#204): its rows are 3 DIPs of margin apart,
+        /// so a six-DIP inflation reaches exactly the next row's box edge — but a row's own ink
+        /// starts ~11 DIPs inside that box, and the scan only looks at the probed element's OWN
+        /// columns. Measured on the fixed tree, the widest extent read for a flyout row was
+        /// 9.502..23.000 against a 38 DIP pitch: no neighbour is in reach.
+        /// </summary>
         private const double Slack = 6;
 
         private const string StaleCaption = "Updated 4 m ago";
