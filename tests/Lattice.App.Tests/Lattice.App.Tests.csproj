@@ -7,6 +7,14 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Avalonia.Headless.XUnit" Version="12.1.1" />
+    <!-- The localization gate's dead-key inventory asks "does any CODE reference this
+         resource?". Review rounds showed text scanning cannot answer that: comments and
+         string literals naming a resource both read as references. Roslyn's parser
+         answers it by construction — a comment is trivia and a literal is a token, so
+         neither is ever a MemberAccessExpression. Syntax only; no compilation, no
+         semantic model, no workspace. (.axaml is XML: XDocument excludes comments
+         structurally, and the markup-extension rules do the rest — see ResxCatalog.) -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="xunit.v3.assert" Version="3.2.2" />
     <PackageReference Include="xunit.v3.core" Version="3.2.2" />
