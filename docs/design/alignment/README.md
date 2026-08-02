@@ -26,6 +26,18 @@ re-run the comparison on another platform's fonts (this is the tool for the two
 open items below: the unmeasured Windows/Linux Latin faces and the PingFang SC
 real-hardware confirmation). Do not copy code from it.
 
+**Known measurement limitation.** The page reads capHeight as the ink bounds of
+an `H` glyph (`measureText('H').actualBoundingBoxAscent`) because canvas
+TextMetrics exposes no cap-height font metric. That proxy was applied uniformly
+to every candidate and every face, so the *comparative* evidence behind the
+ruling stands; but a face whose `H` ink differs from its declared cap height —
+hinting alone can move ink a device pixel — will show *absolute* band figures
+that differ from the normative metric. R1's `capHeight` is the **font metric**,
+full stop: the implementation gate must read it from the resolved face (e.g.
+Skia's `SKFontMetrics.CapHeight`), never from glyph ink. When using this page
+to evidence a new face, treat its figures as proxy comparisons and confirm the
+metric value in the implementation's own font stack.
+
 The implementation target is the existing Lattice codebase and its existing
 layout primitives. Nothing here should introduce a new styling mechanism.
 
@@ -112,7 +124,7 @@ The gate must cover all seventeen. Names follow the alignment lab's
 | legend / swatch | `StatisticsView[Panel+Einstein@Home]` | R2 |
 | legend / swatch | `StatisticsView[Panel+LHC@home]` | R2 |
 | overflow | `StatisticsView[OverflowCheckBox+ProjectName]` | R1 |
-| status bar | `StatusBar[IconWarningFilled+WarningText]` | R1 |
+| rail group header | `ShellWindow[IconChevronRightRegular+GroupHeader]` | R1 |
 
 The two `TasksView[...+Computing]` sites are the two-mark case: chevron and play
 share one label and therefore one band.
@@ -127,10 +139,19 @@ in `measurements.tsv`** — the registry is normative for gate coverage;
   name — the checkbox class R1 itself names. The label is user data; R1 applies
   unchanged (capHeight of the label's resolved face — no per-site exception,
   per R4).
-- `StatusBar[IconWarningFilled+WarningText]` is the shared status-bar template
-  (`Theming/ControlStyles.axaml`), one site appearing in every view. It already
-  wears the shipped band (it was #185's fifth site), so a gate that skipped it
-  would let it silently diverge from the re-ruled band.
+- `ShellWindow[IconChevronRightRegular+GroupHeader]` is the rail's collapsible
+  group header (`Views/ShellWindow.axaml`): a Lattice-authored DataTemplate
+  seating a 12 px chevron beside the 11 px group-header label — inside the
+  scope boundary (our XAML positions it; it shares the label's line box). The
+  chevron's expand rotation is a RenderTransform and does not move its layout
+  centre, so R1 gates it like any other mark.
+
+One registry row covers one unique construction. The shared status-bar
+template (`Theming/ControlStyles.axaml`) is **already represented**: its
+warning section is exactly the `TasksView[IconWarningFilled+3 deadlines at
+risk]` entry (`StatusBarControl.WarningText`), and the template's other
+instances across views are the same construction — do not add per-view rows
+for it, and do not count it missing.
 
 **Scope boundary.** The ruling's "every chrome mark that sits beside a text
 label" governs marks whose position Lattice's own XAML determines — the class
@@ -238,7 +259,8 @@ the swatch is a plain filled rectangle.
 - `README.md` — this file.
 - `measurements.tsv` — the alignment lab's raw data: 2 fonts × 4 candidates ×
   the 15 lab-measured sites, arranged and rendered-pixel values. The two
-  post-lab registry sites (overflow checkbox, status bar) have no rows here.
+  post-lab registry sites (overflow checkbox, rail group header) have no rows
+  here.
 - `shipped-band-verdict.tsv` — shipped-band verdict for the 11 lab-measured
   mark-bearing sites (see the verification notes below for what it omits).
 - `evidence/alignment-evidence.html` — evidence page (design reference, not
