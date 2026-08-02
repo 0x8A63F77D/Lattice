@@ -200,17 +200,27 @@ internal static class ResxCatalog
     /// </para>
     /// </summary>
     internal static IEnumerable<string> ReferencedNames(string path) =>
-        ReferencedNames(path, GlobalResourceAliases.Value);
+        ReferencedNames(path, GlobalImports.Value);
 
     /// <summary>
-    /// As above, with the repository-wide <c>global using</c> aliases supplied explicitly.
+    /// As above, with the repository-wide <c>global using</c> imports supplied explicitly.
     /// </summary>
-    internal static IEnumerable<string> ReferencedNames(string path, IReadOnlySet<string> globalAliases)
+    internal static IEnumerable<string> ReferencedNames(string path, ResourceImports globals)
     {
         string text = File.ReadAllText(path);
         return path.EndsWith(".axaml", StringComparison.Ordinal)
             ? XamlReferences(text)
-            : CSharpReferences(text, globalAliases);
+            : CSharpReferences(text, globals);
+    }
+
+    /// <summary>
+    /// Ways a file can reach the resource type without naming it: aliases it may use, and
+    /// whether the resources are in scope as bare identifiers.
+    /// </summary>
+    internal readonly record struct ResourceImports(IReadOnlySet<string> Aliases, bool Static)
+    {
+        internal static ResourceImports None { get; } =
+            new(new HashSet<string>(StringComparer.Ordinal), false);
     }
 
     /// <summary>
@@ -230,7 +240,7 @@ internal static class ResxCatalog
     /// from a branch nothing compiles (<c>#if NEVER</c>) survives the inventory.
     /// </para>
     /// </summary>
-    private static IEnumerable<string> CSharpReferences(string text, IReadOnlySet<string> globalAliases)
+    private static IEnumerable<string> CSharpReferences(string text, ResourceImports globals)
     {
         var names = new HashSet<string>(StringComparer.Ordinal);
         var pending = new Queue<string>();
@@ -245,7 +255,7 @@ internal static class ResxCatalog
             }
 
             SyntaxNode root = CSharpSyntaxTree.ParseText(source).GetRoot();
-            names.UnionWith(ReferencesIn(root, globalAliases));
+            names.UnionWith(ReferencesIn(root, globals));
             foreach (SyntaxTrivia trivia in root.DescendantTrivia()
                 .Where(trivia => trivia.IsKind(SyntaxKind.DisabledTextTrivia)))
             {
@@ -256,16 +266,16 @@ internal static class ResxCatalog
         return names;
     }
 
-    private static IEnumerable<string> ReferencesIn(SyntaxNode root, IReadOnlySet<string> globalAliases)
+    private static IEnumerable<string> ReferencesIn(SyntaxNode root, ResourceImports globals)
     {
-        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root, globalAliases);
+        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root, globals.Aliases);
         IEnumerable<string> qualified = root.DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(access => NamesStringsType(access.Expression, resourceTypeNames))
             .Where(access => !IsNameofOperand(access))
             .Select(access => access.Name.Identifier.ValueText);
 
-        if (!ImportsResourcesStatically(root))
+        if (!globals.Static && !ImportsResourcesStatically(root))
         {
             return qualified;
         }
@@ -303,22 +313,34 @@ internal static class ResxCatalog
             .OfType<string>();
 
     /// <summary>
-    /// Aliases declared with <c>global using Text = …Strings;</c>, which apply to every file
-    /// in the compilation but are DECLARED in one. Files are parsed independently here, so
-    /// without this pre-pass the consuming file knows only the literal spelling and an
-    /// aliased read elsewhere would be declared dead.
+    /// <c>global using</c> imports of the resource type, which apply to every file in the
+    /// compilation but are DECLARED in one. Files are parsed independently here, so without
+    /// this pre-pass a consuming file knows only the literal spelling and both an aliased
+    /// read and a bare-identifier read elsewhere would be declared dead.
+    /// <para>
+    /// A global <c>using static</c> puts every resource in scope everywhere, so it turns
+    /// the whole inventory into an over-approximation — the dead-key check would stop
+    /// finding anything. That is the safe direction and nothing in this repo does it, but
+    /// it IS the price, and it is paid here rather than by declaring live keys dead.
+    /// </para>
     /// </summary>
-    private static readonly Lazy<IReadOnlySet<string>> GlobalResourceAliases = new(() =>
-        AppSourceFiles()
+    private static readonly Lazy<ResourceImports> GlobalImports = new(() =>
+    {
+        UsingDirectiveSyntax[] directives = AppSourceFiles()
             .Where(path => path.EndsWith(".cs", StringComparison.Ordinal))
             .SelectMany(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
                 .DescendantNodes()
-                .OfType<UsingDirectiveSyntax>()
-                .Where(directive => directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
-                .Where(directive => RightmostIdentifier(directive.NamespaceOrType) == "Strings")
-                .Select(directive => directive.Alias?.Name.Identifier.ValueText)
-                .OfType<string>())
-            .ToHashSet(StringComparer.Ordinal));
+                .OfType<UsingDirectiveSyntax>())
+            .Where(directive => directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
+            .Where(directive => RightmostIdentifier(directive.NamespaceOrType) == "Strings")
+            .ToArray();
+
+        return new ResourceImports(
+            directives.Select(directive => directive.Alias?.Name.Identifier.ValueText)
+                .OfType<string>()
+                .ToHashSet(StringComparer.Ordinal),
+            directives.Any(directive => directive.StaticKeyword.IsKind(SyntaxKind.StaticKeyword)));
+    });
 
     private static bool ImportsResourcesStatically(SyntaxNode root) =>
         root.DescendantNodes()
@@ -489,7 +511,7 @@ internal static class ResxCatalog
         index++; // the opening brace
         string extension = ReadToken(value, ref index);
         string? member = null;
-        bool expectingPropertyValue = false;
+        string? property = null;
 
         while (index < value.Length && value[index] != '}')
         {
@@ -497,21 +519,25 @@ internal static class ResxCatalog
             if (char.IsWhiteSpace(c) || c == ',')
             {
                 index++;
-                expectingPropertyValue = expectingPropertyValue && c != ',';
+                if (c == ',')
+                {
+                    property = null;
+                }
+
                 continue;
             }
 
             if (c == '{')
             {
                 ParseExtension(value, ref index, names, staticExtensions);
-                expectingPropertyValue = false;
+                property = null;
                 continue;
             }
 
             if (c is '\'' or '"')
             {
                 SkipQuoted(value, ref index);
-                expectingPropertyValue = false;
+                property = null;
                 continue;
             }
 
@@ -519,16 +545,20 @@ internal static class ResxCatalog
             if (index < value.Length && value[index] == '=')
             {
                 index++; // the token was a property name; its value comes next
-                expectingPropertyValue = true;
+                property = token;
                 continue;
             }
 
-            if (!expectingPropertyValue)
+            // A positional argument, or the value of Member= — x:Static's positional
+            // argument IS its Member property, so `{x:Static Member=loc:Strings.Foo}`
+            // binds exactly what `{x:Static loc:Strings.Foo}` does. Any other property's
+            // value is not the member.
+            if (property is null || property == "Member")
             {
                 member ??= token;
             }
 
-            expectingPropertyValue = false;
+            property = null;
         }
 
         if (index < value.Length)

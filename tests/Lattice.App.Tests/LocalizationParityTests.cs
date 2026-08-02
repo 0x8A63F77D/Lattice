@@ -284,6 +284,12 @@ public class LocalizationParityTests
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the interior phrase without its delimiters.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
+    // Whitespace around an assignment is legal inside an extension.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{Binding Converter = {x:Static loc:Strings.Live}}" />""", "Live")]
+    // x:Static's positional argument is its Member property, so the named form binds too.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member=loc:Strings.Live}" />""", "Live")]
+    // …but another property's value is not the member.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue=loc:Strings.Ghost}" />""", "Live")]
     // A prefix may contain punctuation: NCName admits '-' and '.'.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:app-loc="using:Lattice.App.Localization" Text="{x:Static app-loc:Strings.Live}" />""", "Live")]
     // The prefix is whatever the document binds to the XAML language namespace — `x` is a
@@ -301,14 +307,34 @@ public class LocalizationParityTests
         Assert.DoesNotContain("Ghost", names);
     }
 
-    private static string[] ScanSource(string source, string fileName, string[]? globalAliases = null)
+    /// <summary>
+    /// A <c>global using static …Strings;</c> declared in one file puts every resource in
+    /// scope as a BARE identifier everywhere else, where syntax cannot tell the resource
+    /// <c>Live</c> from a local named <c>Live</c>. Counting all identifiers over-approximates,
+    /// which is the safe direction — the alternative declares a live translation dead.
+    /// <para>
+    /// Defensive only: this app cannot actually compile that directive, because the generated
+    /// <c>Strings</c> exposes a <c>CultureInfo</c> member that then collides with
+    /// <c>System.Globalization.CultureInfo</c> across the whole assembly. Verified, not assumed.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void A_global_static_import_puts_resources_in_scope_everywhere()
+    {
+        string[] names = ScanSource("class C { void M() { var a = Live; } }", "Sample.cs", globalStatic: true);
+        Assert.Contains("Live", names);
+        Assert.DoesNotContain("Live", ScanSource("class C { void M() { var a = Live; } }", "Sample.cs"));
+    }
+
+    private static string[] ScanSource(
+        string source, string fileName, string[]? globalAliases = null, bool globalStatic = false)
     {
         string path = Path.Combine(Path.GetTempPath(), $"lattice-loc-{Guid.NewGuid():N}-{fileName}");
         try
         {
             File.WriteAllText(path, source);
-            return ResxCatalog.ReferencedNames(
-                path, (globalAliases ?? []).ToHashSet(StringComparer.Ordinal)).ToArray();
+            return ResxCatalog.ReferencedNames(path, new ResxCatalog.ResourceImports(
+                (globalAliases ?? []).ToHashSet(StringComparer.Ordinal), globalStatic)).ToArray();
         }
         finally
         {
