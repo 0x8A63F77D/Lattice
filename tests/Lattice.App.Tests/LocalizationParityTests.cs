@@ -95,6 +95,26 @@ public class LocalizationParityTests
     }
 
     /// <summary>
+    /// A key that survives parity with an empty value renders a blank label, which no
+    /// other check catches: <c>LocalizationTests.Every_resx_key_resolves_to_a_nonempty_string</c>
+    /// walks the built resource table for the NEUTRAL culture only, so the zh-CN
+    /// satellite had no such guard at all.
+    /// </summary>
+    [Theory]
+    [InlineData(ResxCatalog.NeutralFile)]
+    [InlineData(ResxCatalog.ChineseFile)]
+    public void Values_are_never_blank(string fileName)
+    {
+        string[] blank = ResxCatalog.LoadEntries(fileName)
+            .Where(entry => string.IsNullOrWhiteSpace(entry.Value))
+            .Select(entry => $"- {entry.Name}")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+
+        Assert.True(blank.Length == 0, Diff($"{fileName} has key(s) with a blank value", blank));
+    }
+
+    /// <summary>
     /// Dead-key inventory: a key nothing references is a translation nobody reads and a
     /// string every future translator still has to service. The scan is sound only
     /// because no resource name in the app is built at runtime — that premise is pinned
