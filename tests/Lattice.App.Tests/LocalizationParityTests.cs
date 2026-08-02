@@ -148,7 +148,7 @@ public class LocalizationParityTests
         string[] dead = Neutral.Keys.Where(key => !referenced.Contains(key)).Order(StringComparer.Ordinal).ToArray();
 
         Assert.True(dead.Length == 0, Diff(
-            $"{dead.Length} resx key(s) are referenced by no XAML (loc:Strings.X) or C# (Strings.X) under src/ — "
+            $"{dead.Length} resx key(s) are referenced by no XAML (loc:Strings.X) or C# (Strings.X) in src/Lattice.App — "
                 + "wire them up or delete them from BOTH resx files",
             dead.Select(key => $"- {key}")));
     }
@@ -175,7 +175,7 @@ public class LocalizationParityTests
             .ToArray();
 
         Assert.True(offenders.Length == 0, Diff(
-            "src/ reaches the resource table by name instead of through the generated accessors", offenders));
+            "the app reaches the resource table by name instead of through the generated accessors", offenders));
     }
 
     [Theory]

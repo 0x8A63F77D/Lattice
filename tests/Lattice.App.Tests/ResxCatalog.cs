@@ -167,10 +167,19 @@ internal static class ResxCatalog
         return indexes;
     }
 
-    /// <summary>Every C# and XAML source file under <c>src/</c>, obj/bin excluded.</summary>
+    /// <summary>
+    /// Every C# and XAML source file of the APP, obj/bin excluded.
+    /// <para>
+    /// Scoped to the one project that owns the resource type, not to <c>src/</c> at large:
+    /// the scan matches on the NAME <c>Strings</c>, so an unrelated <c>Strings.Foo</c> in
+    /// Core or GuiRpc would count as a use of an app translation and keep a genuinely dead
+    /// key green. Those projects cannot reach <c>Lattice.App.Localization.Strings</c> — the
+    /// dependency runs the other way — so nothing live is lost by ignoring them.
+    /// </para>
+    /// </summary>
     internal static IEnumerable<string> AppSourceFiles()
     {
-        string src = Path.Combine(RepositoryRoot, "src");
+        string src = Path.Combine(RepositoryRoot, "src", "Lattice.App");
         return Directory.EnumerateFiles(src, "*.*", SearchOption.AllDirectories)
             .Where(path => path.EndsWith(".cs", StringComparison.Ordinal)
                 || path.EndsWith(".axaml", StringComparison.Ordinal))
@@ -343,9 +352,11 @@ internal static class ResxCatalog
     {
         UsingDirectiveSyntax[] directives = AppSourceFiles()
             .Where(path => path.EndsWith(".cs", StringComparison.Ordinal))
-            .SelectMany(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
-                .DescendantNodes()
-                .OfType<UsingDirectiveSyntax>())
+            // Through every branch, exactly as ordinary references are read: a global using
+            // under #if DEBUG is disabled trivia in a symbol-free parse, and the file that
+            // consumes the alias would then be scanned without it.
+            .SelectMany(path => ParseEveryBranch(File.ReadAllText(path))
+                .SelectMany(root => root.DescendantNodes().OfType<UsingDirectiveSyntax>()))
             .Where(directive => directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
             .Where(directive => RightmostIdentifier(directive.NamespaceOrType) == "Strings")
             .ToArray();
