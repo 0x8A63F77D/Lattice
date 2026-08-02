@@ -18,8 +18,11 @@ Applies to any mark whose size is a platform idiom: 12 px status icons,
       centerY(mark) = baseline − capHeight / 2
 
 `capHeight` is a FONT METRIC at the label's resolved size — never per-string
-ink. The band is therefore invariant under text change, under locale change,
-and under user data. A label seating multiple marks centres every mark on
+ink. Within a resolved resource set and font configuration the band is
+therefore invariant under text change and under user data. A change of
+resolved resource set MAY move the band — by design: face selection below
+follows the script the labels actually render in, and different faces carry
+different cap heights. A label seating multiple marks centres every mark on
 that same band.
 
 Face selection is DETERMINISTIC and CONTENT-BLIND, resolved per label
@@ -93,8 +96,11 @@ GATE: swatch edges equal cap-band edges ± 0.05 DIP; radius == 2.
 
 ## R3. Digit-only cells
 
-Deadlines and RAC keep the digit band. No change. Restated here only so the
-gate's site registry is exhaustive.
+The two digit-band constructions — the Tasks Deadline cell and the snooze
+pill — keep the digit band. No change. Shipped RAC/credit cells are plain
+text columns carrying no mark and no band mechanism: outside this
+contract's class (no mark beside the label), not registered. Restated here
+only so the gate's site registry is exhaustive.
 
 ## R4. Site exceptions
 

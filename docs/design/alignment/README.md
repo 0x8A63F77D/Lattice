@@ -121,8 +121,11 @@ current 3 px scaled proportionally to the new size (3 × 8.6/12 ≈ 2.15).
 
 ### R3 — digit-only cells
 
-Deadlines and RAC cells keep the digit band. **No code change.** Listed only so
-the gate's site registry is exhaustive.
+The two digit-band constructions — the Tasks Deadline cell and the snooze
+pill — keep the digit band. **No code change.** Shipped RAC/credit cells are
+plain text columns with no mark and no band mechanism, outside the contract's
+class (no mark beside the label) and not registered. Listed only so the gate's
+site registry is exhaustive.
 
 ### R4 — site exceptions
 
