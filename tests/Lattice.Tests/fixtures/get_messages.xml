@@ -1,21 +1,25 @@
+<!-- Shape taken from client/client_msgs.cpp, MESSAGE_DESCS::write: every body is
+     CDATA-wrapped with a newline on each side, and <project> is printf'd raw (%s)
+     with no escaping. The second body's bare '&' is therefore literal payload, not
+     markup — a sanitizer that escapes it hands the caller "&amp;" to display. -->
 <boinc_gui_rpc_reply>
 <msgs>
 <msg>
  <project></project>
  <pri>1</pri>
  <seqno>1</seqno>
- <body>
+ <body><![CDATA[
 Starting BOINC client version 8.0.4 for x86_64-pc-linux-gnu
-</body>
+]]></body>
  <time>1751600000.000000</time>
 </msg>
 <msg>
  <project>Einstein@Home</project>
  <pri>2</pri>
  <seqno>2</seqno>
- <body>
-Task h1_0437.60 exited with zero status but no 'finished' file
-</body>
+ <body><![CDATA[
+Sending scheduler request: To fetch work & report 1 task
+]]></body>
  <time>1751600100.000000</time>
 </msg>
 </msgs>
