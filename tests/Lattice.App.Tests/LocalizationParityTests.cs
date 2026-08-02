@@ -243,6 +243,10 @@ public class LocalizationParityTests
     [InlineData("class C { void M() {\n#if NET10_0_OR_GREATER\nvar a = Strings.Live;\n#endif\n} }", "Live")]
     [InlineData("class C { void M() {\n#if SOMETHING\nvar x = 1;\n#else\nvar a = Strings.Live;\n#endif\n} }", "Live")]
     [InlineData("class C { void M() {\n#if A\n#if B\nvar a = Strings.Live;\n#endif\n#endif\n} }", "Live")]
+    // An alias belongs to the FILE, so it crosses conditional regions in both directions:
+    // declared outside and used inside, or declared inside and used elsewhere.
+    [InlineData("using Text = Lattice.App.Localization.Strings;\nclass C { void M() {\n#if DEBUG\nvar a = Text.Live;\n#endif\n} }", "Live")]
+    [InlineData("class C { void M() { var a = Text.Live; } }\n#if DEBUG\nusing Text = Lattice.App.Localization.Strings;\n#endif", "Live")]
     // An aliased import of the resource type is still the resource type.
     [InlineData("using Text = Lattice.App.Localization.Strings;\nclass C { void M() { var a = Text.Live; } }", "Live")]
     // …and an alias declared globally applies in files that never mention it, so it is
@@ -292,6 +296,10 @@ public class LocalizationParityTests
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X , FallbackValue = 'q'}" />""", "Live")]
     // x:Static's positional argument is its Member property, so the named form binds too.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member=loc:Strings.Live}" />""", "Live")]
+    // A quoted member value binds what the bare form binds…
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static Member='loc:Strings.Live'}" />""", "Live")]
+    // …while quoted PROSE still cannot, because a member must match end to end.
+    [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here'}" />""", "Live")]
     // …but another property's value is not the member.
     [InlineData("""<T xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Text="{x:Static loc:Strings.Live}" Tag="{Binding X, FallbackValue=loc:Strings.Ghost}" />""", "Live")]
     // A prefix may contain punctuation: NCName admits '-' and '.'.

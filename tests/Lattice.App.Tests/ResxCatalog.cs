@@ -242,7 +242,36 @@ internal static class ResxCatalog
     /// </summary>
     private static IEnumerable<string> CSharpReferences(string text, ResourceImports globals)
     {
-        var names = new HashSet<string>(StringComparer.Ordinal);
+        // Imports are collected across ALL branches before any of them is scanned. A
+        // `using Text = …Strings;` at the top of the file is invisible from inside a
+        // disabled #if fragment (they are parsed separately), and one declared inside a
+        // fragment is invisible everywhere else — either way an aliased read would be
+        // declared dead. The alias belongs to the FILE, so it is resolved per file.
+        IReadOnlyList<SyntaxNode> branches = ParseEveryBranch(text);
+        var names = new HashSet<string>(StringComparer.Ordinal) { "Strings" };
+        names.UnionWith(globals.Aliases);
+        foreach (SyntaxNode branch in branches)
+        {
+            names.UnionWith(AliasesIn(branch));
+        }
+
+        bool staticImport = globals.Static || branches.Any(ImportsResourcesStatically);
+        var references = new HashSet<string>(StringComparer.Ordinal);
+        foreach (SyntaxNode branch in branches)
+        {
+            references.UnionWith(ReferencesIn(branch, names, staticImport));
+        }
+
+        return references;
+    }
+
+    /// <summary>
+    /// The file's syntax, plus the syntax of every region some other configuration would
+    /// compile — disabled text re-parsed, recursively, until nothing conditional is left.
+    /// </summary>
+    private static IReadOnlyList<SyntaxNode> ParseEveryBranch(string text)
+    {
+        List<SyntaxNode> roots = [];
         var pending = new Queue<string>();
         var seen = new HashSet<string>(StringComparer.Ordinal);
         pending.Enqueue(text);
@@ -255,7 +284,7 @@ internal static class ResxCatalog
             }
 
             SyntaxNode root = CSharpSyntaxTree.ParseText(source).GetRoot();
-            names.UnionWith(ReferencesIn(root, globals));
+            roots.Add(root);
             foreach (SyntaxTrivia trivia in root.DescendantTrivia()
                 .Where(trivia => trivia.IsKind(SyntaxKind.DisabledTextTrivia)))
             {
@@ -263,19 +292,19 @@ internal static class ResxCatalog
             }
         }
 
-        return names;
+        return roots;
     }
 
-    private static IEnumerable<string> ReferencesIn(SyntaxNode root, ResourceImports globals)
+    private static IEnumerable<string> ReferencesIn(
+        SyntaxNode root, IReadOnlySet<string> resourceTypeNames, bool staticImport)
     {
-        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root, globals.Aliases);
         IEnumerable<string> qualified = root.DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(access => NamesStringsType(access.Expression, resourceTypeNames))
             .Where(access => !IsNameofOperand(access))
             .Select(access => access.Name.Identifier.ValueText);
 
-        if (!globals.Static && !ImportsResourcesStatically(root))
+        if (!staticImport)
         {
             return qualified;
         }
@@ -289,20 +318,6 @@ internal static class ResxCatalog
             .OfType<IdentifierNameSyntax>()
             .Where(identifier => !IsNameofOperand(identifier))
             .Select(identifier => identifier.Identifier.ValueText));
-    }
-
-    /// <summary>
-    /// The names under which this file can reach the generated resource type: its own, plus
-    /// any <c>using Text = …Localization.Strings;</c> alias. Aliasing is an established
-    /// idiom here (<c>ControlOpWire</c>, <c>ShellViewModel</c>), so treating the source
-    /// spelling <c>Strings</c> as the only possibility would declare an aliased read dead.
-    /// </summary>
-    private static IReadOnlySet<string> ResourceTypeNames(SyntaxNode root, IReadOnlySet<string> globalAliases)
-    {
-        var names = new HashSet<string>(StringComparer.Ordinal) { "Strings" };
-        names.UnionWith(globalAliases);
-        names.UnionWith(AliasesIn(root));
-        return names;
     }
 
     private static IEnumerable<string> AliasesIn(SyntaxNode root) =>
@@ -543,8 +558,7 @@ internal static class ResxCatalog
                     tokens.Add(new MarkupToken(MarkupTokenKind.Equals, "="));
                     continue;
                 case '\'' or '"':
-                    SkipQuoted(value, ref i);
-                    tokens.Add(new MarkupToken(MarkupTokenKind.Quoted, string.Empty));
+                    tokens.Add(new MarkupToken(MarkupTokenKind.Quoted, ReadQuoted(value, ref i)));
                     i--; // the loop's own increment steps past the closing quote
                     continue;
                 default:
@@ -594,14 +608,18 @@ internal static class ResxCatalog
                     ParseExtension(tokens, ref index, names, staticExtensions);
                     property = null;
                     continue;
-                case MarkupTokenKind.Comma or MarkupTokenKind.Quoted:
+                case MarkupTokenKind.Comma:
                     property = null;
                     index++;
                     continue;
                 case MarkupTokenKind.Equals:
                     index++;
                     continue;
-                case MarkupTokenKind.Text:
+                // Quoted contents are a VALUE — `{x:Static Member='loc:Strings.Foo'}` binds
+                // what the bare form binds — but never markup: the anchored member pattern
+                // is what keeps `FallbackValue='use {x:Static loc:Strings.Foo} here'` out,
+                // since prose cannot match a whole member name end to end.
+                case MarkupTokenKind.Quoted or MarkupTokenKind.Text:
                     break;
                 case MarkupTokenKind.Close:
                     continue;
@@ -654,18 +672,23 @@ internal static class ResxCatalog
         return value[start..index];
     }
 
-    private static void SkipQuoted(string value, ref int index)
+    /// <summary>The contents of a quoted argument, without its quotes.</summary>
+    private static string ReadQuoted(string value, ref int index)
     {
         char quote = value[index++];
+        int start = index;
         while (index < value.Length && value[index] != quote)
         {
             index++;
         }
 
+        string contents = value[start..index];
         if (index < value.Length)
         {
             index++;
         }
+
+        return contents;
     }
 
     private static readonly Regex StaticMember = new(
