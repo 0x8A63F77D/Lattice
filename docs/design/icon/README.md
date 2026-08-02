@@ -18,6 +18,7 @@ png/
 
 windows/lattice.ico            16 · 24 · 32 · 48 · 256 (16/24/32 = minimal variant)
 macos/lattice.icns             16→1024 incl. @2x retina slices
+macos/tray/                    latticeTrayTemplate.svg + .png + @2x — the menu-bar template asset
 linux/hicolor/                 freedesktop layout: NxN/apps/lattice.png + scalable/apps/lattice.svg
 ```
 
@@ -31,5 +32,5 @@ Fluent blue family (echoes the in-app accent).
 
 - Master SVGs carry the full Fluent depth (soft per-crossing shadows, subtle wallpaper bloom, faint noise). At 16/24/32 those filters muddy, so small sizes use the simplified variant — same geometry, flat colors, thicker struts.
 - The `.ico` / `.icns` / hicolor PNGs are built from the **light** master (the canonical app icon; its blue plate reads on both light taskbars and dark docks).
-- Monochrome template is a single-color + alpha image (accent strut at full alpha, others dimmed) for the future tray / menu-bar surface — the OS tints it.
-- Packaging wire-up (csproj `ApplicationIcon`, `Info.plist`, `.desktop`) is a separate follow-up PR. Artifacts are generated, not hand-edited — revisions route back through Claude Design.
+- Monochrome template is a single-color + alpha image (accent strut at full alpha, others dimmed) for the tray / menu-bar surface — the OS tints it. That surface has since shipped: `macos/tray/latticeTrayTemplate@2x.png` is the asset `TrayIconAssetPolicy` wires on macOS.
+- Packaging wire-up has since landed (csproj `ApplicationIcon` → `windows/lattice.ico`, `packaging/macos/Info.plist`, `packaging/linux/lattice.desktop`). Artifacts are generated, not hand-edited — revisions route back through Claude Design.
