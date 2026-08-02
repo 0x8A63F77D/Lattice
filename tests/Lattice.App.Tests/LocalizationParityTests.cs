@@ -237,14 +237,17 @@ public class LocalizationParityTests
     [InlineData("""class C { void M() { var s = "http://x/y"; var a = Strings.Live; } }""", "Live")]
     // …and a raw string literal, which the previous hand-rolled scanner could not model.
     [InlineData("class C { void M() { var s = \"\"\"Strings.Ghost\"\"\"; var a = Strings.Live; } }", "Live")]
-    // A branch NO shipped configuration compiles is trivia…
-    [InlineData("class C { void M() {\n#if NEVER\nvar b = Strings.Ghost;\n#endif\nvar a = Strings.Live; } }", "Live")]
-    // …but a DEBUG-only region is real code in the Debug build, and this repo has some.
+    // Conditional regions are read whatever symbol guards them — a DEBUG-only region (this
+    // repo has some), an SDK-defined symbol, and the excluded side of an #if/#else alike.
     [InlineData("class C { void M() {\n#if DEBUG\nvar a = Strings.Live;\n#endif\n} }", "Live")]
-    // Both sides of a conditional are read, since both ship in some configuration.
-    [InlineData("class C { void M() {\n#if DEBUG\nvar a = Strings.Live;\n#else\nvar b = Strings.Live;\n#endif\n} }", "Live")]
+    [InlineData("class C { void M() {\n#if NET10_0_OR_GREATER\nvar a = Strings.Live;\n#endif\n} }", "Live")]
+    [InlineData("class C { void M() {\n#if SOMETHING\nvar x = 1;\n#else\nvar a = Strings.Live;\n#endif\n} }", "Live")]
+    [InlineData("class C { void M() {\n#if A\n#if B\nvar a = Strings.Live;\n#endif\n#endif\n} }", "Live")]
     // An aliased import of the resource type is still the resource type.
     [InlineData("using Text = Lattice.App.Localization.Strings;\nclass C { void M() { var a = Text.Live; } }", "Live")]
+    // …and an alias declared globally applies in files that never mention it, so it is
+    // collected repo-wide and handed to every file (simulated here by the parameter).
+    [InlineData("class C { void M() { var a = Text.Live; } }", "Live", new[] { "Text" })]
     // nameof compiles to a literal and reads no resource, so it keeps none alive.
     [InlineData("class C { void M() { var n = nameof(Strings.Ghost); var a = Strings.Live; } }", "Live")]
     // …but a real read elsewhere in the same call still counts.
@@ -256,9 +259,10 @@ public class LocalizationParityTests
     [InlineData("""class C { void M() { var s = $"{Strings.Live}"; } }""", "Live")]
     // Fully qualified access counts.
     [InlineData("class C { void M() { var a = Lattice.App.Localization.Strings.Live; } }", "Live")]
-    public void CSharp_references_are_expressions_not_text(string source, string expected)
+    public void CSharp_references_are_expressions_not_text(
+        string source, string expected, string[]? globalAliases = null)
     {
-        string[] names = ScanSource(source, "Sample.cs");
+        string[] names = ScanSource(source, "Sample.cs", globalAliases);
         Assert.Contains(expected, names);
         Assert.DoesNotContain("Ghost", names);
     }
@@ -297,13 +301,14 @@ public class LocalizationParityTests
         Assert.DoesNotContain("Ghost", names);
     }
 
-    private static string[] ScanSource(string source, string fileName)
+    private static string[] ScanSource(string source, string fileName, string[]? globalAliases = null)
     {
         string path = Path.Combine(Path.GetTempPath(), $"lattice-loc-{Guid.NewGuid():N}-{fileName}");
         try
         {
             File.WriteAllText(path, source);
-            return ResxCatalog.ReferencedNames(path).ToArray();
+            return ResxCatalog.ReferencedNames(
+                path, (globalAliases ?? []).ToHashSet(StringComparer.Ordinal)).ToArray();
         }
         finally
         {

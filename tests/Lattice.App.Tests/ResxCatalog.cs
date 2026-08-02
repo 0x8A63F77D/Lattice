@@ -199,12 +199,18 @@ internal static class ResxCatalog
     /// neighbourhood and by the compiler itself (a wrong <c>Strings.Foo</c> would not build).
     /// </para>
     /// </summary>
-    internal static IEnumerable<string> ReferencedNames(string path)
+    internal static IEnumerable<string> ReferencedNames(string path) =>
+        ReferencedNames(path, GlobalResourceAliases.Value);
+
+    /// <summary>
+    /// As above, with the repository-wide <c>global using</c> aliases supplied explicitly.
+    /// </summary>
+    internal static IEnumerable<string> ReferencedNames(string path, IReadOnlySet<string> globalAliases)
     {
         string text = File.ReadAllText(path);
         return path.EndsWith(".axaml", StringComparison.Ordinal)
             ? XamlReferences(text)
-            : CSharpReferences(text);
+            : CSharpReferences(text, globalAliases);
     }
 
     /// <summary>
@@ -212,28 +218,47 @@ internal static class ResxCatalog
     /// interpolation hole, which is an expression like any other. Trivia (comments and
     /// doc comments) and literal tokens are not expressions and so never appear here.
     /// <para>
-    /// Read once per build configuration, because a conditional region is disabled TRIVIA
-    /// in the configuration that excludes it: with no symbols defined, everything inside
-    /// this repo's <c>#if DEBUG</c> blocks (<c>SampleHost</c>, <c>App.axaml.cs</c>) would
-    /// be invisible, and a resource used only there would be declared dead. A key is live
-    /// if any shipped configuration reads it; a branch no configuration compiles — the
-    /// <c>#if NEVER</c> case — stays invisible in both, which is the point.
+    /// EVERY conditional branch is read, whichever symbol guards it. A branch excluded by
+    /// the parse is disabled TRIVIA and therefore invisible, so a scan that fixes a symbol
+    /// set decides which <c>#if</c>s exist: with none defined this repo's <c>#if DEBUG</c>
+    /// blocks vanish, and with <c>DEBUG</c> alone an SDK symbol such as
+    /// <c>NET10_0_OR_GREATER</c> still does. Enumerating symbols is a losing game — the
+    /// SDK defines dozens and the list moves with the target framework — and every gap in
+    /// it points the SAME dangerous way: a live key reported dead, whose implied remedy is
+    /// deleting a translation that is in use. So the disabled text is re-parsed rather
+    /// than guessed at. The cost is the opposite, harmless error: a key referenced only
+    /// from a branch nothing compiles (<c>#if NEVER</c>) survives the inventory.
     /// </para>
     /// </summary>
-    private static IEnumerable<string> CSharpReferences(string text) =>
-        BuildConfigurations
-            .SelectMany(options => ReferencesIn(CSharpSyntaxTree.ParseText(text, options).GetRoot()))
-            .Distinct(StringComparer.Ordinal);
-
-    private static readonly CSharpParseOptions[] BuildConfigurations =
-    [
-        CSharpParseOptions.Default.WithPreprocessorSymbols("DEBUG"),
-        CSharpParseOptions.Default,
-    ];
-
-    private static IEnumerable<string> ReferencesIn(SyntaxNode root)
+    private static IEnumerable<string> CSharpReferences(string text, IReadOnlySet<string> globalAliases)
     {
-        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root);
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        var pending = new Queue<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        pending.Enqueue(text);
+
+        while (pending.TryDequeue(out string? source))
+        {
+            if (!seen.Add(source))
+            {
+                continue;
+            }
+
+            SyntaxNode root = CSharpSyntaxTree.ParseText(source).GetRoot();
+            names.UnionWith(ReferencesIn(root, globalAliases));
+            foreach (SyntaxTrivia trivia in root.DescendantTrivia()
+                .Where(trivia => trivia.IsKind(SyntaxKind.DisabledTextTrivia)))
+            {
+                pending.Enqueue(trivia.ToFullString());
+            }
+        }
+
+        return names;
+    }
+
+    private static IEnumerable<string> ReferencesIn(SyntaxNode root, IReadOnlySet<string> globalAliases)
+    {
+        IReadOnlySet<string> resourceTypeNames = ResourceTypeNames(root, globalAliases);
         IEnumerable<string> qualified = root.DescendantNodes()
             .OfType<MemberAccessExpressionSyntax>()
             .Where(access => NamesStringsType(access.Expression, resourceTypeNames))
@@ -262,20 +287,38 @@ internal static class ResxCatalog
     /// idiom here (<c>ControlOpWire</c>, <c>ShellViewModel</c>), so treating the source
     /// spelling <c>Strings</c> as the only possibility would declare an aliased read dead.
     /// </summary>
-    private static IReadOnlySet<string> ResourceTypeNames(SyntaxNode root)
+    private static IReadOnlySet<string> ResourceTypeNames(SyntaxNode root, IReadOnlySet<string> globalAliases)
     {
         var names = new HashSet<string>(StringComparer.Ordinal) { "Strings" };
-        foreach (UsingDirectiveSyntax directive in root.DescendantNodes().OfType<UsingDirectiveSyntax>())
-        {
-            if (directive.Alias is { Name.Identifier.ValueText: { } alias }
-                && RightmostIdentifier(directive.NamespaceOrType) == "Strings")
-            {
-                names.Add(alias);
-            }
-        }
-
+        names.UnionWith(globalAliases);
+        names.UnionWith(AliasesIn(root));
         return names;
     }
+
+    private static IEnumerable<string> AliasesIn(SyntaxNode root) =>
+        root.DescendantNodes()
+            .OfType<UsingDirectiveSyntax>()
+            .Where(directive => RightmostIdentifier(directive.NamespaceOrType) == "Strings")
+            .Select(directive => directive.Alias?.Name.Identifier.ValueText)
+            .OfType<string>();
+
+    /// <summary>
+    /// Aliases declared with <c>global using Text = …Strings;</c>, which apply to every file
+    /// in the compilation but are DECLARED in one. Files are parsed independently here, so
+    /// without this pre-pass the consuming file knows only the literal spelling and an
+    /// aliased read elsewhere would be declared dead.
+    /// </summary>
+    private static readonly Lazy<IReadOnlySet<string>> GlobalResourceAliases = new(() =>
+        AppSourceFiles()
+            .Where(path => path.EndsWith(".cs", StringComparison.Ordinal))
+            .SelectMany(path => CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
+                .DescendantNodes()
+                .OfType<UsingDirectiveSyntax>()
+                .Where(directive => directive.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword))
+                .Where(directive => RightmostIdentifier(directive.NamespaceOrType) == "Strings")
+                .Select(directive => directive.Alias?.Name.Identifier.ValueText)
+                .OfType<string>())
+            .ToHashSet(StringComparer.Ordinal));
 
     private static bool ImportsResourcesStatically(SyntaxNode root) =>
         root.DescendantNodes()
@@ -314,14 +357,53 @@ internal static class ResxCatalog
     /// does not, which is exactly the distinction the checks need.
     /// </para>
     /// <para>
-    /// The residual gap is a value used as a format that carries no slot at all (say
+    /// The test is a brace PAIR, not a valid argument index, because a malformed item is
+    /// exactly what needs checking: <c>{name}</c> and <c>{0x}</c> yield no index, so keying
+    /// on "has an index" would have excluded them from the grammar check and let a
+    /// guaranteed runtime <see cref="FormatException"/> through a green gate. An unpaired
+    /// brace stays out — that is the <c>Set {</c> label the scoping exists to protect.
+    /// </para>
+    /// <para>
+    /// The residual gap is a value used as a format that carries no brace pair at all (say
     /// <c>Set {</c> passed to <c>string.Format</c>): unchecked here, and it throws at
     /// runtime. A format string with nothing to format is a contradiction in terms, and
     /// paying for it in false CI failures on ordinary labels is the trade this deliberately
     /// refuses.
     /// </para>
     /// </summary>
-    internal static bool CarriesPlaceholder(string value) => ExtractIndexes(value).Count > 0;
+    internal static bool CarriesPlaceholder(string value)
+    {
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (c == '}' && i + 1 < value.Length && value[i + 1] == '}')
+            {
+                i++;
+                continue;
+            }
+
+            if (c != '{')
+            {
+                continue;
+            }
+
+            if (i + 1 < value.Length && value[i + 1] == '{')
+            {
+                i++;
+                continue;
+            }
+
+            int close = value.IndexOf('}', i + 1);
+            if (close < 0)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>True for a name the file can use for the resource type, plain or qualified.</summary>
     private static bool NamesStringsType(ExpressionSyntax expression, IReadOnlySet<string> names) => expression switch
