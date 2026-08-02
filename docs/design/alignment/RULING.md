@@ -49,12 +49,26 @@ class:
   label at that site. (Content-dependent selection would re-introduce
   the per-string dependence this clause removes.)
 
-The same rules select the face for R2's capHeight. The gate must
-exercise both shipped configurations of the localized rule: the real
-default-plus-fallback configuration (a CJK-resolved resource set whose
-primary family lacks Han), and the unsupported-CJK/System configuration
-(CJK OS culture, English resource fallback → Latin band) — not only
-CJK-primary test pins.
+The same rules select the face for R2's capHeight.
+
+The BASELINE in these formulas is derived the same way: from the
+SELECTED face's metrics at the resolved size, anchored to the label's
+layout box — never read from the live shaped text. Fallback runs move
+the live line metrics with content (the shipped stack records a Latin
+string at a 12.0 DIP line where a CJK-fallback string reports 16.8), so
+a live baseline would let the band follow user data even under a fixed
+capHeight. With face and baseline both fixed, the band cannot move with
+content.
+
+The gate must exercise both shipped configurations of the localized
+rule: the real default-plus-fallback configuration (a CJK-resolved
+resource set whose primary family lacks Han), and the
+unsupported-CJK/System configuration (CJK OS culture, English resource
+fallback → Latin band) — not only CJK-primary test pins. At user-data
+sites the gate must additionally assert the ABSOLUTE mark and band
+positions are unchanged across a Latin → CJK/mixed content swap:
+checking each sample only against its own current baseline would still
+pass a content-following baseline.
 
 GATE: |centerY(mark) − centerY(band)| <= 0.05 DIP, evaluated on arranged
 layout geometry, at every registered site, in every registered UI font.

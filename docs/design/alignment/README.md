@@ -89,13 +89,21 @@ centerY(mark) = baseline − capHeight / 2
     the **primary face** of the label's font stack regardless of content; a
     mixed-script or fallback-forcing name gets the same band as every other
     label at that site.
+- **The baseline is derived the same way as the face** (normative text in
+  `RULING.md`): from the selected face's metrics at the resolved size,
+  anchored to the label's layout box — never read from the live shaped text.
+  Fallback runs move live line metrics with content (Latin 12.0 DIP line vs
+  CJK-fallback 16.8 in the shipped stack), so a live baseline would let the
+  band follow user data even with a fixed capHeight.
   The gate must include a fallback-forcing, mixed-script label sample at the
-  user-data sites (legend swatch, overflow checkbox), AND must run the
-  localized-label sites under both shipped configurations: the real
-  default-plus-fallback configuration (a CJK-resolved resource set whose
-  primary family lacks Han) and the unsupported-CJK/System configuration
-  (CJK OS culture, English resource fallback → Latin band) — rather than
-  only CJK-primary test pins.
+  user-data sites (legend swatch, overflow checkbox), assert the ABSOLUTE
+  mark and band positions are unchanged across a Latin → CJK/mixed content
+  swap at those sites (per-sample self-consistency alone would pass a
+  content-following baseline), AND must run the localized-label sites under
+  both shipped configurations: the real default-plus-fallback configuration
+  (a CJK-resolved resource set whose primary family lacks Han) and the
+  unsupported-CJK/System configuration (CJK OS culture, English resource
+  fallback → Latin band) — rather than only CJK-primary test pins.
 - The mark's box is *not* resized to the band. Only its centre is constrained. A
   12 px icon beside a 12 px label overhangs the band top and bottom — that is
   correct and intended.
