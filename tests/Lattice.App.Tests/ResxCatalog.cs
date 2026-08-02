@@ -228,10 +228,19 @@ internal static class ResxCatalog
     };
 
     /// <summary>
-    /// The XAML binding form, <c>{x:Static loc:Strings.Foo}</c> — read from attribute
-    /// values and element text of the parsed document, so XML comments are structurally
-    /// out of reach. Requiring the <c>x:Static</c> prefix is what keeps prose in a
-    /// content string from counting as a reference.
+    /// The XAML binding form, <c>{x:Static loc:Strings.Foo}</c>, read from attribute
+    /// values and element text of the parsed document — so XML comments, which are not
+    /// in the element tree, are structurally out of reach.
+    /// <para>
+    /// Two XAML rules decide the rest, and both are the language's, not heuristics of
+    /// ours. First, a value is markup only if it BEGINS with <c>{</c>: prose such as
+    /// <c>Text="use {x:Static loc:Strings.Foo} like this"</c> is literal text end to end,
+    /// which is also why <c>{}</c> exists to escape a leading brace. Second, a reference
+    /// must be a complete brace-delimited <c>{x:Static …}</c> item, not the phrase
+    /// inside one — matching the interior would count prose that merely spells it out.
+    /// Nesting still works (<c>{Binding …, Converter={x:Static …}}</c>) because the
+    /// opening brace an inner extension needs is exactly what the pattern requires.
+    /// </para>
     /// </summary>
     private static IEnumerable<string> XamlReferences(string text)
     {
@@ -240,12 +249,20 @@ internal static class ResxCatalog
             .SelectMany(element => element.Attributes().Select(attribute => attribute.Value)
                 .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)));
 
-        return values.SelectMany(value => StaticReference.Matches(value))
+        return values.Where(IsMarkup)
+            .SelectMany(value => StaticReference.Matches(value))
             .Select(match => match.Groups["name"].Value);
     }
 
+    /// <summary>A value that opens with <c>{</c>, excluding the <c>{}</c> literal escape.</summary>
+    private static bool IsMarkup(string value)
+    {
+        string trimmed = value.TrimStart();
+        return trimmed.StartsWith('{') && !trimmed.StartsWith("{}", StringComparison.Ordinal);
+    }
+
     private static readonly Regex StaticReference = new(
-        @"x:Static\s+(?:\w+:)?Strings\.(?<name>\w+)", RegexOptions.CultureInvariant);
+        @"\{\s*x:Static\s+(?:\w+:)?Strings\.(?<name>\w+)\s*\}", RegexOptions.CultureInvariant);
 
     private static bool IsBuildOutput(string path, string sourceRoot)
     {

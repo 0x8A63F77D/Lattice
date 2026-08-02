@@ -230,13 +230,22 @@ public class LocalizationParityTests
     }
 
     [Theory]
-    // The binding form counts…
+    // The binding form counts, in an attribute or in element text…
     [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" />""", "Live")]
     [InlineData("""<T xmlns:x="u"><T.Text>{x:Static loc:Strings.Live}</T.Text></T>""", "Live")]
-    // …an XML comment does not — it is not in the element tree.
+    // …including nested inside another markup extension, which is how converters read.
+    [InlineData("""<T xmlns:x="u" Text="{Binding X, Converter={x:Static loc:Strings.Live}}" />""", "Live")]
+    // An XML comment does not — it is not in the element tree.
     [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}"><!-- {x:Static loc:Strings.Ghost} --></T>""", "Live")]
-    // …and neither does prose that merely spells the name.
+    // Nor does prose that spells the name…
     [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="see Strings.Ghost" />""", "Live")]
+    // …nor prose that spells the whole binding form: a value not opening with '{' is
+    // literal text in XAML, braces and all.
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="use {x:Static loc:Strings.Ghost} here" />""", "Live")]
+    // …nor a value whose leading brace is the {} literal escape.
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
+    // …nor the interior phrase without its delimiters.
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
     public void Xaml_references_require_the_binding_form(string source, string expected)
     {
         string[] names = ScanSource(source, "Sample.axaml");
