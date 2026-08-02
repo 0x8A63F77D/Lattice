@@ -23,6 +23,10 @@ public class LocalizationParityTests
     private static readonly IReadOnlyDictionary<string, string> Chinese =
         ResxCatalog.Load(ResxCatalog.ChineseFile);
 
+    /// <summary>Keys some <c>string.Format</c> call under <c>src/</c> uses as its format string.</summary>
+    private static readonly IReadOnlySet<string> FormatKeys =
+        ResxCatalog.AppSourceFiles().SelectMany(ResxCatalog.FormatArgumentNames).ToHashSet(StringComparer.Ordinal);
+
     [Fact]
     public void Zh_CN_defines_every_neutral_key()
     {
@@ -45,7 +49,7 @@ public class LocalizationParityTests
     public void Placeholder_sets_match_across_languages()
     {
         List<string> mismatches = [];
-        foreach (string key in Neutral.Keys.Intersect(Chinese.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        foreach (string key in FormatKeys.Intersect(Chinese.Keys, StringComparer.Ordinal).Order(StringComparer.Ordinal))
         {
             ResxCatalog.PlaceholderScan neutral = ResxCatalog.ScanPlaceholders(Neutral[key]);
             ResxCatalog.PlaceholderScan chinese = ResxCatalog.ScanPlaceholders(Chinese[key]);
@@ -64,12 +68,22 @@ public class LocalizationParityTests
             mismatches));
     }
 
+    /// <summary>
+    /// Only the values that are actually FORMATTED have to satisfy the composite-format
+    /// grammar. A directly rendered label may legitimately contain a lone brace — <c>Set {</c>
+    /// displays fine — and demanding it be doubled would make the label render two braces
+    /// to satisfy a parser that never runs on it. Which keys those are comes from usage,
+    /// via <see cref="FormatKeys"/>, not from the <c>…Fmt</c> naming convention, which
+    /// already has exceptions. The converse hole — a placeholder sitting in a value nobody
+    /// formats — is closed by <see cref="Values_with_placeholders_are_used_as_format_strings"/>.
+    /// </summary>
     [Theory]
     [InlineData(ResxCatalog.NeutralFile)]
     [InlineData(ResxCatalog.ChineseFile)]
-    public void Every_value_is_a_well_formed_composite_format_string(string fileName)
+    public void Every_format_string_value_is_well_formed(string fileName)
     {
         string[] broken = ResxCatalog.LoadEntries(fileName)
+            .Where(entry => FormatKeys.Contains(entry.Name))
             .Select(entry => (entry.Name, Scan: ResxCatalog.ScanPlaceholders(entry.Value)))
             .Where(pair => pair.Scan.Error is not null)
             .Select(pair => $"- {pair.Name}: {pair.Scan.Error}")
@@ -78,6 +92,32 @@ public class LocalizationParityTests
         Assert.True(broken.Length == 0, Diff(
             $"{fileName} has value(s) string.Format would reject", broken));
     }
+
+    /// <summary>
+    /// The other half of scoping the format checks by usage: a value carrying <c>{0}</c>
+    /// that no <c>string.Format</c> call ever receives is either a placeholder stranded in
+    /// display text (it renders as the literal characters <c>{0}</c>) or a use this scan
+    /// cannot see — and in the second case the two checks above have a blind spot. Either
+    /// way a human has to look, so it fails loudly instead of narrowing coverage in silence.
+    /// </summary>
+    [Fact]
+    public void Values_with_placeholders_are_used_as_format_strings()
+    {
+        string[] stranded = Neutral.Keys.Union(Chinese.Keys, StringComparer.Ordinal)
+            .Where(key => !FormatKeys.Contains(key))
+            .Where(key => HasPlaceholder(Neutral, key) || HasPlaceholder(Chinese, key))
+            .Order(StringComparer.Ordinal)
+            .Select(key => $"- {key}")
+            .ToArray();
+
+        Assert.True(stranded.Length == 0, Diff(
+            "key(s) carry a {0}-style placeholder but reach no string.Format call under src/ — "
+                + "either the placeholder is stray text, or the format checks are blind to how they are used",
+            stranded));
+    }
+
+    private static bool HasPlaceholder(IReadOnlyDictionary<string, string> catalog, string key) =>
+        catalog.TryGetValue(key, out string? value) && ResxCatalog.ScanPlaceholders(value).Indexes.Count > 0;
 
     [Theory]
     [InlineData(ResxCatalog.NeutralFile)]
@@ -246,11 +286,42 @@ public class LocalizationParityTests
     [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{}{x:Static loc:Strings.Ghost}" />""", "Live")]
     // …nor the interior phrase without its delimiters.
     [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="{Binding x:Static loc:Strings.Ghost}" />""", "Live")]
+    // …nor the whole form quoted as a literal ARGUMENT of a real markup extension, which
+    // is markup on the outside and text on the inside.
+    [InlineData("""<T xmlns:x="u" Text="{Binding X, FallbackValue='use {x:Static loc:Strings.Ghost} here', Converter={x:Static loc:Strings.Live}}" />""", "Live")]
     public void Xaml_references_require_the_binding_form(string source, string expected)
     {
         string[] names = ScanSource(source, "Sample.axaml");
         Assert.Contains(expected, names);
         Assert.DoesNotContain("Ghost", names);
+    }
+
+    /// <summary>
+    /// Which argument of a <c>string.Format</c> call is the FORMAT — the question that
+    /// decides whether a value must satisfy the composite-format grammar at all.
+    /// </summary>
+    [Theory]
+    [InlineData("class C { void M() { var s = string.Format(Strings.AFmt, x); } }", new[] { "AFmt" })]
+    // A culture may come first; the format is then argument 1.
+    [InlineData("class C { void M() { var s = string.Format(CultureInfo.CurrentCulture, Strings.AFmt, x); } }", new[] { "AFmt" })]
+    // A conditional format parameter makes BOTH branches format strings.
+    [InlineData("class C { void M() { var s = string.Format(edit ? Strings.AFmt : Strings.BFmt, x); } }", new[] { "AFmt", "BFmt" })]
+    // Later arguments are values being formatted IN, not formats.
+    [InlineData("class C { void M() { var s = string.Format(Strings.AFmt, Strings.Plain); } }", new[] { "AFmt" })]
+    // A plain read is not a format use.
+    [InlineData("class C { void M() { var s = Strings.Plain; } }", new string[0])]
+    public void Format_strings_are_identified_by_use(string source, string[] expected)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"lattice-fmt-{Guid.NewGuid():N}.cs");
+        try
+        {
+            File.WriteAllText(path, source);
+            Assert.Equal(expected.Order(), ResxCatalog.FormatArgumentNames(path).Order());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 
     private static string[] ScanSource(string source, string fileName)

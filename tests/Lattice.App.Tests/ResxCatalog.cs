@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -219,6 +220,66 @@ internal static class ResxCatalog
             .Where(access => NamesStringsType(access.Expression))
             .Select(access => access.Name.Identifier.ValueText);
 
+    /// <summary>
+    /// Resources this file passes to <see cref="string.Format(string, object?[])"/> as the
+    /// format string — the keys, and only those, that must parse as composite formats.
+    /// <para>
+    /// A resource is a format string because of how it is USED, not how it is named (the
+    /// codebase's own <c>…Fmt</c> convention already has two exceptions), and the
+    /// distinction is not cosmetic: a directly rendered label may legitimately read
+    /// <c>Set {</c>, which is fine on screen and would be mangled, not fixed, by doubling
+    /// the brace to satisfy a parser that had no business reading it.
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<string> FormatArgumentNames(string path)
+    {
+        if (!path.EndsWith(".cs", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        return CSharpSyntaxTree.ParseText(File.ReadAllText(path)).GetRoot()
+            .DescendantNodes()
+            .OfType<InvocationExpressionSyntax>()
+            .Where(IsStringFormat)
+            .SelectMany(FormatArguments);
+    }
+
+    private static bool IsStringFormat(InvocationExpressionSyntax invocation) =>
+        invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.ValueText: "Format" } access
+        && access.Expression switch
+        {
+            PredefinedTypeSyntax predefined => predefined.Keyword.IsKind(SyntaxKind.StringKeyword),
+            IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "String",
+            _ => false,
+        };
+
+    /// <summary>
+    /// The resources named by the format parameter: argument 0, or argument 1 when a
+    /// culture is passed first. Never a later argument — those are the values being
+    /// formatted INTO the string, not the format itself.
+    /// <para>
+    /// Plural because the parameter is an expression, not necessarily a bare reference:
+    /// <c>string.Format(edit ? Strings.EditFailedFmt : Strings.AddFailedFmt, err)</c> makes
+    /// BOTH resources format strings. Reading only a top-level member access missed exactly
+    /// that pair, and the placeholders-must-be-formatted check is what caught it.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<string> FormatArguments(InvocationExpressionSyntax invocation)
+    {
+        SeparatedSyntaxList<ArgumentSyntax> arguments = invocation.ArgumentList.Arguments;
+        string[] format = ResourceNames(arguments.ElementAtOrDefault(0)?.Expression).ToArray();
+        return format.Length > 0 ? format : ResourceNames(arguments.ElementAtOrDefault(1)?.Expression);
+    }
+
+    private static IEnumerable<string> ResourceNames(ExpressionSyntax? expression) =>
+        expression is null
+            ? []
+            : expression.DescendantNodesAndSelf()
+                .OfType<MemberAccessExpressionSyntax>()
+                .Where(access => NamesStringsType(access.Expression))
+                .Select(access => access.Name.Identifier.ValueText);
+
     /// <summary>True for <c>Strings</c> and for any qualified form ending in it.</summary>
     private static bool NamesStringsType(ExpressionSyntax expression) => expression switch
     {
@@ -228,41 +289,146 @@ internal static class ResxCatalog
     };
 
     /// <summary>
-    /// The XAML binding form, <c>{x:Static loc:Strings.Foo}</c>, read from attribute
-    /// values and element text of the parsed document — so XML comments, which are not
-    /// in the element tree, are structurally out of reach.
-    /// <para>
-    /// Two XAML rules decide the rest, and both are the language's, not heuristics of
-    /// ours. First, a value is markup only if it BEGINS with <c>{</c>: prose such as
-    /// <c>Text="use {x:Static loc:Strings.Foo} like this"</c> is literal text end to end,
-    /// which is also why <c>{}</c> exists to escape a leading brace. Second, a reference
-    /// must be a complete brace-delimited <c>{x:Static …}</c> item, not the phrase
-    /// inside one — matching the interior would count prose that merely spells it out.
-    /// Nesting still works (<c>{Binding …, Converter={x:Static …}}</c>) because the
-    /// opening brace an inner extension needs is exactly what the pattern requires.
-    /// </para>
+    /// Resource names bound by <c>{x:Static loc:Strings.Foo}</c>, taken from the attribute
+    /// values and element text of the parsed document — so XML comments, not being in the
+    /// element tree, are structurally out of reach.
     /// </summary>
     private static IEnumerable<string> XamlReferences(string text)
     {
         XDocument doc = XDocument.Parse(text);
-        IEnumerable<string> values = doc.Descendants()
+        return doc.Descendants()
             .SelectMany(element => element.Attributes().Select(attribute => attribute.Value)
-                .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)));
-
-        return values.Where(IsMarkup)
-            .SelectMany(value => StaticReference.Matches(value))
-            .Select(match => match.Groups["name"].Value);
+                .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)))
+            .SelectMany(MarkupReferences);
     }
 
-    /// <summary>A value that opens with <c>{</c>, excluding the <c>{}</c> literal escape.</summary>
-    private static bool IsMarkup(string value)
+    /// <summary>
+    /// Resource names an attribute value or text node BINDS, by parsing it as a markup
+    /// extension rather than searching it for a phrase.
+    /// <para>
+    /// Text matching kept producing the same finding in new costumes here — prose naming
+    /// the member, prose spelling the whole <c>{x:Static …}</c> form, then the form
+    /// sitting inside a quoted extension argument
+    /// (<c>{Binding X, FallbackValue='use {x:Static loc:Strings.Foo} here'}</c>). They are
+    /// one bug: a regex cannot tell a binding from a sentence that describes one. Parsing
+    /// the extension grammar decides it structurally, so a quoted argument is a literal,
+    /// a nested <c>{…}</c> is a real extension, and prose is not markup at all.
+    /// </para>
+    /// <para>
+    /// Entry rule is XAML's own: a value is markup only if it BEGINS with <c>{</c>, which
+    /// is why <c>{}</c> exists to escape a leading brace. Anything else is literal text,
+    /// braces and all.
+    /// </para>
+    /// </summary>
+    internal static IEnumerable<string> MarkupReferences(string value)
     {
         string trimmed = value.TrimStart();
-        return trimmed.StartsWith('{') && !trimmed.StartsWith("{}", StringComparison.Ordinal);
+        if (!trimmed.StartsWith('{') || trimmed.StartsWith("{}", StringComparison.Ordinal))
+        {
+            return [];
+        }
+
+        List<string> names = [];
+        int index = 0;
+        ParseExtension(trimmed, ref index, names);
+        return names;
     }
 
-    private static readonly Regex StaticReference = new(
-        @"\{\s*x:Static\s+(?:\w+:)?Strings\.(?<name>\w+)\s*\}", RegexOptions.CultureInvariant);
+    /// <summary>
+    /// Consumes one <c>{Name arg, Prop=value}</c> item starting at <paramref name="index"/>,
+    /// recursing into nested extensions and skipping quoted arguments, and records the
+    /// member of every <c>x:Static</c> it meets that names a resource.
+    /// </summary>
+    private static void ParseExtension(string value, ref int index, ICollection<string> names)
+    {
+        index++; // the opening brace
+        string extension = ReadToken(value, ref index);
+        string? member = null;
+        bool expectingPropertyValue = false;
+
+        while (index < value.Length && value[index] != '}')
+        {
+            char c = value[index];
+            if (char.IsWhiteSpace(c) || c == ',')
+            {
+                index++;
+                expectingPropertyValue = expectingPropertyValue && c != ',';
+                continue;
+            }
+
+            if (c == '{')
+            {
+                ParseExtension(value, ref index, names);
+                expectingPropertyValue = false;
+                continue;
+            }
+
+            if (c is '\'' or '"')
+            {
+                SkipQuoted(value, ref index);
+                expectingPropertyValue = false;
+                continue;
+            }
+
+            string token = ReadToken(value, ref index);
+            if (index < value.Length && value[index] == '=')
+            {
+                index++; // the token was a property name; its value comes next
+                expectingPropertyValue = true;
+                continue;
+            }
+
+            if (!expectingPropertyValue)
+            {
+                member ??= token;
+            }
+
+            expectingPropertyValue = false;
+        }
+
+        if (index < value.Length)
+        {
+            index++; // the closing brace
+        }
+
+        if (extension == "x:Static" && member is not null)
+        {
+            Match match = StaticMember.Match(member);
+            if (match.Success)
+            {
+                names.Add(match.Groups["name"].Value);
+            }
+        }
+    }
+
+    private static string ReadToken(string value, ref int index)
+    {
+        int start = index;
+        while (index < value.Length && !char.IsWhiteSpace(value[index])
+            && value[index] is not ('{' or '}' or ',' or '=' or '\'' or '"'))
+        {
+            index++;
+        }
+
+        return value[start..index];
+    }
+
+    private static void SkipQuoted(string value, ref int index)
+    {
+        char quote = value[index++];
+        while (index < value.Length && value[index] != quote)
+        {
+            index++;
+        }
+
+        if (index < value.Length)
+        {
+            index++;
+        }
+    }
+
+    private static readonly Regex StaticMember = new(
+        @"^(?:\w+:)?Strings\.(?<name>\w+)$", RegexOptions.CultureInvariant);
 
     private static bool IsBuildOutput(string path, string sourceRoot)
     {
