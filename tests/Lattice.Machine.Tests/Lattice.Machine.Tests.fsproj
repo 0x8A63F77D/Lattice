@@ -9,7 +9,7 @@
     <Compile Include="AttachMachineTests.fs" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <!-- Pinned to xunit v2 (issue #16): FsCheck.Xunit 3.3.3 (latest) still depends on
          xunit.extensibility.execution [2.4.1, 3.0.0), i.e. the xunit v2 execution engine.
          No FsCheck.Xunit release targets xunit.v3, so this project cannot join v3 until
