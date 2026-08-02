@@ -229,7 +229,7 @@ internal static class ResxCatalog
     private static bool IsNameofOperand(SyntaxNode node) =>
         node.Ancestors()
             .OfType<InvocationExpressionSyntax>()
-            .Any(invocation => invocation.Expression is IdentifierNameSyntax { Identifier.ValueText: "nameof" });
+            .Any(invocation => invocation.Expression is IdentifierNameSyntax { Identifier.Text: "nameof" });
 
     /// <summary>
     /// Whether a value carries an argument slot, i.e. whether it is a composite format
@@ -269,11 +269,30 @@ internal static class ResxCatalog
     private static IEnumerable<string> XamlReferences(string text)
     {
         XDocument doc = XDocument.Parse(text);
+        IReadOnlySet<string> staticExtensions = StaticExtensionNames(doc);
         return doc.Descendants()
             .SelectMany(element => element.Attributes().Select(attribute => attribute.Value)
                 .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)))
-            .SelectMany(MarkupReferences);
+            .SelectMany(value => MarkupReferences(value, staticExtensions));
     }
+
+    /// <summary>
+    /// Every spelling of the <c>Static</c> extension this document can use, derived from
+    /// its own namespace declarations. <c>x</c> is a convention, not a rule: a view may
+    /// bind the XAML language namespace to any prefix, and
+    /// <c>{lang:Static loc:Strings.Foo}</c> is then a real binding. Hard-coding
+    /// <c>x:Static</c> would report the key it names as DEAD — the dangerous direction,
+    /// since the remedy the failure implies is deleting a translation that is in use.
+    /// </summary>
+    private static IReadOnlySet<string> StaticExtensionNames(XDocument doc) =>
+        doc.Descendants()
+            .SelectMany(element => element.Attributes())
+            .Where(attribute => attribute.IsNamespaceDeclaration
+                && attribute.Value == "http://schemas.microsoft.com/winfx/2006/xaml")
+            .Select(attribute => attribute.Name.LocalName == "xmlns"
+                ? "Static"
+                : $"{attribute.Name.LocalName}:Static")
+            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
     /// Resource names an attribute value or text node BINDS, by parsing it as a markup
@@ -293,7 +312,7 @@ internal static class ResxCatalog
     /// braces and all.
     /// </para>
     /// </summary>
-    internal static IEnumerable<string> MarkupReferences(string value)
+    internal static IEnumerable<string> MarkupReferences(string value, IReadOnlySet<string> staticExtensions)
     {
         string trimmed = value.TrimStart();
         if (!trimmed.StartsWith('{') || trimmed.StartsWith("{}", StringComparison.Ordinal))
@@ -303,7 +322,7 @@ internal static class ResxCatalog
 
         List<string> names = [];
         int index = 0;
-        ParseExtension(trimmed, ref index, names);
+        ParseExtension(trimmed, ref index, names, staticExtensions);
         return names;
     }
 
@@ -312,7 +331,8 @@ internal static class ResxCatalog
     /// recursing into nested extensions and skipping quoted arguments, and records the
     /// member of every <c>x:Static</c> it meets that names a resource.
     /// </summary>
-    private static void ParseExtension(string value, ref int index, ICollection<string> names)
+    private static void ParseExtension(
+        string value, ref int index, ICollection<string> names, IReadOnlySet<string> staticExtensions)
     {
         index++; // the opening brace
         string extension = ReadToken(value, ref index);
@@ -331,7 +351,7 @@ internal static class ResxCatalog
 
             if (c == '{')
             {
-                ParseExtension(value, ref index, names);
+                ParseExtension(value, ref index, names, staticExtensions);
                 expectingPropertyValue = false;
                 continue;
             }
@@ -364,7 +384,7 @@ internal static class ResxCatalog
             index++; // the closing brace
         }
 
-        if (extension == "x:Static" && member is not null)
+        if (staticExtensions.Contains(extension) && member is not null)
         {
             Match match = StaticMember.Match(member);
             if (match.Success)
