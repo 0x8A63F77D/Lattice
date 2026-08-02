@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Lattice.App.Tests;
 
@@ -175,105 +177,75 @@ internal static class ResxCatalog
     }
 
     /// <summary>
-    /// A source file's text with its comments removed, so a reference scan sees only
-    /// syntax-bearing code. This codebase comments densely and names specific resources
-    /// while doing it (<c>TasksView.axaml.cs</c> discusses <c>Strings.ColX</c> in prose),
-    /// so a raw-text scan would keep a key alive on the strength of a comment that
-    /// outlived the code it described.
+    /// Resource names a source file actually REFERENCES, read off the parsed syntax
+    /// rather than the file's text.
     /// <para>
-    /// Both strippers are string-literal aware, because the bias has to run one way: an
-    /// over-eager strip would drop a real reference and red the gate for a key that IS
-    /// used, which is a worse failure than the miss it fixes. Hence the C# pass tracks
-    /// <c>"…"</c>, <c>@"…"</c> and <c>'…'</c> before honouring a <c>//</c> — otherwise
-    /// every <c>"http://…"</c> literal would swallow the rest of its line. C# 11 raw
-    /// string literals (<c>"""</c>) are NOT modelled; src/ has none, and one would break
-    /// loudly (a red naming a live key), never silently.
+    /// Text scanning cannot answer this question, and two review rounds on this file are
+    /// the evidence: a comment naming a resource (this codebase discusses
+    /// <c>Strings.ColX</c> in prose in <c>TasksView.axaml.cs</c>) and a string literal
+    /// containing <c>"Strings.Foo"</c> both read as references, each keeping a dead key
+    /// alive. Patching a hand-rolled scanner for one hazard at a time just reopens the
+    /// same finding under a new costume — comments, verbatim strings, raw strings,
+    /// interpolation holes. So the question moves to the parsers that own it: in C# a
+    /// comment is trivia and a literal is a token, so neither can ever be a
+    /// <see cref="MemberAccessExpressionSyntax"/>; in XAML an XML comment is not part of
+    /// the element tree at all. Both exclusions hold by construction, not by vigilance.
+    /// </para>
+    /// <para>
+    /// Syntax only — no compilation, no semantic model. That means the match is on the
+    /// NAME <c>Strings</c>, not on a resolved symbol; the app has exactly one such type,
+    /// pinned by <c>LocalizationParityTests.Resource_names_are_never_constructed_dynamically</c>'s
+    /// neighbourhood and by the compiler itself (a wrong <c>Strings.Foo</c> would not build).
     /// </para>
     /// </summary>
-    internal static string StripComments(string text, bool isXaml) =>
-        isXaml ? XmlComment.Replace(text, " ") : StripCSharpComments(text);
-
-    private static readonly Regex XmlComment = new(@"<!--.*?-->", RegexOptions.Singleline | RegexOptions.CultureInvariant);
-
-    private static string StripCSharpComments(string text)
+    internal static IEnumerable<string> ReferencedNames(string path)
     {
-        StringBuilder code = new(text.Length);
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            char next = i + 1 < text.Length ? text[i + 1] : '\0';
-
-            if (c == '/' && next == '/')
-            {
-                while (i < text.Length && text[i] != '\n')
-                {
-                    i++;
-                }
-
-                code.Append('\n');
-                continue;
-            }
-
-            if (c == '/' && next == '*')
-            {
-                int end = text.IndexOf("*/", i + 2, StringComparison.Ordinal);
-                i = end < 0 ? text.Length : end + 1;
-                code.Append(' ');
-                continue;
-            }
-
-            if (c is '"' or '\'')
-            {
-                bool verbatim = c == '"' && code.Length > 0 && code[^1] == '@';
-                int close = FindLiteralEnd(text, i, c, verbatim);
-                code.Append(text, i, close - i + 1);
-                i = close;
-                continue;
-            }
-
-            code.Append(c);
-        }
-
-        return code.ToString();
+        string text = File.ReadAllText(path);
+        return path.EndsWith(".axaml", StringComparison.Ordinal)
+            ? XamlReferences(text)
+            : CSharpReferences(text);
     }
 
-    /// <summary>Index of the quote that closes a literal opened at <paramref name="start"/>.</summary>
-    private static int FindLiteralEnd(string text, int start, char quote, bool verbatim)
+    /// <summary>
+    /// <c>Strings.Foo</c> as a member access anywhere in the tree — including inside an
+    /// interpolation hole, which is an expression like any other. Trivia (comments, doc
+    /// comments, disabled <c>#if</c> regions) and literal tokens are not expressions and
+    /// so never appear here.
+    /// </summary>
+    private static IEnumerable<string> CSharpReferences(string text) =>
+        CSharpSyntaxTree.ParseText(text).GetRoot()
+            .DescendantNodes()
+            .OfType<MemberAccessExpressionSyntax>()
+            .Where(access => NamesStringsType(access.Expression))
+            .Select(access => access.Name.Identifier.ValueText);
+
+    /// <summary>True for <c>Strings</c> and for any qualified form ending in it.</summary>
+    private static bool NamesStringsType(ExpressionSyntax expression) => expression switch
     {
-        for (int i = start + 1; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (verbatim)
-            {
-                if (c != quote)
-                {
-                    continue;
-                }
+        IdentifierNameSyntax identifier => identifier.Identifier.ValueText == "Strings",
+        MemberAccessExpressionSyntax qualified => qualified.Name.Identifier.ValueText == "Strings",
+        _ => false,
+    };
 
-                // "" inside a verbatim literal is an escaped quote, not the end.
-                if (i + 1 < text.Length && text[i + 1] == quote)
-                {
-                    i++;
-                    continue;
-                }
+    /// <summary>
+    /// The XAML binding form, <c>{x:Static loc:Strings.Foo}</c> — read from attribute
+    /// values and element text of the parsed document, so XML comments are structurally
+    /// out of reach. Requiring the <c>x:Static</c> prefix is what keeps prose in a
+    /// content string from counting as a reference.
+    /// </summary>
+    private static IEnumerable<string> XamlReferences(string text)
+    {
+        XDocument doc = XDocument.Parse(text);
+        IEnumerable<string> values = doc.Descendants()
+            .SelectMany(element => element.Attributes().Select(attribute => attribute.Value)
+                .Concat(element.Nodes().OfType<XText>().Select(node => node.Value)));
 
-                return i;
-            }
-
-            if (c == '\\')
-            {
-                i++;
-                continue;
-            }
-
-            if (c == quote || c == '\n')
-            {
-                return i;
-            }
-        }
-
-        return text.Length - 1;
+        return values.SelectMany(value => StaticReference.Matches(value))
+            .Select(match => match.Groups["name"].Value);
     }
+
+    private static readonly Regex StaticReference = new(
+        @"x:Static\s+(?:\w+:)?Strings\.(?<name>\w+)", RegexOptions.CultureInvariant);
 
     private static bool IsBuildOutput(string path, string sourceRoot)
     {

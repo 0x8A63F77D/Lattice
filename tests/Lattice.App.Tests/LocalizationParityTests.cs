@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 using Xunit;
 
 namespace Lattice.App.Tests;
@@ -145,8 +144,11 @@ public class LocalizationParityTests
     [Fact]
     public void Resource_names_are_never_constructed_dynamically()
     {
+        // Same parser-backed scan as the inventory: `Strings.ResourceManager` is a member
+        // access like any other, so it surfaces as the name "ResourceManager" — and a
+        // comment or a literal discussing it cannot red this guard by accident.
         string[] offenders = ResxCatalog.AppSourceFiles()
-            .Where(path => File.ReadAllText(path).Contains("Strings.ResourceManager", StringComparison.Ordinal))
+            .Where(path => ResxCatalog.ReferencedNames(path).Contains("ResourceManager"))
             .Select(path => $"- {Path.GetRelativePath(ResxCatalog.RepositoryRoot, path)}")
             .Order(StringComparer.Ordinal)
             .ToArray();
@@ -196,44 +198,70 @@ public class LocalizationParityTests
     }
 
     /// <summary>
-    /// The dead-key scan must read code, not prose. These are the cases where a naive
-    /// text scan and a comment-aware one disagree — in both directions: a comment that
-    /// names a resource must NOT keep it alive, and a string literal that happens to
-    /// contain <c>//</c> (every URL in the codebase) must not swallow the real
-    /// reference that follows it.
+    /// What counts as a reference. Every <c>Ghost</c> below is a way for a resource name
+    /// to appear in a file WITHOUT the code using the resource — the exact shapes that
+    /// keep a dead key looking alive — and every <c>Live</c> is a real use that must
+    /// survive the scan. All of them fall out of the parsers rather than being special
+    /// cases in a scanner.
     /// </summary>
     [Theory]
-    // C#: comments do not count.
-    [InlineData("var a = Strings.Live; // Strings.Ghost", false, "Live")]
-    [InlineData("/* Strings.Ghost */ var a = Strings.Live;", false, "Live")]
-    [InlineData("/// <summary>Strings.Ghost</summary>\nvar a = Strings.Live;", false, "Live")]
-    // C#: literals are not comments — the URL must not eat the rest of the line.
-    [InlineData("var u = \"http://x/y\"; var a = Strings.Live;", false, "Live")]
-    [InlineData("var v = @\"C:\\p // q\"; var a = Strings.Live;", false, "Live")]
-    [InlineData("var q = '\"'; var a = Strings.Live;", false, "Live")]
-    [InlineData("var e = \"a\\\"// b\"; var a = Strings.Live;", false, "Live")]
-    // XAML: same rule, XML syntax.
-    [InlineData("<!-- {x:Static loc:Strings.Ghost} -->\n<T Text=\"{x:Static loc:Strings.Live}\" />", true, "Live")]
-    public void Comment_stripping_keeps_code_and_drops_prose(string source, bool isXaml, string expected)
+    // Trivia is not an expression.
+    [InlineData("class C { void M() { var a = Strings.Live; } } // Strings.Ghost", "Live")]
+    [InlineData("class C { /* Strings.Ghost */ void M() { var a = Strings.Live; } }", "Live")]
+    [InlineData("/// <summary>Strings.Ghost</summary>\nclass C { void M() { var a = Strings.Live; } }", "Live")]
+    // Neither is a literal token — a diagnostic or a code sample that spells a resource
+    // name does not use it.
+    [InlineData("""class C { void M() { var s = "Strings.Ghost"; var a = Strings.Live; } }""", "Live")]
+    [InlineData("""class C { void M() { var s = @"Strings.Ghost"; var a = Strings.Live; } }""", "Live")]
+    [InlineData("""class C { void M() { var s = "http://x/y"; var a = Strings.Live; } }""", "Live")]
+    // …and a raw string literal, which the previous hand-rolled scanner could not model.
+    [InlineData("class C { void M() { var s = \"\"\"Strings.Ghost\"\"\"; var a = Strings.Live; } }", "Live")]
+    // Disabled code is trivia too.
+    [InlineData("class C { void M() {\n#if NEVER\nvar b = Strings.Ghost;\n#endif\nvar a = Strings.Live; } }", "Live")]
+    // An interpolation hole IS an expression, so it counts.
+    [InlineData("""class C { void M() { var s = $"{Strings.Live}"; } }""", "Live")]
+    // Fully qualified access counts.
+    [InlineData("class C { void M() { var a = Lattice.App.Localization.Strings.Live; } }", "Live")]
+    public void CSharp_references_are_expressions_not_text(string source, string expected)
     {
-        string stripped = ResxCatalog.StripComments(source, isXaml);
-        Assert.Contains($"Strings.{expected}", stripped, StringComparison.Ordinal);
-        Assert.DoesNotContain("Strings.Ghost", stripped, StringComparison.Ordinal);
+        string[] names = ScanSource(source, "Sample.cs");
+        Assert.Contains(expected, names);
+        Assert.DoesNotContain("Ghost", names);
     }
 
-    private static IReadOnlySet<string> ReferencedNames()
+    [Theory]
+    // The binding form counts…
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" />""", "Live")]
+    [InlineData("""<T xmlns:x="u"><T.Text>{x:Static loc:Strings.Live}</T.Text></T>""", "Live")]
+    // …an XML comment does not — it is not in the element tree.
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}"><!-- {x:Static loc:Strings.Ghost} --></T>""", "Live")]
+    // …and neither does prose that merely spells the name.
+    [InlineData("""<T xmlns:x="u" Text="{x:Static loc:Strings.Live}" ToolTip.Tip="see Strings.Ghost" />""", "Live")]
+    public void Xaml_references_require_the_binding_form(string source, string expected)
     {
-        // Matches both dialects at once: C# `Strings.ColProject` and XAML
-        // `{x:Static loc:Strings.ColProject}` — over comment-stripped text, so a comment
-        // that names a resource cannot keep the resource alive after its code is gone.
-        Regex reference = new(@"\bStrings\.(\w+)", RegexOptions.CultureInvariant);
-        return ResxCatalog.AppSourceFiles()
-            .SelectMany(path => reference.Matches(ResxCatalog.StripComments(
-                File.ReadAllText(path),
-                isXaml: path.EndsWith(".axaml", StringComparison.Ordinal))))
-            .Select(match => match.Groups[1].Value)
-            .ToHashSet(StringComparer.Ordinal);
+        string[] names = ScanSource(source, "Sample.axaml");
+        Assert.Contains(expected, names);
+        Assert.DoesNotContain("Ghost", names);
     }
+
+    private static string[] ScanSource(string source, string fileName)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"lattice-loc-{Guid.NewGuid():N}-{fileName}");
+        try
+        {
+            File.WriteAllText(path, source);
+            return ResxCatalog.ReferencedNames(path).ToArray();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static IReadOnlySet<string> ReferencedNames() =>
+        ResxCatalog.AppSourceFiles()
+            .SelectMany(ResxCatalog.ReferencedNames)
+            .ToHashSet(StringComparer.Ordinal);
 
     private static string Format(IReadOnlySet<int> indexes) =>
         indexes.Count == 0 ? "{}" : "{" + string.Join(", ", indexes.Order()) + "}";
