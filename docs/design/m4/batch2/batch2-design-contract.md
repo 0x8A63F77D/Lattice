@@ -29,6 +29,20 @@ cap ≤ palette size). One shared time axis. 3-host fleets get tall lanes (~80px
 fleets collapse to 28px bands — 10 hosts fit one screen without scrolling
 (`img/timeline-dense-10hosts.png`).
 
+**Project overflow (> 10 distinct projects in window) [machine-gated]:** ranking = each
+project's total observed **concurrency-seconds within the current rendered window**; the
+top 10 take palette colours, the rest aggregate into one **Other** band segment —
+height-conserving: the rendered concurrency total always equals the observed total
+(dropping series would fabricate concurrency by omission). Ties break by project name;
+the ranking is recomputed when the window changes (same family as the Statistics
+visible-set colour behaviour). The `cap ≤ palette size` invariant holds: coloured series
+never exceed 10 — Other is a neutral aggregate segment and takes no qualitative slot. Its
+concrete colour is deliberately not pinned here; the constraints are: a neutral, pairwise
+distinguishable from the hole grey and from all ten qualitative colours, holding in both
+themes — the token is the implementation's choice, final call at the owner eyeball gate.
+Hover/tooltip enumerates Other's member projects and their counts (existing channel
+style); the accessible name carries the same enumeration.
+
 Band geometry is **stacked-step with left-hold semantics [machine-gated]**: an observation
 at tick T ("N running") holds forward until the next observation tick or the start of a
 hole; nothing is drawn after the last observation (the window is already anchored on it).
@@ -155,7 +169,8 @@ that outage renders as an ordinary hole (reason via label/hover).
 - Command bar: title + zoom `SegmentedControl` + spacer + `Follow now` + `Updated Ns ago` +
   refresh `IconButton` (batch-1 idiom).
 - Legend row: project chips (display-only on this page — the filter semantics stay on
-  Statistics) + **one** non-interactive entry `No data` (swatch = hole fill with a chrome
+  Statistics; an `Other` chip appears when the §1 overflow aggregation is active) +
+  **one** non-interactive entry `No data` (swatch = hole fill with a chrome
   border `#D1D1D1` / `#525252`; the border is a chrome affordance, not chart grammar).
 - Status strip: `N hosts · N intervals in view · N days retained` left,
   `Polling every 5s` right.
@@ -205,7 +220,11 @@ that outage renders as an ordinary hole (reason via label/hover).
 - `StackedColumnSeries`, one column per observed day; segment colour = project. Y axis
   compact labeler and axis styles inherited from batch-1 §2.
 - **Increment definition [machine-gated]:** day N's value = `total(N) − total(N−1)`, valid
-  only when **both endpoints are observed days**.
+  only when **both endpoints are observed days**. `total` = **`HostTotalCredit`**, summed
+  over the current shell host scope — never the account-wide `UserTotalCredit`: Lattice
+  monitors a fleet, so throughput measures the monitored hosts; the account-wide total
+  counts hosts outside the fleet (possibly never observed by Lattice at all), and with
+  one account on several hosts it double-counts the same credit across lanes.
 - **Gap rule [machine-gated]:** a run of unobserved days *and the first observed day after
   it* render **empty — no bars at all** (the bar analogue of the #170 "an average that was
   not observed is not an average — break it" ruling; a missing bar is naturally visible in a
@@ -272,8 +291,13 @@ span < 48px — and a mixed-reason merge) rendered at 1× and 2× DPI + a **dens
 fixture** (30 d of nightly holes: true-geometry members under a `N holes · X h total`
 group label) + a **narrow-window equivalence pair** (the same dataset at 6 h / 24 h,
 where no chaining occurs, renders identically to the isolated-hole rules).
-Daily output: 2 themes × {12-day baseline containing a 3-day gap}.
-Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 22 snapshots.
+Daily output: 2 themes × {12-day baseline containing a 3-day gap} + a **user ≠ host
+fixture** (account-wide and host totals diverge; the chart must follow `HostTotalCredit` —
+fixture values shaped from the BOINC reference implementation's `get_statistics` output,
+not invented).
+Timeline additionally pins one **project-overflow fixture** (> 10 projects in window:
+top-10 coloured + `Other` aggregate, height-conserving).
+Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapshots.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -381,6 +405,27 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 22 snapsho
   group-as-carrier ruling (floating text ≠ surface overpainting); glyph legibility over
   coloured bands is the owner eyeball gate's jurisdiction, not a contract pin. (Raised by
   Codex review round 7.)
+- **Project overflow: Other aggregation (round-8 review).** The inherited palette cap
+  (coloured series ≤ 10) was unsatisfiable on a timeline with > 10 distinct projects in
+  window: the chips are pinned display-only (filter semantics stay on Statistics), so the
+  visible set cannot be shrunk, and dropping series would lower the rendered concurrency
+  total — fabrication by omission. Ruling: deterministic ranking by observed
+  concurrency-seconds in the rendered window (ties by project name), top 10 coloured,
+  rest into one neutral height-conserving `Other` segment that takes no qualitative slot;
+  member detail via hover/tooltip + accessible enumeration. The Other colour is
+  constrained (neutral, pairwise distinguishable from hole grey and all ten qualitative
+  colours, both themes) but the concrete token is the implementation's choice under the
+  owner eyeball gate — picking hex values in contract prose is design in the wrong
+  substrate. Rejected alternatives: interactive chips (violates the filter-semantics pin)
+  and per-lane top-N (still drops height). (Raised by Codex review round 8.)
+- **Daily output total source = `HostTotalCredit` (round-8 review).** The increment
+  definition never selected between the account-wide `UserTotalCredit` and the per-host
+  `HostTotalCredit` that `get_statistics` both exposes, so two conforming implementations
+  could show incompatible throughput. Ruling: `HostTotalCredit`, summed over the shell
+  host scope — Lattice monitors a fleet, so throughput measures the monitored hosts; the
+  account-wide total counts hosts outside the fleet, and one account on several hosts
+  would double-count across lanes. The user ≠ host fixture pins the distinction. (Raised
+  by Codex review round 8.)
 
 ## Files
 
