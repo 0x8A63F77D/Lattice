@@ -83,7 +83,10 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
     (`24.0 h`); at `≥ 170` the full `3 holes · 24.0 h total` (reason appended when uniform
     across the group); below 170 the count is witnessed by the hover detail and the
     accessible enumeration. Per-hole labels are geometrically impossible where they would
-    collide, so the visibility carrier shifts from per-hole label to per-group label.
+    collide, so the visibility carrier shifts from per-hole label to per-group label. The
+    group label's glyphs float over observed pixels within the group's bounding span — an
+    inherent property of group-as-carrier (floating text is not surface overpainting; the
+    member rectangles remain the only grey).
 - **Member detail (both group forms).** Hover lists each member hole's true range and
   reason (same style as the Daily output gap-span tooltip). The group's **accessible
   description enumerates every member's true range · duration · reason** — hover is not an
@@ -242,7 +245,14 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
    (shared pan/zoom).
 3. Hole = `RectangularSection` — `Fill` is the grey, `Label` is the duration/reason text.
    Live edge = zero-width section (`Xi == Xj`) stroke. No custom Skia layer exists anywhere
-   on the page.
+   on the page. A dense group's summary label rides a second, **label-only**
+   `RectangularSection` spanning the group's bounding interval — no fill, no stroke, zero
+   surface rendering (the members stay the only grey; the no-overflow span for the group
+   label is this bounding interval). If an empty-Fill section turns out to produce any
+   surface rendering or hit-test artifacts, that is an implementation-time escalation
+   item — restoring a fill as a workaround is banned (it silently restores overpainting).
+   Legibility of the floating glyphs over coloured bands is not pinned here; it belongs to
+   the owner eyeball gate.
 4. Daily output gaps = missing/nullable values (no bar) — zero extra elements; the gap-hover
    span total goes through tooltip logic.
 5. LiveCharts2 paints are not DynamicResource-aware: rebuild hole/axis/baseline paints on
@@ -359,6 +369,18 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 22 snapsho
   (panning is transient, the label returns naturally, the accessible channel stays
   complete; the implementation PR's owner eyeball gate is the final veto). (Raised by
   Codex review round 6.)
+- **Dense-group label carrier: a label-only section (round-7 review).** The per-hole
+  `RectangularSection` mapping left the group summary without a native carrier: attached
+  to a member, the ladder could not be measured on the group's span (and the no-overflow
+  pin would trap the summary inside that member's width), while a filled section across
+  the group would paint grey over the intervening observed spans. Ruling: the carrier is
+  a `RectangularSection` spanning the group's bounding interval with **no fill and no
+  stroke** — zero surface rendering, so the no-overpaint promise holds and the members
+  remain the only grey; the no-overflow measurement span is the bounding interval. The
+  label's glyphs floating over observed pixels is an inherent property of the round-5
+  group-as-carrier ruling (floating text ≠ surface overpainting); glyph legibility over
+  coloured bands is the owner eyeball gate's jurisdiction, not a contract pin. (Raised by
+  Codex review round 7.)
 
 ## Files
 
