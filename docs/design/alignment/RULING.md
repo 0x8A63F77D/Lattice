@@ -80,8 +80,46 @@ no hhea/OS2 selection rule; the struct is the pin.
 Fallback runs move the live line metrics with content (the shipped stack
 records a Latin string at a 12.0 DIP line where a CJK-fallback string
 reports 16.8), so a live baseline would let the band follow user data
-even under a fixed capHeight. With face, anchor and baseline all fixed,
-the band cannot move with content.
+even under a fixed capHeight. Fixing the face alone does not close this:
+a content-sized label box breathes by that same delta, and a vertically
+centred one moves its own top by half of it — carrying `labelBox.Top`,
+and the baseline with it.
+
+So the LABEL BOX of an in-class label is CONTENT-INDEPENDENT BY
+CONSTRUCTION. This is a structural invariant of the contract, not a
+request an implementation is trusted to honour:
+
+      labelBox.Height = |ascent| + |descent|
+                        (SELECTED face, resolved size)
+
+read from the SAME metrics struct that supplies A and capHeight — all
+three quantities out of one read on one face. Line gap stays outside the
+geometry, as above. The baseline therefore sits |ascent| below the box
+top, which is exactly A's definition: BOTH terms of `baseline =
+labelBox.Top + A` are now content-blind, and the absolute-position gate
+passes by construction rather than by an implementation remembering to
+hold it.
+
+FALLBACK OVERFLOW. A mixed-script or fallback run whose glyphs are
+taller than this box OVERFLOWS it visually. Overflow is ALLOWED;
+CLIPPING IS BANNED — clipping would cut CJK text. Overflow never changes
+the box's size or position, and never moves the baseline. Visual
+collision with adjacent rows is line-spacing design, outside this
+ruling's scope.
+
+MECHANISM IS NOT PART OF THIS CONTRACT. Pinning `LineHeight`, or forcing
+the height in the label's own measure pass, is an implementation choice.
+The contract pins the RESULT and the gate asserts it: (a) the label
+box's height equals |ascent| + |descent| within 0.05 DIP, and (b) the
+mark and band absolute positions are unchanged across a Latin →
+CJK/mixed content swap — the clause below, which this invariant is what
+makes passable. This is the same defect #216 records at the
+implementation level, where `CollapseMargin` conflates the band face's
+line height with the label's; the #216 fix is where this clause lands in
+code.
+
+With face, anchor, box and baseline all fixed, the band cannot move with
+content.
 
 The gate must exercise both shipped configurations of the localized
 rule: the real default-plus-fallback configuration (a CJK-resolved
@@ -130,9 +168,13 @@ The one mark whose size is open, and decorative rather than functional.
       cornerRadius = 2                        (= borderRadiusSmall)
 
 Philosophies (A) and (B) coincide here by construction: swatch position is
-independent of the label's descender content and of font choice. This is
-what removes the legend from the dispute — project names are user data, and
-the descender behaviour of "@" flips between the two Latin fonts.
+independent of the LIVE LABEL'S GLYPH/DESCENDER CONTENT. This is what
+removes the legend from the dispute — project names are user data, and the
+descender behaviour of "@" flips between the two Latin fonts. (The swatch
+is NOT independent of font choice, and no such claim is made: its size is
+capHeight of the selected face and its edges follow that face's ascent —
+per-face by construction, which is why the gate runs every registered
+font.)
 
 GATE: swatch edges equal cap-band edges ± 0.05 DIP; radius == 2.
 

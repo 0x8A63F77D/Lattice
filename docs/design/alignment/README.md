@@ -115,7 +115,33 @@ centerY(mark) = baseline − capHeight / 2
   and no per-face table. Fallback runs move live line metrics with
   content (Latin 12.0 DIP line vs CJK-fallback 16.8 in the shipped stack), so
   a live baseline would let the band follow user data even with a fixed
-  capHeight.
+  capHeight — and fixing the face alone does not close it, because a
+  content-sized label box breathes by that same delta and a vertically
+  centred one moves its own top by half of it.
+- **The label box is content-independent by construction** — a structural
+  invariant, not a request (normative text in `RULING.md`):
+
+  ```
+  labelBox.Height = |ascent| + |descent|   // selected face, resolved size
+  ```
+
+  read from the **same metrics struct** that supplies `A` and `capHeight` —
+  all three out of one read on one face, line gap still outside the geometry.
+  The baseline then sits `|ascent|` below the box top, which is exactly `A`;
+  both terms of `baseline = labelBox.Top + A` are content-blind, so the
+  absolute-position gate passes by construction.
+  - *Fallback overflow*: a mixed-script or fallback run taller than the box
+    **overflows it visually — overflow is allowed, clipping is banned** (it
+    would cut CJK text). Overflow never changes the box's size or position and
+    never moves the baseline. Collision with adjacent rows is line-spacing
+    design, out of scope here.
+  - *Mechanism is not part of the contract*: pinning `LineHeight` or forcing
+    the height in the label's own measure pass is an implementation choice.
+    The contract pins the result; the gate asserts (a) box height ==
+    `|ascent| + |descent|` ± 0.05 DIP and (b) unchanged absolute mark/band
+    positions across a Latin → CJK/mixed swap. This is the same defect #216
+    records in code, where `CollapseMargin` conflates the band face's line
+    height with the label's — the #216 fix is where this clause lands.
   The gate must include a fallback-forcing, mixed-script label sample at the
   user-data sites (legend swatch, overflow checkbox), assert the ABSOLUTE
   mark and band positions are unchanged across a Latin → CJK/mixed content
