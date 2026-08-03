@@ -391,9 +391,10 @@ cases; (3) UI wiring that neither pixels nor the pure function witness — **eve
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
 accessibility assertions**. Currently that is: the bare-run node (presence, name,
 focusability; both the exact-total and omitted-total forms), the partial-day column's
-disclosure name, and the timeline hole/group accessible names including the group member
-enumeration; any accessibility carrier a future revision mandates joins this track by
-rule, not by a new listing.
+disclosure name, the timeline hole/group accessible names including the group member
+enumeration, and the `Other` overflow band's accessible name with its member/count
+enumeration (§1); any accessibility carrier a future revision mandates joins this track
+by rule, not by a new listing.
 Track 3 must assert against the **built accessibility tree itself** (the automation peer
 queried after a headless settle), never against a ViewModel exposing the right string —
 the classic false-green shape for wiring assertions (correct wiring code, absent end
@@ -723,6 +724,11 @@ canons, not this contract.
   not by a new listing (the same shape as the artifact-precedence rule: state the class
   once instead of patching per instance). A conforming completion of the round-20 track,
   not a new mechanism. (Raised by Codex review round 22.)
+- **Track 3 carrier list: the `Other` band added (round-23 review).** The round-22
+  "current carriers" enumeration itself missed the §1-mandated `Other` accessible name
+  and member/count enumeration — a list that claims completeness misleads even under a
+  generic rule, so the omission is corrected in the listing rather than waved at the
+  generic sentence. (Raised by Codex review round 23.)
 
 ## Files
 
