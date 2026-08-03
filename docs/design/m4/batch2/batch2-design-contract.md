@@ -91,9 +91,12 @@ transform):
 - **Grouping.** Holes whose exaggerated render intervals would overlap or touch (transitive
   closure) form a **group**, dispatched by the group's **true span** (first member's true
   start → last member's true end, in DIPs):
-  - **Compact merge (true span `< 48`):** the group merges into one 48-DIP rendered hole;
-    its label shows the **sum of the member holes' true durations**; at `≥ 170` the reason
-    is shown only when all members share one (mixed reasons → duration only).
+  - **Compact merge (true span `< 48`):** the group merges into one 48-DIP rendered hole,
+    **anchored on the centre of the group's true bounding span** (the same centre-anchor
+    rule as an isolated hole, applied to the group's true interval — the fixture geometry
+    is thereby unique); its label shows the **sum of the member holes' true durations**;
+    at `≥ 170` the reason is shown only when all members share one (mixed reasons →
+    duration only).
   - **Dense regime (true span `≥ 48`):** per-hole exaggeration is **abandoned** — members
     render at their **true geometry**, so observed data is never swallowed and nothing is
     overpainted — and the group shares one summary label riding **the same width ladder as
@@ -116,8 +119,10 @@ transform):
 - `≥ 170` → reason + duration: `Lattice not running · 8.2 h` / `Host unreachable · 2.5 h`
 
 **Duration format — one definition, referenced by label, tooltip and accessible name (a
-single formatting function in code, never three copies):** `≥ 0.1 h` → hours, one decimal
-(`8.2 h`); `< 0.1 h` → whole minutes (`4 m`); `< 1 m` → whole seconds (`30 s`).
+single formatting function in code, never three copies; the intervals are mutually
+exclusive):** `≥ 0.1 h` → hours, one decimal (`8.2 h`); `1 m ≤ duration < 0.1 h` → whole
+minutes (`4 m`); `< 1 m` → whole seconds (`30 s`). Boundaries land in the larger unit:
+exactly `1 m` formats as minutes, exactly `0.1 h` as hours.
 
 Every rendered hole (single hole or dense group) carries its own label, regardless of lane
 position — no aligned-column deduplication. A fleet-wide outage column therefore repeats
@@ -765,6 +770,15 @@ canons, not this contract.
   extension of the round-18 ruling: the single delta formatter covers every delta-valued
   display, span totals included (with the `< 0.01` rule), and track 2 gains a fractional
   exact-total case. (Raised by Codex review round 26.)
+- **Compact-merge anchor pinned; duration intervals made exclusive (round-27 review).**
+  (a) The compact merge fixed the 48-DIP width but never placed the interval — three
+  different anchors all satisfied the stated width while swallowing different observed
+  pixels, leaving the gated fixture without unique geometry. Pinned: centre-anchored on
+  the group's true bounding span, the same rule as an isolated hole applied to the
+  group's true interval. (b) The duration format's rungs overlapped (`30 s` satisfied
+  both `< 0.1 h` and `< 1 m`, so ordered evaluation never reached seconds); the middle
+  interval is now `1 m ≤ duration < 0.1 h` with boundaries landing in the larger unit.
+  Both formal completions of ruled rules. (Raised by Codex review round 27.)
 
 ## Files
 
