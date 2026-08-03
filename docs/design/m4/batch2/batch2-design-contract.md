@@ -121,8 +121,11 @@ transform):
 **Duration format — one definition, referenced by label, tooltip and accessible name (a
 single formatting function in code, never three copies; the intervals are mutually
 exclusive):** `≥ 0.1 h` → hours, one decimal (`8.2 h`); `1 m ≤ duration < 0.1 h` → whole
-minutes (`4 m`); `< 1 m` → whole seconds (`30 s`). Boundaries land in the larger unit:
-exactly `1 m` formats as minutes, exactly `0.1 h` as hours.
+minutes (`4 m`); `< 1 m` → whole seconds (`30 s`). Whole values round **half away from
+zero** (the same declared rule as the delta formatter). Boundaries land in the larger
+unit — exactly `1 m` formats as minutes, exactly `0.1 h` as hours — and a **rounded**
+value that reaches the next unit's boundary is represented in that larger unit too:
+`59.6 s` → `1 m`; `5 m 58 s` → `6 m` = `0.1 h` → `0.1 h`.
 
 Every rendered hole (single hole or dense group) carries its own label, regardless of lane
 position — no aligned-column deduplication. A fleet-wide outage column therefore repeats
@@ -403,7 +406,10 @@ over the **extracted gap-semantics pure function** — the exact vs omitted span
 paths of predicate 3 — **including a fractional exact-total case** (the span total rides
 the delta formatter) — **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
 `partial day` tooltip/accessible-name content, equally pixel-invisible) must each have
-cases; (3) UI wiring that neither pixels nor the pure function witness — **every
+cases; the **shared duration formatter** likewise has unit-boundary cases (a sub-minute
+value, exactly `1 m`, exactly `0.1 h`, and a value that rounds up to a unit boundary),
+and the ladder fixture includes a **sub-minute-duration hole** so the rendered `30 s`
+label is pixel-gated end to end; (3) UI wiring that neither pixels nor the pure function witness — **every
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
 accessibility assertions**. Currently that is: the bare-run node (presence, name,
 focusability; both the exact-total and omitted-total forms), the partial-day column's
@@ -779,6 +785,16 @@ canons, not this contract.
   both `< 0.1 h` and `< 1 m`, so ordered evaluation never reached seconds); the middle
   interval is now `1 m ≤ duration < 0.1 h` with boundaries landing in the larger unit.
   Both formal completions of ruled rules. (Raised by Codex review round 27.)
+- **Duration rounding at unit edges pinned and gated (round-28 review).** "Whole
+  seconds/minutes" left `59.6 s` ambiguous between `59 s` and `60 s`. Pinned: whole
+  values round half away from zero (the delta formatter's declared rule), and a rounded
+  value reaching the next unit's boundary is represented in the larger unit (`59.6 s` →
+  `1 m`; `5 m 58 s` → `6 m` = `0.1 h` → `0.1 h`) — consistent with boundaries-land-in-
+  the-larger-unit. The gates gain the missing cases: the policy track covers sub-minute,
+  exact-boundary and rounds-up-to-boundary values, and the ladder fixture includes a
+  sub-minute-duration hole so the rendered label is pixel-gated — the formerly
+  overlapping implementation can no longer pass every named gate. (Raised by Codex
+  review round 28.)
 
 ## Files
 
