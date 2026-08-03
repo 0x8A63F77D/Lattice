@@ -69,7 +69,9 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
 - `≥ 48` → duration label, one decimal: `8.2 h`
 - `≥ 170` → reason + duration: `Lattice not running · 8.2 h` / `Host unreachable · 2.5 h`
 
-Label only on the **topmost lane** of an aligned column; other lanes rely on hover.
+Every rendered hole carries its own label, regardless of lane position — no aligned-column
+deduplication. A fleet-wide outage column therefore repeats the label once per lane; that
+repetition is semantically truthful (each host was independently unobserved).
 
 **Reason vocabulary — exactly two user-facing strings, no others:**
 `Lattice not running` (the app was off — routine) and `Host unreachable` (Lattice was
@@ -206,7 +208,8 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
 
 ## Snapshot matrix (machine gate)
 
-Timeline: 2 themes × {24 h baseline (overnight hole + historical unreachable + idle span),
+Timeline: 2 themes × {24 h baseline (overnight hole as an aligned fleet-wide column —
+every lane labelled — + historical unreachable + idle span),
 7 d dense (10 hosts, 41px true-width holes — exaggerated to the 48px minimum, labelled),
 cold start, no-hosts, empty} + a synthetic **ladder fixture** (one hole per width rung,
 including a sub-48px hole exaggerated to the minimum width, a two-hole merge, and a
@@ -261,6 +264,16 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
   above) and raising fill contrast (changes the reserved neutral). The former
   `< 3 px → 3 px` detection-floor rung is superseded by this rule. (Raised by Codex review
   round 1 on the landing PR.)
+- **Aligned columns: every hole labels itself (rounds 2–3 review; owner ruling).** The
+  minimum-width rule's "no unlabelled hole exists" argument conflicted with the original
+  topmost-lane-only label rule for aligned columns, leaving lower-lane holes unlabelled.
+  Ruling: every rendered hole carries its own duration label (reason at ≥ 170 px),
+  regardless of lane position. Explicit accepted cost: a fleet-wide outage column repeats
+  the label once per lane — semantically truthful, since each host was independently
+  unobserved. Rejected alternatives: topmost-lane deduplication (lanes are one chart per
+  host and the page can scroll, so the top label can leave the viewport while lower holes
+  stay visible and unidentified) and a shared cross-column label (a new visual element,
+  against the standing no-new-elements ruling). (Raised by Codex review round 3.)
 
 ## Files
 
