@@ -348,11 +348,12 @@ Timeline additionally pins one **project-overflow fixture** (> 10 projects in wi
 top-10 coloured + `Other` aggregate, height-conserving).
 Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 26 snapshots.
 The gate is **dual-track**: chart-surface pixels ride the snapshots above; predicate
-paths that leave no mark on chart pixels (the exact vs omitted span-total hover of
-predicate 3) are machine-gated by unit tests over the **extracted gap-semantics pure
-function** — both paths must have cases. This is the existing decision-logic canon made
-explicit in the gate wording; the function's substrate is the canon's business, not this
-contract's.
+paths that leave no mark on chart pixels are machine-gated by unit tests over the
+**extracted gap-semantics pure function** — the exact vs omitted span-total paths of
+predicate 3 **and** the partial-day disclosure of the `1 ∧ ¬2` path (the `partial day`
+tooltip/accessible-name content, equally pixel-invisible) must each have cases. This is
+the existing decision-logic canon made explicit in the gate wording; the function's
+substrate is the canon's business, not this contract's.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -585,6 +586,13 @@ contract's.
   conformed in the same round — `no daily value that day`: a project with a record on N
   but no N−1 endpoint is observed, its increment merely unavailable, and calling it
   "unobserved" falsely reported a data outage. (Raised by Codex review round 14.)
+- **Dual-track enumeration completed (round-15 review).** The round-14 dual-track
+  statement listed only predicate 3's span-total paths; the partial-day disclosure
+  (the `1 ∧ ¬2` path — tooltip + accessible name) is equally pixel-invisible, so an
+  implementation could render the available segments while omitting the disclosure
+  without failing any gate. The policy-test track now requires cases for the partial-day
+  disclosure alongside both span-total paths — a conforming completion of the ruled
+  dual-track principle, not a new mechanism. (Raised by Codex review round 15.)
 
 ## Files
 
