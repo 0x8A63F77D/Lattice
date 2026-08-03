@@ -109,44 +109,56 @@ ruling's scope.
 
 GATING THE NO-CLIPPING BAN. This is the ONE assertion the geometry-only
 gate rule does not reach: clipping is a render-stage effect that leaves
-arranged geometry correct, so an ancestor `ClipToBounds` can cut the CJK
-glyphs while the box height and every absolute position still check out.
-It is gated by a DIFFERENTIAL END-STATE RENDER (headless Skia), at the
-user-data sites, under a fallback-forcing mixed-script sample:
+arranged geometry correct, so an ancestor clip can cut the CJK glyphs
+while the box height and every absolute position still check out. What
+follows states the PROPERTY and the FALSIFICATION OBLIGATIONS. It does
+NOT specify the probe's construction — that is the implementation's, and
+prose that designs the test apparatus is how this clause acquired three
+rounds of holes.
 
-      render the registered site TWICE — once AS SHIPPED, with its
-      complete production ancestor chain, and once with clipping
-      SUPPRESSED on that chain — and require the rendered ink BELOW the
-      label box bottom to be IDENTICAL between the two.
+THE PROPERTY. At every registered user-data site, under a
+fallback-forcing mixed-script sample, the label's own rendered ink is
+COMPLETE: identical to that label's ink with clipping removed from its
+ENTIRE ancestor chain, over the WHOLE overflow region — ABOVE THE BOX
+TOP as well as BELOW THE BOX BOTTOM. A fallback run overflows the
+normalized box at both edges (the box is |ascent| + |descent| of the
+SELECTED face, and a Han glyph fills the em square), so a top-edge cut
+is as much a violation as a bottom-edge one, and a check reading only
+one side is half a check.
 
-The unclipped render is the reference, generated from the same scene
-rather than hand-maintained. TOTAL clipping shows up as ink missing,
-PARTIAL clipping as ink truncated; both make the two renders differ.
-Both renders are of the registered site with its full production
-ancestor chain — that chain IS the attack surface, so a standalone or
-minimal label-only scene is not an admissible probe scene. Attribution
-needs neither isolation nor a mask: unrelated neighbouring ink is
-identical in both renders and cancels in the comparison, so the
-differential PROVES attribution instead of assuming it.
+THE ATTRIBUTION OBLIGATION. The comparison must be attributable to that
+label. Any pixels that removing the clipping changes for a reason OTHER
+than the target label's ink — a sibling, the background, a rounded
+container's own content clip — are OUTSIDE the comparison; otherwise a
+correctly unclipped label fails the gate. The mechanism is open.
+Admissible: masking to the target's ink; suppressing only the clip that
+governs the target; compositing the target label's own layer. This
+contract does not choose among them.
 
-This is the only pixel-gated clause of this contract, and it is still
-not a sub-pixel position measurement. The two renders share hinting,
-snapping and antialiasing, which cancel; the assertion is the IDENTITY
-of two renders differing only by the clip. The ±0.05 DIP assertions stay
-on arranged layout, so the pixel noise the geometry-only rule guards
-against is not reintroduced.
+THE FALSIFICATION OBLIGATIONS. The check counts as a gate only once it
+has been observed:
 
-RED-FIRST for this probe: the red scene's deliberate clipping ancestor
-must cut MID-GLYPH, not at the box edge — a box-edge cut exercises only
-the all-or-none case and would leave partial clipping unfalsified. The
-red scene's clipping mechanism must also be the SAME KIND as a clipping
-source that actually occurs in the production templates (`ClipToBounds`,
-a rounded `Border`'s content clip — whatever is live), so red-first
-simultaneously proves the suppression lever really suppresses that kind
-of source.
+      RED   against a clip cutting the run ABOVE the box top
+      RED   against a clip cutting the run BELOW the box bottom
+      RED   against a MID-GLYPH cut
+              (each using a clipping source of a KIND that actually
+               occurs in the production templates — `ClipToBounds`, a
+               rounded `Border`'s content clip, whatever is live)
+      GREEN under a perturbation of a SIBLING's rendering
 
-If a site's clipping source CANNOT be suppressed for the reference
-render, the two renders are identical by construction and the probe is
+The three reds cover the false-green direction, including the two edges
+a single-sided or box-edge-only red scene leaves unexercised. The green
+covers the false-red direction: a gate that blocks conforming
+implementations is a failure of the same seriousness, and it is not
+detectable from the red cases alone.
+
+This remains the only pixel-gated clause of this contract, and it is
+still not a sub-pixel position measurement: the compared renders share
+hinting, snapping and antialiasing, which cancel. The ±0.05 DIP
+assertions stay on arranged layout.
+
+If a site's clipping source CANNOT be removed for the reference
+comparison, the two sides are identical by construction and the check is
 blind — a false green undetectable from inside the gate. That site
 escalates for adjudication on its own. No fallback assertion is
 pre-authorized here: bolting per-symptom qualifiers back on is the shape

@@ -136,37 +136,40 @@ centerY(mark) = baseline − capHeight / 2
     never moves the baseline. Collision with adjacent rows is line-spacing
     design, out of scope here.
   - *Gating the no-clipping ban*: the **one** assertion the geometry-only gate
-    rule cannot reach — clipping is a render-stage effect, so an ancestor
-    `ClipToBounds` cuts the CJK glyphs while box height and every absolute
-    position still check out. Gated by a **differential end-state render**
-    (headless Skia), at the user-data sites, under a fallback-forcing
-    mixed-script sample:
-
-    > render the registered site **twice** — once as shipped with its complete
-    > production ancestor chain, once with clipping **suppressed** on that
-    > chain — and require the ink **below the label box bottom** to be
-    > **identical** between the two.
-
-    The unclipped render is the reference, generated from the same scene
-    rather than hand-maintained. Total clipping shows as ink missing, partial
-    clipping as ink truncated — both make the renders differ. Both renders are
-    of the real site with its full ancestor chain, because that chain *is* the
-    attack surface; a standalone label-only scene is not an admissible probe
-    scene. Attribution needs no isolation and no mask: unrelated neighbouring
-    ink is identical in both renders and cancels, so the differential **proves**
-    attribution rather than assuming it.
-    Still not a sub-pixel position measurement — hinting, snapping and AA are
-    shared by both renders and cancel; the assertion is the identity of two
-    renders differing only by the clip. This is the only pixel-gated clause.
-    *Red-first*: the red scene's clipping ancestor must cut **mid-glyph**, not
-    at the box edge (a box-edge cut leaves partial clipping unfalsified), and
-    must use the **same kind** of clipping source that actually occurs in the
-    production templates — so red-first also proves the suppression lever
-    works on that kind of source.
-    If a site's clipping source **cannot** be suppressed for the reference
-    render, the two renders are identical by construction and the probe is
-    blind; that site escalates for adjudication. No fallback assertion is
-    pre-authorized.
+    rule cannot reach — clipping is a render-stage effect, so an ancestor clip
+    cuts the CJK glyphs while box height and every absolute position still
+    check out. The contract states the **property** and the **falsification
+    obligations**; it deliberately does **not** design the probe (that is the
+    implementation's, and prose test-apparatus design is what put three rounds
+    of holes in this clause).
+    - *Property*: at every registered user-data site, under a fallback-forcing
+      mixed-script sample, the label's own rendered ink is **complete** —
+      identical to that label's ink with clipping removed from its entire
+      ancestor chain, over the **whole** overflow region, **above the box top
+      as well as below the box bottom**. The fallback run overflows the
+      normalized box at both edges (the box is `|ascent| + |descent|` of the
+      selected face; a Han glyph fills the em square), so a one-sided check is
+      half a check.
+    - *Attribution obligation*: pixels that removing the clipping changes for
+      any reason other than the target label's ink — a sibling, the
+      background, a rounded container's own content clip — are **outside** the
+      comparison, or a correctly unclipped label fails the gate. Mechanism is
+      open; masking to the target's ink, suppressing only the clip that governs
+      the target, and compositing the target's own layer are all admissible.
+    - *Falsification obligations*: the check counts as a gate only once
+      observed **red** against a cut above the box top, **red** against a cut
+      below the box bottom, and **red** against a mid-glyph cut — each using a
+      clipping source of a kind that actually occurs in the production
+      templates — and **green** under a perturbation of a sibling's rendering.
+      The reds cover false greens; the green covers the false-**red** direction,
+      a gate that blocks conforming implementations.
+    - Still the only pixel-gated clause, and still not a sub-pixel position
+      measurement: the compared renders share hinting, snapping and AA, which
+      cancel.
+    - If a site's clipping source **cannot** be removed for the reference
+      comparison, the two sides are identical by construction and the check is
+      blind; that site escalates for adjudication. No fallback assertion is
+      pre-authorized.
   - *Mechanism is not part of the contract*: pinning `LineHeight` or forcing
     the height in the label's own measure pass is an implementation choice.
     The contract pins the result; the gate asserts (a) box height ==
@@ -301,11 +304,12 @@ R2  cornerRadius == 2
 - Assert on **arranged layout geometry**, not on rendered pixels — pixel
   snapping is platform noise and will make the gate flaky at this tolerance.
   **One exception, and only one:** the no-clipping ban is unreachable from
-  arranged geometry (clipping leaves it correct), so it is gated by a
-  differential end-state headless-Skia render — the same site rendered with
-  and without clipping, asserting the ink below the box is identical. Not a
-  position measurement: the two renders share all pixel noise and it cancels.
-  See the R1 bullet above for the full clause and its red-first requirements.
+  arranged geometry (clipping leaves it correct), so it is gated on rendered
+  ink — the label's own ink must be complete, above and below the box, versus
+  the same ink with clipping removed. Not a position measurement: the compared
+  renders share all pixel noise and it cancels. The contract states that
+  property and the required falsifications, not the probe's construction; see
+  the R1 bullet above.
 - Run every registered site × every registered UI font.
 - **The table above is a point-in-time census, not the gate's source of
   truth.** Three review rounds each surfaced a shipped in-class site the
