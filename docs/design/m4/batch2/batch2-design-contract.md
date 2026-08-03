@@ -219,12 +219,22 @@ that outage renders as an ordinary hole (reason via label/hover).
   allocation / animation all inherited.
 - `StackedColumnSeries`, one column per observed day; segment colour = project. Y axis
   compact labeler and axis styles inherited from batch-1 §2.
-- **Increment definition [machine-gated]:** day N's value = `total(N) − total(N−1)`, valid
-  only when **both endpoints are observed days**. `total` = **`HostTotalCredit`**, summed
-  over the current shell host scope — never the account-wide `UserTotalCredit`: Lattice
-  monitors a fleet, so throughput measures the monitored hosts; the account-wide total
-  counts hosts outside the fleet (possibly never observed by Lattice at all), and with
-  one account on several hosts it double-counts the same credit across lanes.
+- **Increment definition [machine-gated]:** day N's value = `total(N) − total(N−1)`,
+  computed **per project**, valid only when **both endpoints are observed days**. `total`
+  = **`HostTotalCredit`** of the host selected by the batch-1 host-scope rule (the
+  Statistics page charts one host; on `All hosts` the command-bar ComboBox picks it) —
+  never the account-wide `UserTotalCredit`: this chart shows the selected host's output,
+  and the account-wide total silently includes every other host on the account, possibly
+  never observed by Lattice at all.
+- **Partial-day rule [machine-gated]:** daily histories are per project and gap positions
+  differ across projects, so a day can be computable for one project and not another.
+  The increment rule applies per project: a segment renders only when *that project's*
+  endpoints are both observed, and a partially observed day renders its observed segments
+  as usual — suppressing the whole column would discard valid observations. The column's
+  tooltip and accessible name disclose the shortfall (`partial day` + which projects are
+  unobserved, existing channel style); the residual risk that a shortened stack reads as
+  the complete daily total rides the text channel — same family as the stated
+  not-area-conserving cost.
 - **Gap rule [machine-gated]:** a run of unobserved days *and the first observed day after
   it* render **empty — no bars at all** (the bar analogue of the #170 "an average that was
   not observed is not an average — break it" ruling; a missing bar is naturally visible in a
@@ -294,7 +304,8 @@ where no chaining occurs, renders identically to the isolated-hole rules).
 Daily output: 2 themes × {12-day baseline containing a 3-day gap} + a **user ≠ host
 fixture** (account-wide and host totals diverge; the chart must follow `HostTotalCredit` —
 fixture values shaped from the BOINC reference implementation's `get_statistics` output,
-not invented).
+not invented) + a **partial-day fixture** (one project computable, another missing an
+endpoint on the same day — observed segments render, the column is disclosed partial).
 Timeline additionally pins one **project-overflow fixture** (> 10 projects in window:
 top-10 coloured + `Other` aggregate, height-conserving).
 Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapshots.
@@ -426,6 +437,26 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   account-wide total counts hosts outside the fleet, and one account on several hosts
   would double-count across lanes. The user ≠ host fixture pins the distinction. (Raised
   by Codex review round 8.)
+- **Daily output scope: the batch-1 single-host rule wins (round-9 review; correction).**
+  Round 8 pinned `HostTotalCredit` "summed over the current shell host scope", which
+  cannot coexist with the batch-1 [HARD] host-scope rule (the Statistics page charts one
+  host via the command-bar selector; cross-host overlay is out of scope, #148) — and this
+  contract's own header says batch 1 wins conflicts. Correction: Daily output is defined
+  against the host selected by that selector; the summing clause is removed; the round-8
+  substance (HostTotalCredit, never UserTotalCredit, with its rationale) is unchanged.
+  Recorded fairly, two misses: the summing clause entered via the landing session's
+  recommendation, and the adopting ruling did not check it against the superior contract —
+  one lesson: check every new pin against the batch-1 HARD set before ruling. (Raised by
+  Codex review round 9.)
+- **Partial-day columns render their observed segments (round-9 review).** Daily
+  histories are per project and gap positions differ across projects, so a day can be
+  computable for one project and not another. Ruling: the increment rule stays per
+  project; observed segments render as usual; the tooltip and accessible name disclose
+  the unobserved projects (`partial day`). Whole-column suppression is rejected — it
+  discards valid observations, the round-5 violation class. Visual partial-day markers
+  are rejected — they collide with the no-pattern and no-new-elements rulings. The
+  residual reads-as-complete risk rides the text channel, same family as the stated
+  not-area-conserving cost. (Raised by Codex review round 9.)
 
 ## Files
 
