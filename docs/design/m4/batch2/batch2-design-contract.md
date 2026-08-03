@@ -231,20 +231,29 @@ that outage renders as an ordinary hole (reason via label/hover).
   **Domain: P ranges over the current visible project set** (the batch-1 chip filtering; a
   hidden project does not exist for this chart — it contributes no segment and does not
   block bareness; toggling chips recomputes, same family as the batch-1 visible-set
-  behaviour; the partial-day disclosure quantifies over the same domain).
+  behaviour; the partial-day disclosure quantifies over the same domain). **An empty
+  domain evaluates nothing:** with zero visible projects the predicates are not evaluated
+  and the page falls into the batch-1 nothing-to-chart state — a vacuous quantification
+  would make every day bare with an empty-sum "total" of 0, a fabricated value, not an
+  observation. **N ranges over the axis span `[min, max]` of the visible projects'
+  observed days** — days outside it are not columns (the same family as the timeline's
+  bare-canvas-outside-coverage semantics). `observed(P, N)` ⟺ a `daily_statistics`
+  record for day N exists for P on the selected host (anchored directly to the GuiRpc
+  data model).
   1. `segment(P, N)` renders ⟺ `observed(P, N) ∧ observed(P, N−1)` — visible project P
      contributes a segment to day N exactly when both endpoints are observed.
   2. Day N is a **bare column** (no bars at all) ⟺ no visible P satisfies predicate 1
-     for N. The bare-run hover covers each **maximal run of bare columns**.
+     for N. The bare-run hover covers each **maximal run of bare columns**; its day count
+     is the **inclusive number of bare columns** in the run.
   3. For a bare run `[start..end]`, the hover shows the span total ⟺
      `∀ visible P: observed(P, start−1) ∧ observed(P, end)` — then
      `spanTotal = Σ_P (total(P, end) − total(P, start−1))`, covering exactly
      `[start..end]` and overlapping no rendered segment (the first one after the run is
      `end+1`, whose increment starts at `end`):
-     `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`.
+     `No daily values · 07-15 → 07-17 (3 days) · 104,500 over the span`.
      Otherwise (staggered observations) the hover omits the total:
-     `No daily values · 07-15 → 07-17 (2 days without data)`. The span total is never
-     drawn, estimated, or amortized — shown only when exact, hover only.
+     `No daily values · 07-15 → 07-17 (3 days)`. The span total is never drawn,
+     estimated, or amortized — shown only when exact, hover only.
 
   Everything below follows from the predicates and is **non-normative illustration**:
   - *Per-project gap* (from 1): a project's run of unobserved days and its first observed
@@ -259,6 +268,10 @@ that outage renders as an ordinary hole (reason via label/hover).
     N, no segment exists on N, so N is bare and sits inside the hovered span — the
     original single-project "gap plus its first observed day" semantics reappear as a
     special case, needing no rule of their own.
+  - *First column* (from 1 + the N domain): `min − 1` is unobserved by the definition of
+    `min`, so day `min` never has a segment — the axis's first column is always bare:
+    the same "first observed day after a gap has no bar" semantics reappearing at the
+    axis origin.
 
   **Accepted cost:** this chart is not area-conserving — "how much in total" is answered
   by the **Host total** metric (the cumulative counterpart of this chart's
@@ -534,6 +547,21 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   double-counts that day's rendered bar; the landing session caught it against the
   synchronized-recovery example before landing — the mirror image of the round-9
   check-before-adopting lesson. (Raised by Codex review round 12.)
+- **Predicate group closed: empty domain, inclusive counts, axis span, observed()
+  (round-13 review + proactive free-variable sweep).** Two findings and two proactively
+  closed variables. (a) An empty visible set made predicate 2 vacuously true for every
+  day and predicate 3's empty sum advertise `0 over the span` — a fabricated value, not
+  an observation; ruling: an empty domain evaluates nothing, the page falls into the
+  batch-1 nothing-to-chart state. (b) The hover's day count is the inclusive number of
+  bare columns; the owner example string changes from `(2 days without data)` to
+  `(3 days)` (controller-confirmed, owner-notified): after formalization, "days without
+  data" is a false description for a recovery day (observed, no daily value) and for
+  staggered runs — under the `No daily values` prefix the inclusive count is the only
+  self-consistent reading. (c–d, proactive) N's domain = the visible projects' observed-
+  day span `[min, max]` (outside is not a column — timeline bare-canvas family), and
+  `observed(P, N)` ⟺ a `daily_statistics` record exists for that day/project/host —
+  anchoring the last free variables to the GuiRpc data model. A first-column-always-bare
+  corollary is recorded as illustration. (Raised by Codex review round 13.)
 
 ## Files
 
