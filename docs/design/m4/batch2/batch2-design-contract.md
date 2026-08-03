@@ -227,13 +227,24 @@ that outage renders as an ordinary hole (reason via label/hover).
   `UserTotalCredit`: this chart shows the selected host's output, and the account-wide
   total silently includes every other host on the account, possibly never observed by
   Lattice at all. A rendered segment's value is `total(P, N) − total(P, N−1)`.
-- **Gap semantics [machine-gated] — two normative predicates, the sole source of truth:**
-  1. `segment(P, N)` renders ⟺ `observed(P, N) ∧ observed(P, N−1)` — project P
+- **Gap semantics [machine-gated] — normative predicates, the sole source of truth.**
+  **Domain: P ranges over the current visible project set** (the batch-1 chip filtering; a
+  hidden project does not exist for this chart — it contributes no segment and does not
+  block bareness; toggling chips recomputes, same family as the batch-1 visible-set
+  behaviour; the partial-day disclosure quantifies over the same domain).
+  1. `segment(P, N)` renders ⟺ `observed(P, N) ∧ observed(P, N−1)` — visible project P
      contributes a segment to day N exactly when both endpoints are observed.
-  2. Day N is a **bare column** (no bars at all) ⟺ no project P satisfies predicate 1
-     for N. The span-total hover covers each **maximal run of bare columns**:
-     `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`;
-     the span total is never drawn, estimated, or amortized — hover only.
+  2. Day N is a **bare column** (no bars at all) ⟺ no visible P satisfies predicate 1
+     for N. The bare-run hover covers each **maximal run of bare columns**.
+  3. For a bare run `[start..end]`, the hover shows the span total ⟺
+     `∀ visible P: observed(P, start−1) ∧ observed(P, end)` — then
+     `spanTotal = Σ_P (total(P, end) − total(P, start−1))`, covering exactly
+     `[start..end]` and overlapping no rendered segment (the first one after the run is
+     `end+1`, whose increment starts at `end`):
+     `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`.
+     Otherwise (staggered observations) the hover omits the total:
+     `No daily values · 07-15 → 07-17 (2 days without data)`. The span total is never
+     drawn, estimated, or amortized — shown only when exact, hover only.
 
   Everything below follows from the predicates and is **non-normative illustration**:
   - *Per-project gap* (from 1): a project's run of unobserved days and its first observed
@@ -503,6 +514,26 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   stale User-total cross-reference in the accepted-cost sentence was conformed to the
   round-9 `HostTotalCredit` pin in the same round (points to Host total). (Raised by
   Codex review round 11.)
+- **Predicates quantified over the visible project set (round-12 review).** The
+  predicates left P's domain open, colliding with the inherited Top-6/chip filtering: a
+  hidden project's segment would "render", and a day computable only for a hidden project
+  would be classified non-bare while showing no bars and receiving no hover. Ruling: the
+  domain declaration is part of the predicate definitions — P ranges over the visible
+  set; hidden projects do not exist for this chart; chip toggles recompute (batch-1
+  visible-set family); the partial-day disclosure shares the domain. (Raised by Codex
+  review round 12.)
+- **Span total shown only when exact (round-12 review; controller formula corrected at
+  landing).** Staggered observations can make a run bare with no common observed
+  endpoints, leaving no exact `HostTotalCredit` derivation for the advertised span — and
+  estimating or amortizing is banned. Ruling: the hover shows the span total iff every
+  visible project is observed on `start−1` and on `end` (the run's own last day), where
+  `spanTotal = Σ_P (total(P, end) − total(P, start−1))` covers exactly the run and
+  overlaps no rendered segment; otherwise the total line is omitted (range + day count
+  only) — not exact ⇒ not shown, the no-fabrication rule in hover form. Process note,
+  recorded fairly: the controller's initial ruling set the right edge at `end+1`, which
+  double-counts that day's rendered bar; the landing session caught it against the
+  synchronized-recovery example before landing — the mirror image of the round-9
+  check-before-adopting lesson. (Raised by Codex review round 12.)
 
 ## Files
 
