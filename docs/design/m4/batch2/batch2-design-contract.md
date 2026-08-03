@@ -265,7 +265,12 @@ that outage renders as an ordinary hole (reason via label/hover).
      `No daily values · 07-15 → 07-17 (3 days) · 104,500 over the span`.
      Otherwise (staggered observations) the hover omits the total:
      `No daily values · 07-15 → 07-17 (3 days)`. The span total is never drawn,
-     estimated, or amortized — shown only when exact, hover only.
+     estimated, or amortized — shown only when exact, hover only. Each maximal bare run
+     also carries an **accessible node** whose name equals its hover content (range ·
+     inclusive day count · span total when exact) — with no bar to focus, the run itself
+     is the focusable node; hover is not an equivalent channel for assistive technology,
+     and the accessibility tree is not a visual element (the same principle as the hole
+     groups' accessible enumeration).
 
   Everything below follows from the predicates and is **non-normative illustration**:
   - *Per-project gap* (from 1): a project's run of unobserved days and its first observed
@@ -339,8 +344,9 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
    item — restoring a fill as a workaround is banned (it silently restores overpainting).
    Legibility of the floating glyphs over coloured bands is not pinned here; it belongs to
    the owner eyeball gate.
-4. Daily output gaps = missing/nullable values (no bar) — zero extra elements; the gap-hover
-   span total goes through tooltip logic.
+4. Daily output gaps = missing/nullable values (no bar) — zero extra **visual** elements;
+   the gap-hover span total goes through tooltip logic. The bare-run accessible node is an
+   accessibility-tree entry, not a visual element (see the gap semantics).
 5. LiveCharts2 paints are not DynamicResource-aware: rebuild hole/axis/baseline paints on
    theme switch (batch-1 warning #1).
 6. Ordinal/collapsed axis modes silently delete holes — the X axis must stay linear time.
@@ -658,6 +664,14 @@ substrate is the canon's business, not this contract's.
   presenting invented values as observations is. Recorded fairly, two misses again: the
   exactness-precision binding entered via the landing session's round-17 recommendation
   and was adopted unexamined. (Raised by Codex review round 18.)
+- **Bare runs get an accessible carrier (round-19 review).** The bare-run range, day
+  count and span total were hover-only: with no bar to focus and the no-extra-elements
+  mapping, keyboard and screen-reader users had no channel at all — while this contract
+  itself holds that hover is not equivalent for assistive technology. Conforming
+  application of the round-4 principle: each maximal bare run carries an accessible node
+  whose name equals its hover content; the accessibility tree is not a visual element,
+  so the zero-extra-elements mapping (now stated as zero extra *visual* elements) is
+  untouched. (Raised by Codex review round 19.)
 
 ## Files
 
