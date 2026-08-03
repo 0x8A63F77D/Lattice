@@ -376,13 +376,20 @@ content).
 Timeline additionally pins one **project-overflow fixture** (> 10 projects in window:
 top-10 coloured + `Other` aggregate, height-conserving).
 Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 26 snapshots.
-The gate is **dual-track**: chart-surface pixels ride the snapshots above; predicate
-paths that leave no mark on chart pixels are machine-gated by unit tests over the
-**extracted gap-semantics pure function** — the exact vs omitted span-total paths of
-predicate 3 **and** the partial-day disclosure of the `1 ∧ ¬2` path (the `partial day`
-tooltip/accessible-name content, equally pixel-invisible) must each have cases. This is
-the existing decision-logic canon made explicit in the gate wording; the function's
-substrate is the canon's business, not this contract's.
+The gate has **three tracks**: (1) chart-surface pixels ride the snapshots above;
+(2) predicate paths that leave no mark on chart pixels are machine-gated by unit tests
+over the **extracted gap-semantics pure function** — the exact vs omitted span-total
+paths of predicate 3 **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
+`partial day` tooltip/accessible-name content, equally pixel-invisible) must each have
+cases; (3) UI wiring that neither pixels nor the pure function witness — the bare-run
+accessible node's presence, name and focusability — is machine-gated by **headless
+accessibility assertions**, with cases for both the exact-total and omitted-total forms.
+Track 3 must assert against the **built accessibility tree itself** (the automation peer
+queried after a headless settle), never against a ViewModel exposing the right string —
+the classic false-green shape for wiring assertions (correct wiring code, absent end
+state). Tracks 2 and 3 are existing canons made explicit in the gate wording
+(decision-logic-as-policy-module; the headless settle family); substrates stay with the
+canons, not this contract.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -672,6 +679,17 @@ substrate is the canon's business, not this contract's.
   whose name equals its hover content; the accessibility tree is not a visual element,
   so the zero-extra-elements mapping (now stated as zero extra *visual* elements) is
   untouched. (Raised by Codex review round 19.)
+- **Gate track 3: headless accessibility assertions (round-20 review).** The round-19
+  bare-run accessible node is UI wiring — a focusable accessibility-tree node — which
+  neither snapshots (no pixels) nor the pure-function track (content only) witness: an
+  implementation could compute the correct name yet never attach the node, passing every
+  listed gate while preserving the exact failure round 19 addressed. Ruling: a third
+  gate track — headless accessibility assertions on node presence, name and focusability,
+  for both span-total forms — asserting against the built accessibility tree itself
+  after a headless settle, never against a ViewModel exposing the right string (the
+  classic wiring false-green: correct code, absent end state). Same shape as the
+  round-14 dual-track ruling: an existing canon (the headless settle family) made
+  explicit, not a new mechanism. (Raised by Codex review round 20.)
 
 ## Files
 
