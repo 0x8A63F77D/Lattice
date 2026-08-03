@@ -262,7 +262,9 @@ that outage renders as an ordinary hole (reason via label/hover).
   - *Partial day* (from 1 ∧ ¬2): a day computable for some projects renders exactly their
     segments — suppressing the whole column would discard valid observations. The
     column's tooltip and accessible name disclose the shortfall (`partial day` + which
-    projects are unobserved, existing channel style); the residual reads-as-complete risk
+    projects have **no daily value** that day — a missing endpoint, not necessarily an
+    unobserved day: a project observed on N but lacking N−1 is observed, its increment is
+    merely unavailable; existing channel style); the residual reads-as-complete risk
     rides the text channel.
   - *Synchronized recovery* (from 2): when every project shares a gap and resumes on day
     N, no segment exists on N, so N is bare and sits inside the hovered span — the
@@ -339,10 +341,18 @@ Daily output: 2 themes × {12-day baseline containing a 3-day gap} + a **user �
 fixture** (account-wide and host totals diverge; the chart must follow `HostTotalCredit` —
 fixture values shaped from the BOINC reference implementation's `get_statistics` output,
 not invented) + a **partial-day fixture** (one project computable, another missing an
-endpoint on the same day — observed segments render, the column is disclosed partial).
+endpoint on the same day — observed segments render, the column is disclosed partial)
++ a **zero-visible fixture** (all chips unchecked → the nothing-to-chart state, no chart
+content).
 Timeline additionally pins one **project-overflow fixture** (> 10 projects in window:
 top-10 coloured + `Other` aggregate, height-conserving).
-Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapshots.
+Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 26 snapshots.
+The gate is **dual-track**: chart-surface pixels ride the snapshots above; predicate
+paths that leave no mark on chart pixels (the exact vs omitted span-total hover of
+predicate 3) are machine-gated by unit tests over the **extracted gap-semantics pure
+function** — both paths must have cases. This is the existing decision-logic canon made
+explicit in the gate wording; the function's substrate is the canon's business, not this
+contract's.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -562,6 +572,19 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   `observed(P, N)` ⟺ a `daily_statistics` record exists for that day/project/host —
   anchoring the last free variables to the GuiRpc data model. A first-column-always-bare
   corollary is recorded as illustration. (Raised by Codex review round 13.)
+- **Gate coverage for the new predicates; dual-track gate stated (round-14 review).** The
+  snapshot matrix had not been extended for the round-12/13 semantics: an implementation
+  could show an empty-sum total in the zero-visible state, or a span total on a staggered
+  run where predicate 3 requires omission, without failing any listed gate. Additions: a
+  zero-visible PNG fixture (nothing-to-chart), and an explicit dual-track gate statement —
+  chart-surface pixels ride snapshots, while predicate paths that leave no pixel mark
+  (exact vs omitted span-total) are machine-gated by unit tests over the extracted
+  gap-semantics pure function, both paths with cases. Not a new mechanism: the existing
+  decision-logic-as-policy-module canon made explicit in the gate wording (the substrate
+  choice stays with the canon, not the contract). The partial-day disclosure wording was
+  conformed in the same round — `no daily value that day`: a project with a record on N
+  but no N−1 endpoint is observed, its increment merely unavailable, and calling it
+  "unobserved" falsely reported a data outage. (Raised by Codex review round 14.)
 
 ## Files
 
