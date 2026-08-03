@@ -33,8 +33,10 @@ fleets collapse to 28px bands — 10 hosts fit one screen without scrolling
 project's total observed **concurrency-seconds within the current rendered window**; the
 top 10 take palette colours, the rest aggregate into one **Other** band segment —
 height-conserving: the rendered concurrency total always equals the observed total
-(dropping series would fabricate concurrency by omission). Ties break by project name;
-the ranking is recomputed when the window changes (same family as the Statistics
+(dropping series would fabricate concurrency by omission). Ties break by project display
+name, then by `MasterUrl` — the project's identity key in the GuiRpc model; two distinct
+URLs can share a display name, and the ordering must be total for the gated output to be
+stable. The ranking is recomputed when the window changes (same family as the Statistics
 visible-set colour behaviour). The `cap ≤ palette size` invariant holds: coloured series
 never exceed 10 — Other is a neutral aggregate segment and takes no qualitative slot. Its
 concrete colour is deliberately not pinned here; the constraints are: a neutral, pairwise
@@ -235,14 +237,17 @@ that outage renders as an ordinary hole (reason via label/hover).
   unobserved, existing channel style); the residual risk that a shortened stack reads as
   the complete daily total rides the text channel — same family as the stated
   not-area-conserving cost.
-- **Gap rule [machine-gated]:** a run of unobserved days *and the first observed day after
-  it* render **empty — no bars at all** (the bar analogue of the #170 "an average that was
-  not observed is not an average — break it" ruling; a missing bar is naturally visible in a
-  bar chart). The span total is never drawn, estimated, or amortized; it surfaces only on
-  hover over the gap: `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over
-  the span`. **Accepted cost:** this chart is not area-conserving — "how much in total" is
-  answered by the User total metric, this chart answers "how much on which day", and days it
-  cannot answer are empty.
+- **Gap rule [machine-gated], scoped per project:** for each project, a run of its
+  unobserved days *and its first observed day after the run* contribute **no segment for
+  that project** (the bar analogue of the #170 "an average that was not observed is not an
+  average — break it" ruling; a missing bar is naturally visible in a bar chart). A day
+  unobserved by **every** project renders **empty — no bars at all**; a day where only
+  some projects are affected follows the partial-day rule above. The span total is never
+  drawn, estimated, or amortized; for an all-project gap it surfaces only on hover:
+  `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`
+  (project-level shortfalls ride the partial-day disclosure instead). **Accepted cost:**
+  this chart is not area-conserving — "how much in total" is answered by the User total
+  metric, this chart answers "how much on which day", and days it cannot answer are empty.
 - Grouped bars **rejected** (6 visible × 90 days = 540 sub-detection-floor slivers; loses
   the per-day total; per-project comparison is what chip filtering is for).
 - Tooltip: exact integers + group separators (batch-1 §6 rules).
@@ -457,6 +462,26 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   are rejected — they collide with the no-pattern and no-new-elements rulings. The
   residual reads-as-complete risk rides the text channel, same family as the stated
   not-area-conserving cost. (Raised by Codex review round 9.)
+- **Gap rule scoped per project (round-10 review; conforming rewrite).** The original
+  column-level wording ("the first observed day after a gap renders no bars at all")
+  contradicted the round-9 partial-day ruling: with project A observed on 07-16/07-17
+  and project B resuming 07-17 after a gap, the gate had no single expected output —
+  A's 07-17 segment was simultaneously required and forbidden. The column-level text was
+  the single-project projection of a per-project rule, and round-9 (owner-informed) had
+  already fixed the scope at project level — so this is a conforming rewrite of the
+  original text, not new design: per project, a gap run and its first observed day
+  contribute no segment; only an all-project-unobserved day is a bare column, where the
+  span-total hover lives; project-level shortfalls ride the partial-day disclosure.
+  (Raised by Codex review round 10.)
+- **Ranking totality: `MasterUrl` closes the tie-break chain (round-10 review).** "Ties
+  break by project name" is not a total order — two distinct project URLs can share a
+  display name, so enumeration order could decide who takes the last palette slot vs
+  Other, destabilising the gated output across equivalent inputs. The chain is now
+  concurrency-seconds → display name → `MasterUrl` (the project's identity key in the
+  GuiRpc model — identity lives in the data model, which is exactly where a tie-break
+  should end). Recorded fairly: the name-only tie-break entered via the landing session's
+  round-8 recommendation and was adopted unchecked — a shared miss. (Raised by Codex
+  review round 10.)
 
 ## Files
 
