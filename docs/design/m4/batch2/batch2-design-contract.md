@@ -78,11 +78,12 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
     is shown only when all members share one (mixed reasons → duration only).
   - **Dense regime (true span `≥ 48`):** per-hole exaggeration is **abandoned** — members
     render at their **true geometry**, so observed data is never swallowed and nothing is
-    overpainted — and the group shares one summary label: `3 holes · 24.0 h total` (reason
-    appended when uniform across the group). Per-hole labels are geometrically impossible
-    where they would collide, so the visibility carrier shifts from per-hole label to
-    per-group label; sub-pixel members are witnessed by the count, the hover detail and
-    the accessible enumeration.
+    overpainted — and the group shares one summary label riding **the same width ladder as
+    any rendered hole** (referenced, not a second ladder): at `≥ 48` the summed duration
+    (`24.0 h`); at `≥ 170` the full `3 holes · 24.0 h total` (reason appended when uniform
+    across the group); below 170 the count is witnessed by the hover detail and the
+    accessible enumeration. Per-hole labels are geometrically impossible where they would
+    collide, so the visibility carrier shifts from per-hole label to per-group label.
 - **Member detail (both group forms).** Hover lists each member hole's true range and
   reason (same style as the Daily output gap-span tooltip). The group's **accessible
   description enumerates every member's true range · duration · reason** — hover is not an
@@ -97,10 +98,20 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
 single formatting function in code, never three copies):** `≥ 0.1 h` → hours, one decimal
 (`8.2 h`); `< 0.1 h` → whole minutes (`4 m`); `< 1 m` → whole seconds (`30 s`).
 
-Every rendered hole or hole group carries its own label, regardless of lane position — no
-aligned-column deduplication. A fleet-wide outage column therefore repeats the label once
-per lane; that repetition is semantically truthful (each host was independently
-unobserved).
+Every rendered hole (single hole or dense group) carries its own label, regardless of lane
+position — no aligned-column deduplication. A fleet-wide outage column therefore repeats
+the label once per lane; that repetition is semantically truthful (each host was
+independently unobserved).
+
+**Label fit and clamping [machine-gated].** A label never overflows the rendered span of
+the hole or group it belongs to — content degrades down the ladder until it fits — which
+makes cross-group label collision geometrically impossible (no collision-handling rule
+exists or is needed). When a rendered hole (single or dense group) intersects the viewport
+edge during panning, its label slides to stay within the visible intersection (sticky);
+the exaggeration geometry and time anchoring never move, only the label, and the content
+degrades down the ladder as the intersection narrows. An intersection `< 48` renders
+unlabelled — an explicit, accepted residual: panning is transient, the label returns as
+the hole scrolls into view, and the accessible channel stays complete throughout.
 
 **Reason vocabulary — exactly two user-facing strings, no others:**
 `Lattice not running` (the app was off — routine) and `Host unreachable` (Lattice was
@@ -335,6 +346,19 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 22 snapsho
   window-scaled minimum widths (violates the labelling ruling); accepting month-wide
   fusion as a known cost (swallows observed facts — unacceptable). (Raised by Codex
   review round 5.)
+- **Group labels hook into the existing ladder; labels never overflow; edge clamping
+  (round-6 review).** Round 5 mandated the `N holes · X h total` summary without hooking
+  it to the width ladder, so a 48–100px group could not fit its own label, and an
+  overflowing label could collide with a neighbouring group's. Ruling: the group label
+  rides the same ladder as any rendered hole (referenced, not copied — `≥ 48` summed
+  duration, `≥ 170` full summary with count), and a label never overflows its hole/group's
+  rendered span — making cross-group collision geometrically impossible instead of adding
+  a collision-handling rule. At viewport edges the label slides to stay within the visible
+  intersection (sticky) and degrades down the ladder as the intersection narrows; an
+  intersection `< 48` renders unlabelled, recorded as a **controller-accepted residual**
+  (panning is transient, the label returns naturally, the accessible channel stays
+  complete; the implementation PR's owner eyeball gate is the final veto). (Raised by
+  Codex review round 6.)
 
 ## Files
 
