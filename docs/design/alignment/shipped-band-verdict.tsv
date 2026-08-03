@@ -1,0 +1,22 @@
+Inter	EventLogView[IconCheckmarkFilled+Error]	a	top=-3.381	bottom=-3.381
+Inter	EventLogView[IconCheckmarkFilled+Info]	a	top=-3.381	bottom=-3.381
+Inter	EventLogView[IconCheckmarkFilled+Warning]	a	top=-3.381	bottom=-3.381
+Inter	ProjectsView[IconWarningFilled+Updated 4 m ago]	a	top=-2.898	bottom=-2.898
+Inter	StatisticsView[Panel+Einstein@Home]	a	top=-2.898	bottom=-2.898
+Inter	StatisticsView[Panel+LHC@home]	a	top=-2.898	bottom=-2.898
+Inter	TasksView[IconChevronDownRegular+Computing]	a	top=-3.139	bottom=-3.139
+Inter	TasksView[IconPlaySettingsRegular+Computing]	a	top=-3.139	bottom=-3.139
+Inter	TasksView[IconWarningFilled+3 deadlines at risk]	a	top=-2.898	bottom=-2.898
+Inter	TasksView[IconWarningFilled+Updated 4 m ago]	a	top=-2.898	bottom=-2.898
+Inter	TransfersView[IconWarningFilled+Updated 4 m ago]	a	top=-2.898	bottom=-2.898
+Helvetica	EventLogView[IconCheckmarkFilled+Error]	a	top=-0.738	bottom=-3.220
+Helvetica	EventLogView[IconCheckmarkFilled+Info]	a	top=-0.738	bottom=-3.220
+Helvetica	EventLogView[IconCheckmarkFilled+Warning]	a	top=-0.738	bottom=-3.220
+Helvetica	ProjectsView[IconWarningFilled+Updated 4 m ago]	a	top=-0.633	bottom=-2.760
+Helvetica	StatisticsView[Panel+Einstein@Home]	a	top=-0.633	bottom=-2.760
+Helvetica	StatisticsView[Panel+LHC@home]	a	top=-0.633	bottom=-2.760
+Helvetica	TasksView[IconChevronDownRegular+Computing]	a	top=-0.482	bottom=-2.787
+Helvetica	TasksView[IconPlaySettingsRegular+Computing]	a	top=-0.482	bottom=-2.787
+Helvetica	TasksView[IconWarningFilled+3 deadlines at risk]	a	top=-0.633	bottom=-2.760
+Helvetica	TasksView[IconWarningFilled+Updated 4 m ago]	a	top=-0.633	bottom=-2.760
+Helvetica	TransfersView[IconWarningFilled+Updated 4 m ago]	a	top=-0.633	bottom=-2.760

@@ -1,0 +1,145 @@
+font	group	site	candidate	label	markH	capH	wordH	t	vsCap	vsWordInk	panelH	renderedVsCap	renderedVsWordInk
+Inter	pills	EventLogView[IconCheckmarkFilled+Error]	a	Error	12.000	10.182	13.045	0.635	0.000	-0.080	12.000	0.244	0.112
+Inter	pills	EventLogView[IconCheckmarkFilled+Info]	a	Info	12.000	10.182	13.045	0.635	0.000	0.159	12.000	0.706	0.343
+Inter	pills	EventLogView[IconCheckmarkFilled+Warning]	a	Warning	12.000	10.182	13.045	0.635	0.000	-1.352	12.000	0.508	-1.200
+Inter	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.727	11.182	1.000	0.000	-1.295	12.000	0.037	-1.336
+Inter	legend	StatisticsView[Panel+Einstein@Home]	a	Einstein@Home	12.000	8.727	11.182	1.000	0.000	-1.014	12.000	0.216	-1.092
+Inter	legend	StatisticsView[Panel+LHC@home]	a	LHC@home	12.000	8.727	11.182	1.000	0.000	-1.091	12.000	0.111	-1.145
+Inter	computing	TasksView[IconChevronDownRegular+Computing]	a	Computing	12.000	9.455	12.114	1.000	0.000	-1.175	16.000	0.773	-0.884
+Inter	computing	TasksView[IconPlaySettingsRegular+Computing]	a	Computing	16.000	9.455	12.114	1.000	0.000	-1.175	16.000	0.727	-0.930
+Inter	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	a	3 deadlines at risk	12.000	8.727	11.182	1.000	0.000	0.060	27.000	0.227	-0.021
+Inter	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.727	11.182	1.000	0.000	-1.295	12.000	0.037	-1.336
+Inter	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.727	11.182	1.000	0.000	-1.295	12.000	0.037	-1.336
+Inter	pills	EventLogView[IconCheckmarkFilled+Error]	b	Error	12.000	10.182	13.045	0.635	1.432	1.352	13.500	1.589	1.457
+Inter	pills	EventLogView[IconCheckmarkFilled+Info]	b	Info	12.000	10.182	13.045	0.635	1.432	1.591	13.500	2.050	1.688
+Inter	pills	EventLogView[IconCheckmarkFilled+Warning]	b	Warning	12.000	10.182	13.045	0.635	1.432	0.080	13.500	1.853	0.145
+Inter	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	legend	StatisticsView[Panel+Einstein@Home]	b	Einstein@Home	12.000	8.727	11.182	1.000	1.227	0.213	12.000	1.716	0.408
+Inter	legend	StatisticsView[Panel+LHC@home]	b	LHC@home	12.000	8.727	11.182	1.000	1.227	0.136	12.000	1.611	0.355
+Inter	computing	TasksView[IconChevronDownRegular+Computing]	b	Computing	12.000	9.455	12.114	1.000	1.330	0.155	16.000	1.773	0.116
+Inter	computing	TasksView[IconPlaySettingsRegular+Computing]	b	Computing	16.000	9.455	12.114	1.000	1.330	0.155	16.000	1.727	0.070
+Inter	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	b	3 deadlines at risk	12.000	8.727	11.182	1.000	1.227	1.287	27.000	1.727	1.479
+Inter	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	pills	EventLogView[IconCheckmarkFilled+Error]	c	Error	12.000	10.182	13.045	0.635	0.909	0.830	12.000	1.244	1.112
+Inter	pills	EventLogView[IconCheckmarkFilled+Info]	c	Info	12.000	10.182	13.045	0.635	0.909	1.068	12.000	1.706	1.343
+Inter	pills	EventLogView[IconCheckmarkFilled+Warning]	c	Warning	12.000	10.182	13.045	0.635	0.909	-0.443	12.000	1.508	-0.200
+Inter	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	legend	StatisticsView[Panel+Einstein@Home]	c	Einstein@Home	12.000	8.727	11.182	1.000	1.227	0.213	12.000	1.716	0.408
+Inter	legend	StatisticsView[Panel+LHC@home]	c	LHC@home	12.000	8.727	11.182	1.000	1.227	0.136	12.000	1.611	0.355
+Inter	computing	TasksView[IconChevronDownRegular+Computing]	c	Computing	12.000	9.455	12.114	1.000	1.330	0.155	16.000	1.773	0.116
+Inter	computing	TasksView[IconPlaySettingsRegular+Computing]	c	Computing	16.000	9.455	12.114	1.000	1.330	0.155	16.000	1.727	0.070
+Inter	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	c	3 deadlines at risk	12.000	8.727	11.182	1.000	1.227	1.287	27.000	1.727	1.479
+Inter	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.727	11.182	1.000	1.227	-0.068	12.000	1.537	0.164
+Inter	pills	EventLogView[IconCheckmarkFilled+Error]	d	Error	12.000	10.182	13.045	0.635	0.716	0.636	12.000	0.744	0.612
+Inter	pills	EventLogView[IconCheckmarkFilled+Info]	d	Info	12.000	10.182	13.045	0.635	0.716	0.875	12.000	1.206	0.843
+Inter	pills	EventLogView[IconCheckmarkFilled+Warning]	d	Warning	12.000	10.182	13.045	0.635	0.716	-0.636	12.000	1.008	-0.700
+Inter	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.727	11.182	1.000	0.614	-0.682	12.000	0.537	-0.800
+Inter	legend	StatisticsView[Panel+Einstein@Home]	d	Einstein@Home	12.000	8.727	11.182	1.000	0.614	-0.401	12.000	0.716	-0.592
+Inter	legend	StatisticsView[Panel+LHC@home]	d	LHC@home	12.000	8.727	11.182	1.000	0.614	-0.477	12.000	0.611	-0.645
+Inter	computing	TasksView[IconChevronDownRegular+Computing]	d	Computing	12.000	9.455	12.114	1.000	0.665	-0.510	16.000	1.273	-0.384
+Inter	computing	TasksView[IconPlaySettingsRegular+Computing]	d	Computing	16.000	9.455	12.114	1.000	0.665	-0.510	16.000	1.227	-0.430
+Inter	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	d	3 deadlines at risk	12.000	8.727	11.182	1.000	0.614	0.673	27.000	0.727	0.479
+Inter	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.727	11.182	1.000	0.614	-0.682	12.000	0.537	-0.800
+Inter	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.727	11.182	1.000	0.614	-0.682	12.000	0.537	-0.800
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Error]	a	Error	12.000	10.042	12.961	0.671	0.000	-0.133	12.000	0.172	-0.022
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Info]	a	Info	12.000	10.042	12.961	0.671	0.000	-0.062	12.000	0.309	0.047
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Warning]	a	Warning	12.000	10.042	12.961	0.671	0.000	-1.548	12.000	0.172	-1.403
+Helvetica	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.607	11.109	1.000	0.000	-1.312	12.000	-0.005	-1.350
+Helvetica	legend	StatisticsView[Panel+Einstein@Home]	a	Einstein@Home	12.000	8.607	11.109	1.000	0.000	-0.009	12.000	0.171	-0.118
+Helvetica	legend	StatisticsView[Panel+LHC@home]	a	LHC@home	12.000	8.607	11.109	1.000	0.000	-0.009	12.000	0.154	-0.131
+Helvetica	computing	TasksView[IconChevronDownRegular+Computing]	a	Computing	12.000	9.731	12.441	1.000	0.000	-1.311	16.000	0.337	-1.149
+Helvetica	computing	TasksView[IconPlaySettingsRegular+Computing]	a	Computing	16.000	9.731	12.441	1.000	0.000	-1.311	16.000	0.291	-1.194
+Helvetica	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	a	3 deadlines at risk	12.000	8.607	11.109	1.000	0.000	-0.105	27.000	-0.005	-0.225
+Helvetica	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.607	11.109	1.000	0.000	-1.312	12.000	-0.005	-1.350
+Helvetica	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	a	Updated 4 m ago	12.000	8.607	11.109	1.000	0.000	-1.312	12.000	-0.005	-1.350
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Error]	b	Error	12.000	10.042	12.961	0.671	1.459	1.326	13.000	1.672	1.478
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Info]	b	Info	12.000	10.042	12.961	0.671	1.459	1.398	13.000	1.809	1.547
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Warning]	b	Warning	12.000	10.042	12.961	0.671	1.459	-0.089	13.000	1.672	0.060
+Helvetica	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	legend	StatisticsView[Panel+Einstein@Home]	b	Einstein@Home	12.000	8.607	11.109	1.000	1.251	1.242	12.000	1.671	1.382
+Helvetica	legend	StatisticsView[Panel+LHC@home]	b	LHC@home	12.000	8.607	11.109	1.000	1.251	1.242	12.000	1.654	1.369
+Helvetica	computing	TasksView[IconChevronDownRegular+Computing]	b	Computing	12.000	9.731	12.441	1.000	1.355	0.044	16.000	1.337	-0.149
+Helvetica	computing	TasksView[IconPlaySettingsRegular+Computing]	b	Computing	16.000	9.731	12.441	1.000	1.355	0.044	16.000	1.291	-0.194
+Helvetica	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	b	3 deadlines at risk	12.000	8.607	11.109	1.000	1.251	1.146	27.000	1.495	1.275
+Helvetica	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	b	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Error]	c	Error	12.000	10.042	12.961	0.671	0.979	0.846	12.000	1.172	0.978
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Info]	c	Info	12.000	10.042	12.961	0.671	0.979	0.917	12.000	1.309	1.047
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Warning]	c	Warning	12.000	10.042	12.961	0.671	0.979	-0.569	12.000	1.172	-0.440
+Helvetica	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	legend	StatisticsView[Panel+Einstein@Home]	c	Einstein@Home	12.000	8.607	11.109	1.000	1.251	1.242	12.000	1.671	1.382
+Helvetica	legend	StatisticsView[Panel+LHC@home]	c	LHC@home	12.000	8.607	11.109	1.000	1.251	1.242	12.000	1.654	1.369
+Helvetica	computing	TasksView[IconChevronDownRegular+Computing]	c	Computing	12.000	9.731	12.441	1.000	1.355	0.044	16.000	1.337	-0.149
+Helvetica	computing	TasksView[IconPlaySettingsRegular+Computing]	c	Computing	16.000	9.731	12.441	1.000	1.355	0.044	16.000	1.291	-0.194
+Helvetica	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	c	3 deadlines at risk	12.000	8.607	11.109	1.000	1.251	1.146	27.000	1.495	1.275
+Helvetica	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	c	Updated 4 m ago	12.000	8.607	11.109	1.000	1.251	-0.062	12.000	1.495	0.073
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Error]	d	Error	12.000	10.042	12.961	0.671	0.730	0.596	12.000	0.672	0.478
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Info]	d	Info	12.000	10.042	12.961	0.671	0.730	0.668	12.000	0.809	0.547
+Helvetica	pills	EventLogView[IconCheckmarkFilled+Warning]	d	Warning	12.000	10.042	12.961	0.671	0.730	-0.819	12.000	0.672	-0.903
+Helvetica	freshness	ProjectsView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.607	11.109	1.000	0.625	-0.687	12.000	0.995	-0.427
+Helvetica	legend	StatisticsView[Panel+Einstein@Home]	d	Einstein@Home	12.000	8.607	11.109	1.000	0.625	0.617	12.000	1.171	0.882
+Helvetica	legend	StatisticsView[Panel+LHC@home]	d	LHC@home	12.000	8.607	11.109	1.000	0.625	0.617	12.000	1.154	0.869
+Helvetica	computing	TasksView[IconChevronDownRegular+Computing]	d	Computing	12.000	9.731	12.441	1.000	0.678	-0.633	16.000	0.837	-0.649
+Helvetica	computing	TasksView[IconPlaySettingsRegular+Computing]	d	Computing	16.000	9.731	12.441	1.000	0.678	-0.633	16.000	0.791	-0.694
+Helvetica	freshness	TasksView[IconWarningFilled+3 deadlines at risk]	d	3 deadlines at risk	12.000	8.607	11.109	1.000	0.625	0.520	27.000	0.995	0.775
+Helvetica	freshness	TasksView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.607	11.109	1.000	0.625	-0.687	12.000	0.995	-0.427
+Helvetica	freshness	TransfersView[IconWarningFilled+Updated 4 m ago]	d	Updated 4 m ago	12.000	8.607	11.109	1.000	0.625	-0.687	12.000	0.995	-0.427
+Inter	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.727	11.182		0.023	-0.000	10.000	0.136	-0.078
+Inter	cells	TasksView[Running]	a	Running	12.000	8.727	11.182	1.000	0.000	-1.159	12.000	0.235	-1.227
+Inter	cells	ProjectsView[Active]	a	Active	12.000	8.727	11.182	1.000	0.000	0.068	12.000	0.214	-0.013
+Inter	cells	TransfersView[Active]	a	Active	12.000	8.727	11.182	1.000	0.000	0.068	12.000	0.214	-0.013
+Inter	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.727	11.182		0.023	-0.000	10.000	0.136	-0.078
+Inter	cells	TasksView[Running]	b	Running	12.000	8.727	11.182	1.000	1.227	0.068	12.000	1.735	0.273
+Inter	cells	ProjectsView[Active]	b	Active	12.000	8.727	11.182	1.000	1.227	1.295	12.000	1.714	1.487
+Inter	cells	TransfersView[Active]	b	Active	12.000	8.727	11.182	1.000	1.227	1.295	12.000	1.714	1.487
+Inter	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.727	11.182		0.023	-0.000	10.000	0.136	-0.078
+Inter	cells	TasksView[Running]	c	Running	12.000	8.727	11.182	1.000	1.227	0.068	12.000	1.735	0.273
+Inter	cells	ProjectsView[Active]	c	Active	12.000	8.727	11.182	1.000	1.227	1.295	12.000	1.714	1.487
+Inter	cells	TransfersView[Active]	c	Active	12.000	8.727	11.182	1.000	1.227	1.295	12.000	1.714	1.487
+Inter	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.727	11.182		0.023	-0.000	10.000	0.136	-0.078
+Inter	cells	TasksView[Running]	d	Running	12.000	8.727	11.182	1.000	0.614	-0.545	12.000	0.735	-0.701
+Inter	cells	ProjectsView[Active]	d	Active	12.000	8.727	11.182	1.000	0.614	0.682	12.000	0.714	0.487
+Inter	cells	TransfersView[Active]	d	Active	12.000	8.727	11.182	1.000	0.614	0.682	12.000	0.714	0.487
+Helvetica	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.982	11.484		0.211	-0.012	10.000	0.079	0.079
+Helvetica	cells	TasksView[Running]	a	Running	12.000	8.607	11.109	1.000	0.000	-1.327	12.000	-0.074	-1.385
+Helvetica	cells	ProjectsView[Active]	a	Active	12.000	8.607	11.109	1.000	0.000	-0.111	12.000	-0.073	-0.233
+Helvetica	cells	TransfersView[Active]	a	Active	12.000	8.607	11.109	1.000	0.000	-0.111	12.000	-0.073	-0.233
+Helvetica	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.982	11.484		0.211	-0.012	10.000	0.079	0.079
+Helvetica	cells	TasksView[Running]	b	Running	12.000	8.607	11.109	1.000	1.251	-0.076	12.000	1.426	0.058
+Helvetica	cells	ProjectsView[Active]	b	Active	12.000	8.607	11.109	1.000	1.251	1.140	12.000	1.427	1.267
+Helvetica	cells	TransfersView[Active]	b	Active	12.000	8.607	11.109	1.000	1.251	1.140	12.000	1.427	1.267
+Helvetica	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.982	11.484		0.211	-0.012	10.000	0.079	0.079
+Helvetica	cells	TasksView[Running]	c	Running	12.000	8.607	11.109	1.000	1.251	-0.076	12.000	1.426	0.058
+Helvetica	cells	ProjectsView[Active]	c	Active	12.000	8.607	11.109	1.000	1.251	1.140	12.000	1.427	1.267
+Helvetica	cells	TransfersView[Active]	c	Active	12.000	8.607	11.109	1.000	1.251	1.140	12.000	1.427	1.267
+Helvetica	cells	TasksView[07-11 00:00]	n/a	07-11 00:00	10.000	8.982	11.484		0.211	-0.012	10.000	0.079	0.079
+Helvetica	cells	TasksView[Running]	d	Running	12.000	8.607	11.109	1.000	0.625	-0.702	12.000	0.926	-0.442
+Helvetica	cells	ProjectsView[Active]	d	Active	12.000	8.607	11.109	1.000	0.625	0.514	12.000	0.927	0.767
+Helvetica	cells	TransfersView[Active]	d	Active	12.000	8.607	11.109	1.000	0.625	0.514	12.000	0.927	0.767
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-1	Einstein@Home	12.000	8.727	11.182		0.000	-1.014	12.000	0.216	-1.092
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-1	LHC@home	12.000	8.727	11.182		0.000	-1.091	12.000	0.111	-1.145
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-2	Einstein@Home	8.727	8.727	11.182		0.000	-1.014	8.727	0.236	-1.082
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-2	LHC@home	8.727	8.727	11.182		0.000	-1.091	8.727	0.112	-1.144
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-3	Einstein@Home	6.545	8.727	11.182		0.000	-1.014	8.727	0.234	-1.084
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-3	LHC@home	6.545	8.727	11.182		0.000	-1.091	8.727	0.110	-1.146
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-1	Einstein@Home	12.000	8.607	11.109		0.000	-0.009	12.000	0.171	-0.118
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-1	LHC@home	12.000	8.607	11.109		0.000	-0.009	12.000	0.154	-0.131
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-2	Einstein@Home	8.607	8.607	11.109		0.000	-0.009	8.607	0.170	-0.119
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-2	LHC@home	8.607	8.607	11.109		0.000	-0.009	8.607	0.170	-0.121
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-3	Einstein@Home	6.275	8.607	11.109		0.000	-0.009	8.607	0.155	-0.130
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-3	LHC@home	6.275	8.607	11.109		0.000	-0.009	8.607	0.172	-0.117
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-1	Einstein@Home	12.000	8.727	11.182		0.000	-1.014	12.000	0.273	-1.126
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-1	LHC@home	12.000	8.727	11.182		0.000	-1.091	12.000	0.134	-1.195
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-2	Einstein@Home	8.727	8.727	11.182		0.000	-1.014	8.727	0.311	-1.108
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-2	LHC@home	8.727	8.727	11.182		0.000	-1.091	8.727	0.135	-1.195
+Inter	swatch	StatisticsView[Panel+Einstein@Home]	size-3	Einstein@Home	6.545	8.727	11.182		0.000	-1.014	8.727	0.311	-1.106
+Inter	swatch	StatisticsView[Panel+LHC@home]	size-3	LHC@home	6.545	8.727	11.182		0.000	-1.091	8.727	0.135	-1.195
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-1	Einstein@Home	12.000	8.607	11.109		0.000	-0.009	12.000	0.194	-0.166
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-1	LHC@home	12.000	8.607	11.109		0.000	-0.009	12.000	0.192	-0.172
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-2	Einstein@Home	8.607	8.607	11.109		0.000	-0.009	8.607	0.195	-0.166
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-2	LHC@home	8.607	8.607	11.109		0.000	-0.009	8.607	0.195	-0.169
+Helvetica	swatch	StatisticsView[Panel+Einstein@Home]	size-3	Einstein@Home	6.275	8.607	11.109		0.000	-0.009	8.607	0.193	-0.171
+Helvetica	swatch	StatisticsView[Panel+LHC@home]	size-3	LHC@home	6.275	8.607	11.109		0.000	-0.009	8.607	0.195	-0.166

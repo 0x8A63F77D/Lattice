@@ -1,0 +1,12 @@
+/* Fluent 2 — minimal base styles */
+body {
+  margin: 0;
+  font-family: var(--fontFamilyBase);
+  font-size: var(--fontSizeBase300);
+  line-height: var(--lineHeightBase300);
+  color: var(--colorNeutralForeground1);
+  background: var(--colorNeutralBackground1);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--colorBrandForegroundLink); text-decoration: none; }
+a:hover { text-decoration: underline; color: var(--colorBrandForegroundLinkHover); }

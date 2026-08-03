@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/radius.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/shadows.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/base.css">
+  <link rel="stylesheet" href="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/tokens/icons.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400&display=swap">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/subsetted-fonts@1/SarasaUiSC-Regular/SarasaUiSC-Regular.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/subsetted-fonts@1/PingFangSC-Regular/PingFangSC-Regular.css">
+  <script src="_ds/fluent-2-design-system-60567ca7-463c-4d7b-8f7b-a4744047ec0e/_ds_bundle.js"></script>
+  <style>
+    body { margin:0; background:#FAFAFA; color:#242424; font-family:'Segoe UI','Segoe UI Variable Text',system-ui,-apple-system,sans-serif; }
+    a { color:#0F6CBD; text-decoration:none; } a:hover { color:#115EA3; text-decoration:underline; }
+  </style>
+</helmet>
+<div style="max-width:1080px; margin:0 auto; padding:40px 32px 64px; display:flex; flex-direction:column; gap:24px">
+  <header style="display:flex; flex-direction:column; gap:8px">
+    <div style="display:flex; align-items:center; gap:10px">
+      <span style="font-size:12px; color:#616161">Lattice · issue #206 · chrome-mark vertical alignment · 2026-08-02</span>
+      <span style="font-size:11px; font-weight:600; color:#8A3707; background:#FFF9F5; border:1px solid #F4BFAB; border-radius:9999px; padding:2px 10px">FINAL — 已拍板</span>
+    </div>
+    <h1 style="margin:0; font-size:28px; line-height:36px; font-weight:600">裁决:功能标记维持 (a) cap band,图例色块按 cap height 消解</h1>
+    <p style="margin:0; font-size:14px; line-height:20px; color:#616161; max-width:72ch">依据:REQUEST.md、README(实验室走查)、measurements.tsv 全量数据、14 张 montage 的目检,以及本页三端 × 八款字体的实机实测。已拍板并写入 RULING.md(进 repo、供 gate 断言引用)。</p>
+  </header>
+
+  <section style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px">
+    <div style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:20px; display:flex; flex-direction:column; gap:8px">
+      <div style="font-size:12px; font-weight:600; color:#0F6CBD">R1 · 功能标记</div>
+      <div style="font-size:16px; font-weight:600; line-height:22px">方案 (a):cap band,t = 0</div>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161">带 = 大写顶 → 基线。所有平台习语尺寸的标记(12px 状态图标、16px 播放、20px checkbox)一律取该带中心。两标记按钮共用标签的同一条带。代价明码:有下沉笔画的拉丁标签最差偏高 1.55 DIP;换来 script 无关与双语列齐平。</p>
+    </div>
+    <div style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:20px; display:flex; flex-direction:column; gap:8px">
+      <div style="font-size:12px; font-weight:600; color:#0F6CBD">R2 · 图例色块</div>
+      <div style="font-size:16px; font-weight:600; line-height:22px">消解:size = cap height,radius 2</div>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161">色块高=宽=标签字体 cap height,顶底与 cap band 重合——(A)(B) 两种哲学在此重合,误差按构造为 0,对用户数据的下沉笔画完全免疫,且恰好就是 Fluent 明文的 cap 规则。圆角裁定为 2(= borderRadiusSmall token),sample 见下。</p>
+    </div>
+    <div style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:20px; display:flex; flex-direction:column; gap:8px">
+      <div style="font-size:12px; font-weight:600; color:#0F6CBD">R3 / R4 · 例外与范围</div>
+      <div style="font-size:16px; font-weight:600; line-height:22px">无站点例外</div>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161">图例无需另立例外——它唯一的标记是色块,已由 R2 裁定。纯数字格保持数字带,四方案下本就不动,合同里只作重述。20px checkbox 由 R1 通用覆盖并点名一次,不另立规则。</p>
+    </div>
+  </section>
+
+  <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:12px">
+    <h2 style="margin:0; font-size:18px; font-weight:600">理由(含对 Fluent 合规的交代)</h2>
+    <ul style="margin:0; padding-left:20px; font-size:14px; line-height:22px; color:#424242; display:flex; flex-direction:column; gap:8px">
+      <li><strong>(a) 是 Fluent 的字面机械化,代价明码接受。</strong>cap band 就是 optically center 的默认实现。Lattice 约一半拉丁标签带下沉笔画,(a) 在这一半上偏高 1.31–1.55 DIP;落选的 (d)(t=0.5)能压到 0.82。仍选 (a):它是唯一无需 script 分支的规则,且两者机制同构、gate 形状相同,改判只需翻一个常数。</li>
+      <li><strong>中文与双语是决定性的一票。</strong>汉字无下沉笔画,(d) 的补偿对 CJK 是纯损失:五款 CJK 字体实测 (a) −0.50…0.00、(d) +0.25…+0.75 DIP。同列中英图标台阶:(a) 0.00、(d) 0.25、按 script 分流 0.50 DIP——只有 (a) 保证混排列绝对齐平。</li>
+      <li><strong>(b)(c) 排除,与实验室同判。</strong>(c) 在 14 个位置中 11 个顶到上限、与 (b) 无异,且在两标记按钮上不可表达;(b) 让事件日志徽章长高 ~1px,并把误差原样推给另一半词。</li>
+      <li><strong>图标字体已排除嫌疑。</strong>Fluent 图标字形的墨迹中心正好落在 12px 盒子中心(偏移 0.00),与文本字体混排不引入任何隐藏常数,以上数值全部可信。<br><br><strong>色块消解让图例退出赌局。</strong>README 发现 3:项目名是用户数据,@ 的下沉在两种字体间翻转。R2 之后色块位置只依赖 cap 度量,与词的墨迹无关,两字体下按构造 0 误差(实测已验证:位置与尺寸无关,0.000)。</li>
+    </ul>
+    <div style="border-top:1px solid #F0F0F0; padding-top:12px">
+      <div style="font-size:12px; font-weight:600; color:#616161; margin-bottom:8px">最差光学误差对照(Helvetica,DIP;负=标记偏高)· 橙色为裁决接受的代价</div>
+      <div style="display:grid; grid-template-columns:auto repeat(2,90px); gap:2px 16px; font-size:13px; font-variant-numeric:tabular-nums; max-width:440px">
+        <div style="font-weight:600; color:#616161"></div><div style="font-weight:600; color:#0F6CBD">(a) 裁决</div><div style="font-weight:600; color:#616161">(d) 落选</div>
+        <div>Warning(有下沉)</div><div style="color:#8A3707; font-weight:600">−1.55</div><div>−0.82</div>
+        <div>Computing(有下沉)</div><div style="color:#8A3707; font-weight:600">−1.31</div><div>−0.63</div>
+        <div>Running(有下沉)</div><div style="color:#8A3707; font-weight:600">−1.33</div><div>−0.70</div>
+        <div>Updated 4 m ago(有下沉)</div><div style="color:#8A3707; font-weight:600">−1.31</div><div>−0.69</div>
+        <div>Info(无下沉)</div><div>−0.06</div><div>+0.67</div>
+        <div>Error(无下沉)</div><div>−0.13</div><div>+0.60</div>
+        <div>Active(无下沉)</div><div>−0.11</div><div>+0.51</div>
+        <div style="border-top:1px solid #F0F0F0; padding-top:4px; font-weight:600">全库最差</div><div style="border-top:1px solid #F0F0F0; padding-top:4px; font-weight:600">1.55</div><div style="border-top:1px solid #F0F0F0; padding-top:4px; font-weight:600">0.82</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:12px">
+    <h2 style="margin:0; font-size:18px; font-weight:600">合同正文预览 — 已作废(SUPERSEDED)</h2>
+    <div style="background:#FFF4CE; border:1px solid #F7D060; border-radius:4px; padding:16px 20px; font-size:13px; line-height:20px; color:#242424">
+      <p style="margin:0 0 8px">这里曾放着一份"定稿即此文本"的合同预览。它已被删除,而不是更新。</p>
+      <p style="margin:0 0 8px"><strong>唯一权威文本是 <code>docs/design/alignment/RULING.md</code>。</strong>本页是达成裁决所用的测量与证据页,属历史证据;它从不定义合同。</p>
+      <p style="margin:0 0 8px">删除的原因:那份预览是合同的第二份副本,评审过程中裁决持续演进,副本随即与权威文本相抵触——它仍要求 R2 的位置与字体无关、仍把 RAC 列为数字带站点、仍声称色带在 locale 变化下不变,而这三条在 RULING.md 中都已被明确推翻。同步一份副本只会让它在下一次改动后再次腐坏;删除副本则让这一类问题不再可能发生。</p>
+      <p style="margin:0">本页下方的测量数据与规格样本仍然有效,并且仍是裁决的证据基础 —— 失效的只是这一节的合同转述。</p>
+    </div>
+  </section>
+
+  <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:16px">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <h2 style="margin:0; font-size:18px; font-weight:600">R1 对比 sample:(a) 裁决 vs (d) 落选</h2>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161">以下三个代表位置放大 3×,误差数值来自实验室 Helvetica 实测;后续的 CJK 字体分组与拉丁字形分组为本机实时测量。所有图标位置均按两种方案的几何定义、用你这台机器的实际字体度量实时计算(不是截图,也不是硬编码)。负=图标偏高,正=偏低。</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:14px; overflow-x:auto; overflow-y:hidden; padding-bottom:16px">
+      <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px">
+        <div></div>
+        <div style="font-size:12px; font-weight:600; color:#0F6CBD">(a) cap band · 裁决</div>
+        <div style="font-size:12px; font-weight:600; color:#616161">(d) 半下沉带 · 落选</div>
+      </div>
+      <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px; align-items:start">
+        <div style="font-size:13px"><strong>Info</strong><br><span style="color:#616161; font-size:12px">无下沉笔画<br>(a) 的 best case</span></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:100px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaA}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Info</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 −0.06 · 基本完美</div></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:100px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaD}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Info</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 +0.67 · 略低,难察觉</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px; align-items:start">
+        <div style="font-size:13px"><strong>Updated 4 m ago</strong><br><span style="color:#616161; font-size:12px">有下沉笔画(p、g)<br>日常最高频的位置</span></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:132px; height:26px; transform:scale(3); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1.3px; box-sizing:border-box; padding:6.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#8A3707; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaA}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_warning_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#DA3B01; font-style:normal"></i></span>Updated 4 m ago</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 −1.31 · 图标偏高,可见</div></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:132px; height:26px; transform:scale(3); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1.3px; box-sizing:border-box; padding:6.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#8A3707; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaD}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_warning_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#DA3B01; font-style:normal"></i></span>Updated 4 m ago</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 −0.69 · 难察觉</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px; align-items:start">
+        <div style="font-size:13px"><strong>Warning</strong><br><span style="color:#616161; font-size:12px">有下沉笔画(g)<br>(a) 的 worst case</span></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:110px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaA}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Warning</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 −1.55 · 全库最差,偏高明显</div></div>
+        <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:110px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{vaD}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Warning</div></div><div style="margin-top:4px; font-size:11px; color:#616161">误差 −0.82 · 减半,难察觉</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:130px 812px; gap:12px; min-width:954px; margin-top:10px">
+        <div></div>
+        <div style="font-size:12px; font-weight:600; color:#616161">中文标签「活动中」· 三端五款 CJK 字体 · 误差为本机实时测量(汉字无下沉笔画,墨迹比拉丁大写更高更满)。苹方/更纱本机没装时自动用 webfont 子集;雅黑两款无合法 webfont,只能 Windows 实机看</div>
+      </div>
+      <sc-for list="{{zhFonts}}" as="f" hint-placeholder-count="4">
+        <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px; align-items:start">
+          <div style="font-size:13px"><strong>{{f.name}}</strong><br><span style="color:{{f.statusColor}}; font-size:12px">{{f.status}}</span></div>
+          <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:96px; height:26px; transform:scale(3); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1.3px; box-sizing:border-box; padding:6.5px 0 0 8px; font-family:{{f.css}}; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{f.vaA}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_arrow_sync_16_regular" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#107C10; font-style:normal"></i></span>活动中</div></div><div style="margin-top:4px; font-size:11px; color:#616161">实测误差 {{f.errA}} px</div></div>
+          <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:96px; height:26px; transform:scale(3); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1.3px; box-sizing:border-box; padding:6.5px 0 0 8px; font-family:{{f.css}}; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{f.vaD}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_arrow_sync_16_regular" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#107C10; font-style:normal"></i></span>活动中</div></div><div style="margin-top:4px; font-size:11px; color:#616161">实测误差 {{f.errD}} px</div></div>
+        </div>
+      </sc-for>
+      <div style="display:grid; grid-template-columns:130px 812px; gap:12px; min-width:954px">
+        <div></div>
+        <div style="font-size:12px; line-height:18px; color:#616161; max-width:76ch">{{zhSummary}}</div>
+      </div>
+      <div style="display:grid; grid-template-columns:130px 812px; gap:12px; min-width:954px; margin-top:10px">
+        <div></div>
+        <div style="font-size:12px; font-weight:600; color:#616161">拉丁词「Warning」跑在 CJK 字体的拉丁字形下 · 中文界面里拉丁标签常由 CJK 字体渲染,descent 与 Helvetica 不同,(d) 的常数须随之验证</div>
+      </div>
+      <sc-for list="{{latinFonts}}" as="f" hint-placeholder-count="2">
+        <div style="display:grid; grid-template-columns:130px 400px 400px; gap:12px; min-width:954px; align-items:start">
+          <div style="font-size:13px"><strong>{{f.name}}</strong><br><span style="color:{{f.statusColor}}; font-size:12px">{{f.status}}</span></div>
+          <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:110px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:{{f.css}}; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{f.vaA}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Warning</div></div><div style="margin-top:4px; font-size:11px; color:#616161">实测误差 {{f.errA}} px</div></div>
+          <div><div style="width:400px; height:78px; overflow:hidden"><div style="width:110px; height:26px; transform:scale(3); transform-origin:0 0; background:#EBF3FC; border-radius:1.3px; box-sizing:border-box; padding:7px 0 0 8px; font-family:{{f.css}}; font-size:12px; line-height:12px; color:#0F6CBD; white-space:nowrap"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{f.vaD}}px; position:relative; margin-right:5px"><i class="icon-ic_fluent_checkmark_16_filled" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:#0F6CBD; font-style:normal"></i></span>Warning</div></div><div style="margin-top:4px; font-size:11px; color:#616161">实测误差 {{f.errD}} px</div></div>
+        </div>
+      </sc-for>
+      <div style="display:grid; grid-template-columns:130px 812px; gap:12px; min-width:954px">
+        <div></div>
+        <div style="font-size:12px; line-height:18px; color:#616161; max-width:76ch">{{latinSummary}}</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:16px">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <h2 style="margin:0; font-size:18px; font-weight:600">分流规则的代价:双语列表</h2>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161; max-width:80ch">分流方案(拉丁 t=0.5、CJK t=0)让每一行各自最优,但同一列里中英两种标签的图标会落在两个高度上。这是它落选的原因:同列台阶 (a) 0.00 · (d) 0.25 · 分流 0.50 DIP——只有 (a) 保证混排列绝对齐平。三条规则并排渲染,放大 3×,左侧竖线是共用的对齐参考。</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:12px; overflow-x:auto; overflow-y:hidden; padding-bottom:16px">
+      <div style="display:grid; grid-template-columns:250px 250px 250px; gap:16px; min-width:782px">
+        <div style="font-size:12px; font-weight:600; color:#0F6CBD">(a) 全局 · 裁决</div>
+        <div style="font-size:12px; font-weight:600; color:#616161">(d) 全局 · 落选</div>
+        <div style="font-size:12px; font-weight:600; color:#616161">按 script 分流 · 落选</div>
+      </div>
+      <div style="display:grid; grid-template-columns:250px 250px 250px; gap:16px; min-width:782px; align-items:start">
+        <sc-for list="{{ruleCols}}" as="col" hint-placeholder-count="3">
+          <div style="width:250px; height:352px; overflow:hidden"><div style="width:82px; transform:scale(3); transform-origin:0 0; background:#fff; border:0.34px solid #E0E0E0; border-radius:1.3px; box-sizing:border-box; padding:5px 0">
+            <sc-for list="{{col.rows}}" as="r" hint-placeholder-count="6">
+              <div style="height:17px; box-sizing:border-box; padding:2.5px 6px 2.5px 8px; margin-left:6px; border-left:1px solid #0F6CBD; font-size:12px; line-height:12px; color:#242424; white-space:nowrap; font-family:{{r.css}}"><span style="display:inline-block; width:12px; height:12px; vertical-align:{{r.va}}px; position:relative; margin-right:5px"><i class="{{r.icon}}" style="position:absolute; inset:0; font-size:12px; line-height:12px; color:{{r.color}}; font-style:normal"></i></span><span>{{r.text}}</span></div>
+            </sc-for>
+          </div></div>
+        </sc-for>
+      </div>
+      <div style="min-width:782px">
+        <div style="font-size:12px; line-height:18px; color:#616161; max-width:80ch">{{ruleSummary}}</div>
+      </div>
+    </div>
+  </section>
+
+  <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:16px; --radius-sample:1">
+    <div style="display:flex; flex-direction:column; gap:4px">
+      <h2 style="margin:0; font-size:18px; font-weight:600">色块圆角 sample(R2 已裁定:radius 2)</h2>
+      <p style="margin:0; font-size:13px; line-height:18px; color:#616161">色块按 R2 缩到 cap height(Helvetica 12px 标签 → 约 8.6px),下面是五档圆角,3.5× 放大 + 原大。渲染字体以你本机解析到的为准(见上一节的字体检测标记);色块底边由浏览器按真实基线精确对齐(bottom = baseline),顶边≈cap 顶;像素级对齐仍以实验室 montage 的 swatch size-2 列为准。裁定 <strong>radius 2</strong>:与 Fluent 的 borderRadiusSmall token 重合,且约等于现状 3px 按尺寸等比缩放(3 × 8.6/12 ≈ 2.15)后取整。</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px; overflow-x:auto; overflow-y:hidden; padding-bottom:16px">
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px">
+        <div></div>
+        <div style="font-size:12px; font-weight:600; color:#616161">light</div>
+        <div style="font-size:12px; font-weight:600; color:#616161">dark</div>
+      </div>
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px; outline-offset:4px; border-radius:4px; outline:2px solid {{hl3}}">
+        <div style="font-size:13px"><strong>radius 3</strong><br><span style="color:#616161; font-size:12px">现状值,未随尺寸缩</span></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:3px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#2B2B2B; border:0.5px solid #3D3D3D; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#FFFFFF; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:3px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px; outline-offset:4px; border-radius:4px; outline:2px solid {{hl25}}">
+        <div style="font-size:13px"><strong>radius 2.5</strong></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:2.5px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#2B2B2B; border:0.5px solid #3D3D3D; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#FFFFFF; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:2.5px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px; outline-offset:4px; border-radius:4px; outline:2px solid {{hl2}}">
+        <div style="font-size:13px"><strong>radius 2</strong> <span style="font-size:11px; font-weight:600; color:#0F6CBD; background:#EBF3FC; border-radius:9999px; padding:1px 8px">裁定</span><br><span style="color:#616161; font-size:12px">= borderRadiusSmall</span></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:2px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#2B2B2B; border:0.5px solid #3D3D3D; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#FFFFFF; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:2px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px; outline-offset:4px; border-radius:4px; outline:2px solid {{hl15}}">
+        <div style="font-size:13px"><strong>radius 1.5</strong></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:1.5px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#2B2B2B; border:0.5px solid #3D3D3D; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#FFFFFF; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:1.5px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+      </div>
+      <div style="display:grid; grid-template-columns:140px 371px 371px; gap:12px; align-items:center; min-width:918px; outline-offset:4px; border-radius:4px; outline:2px solid {{hl1}}">
+        <div style="font-size:13px"><strong>radius 1</strong></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#fff; border:0.5px solid #E0E0E0; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#242424; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:1px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+        <div style="width:371px; height:84px; overflow:hidden"><div style="width:106px; height:24px; transform:scale(3.5); transform-origin:0 0; background:#2B2B2B; border:0.5px solid #3D3D3D; border-radius:1px; box-sizing:border-box; padding:5.5px 0 0 8px; font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; line-height:12px; color:#FFFFFF; white-space:nowrap"><span style="display:inline-block; width:8.6px; height:8.6px; border-radius:1px; background:#E0219A; margin-right:5px; vertical-align:baseline"></span>LHC@home</div></div>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:8px; border-top:1px solid #F0F0F0; padding-top:16px">
+      <div style="font-size:12px; font-weight:600; color:#616161">原大(1×)· 左起 radius 3 / 2.5 / 2 / 1.5 / 1</div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <div style="display:flex; gap:8px; align-items:baseline; background:#fff; border:1px solid #E0E0E0; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:3px; background:#6B79E0"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#242424">Einstein@Home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#fff; border:1px solid #E0E0E0; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:2.5px; background:#6B79E0"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#242424">Einstein@Home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#fff; border:1px solid #E0E0E0; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:2px; background:#6B79E0"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#242424">Einstein@Home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#fff; border:1px solid #E0E0E0; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:1.5px; background:#6B79E0"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#242424">Einstein@Home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#fff; border:1px solid #E0E0E0; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:1px; background:#6B79E0"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#242424">Einstein@Home</span></div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap">
+        <div style="display:flex; gap:8px; align-items:baseline; background:#2B2B2B; border:1px solid #3D3D3D; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:3px; background:#E0219A"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#FFFFFF">LHC@home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#2B2B2B; border:1px solid #3D3D3D; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:2.5px; background:#E0219A"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#FFFFFF">LHC@home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#2B2B2B; border:1px solid #3D3D3D; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:2px; background:#E0219A"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#FFFFFF">LHC@home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#2B2B2B; border:1px solid #3D3D3D; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:1.5px; background:#E0219A"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#FFFFFF">LHC@home</span></div>
+        <div style="display:flex; gap:8px; align-items:baseline; background:#2B2B2B; border:1px solid #3D3D3D; border-radius:4px; padding:6px 10px"><div style="width:8.6px; height:8.6px; border-radius:1px; background:#E0219A"></div><span style="font-family:Helvetica,'Helvetica Neue',Arial,sans-serif; font-size:12px; color:#FFFFFF">LHC@home</span></div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="font-size:13px; line-height:19px; color:#616161; max-width:76ch">已定稿:R1 = (a) cap band(t=0),R2 = 色块 cap height + radius 2,R3/R4 无例外。合同正文见 repo 的 <strong>RULING.md</strong>;本页留作裁决依据的实测记录。</footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1160},&quot;highlightRadius&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;3&quot;,&quot;2.5&quot;,&quot;2&quot;,&quot;1.5&quot;,&quot;1&quot;,&quot;none&quot;],&quot;default&quot;:&quot;2&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Radius sample&quot;}}">
+class Component extends DCLogic {
+  state = { vaA: -1.7, vaD: -2.33 };
+  componentDidMount() {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = "12px Helvetica,'Helvetica Neue',Arial,sans-serif";
+    const capH = c.measureText('H').actualBoundingBoxAscent;
+    const desc = c.measureText('gpqy').actualBoundingBoxDescent;
+    // (a): mark centre at capH/2 above baseline; (d): centre at (capH - 0.5*desc)/2
+    // vertical-align lifts the 12px box's bottom edge: bottom = centre - 6
+    this.setState({
+      vaA: +(capH / 2 - 6).toFixed(2),
+      vaD: +((capH - 0.5 * desc) / 2 - 6).toFixed(2),
+    });
+    // zh: same band definitions per CJK font + hanzi ink centre, measured live
+    const fmt = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(2);
+    const defs = [
+      { name: '苹方 · macOS', css: "'PingFang SC','PingFangSC-Regular', sans-serif", local: ['PingFang SC'], web: ['PingFangSC-Regular'] },
+      { name: '微软雅黑 · Windows', css: "'Microsoft YaHei', sans-serif", local: ['Microsoft YaHei'], web: [] },
+      { name: '微软雅黑 UI · Windows', css: "'Microsoft YaHei UI', sans-serif", local: ['Microsoft YaHei UI'], web: [] },
+      { name: 'Noto Sans SC · Linux', css: "'Noto Sans SC', sans-serif", local: [], web: ['Noto Sans SC'] },
+      { name: '更纱黑体 · bundle 候选', css: "'Sarasa UI SC','Sarasa Gothic SC','更纱黑体 SC UI','SarasaUiSC-Regular', sans-serif", local: ['Sarasa UI SC', 'Sarasa Gothic SC', '更纱黑体 SC UI'], web: ['SarasaUiSC-Regular'] },
+    ];
+    // webfonts registered via @font-face: document.fonts.check is reliable after load
+    const checkWeb = (names) => names.some((n) => { try { return document.fonts.check(`12px "${n}"`, '活动中'); } catch (e) { return false; } });
+    // local/system fonts: document.fonts.check lies (always true) — detect by width delta vs generic baselines
+    const probe = '活动中HMWiillggpqy氿鑫躨';
+    const localCheck = (names) => names.some((n) => {
+      for (const gen of ['monospace', 'sans-serif', 'serif']) {
+        c.font = `40px ${gen}`;
+        const base = c.measureText(probe).width;
+        c.font = `40px "${n}", ${gen}`;
+        const w = c.measureText(probe).width;
+        if (Math.abs(w - base) > 0.5) return true;
+      }
+      return false;
+    });
+    const measureZh = () => {
+      const zhFonts = defs.map((d) => {
+        const localAvail = localCheck(d.local), webAvail = checkWeb(d.web);
+        const avail = localAvail || webAvail;
+        c.font = `12px ${d.css}`;
+        const zCap = c.measureText('H').actualBoundingBoxAscent;
+        const zDesc = c.measureText('gpqy').actualBoundingBoxDescent;
+        const zm = c.measureText('活动中');
+        const ink = (zm.actualBoundingBoxAscent - zm.actualBoundingBoxDescent) / 2;
+        const cA = zCap / 2, cD = (zCap - 0.5 * zDesc) / 2;
+        return {
+          name: d.name, css: d.css, avail,
+          vaA: +(cA - 6).toFixed(2), vaD: +(cD - 6).toFixed(2),
+          errA: fmt(-(cA - ink)), errD: fmt(-(cD - ink)),
+          status: localAvail ? '本机字体 ✓' : webAvail ? 'webfont 子集 ✓' : '未加载 · 回退渲染,数值不可信',
+          statusColor: avail ? '#107C10' : '#C50F1F',
+        };
+      });
+      const av = zhFonts.filter((f) => f.avail);
+      const rng = (k) => {
+        const vs = av.map((f) => parseFloat(f[k].replace('−', '-')));
+        return `${fmt(Math.min(...vs))} … ${fmt(Math.max(...vs))}`;
+      };
+      const zhSummary = av.length
+        ? `当前可用 ${av.length}/5 款。跨字体一致性:(a) 误差范围 ${rng('errA')} px,(d) 误差范围 ${rng('errD')} px。范围越窄跨端越一致;两方案的跨字体离散度都在 0.5 px 内,跨端一致性不成问题——裁决因此不 bundle 更纱黑体。裁决取 (a)。遗留核验项:苹方此处为第三方 webfont 子集,数值待 Mac 实机复核;雅黑两款需在 Windows 机器打开本页确认。`
+        : '当前没有任何一款 CJK 候选字体可用,请在目标机器上打开本页。';
+      // Latin word rendered by each font's own Latin glyphs (incl. CJK fonts' Latin)
+      const latinDefs = [
+        { name: 'Helvetica · 本次 ref', css: "Helvetica,'Helvetica Neue',Arial,sans-serif", local: ['Helvetica', 'Helvetica Neue'], web: [] },
+        { name: 'Noto Sans SC 的拉丁', css: "'Noto Sans SC', sans-serif", local: [], web: ['Noto Sans SC'] },
+        { name: '更纱 的拉丁 (Inter/Iosevka)', css: "'Sarasa UI SC','Sarasa Gothic SC','更纱黑体 SC UI','SarasaUiSC-Regular', sans-serif", local: ['Sarasa UI SC', 'Sarasa Gothic SC', '更纱黑体 SC UI'], web: ['SarasaUiSC-Regular'] },
+      ];
+      const latinFonts = latinDefs.map((d) => {
+        const localAvail = localCheck(d.local), webAvail = checkWeb(d.web);
+        c.font = `12px ${d.css}`;
+        const cap = c.measureText('H').actualBoundingBoxAscent;
+        const dsc = c.measureText('gpqy').actualBoundingBoxDescent;
+        const m = c.measureText('Warning');
+        const ink = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2;
+        const cA = cap / 2, cD = (cap - 0.5 * dsc) / 2;
+        return {
+          name: d.name, css: d.css,
+          vaA: +(cA - 6).toFixed(2), vaD: +(cD - 6).toFixed(2),
+          errA: fmt(-(cA - ink)), errD: fmt(-(cD - ink)),
+          avail: localAvail || webAvail,
+          status: localAvail ? '本机字体 ✓' : webAvail ? 'webfont 子集 ✓' : '未加载 · 数值不可信',
+          statusColor: (localAvail || webAvail) ? '#107C10' : '#C50F1F',
+        };
+      });
+      const lav = latinFonts.filter((f) => f.avail);
+      const lrng = (k) => {
+        const vs = lav.map((f) => parseFloat(f[k].replace('−', '-')));
+        return `${fmt(Math.min(...vs))} … ${fmt(Math.max(...vs))}`;
+      };
+      const latinSummary = lav.length
+        ? `可用 ${lav.length}/3 款。(a) 误差范围 ${lrng('errA')} px,(d) 误差范围 ${lrng('errD')} px。(d) 在三款拉丁字形下一致优于 (a),说明规则对"谁来画拉丁词"不敏感——因此无需按解析字体分流。裁决仍取 (a):这一项的 0.73 DIP 收益不足以抵偿 CJK 的损失与 script 分支的复杂度。`
+        : '拉丁字体均未加载。';
+      // bilingual list under three rules
+      const LAT = "Helvetica,'Helvetica Neue',Arial,sans-serif";
+      const CJK = "'PingFang SC','Microsoft YaHei','Noto Sans SC','PingFangSC-Regular',sans-serif";
+      const items = [
+        { text: 'Running', cjk: false, icon: 'icon-ic_fluent_checkmark_16_filled', color: '#107C10' },
+        { text: '活动中', cjk: true, icon: 'icon-ic_fluent_checkmark_16_filled', color: '#107C10' },
+        { text: 'Warning', cjk: false, icon: 'icon-ic_fluent_warning_16_filled', color: '#DA3B01' },
+        { text: '已更新', cjk: true, icon: 'icon-ic_fluent_warning_16_filled', color: '#DA3B01' },
+        { text: 'Info', cjk: false, icon: 'icon-ic_fluent_info_16_filled', color: '#0F6CBD' },
+        { text: '已归档', cjk: true, icon: 'icon-ic_fluent_info_16_filled', color: '#0F6CBD' },
+      ];
+      const bandsFor = (css) => {
+        c.font = `12px ${css}`;
+        const cap = c.measureText('H').actualBoundingBoxAscent;
+        const dsc = c.measureText('gpqy').actualBoundingBoxDescent;
+        return { a: cap / 2 - 6, d: (cap - 0.5 * dsc) / 2 - 6 };
+      };
+      const bLat = bandsFor(LAT), bCjk = bandsFor(CJK);
+      const mk = (pick) => items.map((it) => {
+        const b = it.cjk ? bCjk : bLat;
+        return { ...it, css: it.cjk ? CJK : LAT, va: +pick(b, it).toFixed(2) };
+      });
+      const ruleCols = [
+        { rows: mk((b) => b.a) },
+        { rows: mk((b) => b.d) },
+        { rows: mk((b, it) => (it.cjk ? b.a : b.d)) },
+      ];
+      const stepA = Math.abs(bLat.a - bCjk.a), stepD = Math.abs(bLat.d - bCjk.d);
+      const stepSplit = Math.abs(bLat.d - bCjk.a);
+      const ruleSummary = `同一列内中英图标的高度差:(a) 全局 ${stepA.toFixed(2)} px · (d) 全局 ${stepD.toFixed(2)} px · 分流 ${stepSplit.toFixed(2)} px。分流让每行各自最优,却把这个台阶做到最大;只有 (a) 全局把台阶归零。裁决取 (a):混排列绝对齐平,且规则无需 script 分支。`;
+      this.setState({ zhFonts, zhSummary, latinFonts, latinSummary, ruleCols, ruleSummary });
+    };
+    measureZh();
+    try {
+      Promise.allSettled([
+        document.fonts.load("12px 'Noto Sans SC'", '活动中Hgpqy'),
+        document.fonts.load("12px 'SarasaUiSC-Regular'", '活动中Hgpqy'),
+        document.fonts.load("12px 'PingFangSC-Regular'", '活动中Hgpqy'),
+      ]).then(measureZh);
+      document.fonts.ready.then(measureZh);
+    } catch (e) {}
+  }
+  renderVals() {
+    const sel = this.props.highlightRadius ?? "2";
+    const on = "#0F6CBD", off = "transparent";
+    return {
+      hl3: sel === "3" ? on : off,
+      hl25: sel === "2.5" ? on : off,
+      hl2: sel === "2" ? on : off,
+      hl15: sel === "1.5" ? on : off,
+      hl1: sel === "1" ? on : off,
+      vaA: this.state.vaA,
+      vaD: this.state.vaD,
+      zhFonts: this.state.zhFonts ?? [],
+      zhSummary: this.state.zhSummary ?? '测量中…',
+      latinFonts: this.state.latinFonts ?? [],
+      latinSummary: this.state.latinSummary ?? '测量中…',
+      ruleCols: this.state.ruleCols ?? [],
+      ruleSummary: this.state.ruleSummary ?? '测量中…',
+    };
+  }
+}
+</script>
+</body>
+</html>
