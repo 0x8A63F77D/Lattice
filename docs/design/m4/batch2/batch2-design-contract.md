@@ -29,6 +29,14 @@ cap ≤ palette size). One shared time axis. 3-host fleets get tall lanes (~80px
 fleets collapse to 28px bands — 10 hosts fit one screen without scrolling
 (`img/timeline-dense-10hosts.png`).
 
+Band geometry is **stacked-step with left-hold semantics [machine-gated]**: an observation
+at tick T ("N running") holds forward until the next observation tick or the start of a
+hole; nothing is drawn after the last observation (the window is already anchored on it).
+Left-hold states what was known at T. Right-hold would project a later observation
+backwards into time before it happened — fabricating history, the same violation as a
+linear ramp, differing only in degree; interpolating (direct-line) area geometry is banned
+for the same reason.
+
 Host expansion into per-task rows (wireframe 3d shape: expand one host at a time) is a
 **follow-up batch** — not part of this contract's gate.
 
@@ -65,9 +73,17 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
   into one rendered hole. Its label shows the **sum of the member holes' true durations**;
   at `≥ 170` the reason is shown only when all members share one (mixed reasons → duration
   only). Hover lists each member hole's true range and reason (same style as the Daily
-  output gap-span tooltip).
-- `≥ 48` → duration label, one decimal: `8.2 h`
+  output gap-span tooltip). The merged hole's **accessible description enumerates every
+  member's true range · duration · reason** — hover is not an equivalent channel for
+  assistive technology, and the accessibility tree is not a visual element, so this sits
+  outside the no-new-visual-elements ruling. Visual channel = merged summary + hover
+  detail; accessible channel = full detail: two channels of the same true-values principle.
+- `≥ 48` → duration label
 - `≥ 170` → reason + duration: `Lattice not running · 8.2 h` / `Host unreachable · 2.5 h`
+
+**Duration format — one definition, referenced by label, tooltip and accessible name (a
+single formatting function in code, never three copies):** `≥ 0.1 h` → hours, one decimal
+(`8.2 h`); `< 0.1 h` → whole minutes (`4 m`); `< 1 m` → whole seconds (`30 s`).
 
 Every rendered hole carries its own label, regardless of lane position — no aligned-column
 deduplication. A fleet-wide outage column therefore repeats the label once per lane; that
@@ -148,8 +164,8 @@ that outage renders as an ordinary hole (reason via label/hover).
 - Hole hover: reason · range · duration — `Lattice not running · 23:30 → 07:41 · 8.2 h`.
 - Band hover: per-project concurrent counts at the hovered instant; task-level detail lists
   task name, project, host, elapsed, progress (live) or final runtime (historical).
-- Durations one decimal (`8.2 h`); dates/times `CultureInfo.CurrentCulture`; harness pins
-  `en-US`.
+- Durations use the §2 duration format (the single shared formatting function); dates/times
+  `CultureInfo.CurrentCulture`; harness pins `en-US`.
 
 ---
 
@@ -191,8 +207,12 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
 
 ## ⚠ Implementer notes (LiveCharts2 mapping — every element is native)
 
-1. Density band = `StackedAreaSeries` (or stacked step) with **nullable points** — holes
-   break the geometry naturally. Never drop missing rows (silent join); materialize nulls.
+1. Density band = **stacked step series** with **nullable points** (left-hold, §1 — the
+   only conforming geometry) — holes break the geometry naturally. A direct-line
+   `StackedAreaSeries` interpolates between poll ticks (fractional concurrency, invented
+   ramps) and is banned. If LiveCharts2 offers no native step variant, building the step
+   from duplicated endpoints is implementation freedom. Never drop missing rows (silent
+   join); materialize nulls.
 2. Lanes = one `CartesianChart` per host, X axes synchronized via shared Min/MaxLimit
    (shared pan/zoom).
 3. Hole = `RectangularSection` — `Fill` is the grey, `Label` is the duration/reason text.
@@ -274,6 +294,12 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
   host and the page can scroll, so the top label can leave the viewport while lower holes
   stay visible and unidentified) and a shared cross-column label (a new visual element,
   against the standing no-new-elements ruling). (Raised by Codex review round 3.)
+- **Duration format made adaptive (round-4 review).** The every-hole-label ruling turned
+  the `0.0 h` contradiction from latent to inevitable: a bounded hole shorter than ~3 min
+  is realistic at the 5 s polling cadence, and a mandatory label must carry true values.
+  The one-decimal-hours pin is therefore revised to the §2 adaptive format (`8.2 h` /
+  `4 m` / `30 s`) — one formatting definition shared by label, tooltip and accessible
+  name. (Raised by Codex review round 4.)
 
 ## Files
 
