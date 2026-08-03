@@ -293,12 +293,16 @@ that outage renders as an ordinary hole (reason via label/hover).
   this chart answers "how much on which day", and days it cannot answer are empty.
 - Grouped bars **rejected** (6 visible × 90 days = 540 sub-detection-floor slivers; loses
   the per-day total; per-project comparison is what chip filtering is for).
-- Tooltip: **daily deltas** format with group separators; a non-integral delta shows two
-  decimals (`1,204.50` — `HostTotalCredit` is a `double`, and a tooltip that claims
-  exactness must not drop fractional output), an integral one shows as an integer. One
-  delta formatter, shared by tooltip and accessible name (the §2 single-definition
-  principle). The batch-1 §6 exact-integer rule continues to govern the shipped
-  cumulative metrics — not these deltas.
+- Tooltip: **daily deltas** format with group separators at **declared display
+  precision**: a non-integral delta shows two decimals (`1,204.50`), rounded **half away
+  from zero** — pinned explicitly because .NET's `Math.Round` defaults to banker's
+  rounding, which an implementation must not inherit by accident — and an integral delta
+  shows as an integer. A stated rounding rule is not fabrication; presenting invented
+  values as observations is. A **positive** delta that would round to `0.00` displays
+  `< 0.01` — real output is never asserted to be zero (the same family as
+  missing-data-is-not-a-negative-observation). One delta formatter, shared by tooltip and
+  accessible name (the §2 single-definition principle). The batch-1 §6 exact-integer rule
+  continues to govern the shipped cumulative metrics — not these deltas.
 
 ---
 
@@ -643,6 +647,17 @@ substrate is the canon's business, not this contract's.
   decimals when non-integral, integer otherwise — defined once and shared by tooltip and
   accessible name; the batch-1 integer rule keeps governing the shipped cumulative
   metrics only. (Raised by Codex review round 17.)
+- **Delta precision: declared rounding, not exactness (round-18 review).** The round-17
+  wording bound "two decimals" to an exactness claim — impossible for a `double` source:
+  a positive delta below `0.005` would display as `0.00` (real output asserted as zero)
+  and longer fractions were truncated while still called exact. Ruling: the delta
+  formatter is a **declared display rounding** — two decimals, round half away from zero
+  (pinned against .NET's banker's-rounding `Math.Round` default), integers unchanged —
+  and a positive delta rounding to zero displays `< 0.01`, never `0.00` (same family as
+  missing-data-is-not-a-negative-observation). A stated rounding rule is not fabrication;
+  presenting invented values as observations is. Recorded fairly, two misses again: the
+  exactness-precision binding entered via the landing session's round-17 recommendation
+  and was adopted unexamined. (Raised by Codex review round 18.)
 
 ## Files
 
