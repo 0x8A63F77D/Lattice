@@ -221,33 +221,38 @@ that outage renders as an ordinary hole (reason via label/hover).
   allocation / animation all inherited.
 - `StackedColumnSeries`, one column per observed day; segment colour = project. Y axis
   compact labeler and axis styles inherited from batch-1 §2.
-- **Increment definition [machine-gated]:** day N's value = `total(N) − total(N−1)`,
-  computed **per project**, valid only when **both endpoints are observed days**. `total`
-  = **`HostTotalCredit`** of the host selected by the batch-1 host-scope rule (the
-  Statistics page charts one host; on `All hosts` the command-bar ComboBox picks it) —
-  never the account-wide `UserTotalCredit`: this chart shows the selected host's output,
-  and the account-wide total silently includes every other host on the account, possibly
-  never observed by Lattice at all.
-- **Partial-day rule [machine-gated]:** daily histories are per project and gap positions
-  differ across projects, so a day can be computable for one project and not another.
-  The increment rule applies per project: a segment renders only when *that project's*
-  endpoints are both observed, and a partially observed day renders its observed segments
-  as usual — suppressing the whole column would discard valid observations. The column's
-  tooltip and accessible name disclose the shortfall (`partial day` + which projects are
-  unobserved, existing channel style); the residual risk that a shortened stack reads as
-  the complete daily total rides the text channel — same family as the stated
-  not-area-conserving cost.
-- **Gap rule [machine-gated], scoped per project:** for each project, a run of its
-  unobserved days *and its first observed day after the run* contribute **no segment for
-  that project** (the bar analogue of the #170 "an average that was not observed is not an
-  average — break it" ruling; a missing bar is naturally visible in a bar chart). A day
-  unobserved by **every** project renders **empty — no bars at all**; a day where only
-  some projects are affected follows the partial-day rule above. The span total is never
-  drawn, estimated, or amortized; for an all-project gap it surfaces only on hover:
-  `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`
-  (project-level shortfalls ride the partial-day disclosure instead). **Accepted cost:**
-  this chart is not area-conserving — "how much in total" is answered by the User total
-  metric, this chart answers "how much on which day", and days it cannot answer are empty.
+- **Data source [machine-gated]:** `total(P, N)` = project P's **`HostTotalCredit`** on
+  day N for the host selected by the batch-1 host-scope rule (the Statistics page charts
+  one host; on `All hosts` the command-bar ComboBox picks it) — never the account-wide
+  `UserTotalCredit`: this chart shows the selected host's output, and the account-wide
+  total silently includes every other host on the account, possibly never observed by
+  Lattice at all. A rendered segment's value is `total(P, N) − total(P, N−1)`.
+- **Gap semantics [machine-gated] — two normative predicates, the sole source of truth:**
+  1. `segment(P, N)` renders ⟺ `observed(P, N) ∧ observed(P, N−1)` — project P
+     contributes a segment to day N exactly when both endpoints are observed.
+  2. Day N is a **bare column** (no bars at all) ⟺ no project P satisfies predicate 1
+     for N. The span-total hover covers each **maximal run of bare columns**:
+     `No daily values · 07-15 → 07-17 (2 days without data) · 104,500 over the span`;
+     the span total is never drawn, estimated, or amortized — hover only.
+
+  Everything below follows from the predicates and is **non-normative illustration**:
+  - *Per-project gap* (from 1): a project's run of unobserved days and its first observed
+    day after it contribute no segment for that project — the bar analogue of the #170
+    "an average that was not observed is not an average — break it" ruling.
+  - *Partial day* (from 1 ∧ ¬2): a day computable for some projects renders exactly their
+    segments — suppressing the whole column would discard valid observations. The
+    column's tooltip and accessible name disclose the shortfall (`partial day` + which
+    projects are unobserved, existing channel style); the residual reads-as-complete risk
+    rides the text channel.
+  - *Synchronized recovery* (from 2): when every project shares a gap and resumes on day
+    N, no segment exists on N, so N is bare and sits inside the hovered span — the
+    original single-project "gap plus its first observed day" semantics reappear as a
+    special case, needing no rule of their own.
+
+  **Accepted cost:** this chart is not area-conserving — "how much in total" is answered
+  by the **Host total** metric (the cumulative counterpart of this chart's
+  `HostTotalCredit` source; User total is account-wide and answers a different scope),
+  this chart answers "how much on which day", and days it cannot answer are empty.
 - Grouped bars **rejected** (6 visible × 90 days = 540 sub-detection-floor slivers; loses
   the per-day total; per-project comparison is what chip filtering is for).
 - Tooltip: exact integers + group separators (batch-1 §6 rules).
@@ -482,6 +487,22 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 25 snapsho
   should end). Recorded fairly: the name-only tie-break entered via the landing session's
   round-8 recommendation and was adopted unchecked — a shared miss. (Raised by Codex
   review round 10.)
+- **Gap semantics normalized to two predicates (round-11 review; structural).** Rounds
+  8–11 produced four consecutive same-class findings — each prose restatement of the gap
+  rules leaked a corner (column-level projection, partial days, synchronized recovery):
+  the repeated-patches signal that one predicate was being paraphrased four times instead
+  of stated once. Restructure: two normative predicates are now the sole source of truth
+  (`segment(P, N)` renders ⟺ both endpoints observed; a day is bare ⟺ no segment
+  renders, span-total hover on maximal bare runs), and every prose gap rule is demoted to
+  a non-normative corollary. The round-11 synchronized-recovery counterexample (every
+  project resuming on day N leaves N bare while the round-10 wording claimed bare =
+  unobserved-by-all) is a direct consequence of the predicates, needing no rule of its
+  own. Same family as the artifact-precedence rule: one formal statement holds authority,
+  prose illustrates. This finding class should now be extinct — a future finding against
+  the predicates themselves would be a genuine semantic gap, adjudicated separately. The
+  stale User-total cross-reference in the accepted-cost sentence was conformed to the
+  round-9 `HostTotalCredit` pin in the same round (points to Host total). (Raised by
+  Codex review round 11.)
 
 ## Files
 
