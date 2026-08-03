@@ -404,15 +404,19 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 26 snapsho
 The gate has **three tracks**: (1) chart-surface pixels ride the snapshots above;
 (2) predicate paths that leave no mark on chart pixels are machine-gated by unit tests
 over the **extracted gap-semantics pure function** — the exact vs omitted span-total
-paths of predicate 3 — **including a fractional exact-total case** (the span total rides
-the delta formatter) — **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
+paths of predicate 3 — **including a fractional exact-total case**, and an explicit
+**delta-formatter midpoint case** whose lower hundredth is even (`1.125` → `1.13`, the
+input that distinguishes the declared rule from banker's rounding for credit deltas) —
+**and** the partial-day disclosure of the `1 ∧ ¬2` path (the
 `partial day` tooltip/accessible-name content, equally pixel-invisible) must each have
 cases; the **shared duration formatter** likewise has unit-boundary cases (a sub-minute
 value, exactly `1 m`, exactly `0.1 h`, a value that rounds up to a unit boundary, and an
 **exact-halfway tie whose lower value is even** — `58.5 s` → `59 s`, the case that
 distinguishes the declared half-away-from-zero rule from .NET's banker's rounding),
-and the ladder fixture includes a **sub-minute-duration hole** so the rendered `30 s`
-label is pixel-gated end to end; (3) UI wiring that neither pixels nor the pure function witness — **every
+and the ladder fixture's sub-minute hole uses the **halfway-tie duration itself**
+(`58.5 s`, rendered label `59 s`) so the chart label path is pixel-gated end to end —
+a label path that bypasses the shared helper for midpoint-to-even formatting fails the
+snapshot, not just the policy test; (3) UI wiring that neither pixels nor the pure function witness — **every
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
 accessibility assertions**. Currently that is: the bare-run node (presence, name,
 focusability; both the exact-total and omitted-total forms), the partial-day column's
@@ -806,6 +810,14 @@ canons, not this contract.
   every named gate while formatting `58.5 s` as `58 s`; the policy track now requires an
   exact-halfway tie whose lower value is even (`58.5 s` → `59 s`). (Raised by Codex
   review round 29.)
+- **Tie coverage completed: delta midpoint case; rendered tie in the ladder (round-30
+  review).** The round-29 tie case exercised only the duration formatter — the delta
+  formatter had no midpoint case (`1.125` → `1.12` under default rounding passed every
+  gate), and the ladder's rendered label was the non-tie `30 s`, so a chart label path
+  bypassing the shared helper also passed. The policy track gains a delta midpoint case
+  (`1.125` → `1.13`), and the ladder fixture's sub-minute hole now renders the tie
+  itself (`58.5 s` → `59 s`) so the end state is pixel-gated. (Raised by Codex review
+  round 30.)
 
 ## Files
 
