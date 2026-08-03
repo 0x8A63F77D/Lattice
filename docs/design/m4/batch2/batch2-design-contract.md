@@ -303,22 +303,25 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
 
 ## Files
 
+> **Artifact precedence rule.** Every reference render under `img/` and the interactive
+> spec `M4-Batch2-Spec.html` predate the review rulings recorded in the decision log
+> (minimum hole width + universal labels, adaptive duration format, stacked-step/left-hold
+> geometry, backfill and lane semantics). Wherever an artifact disagrees with the contract
+> text — sloped band edges, unlabelled or sub-48px holes, topmost-lane-only labels,
+> `0.0 h`-style durations, `StackedAreaSeries` wording — the contract text and the
+> snapshot matrix are authoritative and the artifact is obsolete on that point. Artifacts
+> are illustration, not gate: snapshot fixtures are pinned by the contract text and cannot
+> encode superseded behavior.
+
 - `batch2-design-contract.md` — this contract (the handoff `README.md`, file renamed on
-  landing; landing edits: this Files section, the evidence-base pointer, and the round-1
-  review rulings — backfill semantics, configured-host lanes, minimum hole width — each
-  recorded in the decision log).
-- `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable; predates
-  the round-1 minimum-width ruling — where its hole-ladder depiction disagrees with §2,
-  §2 is authoritative).
+  landing; landing edits: this Files section, the evidence-base pointer, and the review
+  rulings recorded in the decision log).
+- `M4-Batch2-Spec.html` — offline interactive spec (full hi-fi board, pannable).
 - `hole-rendering-research.md` — evidence base for the hole-rendering decisions.
 - `img/timeline-light.png`, `img/timeline-dark.png` — Timeline full page, both themes.
-- `img/timeline-dense-10hosts.png` — 10-host × 7 d density state (predates the round-1
-  minimum-width ruling: its narrow holes render unlabelled — §2 and the snapshot matrix
-  are authoritative for the shipped treatment).
+- `img/timeline-dense-10hosts.png` — 10-host × 7 d density state.
 - `img/timeline-cold-start.png`, `img/timeline-empty-states.png` — states.
-- `img/degradation-ladder.png` — label-ladder reference (device-px rungs; predates the
-  round-1 minimum-width ruling — the `< 3 px` rung it shows is superseded, §2 is
-  authoritative).
+- `img/degradation-ladder.png` — label-ladder reference (device-px rungs).
 - `img/settings-retention.png` — retention Settings row.
 - `img/daily-output-light.png`, `img/daily-output-dark.png` — Statistics fifth metric with
   the 3-day gap rendering.
