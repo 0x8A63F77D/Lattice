@@ -107,6 +107,29 @@ the box's size or position, and never moves the baseline. Visual
 collision with adjacent rows is line-spacing design, outside this
 ruling's scope.
 
+GATING THE NO-CLIPPING BAN. This is the ONE assertion the geometry-only
+gate rule does not reach: clipping is a render-stage effect that leaves
+arranged geometry correct, so an ancestor `ClipToBounds` can cut the CJK
+glyphs while the box height and every absolute position still check out.
+It is therefore gated by an END-STATE RENDERED probe (headless Skia)
+asserting the overflow run's ink is PRESENT outside the label box, at
+the user-data sites, under a fallback-forcing mixed-script sample. The
+probe is a PRESENCE/ABSENCE check on ink and NEVER a position
+measurement — the ±0.05 DIP assertions stay on arranged layout, so the
+pixel noise the geometry-only rule guards against is not reintroduced.
+This is the only exception; no other clause of this contract is gated on
+pixels.
+
+The probe scene must ISOLATE the label so the overflow ink's
+ATTRIBUTION is provable. Probed in a live view, a neighbouring control's
+ink feeds the assertion a false green — and the negative case (clipping
+happened, so the region is empty) cannot go red either. The asserted
+region — between the box bottom and the overflow run's lower ink edge —
+must be reachable ONLY by that label's overflow: a minimal
+isolated-label scene, or an attribution mask over the region. Per
+red-first discipline the probe must be observed FAILING against a
+deliberate `ClipToBounds` scene before it counts as a gate.
+
 MECHANISM IS NOT PART OF THIS CONTRACT. Pinning `LineHeight`, or forcing
 the height in the label's own measure pass, is an implementation choice.
 The contract pins the RESULT and the gate asserts it: (a) the label

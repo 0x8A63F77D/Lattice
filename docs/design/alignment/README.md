@@ -135,6 +135,23 @@ centerY(mark) = baseline − capHeight / 2
     would cut CJK text). Overflow never changes the box's size or position and
     never moves the baseline. Collision with adjacent rows is line-spacing
     design, out of scope here.
+  - *Gating the no-clipping ban*: the **one** assertion the geometry-only gate
+    rule cannot reach — clipping is a render-stage effect, so an ancestor
+    `ClipToBounds` cuts the CJK glyphs while box height and every absolute
+    position still check out. Gated by an **end-state rendered probe**
+    (headless Skia): the overflow run's ink is **present outside the label
+    box**, at the user-data sites, under a fallback-forcing mixed-script
+    sample. It is a presence/absence check on ink, **never** a position
+    measurement, so the ±0.05 DIP assertions stay on arranged layout. This is
+    the only pixel-gated clause in the contract.
+    The probe scene must **isolate the label** so the ink's attribution is
+    provable: in a live view a neighbouring control's ink false-greens the
+    assertion, and the negative case (clipped ⇒ region empty) cannot go red
+    either. The asserted region — box bottom to the overflow run's lower ink
+    edge — must be reachable only by that label's overflow: a minimal
+    isolated-label scene, or an attribution mask. Red-first applies: the probe
+    must be observed failing against a deliberate `ClipToBounds` scene before
+    it counts as a gate.
   - *Mechanism is not part of the contract*: pinning `LineHeight` or forcing
     the height in the label's own measure pass is an implementation choice.
     The contract pins the result; the gate asserts (a) box height ==
@@ -268,6 +285,11 @@ R2  cornerRadius == 2
 
 - Assert on **arranged layout geometry**, not on rendered pixels — pixel
   snapping is platform noise and will make the gate flaky at this tolerance.
+  **One exception, and only one:** the no-clipping ban is unreachable from
+  arranged geometry (clipping leaves it correct), so it is gated by an
+  end-state headless-Skia ink-presence probe — a presence/absence check, never
+  a position measurement. See the R1 bullet above for its scene-isolation and
+  red-first requirements.
 - Run every registered site × every registered UI font.
 - **The table above is a point-in-time census, not the gate's source of
   truth.** Three review rounds each surfaced a shipped in-class site the
