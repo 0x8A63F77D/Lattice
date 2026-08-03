@@ -76,10 +76,12 @@ Pure fill only: **no border/hairline, no hatch or dash pattern, no red frame, no
 grey.** Banned tokens: `Stencil*` (semantics = "content is loading"), all alpha `*Disabled`
 fills (invisible over a chart canvas). The neutral is reserved — never assigned to a project.
 
-**Minimum rendered width + label ladder** — treatment = f(hole width in **device px**), a
-pure function (no wall clock, no DPI-dependent branches beyond the device-px input):
+**Minimum rendered width + label ladder** — treatment = f(hole width in **DIPs**), a
+pure function (no wall clock, no DPI-dependent branches — a DIP threshold is
+scale-invariant by construction, because label glyphs scale with the same DIP-to-device
+transform):
 
-- **Minimum rendered width = 48 device px (the label threshold).** An **isolated** hole
+- **Minimum rendered width = 48 DIPs (the label threshold).** An **isolated** hole
   whose true width is `< 48` is exaggerated to 48, anchored on the centre of its true
   interval — exaggeration exists to make room for the label — so the hole carries a
   duration label, with the fill, no-hairline and no-pattern rulings untouched. Accepted,
@@ -88,8 +90,8 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
   the true values.
 - **Grouping.** Holes whose exaggerated render intervals would overlap or touch (transitive
   closure) form a **group**, dispatched by the group's **true span** (first member's true
-  start → last member's true end, in device px):
-  - **Compact merge (true span `< 48`):** the group merges into one 48px rendered hole;
+  start → last member's true end, in DIPs):
+  - **Compact merge (true span `< 48`):** the group merges into one 48-DIP rendered hole;
     its label shows the **sum of the member holes' true durations**; at `≥ 170` the reason
     is shown only when all members share one (mixed reasons → duration only).
   - **Dense regime (true span `≥ 48`):** per-hole exaggeration is **abandoned** — members
@@ -350,17 +352,21 @@ confirmation flyout (interactive lane). Nothing beyond this is needed.
 5. LiveCharts2 paints are not DynamicResource-aware: rebuild hole/axis/baseline paints on
    theme switch (batch-1 warning #1).
 6. Ordinal/collapsed axis modes silently delete holes — the X axis must stay linear time.
-7. The label ladder runs on **device pixels**; compute from the rendered scale, not DIPs,
-   or the rules silently weaken at 2× DPI.
+7. The label ladder runs on **DIPs** — glyphs scale with the DIP-to-device transform, so
+   a DIP threshold yields the same glyph fit at every render scale; a device-pixel
+   threshold would halve the available label room at 2× — the exact silent weakening this
+   note used to guard against, mirrored (the unit followed the threshold's semantics when
+   the perception floor gave way to the label threshold; see the decision log).
 
 ## Snapshot matrix (machine gate)
 
 Timeline: 2 themes × {24 h baseline (overnight hole as an aligned fleet-wide column —
 every lane labelled — + historical unreachable + idle span),
-7 d dense (10 hosts, 41px true-width holes — exaggerated to the 48px minimum, labelled),
-cold start, no-hosts, empty} + a synthetic **ladder fixture** (one hole per width rung,
-including a sub-48px hole exaggerated to the minimum width, a compact merge — group true
-span < 48px — and a mixed-reason merge) rendered at 1× and 2× DPI + a **dense-regime
+7 d dense (10 hosts, 41-DIP true-width holes — exaggerated to the 48-DIP minimum,
+labelled), cold start, no-hosts, empty} + a synthetic **ladder fixture** (one hole per
+width rung, including a sub-48-DIP hole exaggerated to the minimum width, a compact
+merge — group true span < 48 DIPs — and a mixed-reason merge) rendered at 1× and 2× DPI —
+the pair now verifies **DIP-threshold consistency across render scales** + a **dense-regime
 fixture** (30 d of nightly holes: true-geometry members under a `N holes · X h total`
 group label) + a **narrow-window equivalence pair** (the same dataset at 6 h / 24 h,
 where no chaining occurs, renders identically to the isolated-hole rules) + a
@@ -690,6 +696,20 @@ canons, not this contract.
   classic wiring false-green: correct code, absent end state). Same shape as the
   round-14 dual-track ruling: an existing canon (the headless settle family) made
   explicit, not a new mechanism. (Raised by Codex review round 20.)
+- **Ladder units follow the threshold's semantics: DIPs, not device pixels (round-21
+  review).** At 2× the fixed 48-device-px minimum is only 24 DIPs while label glyphs
+  scale with the DIP transform — a normal duration label no longer fits, contradicting
+  every-hole-labelled and no-overflow in the explicitly gated 2× fixtures. The original
+  device-pixel pin served the superseded 3px perception floor (perception is a
+  physical-pixel question); round 1 replaced the threshold's semantics with glyph fit,
+  which is DIP-scaled — so the unit migrates with the semantics: **48/170 DIPs**. The
+  owner's underlying intent (rules must not silently weaken at 2×) is preserved, not
+  overturned — the device-pixel unit had come to produce exactly the weakening it
+  guarded against. 1× behaviour is verbatim unchanged (48 DIPs = 48 device px at 1×);
+  2× turns from contradictory to consistent; the 1×/2× fixture pair now verifies
+  DIP-threshold consistency across render scales. (Semantics-preserving inversion of an
+  owner pin; controller-confirmed, owner-notified with veto reserved.) (Raised by Codex
+  review round 21.)
 
 ## Files
 
