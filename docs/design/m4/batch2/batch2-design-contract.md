@@ -195,8 +195,8 @@ that outage renders as an ordinary hole (reason via label/hover).
   where bounded by observations, bare canvas otherwise), and backfill never changes hole
   geometry. This prohibition is scoped to chart geometry — no chart element renders
   backfill data and no new visual element may be added to consume it — but non-geometry
-  predicates may read completion observations: the Empty state's `none completed in the
-  last hour` claim is established from them.
+  predicates may read completion observations: the Empty state's `none observed
+  completing in the last hour` claim is established from them.
 - **Pre-observation (configured hosts, zero observations in the store):** the time axis
   is **not rendered** — no data, no axis, so §3's observation-anchored `end` needs no
   substitute and the no-wall-clock pin is untouched. The lane area shows each
@@ -207,8 +207,13 @@ that outage renders as an ordinary hole (reason via label/hover).
   renders its lanes — InfoBars plus retained history — never this state) — centered — `ServerMultiple`
   icon 28px `#C7C7C7`, `No hosts connected`, caption `Add a host to start observing task
   activity.`
-- **Empty:** `No task activity yet` + `No tasks running since {time}, and none completed in
-  the last hour.`
+- **Empty:** predicate — no observed task activity within the observed spans ∧ no
+  completion observation within the most recent observed hour (anchored to the latest
+  observation tick, not wall clock). Copy: `No observed task activity` +
+  `No tasks observed running since {time}, and none observed completing in the last
+  hour.` Both clauses explicitly quantify over observations — holes and pre-observation
+  canvas can never make this copy assert inactivity across unobserved time (missing data
+  is not a negative observation).
 - **Loading:** batch-1 ProgressRing idiom, `Loading timeline…`
 
 ### 6. Tooltip (interactive lane; formats binding)
@@ -288,7 +293,12 @@ that outage renders as an ordinary hole (reason via label/hover).
   this chart answers "how much on which day", and days it cannot answer are empty.
 - Grouped bars **rejected** (6 visible × 90 days = 540 sub-detection-floor slivers; loses
   the per-day total; per-project comparison is what chip filtering is for).
-- Tooltip: exact integers + group separators (batch-1 §6 rules).
+- Tooltip: **daily deltas** format with group separators; a non-integral delta shows two
+  decimals (`1,204.50` — `HostTotalCredit` is a `double`, and a tooltip that claims
+  exactness must not drop fractional output), an integral one shows as an integer. One
+  delta formatter, shared by tooltip and accessible name (the §2 single-definition
+  principle). The batch-1 §6 exact-integer rule continues to govern the shipped
+  cumulative metrics — not these deltas.
 
 ---
 
@@ -619,6 +629,20 @@ substrate is the canon's business, not this contract's.
   shape is fully forced by existing pins — the only freedom is the caption presentation,
   covered by the implementation PR's owner eyeball gate. (Raised by Codex review
   round 16.)
+- **Empty-state copy quantified over observations; fractional deltas preserved
+  (round-17 review).** (a) `No tasks running since {time}` asserted inactivity across
+  time Lattice never observed — missing data turned into a negative observation, against
+  the no-fabrication rule. Ruling: the Empty predicate and both copy clauses quantify
+  explicitly over observations (`No tasks observed running… none observed completing…`),
+  with the "last hour" anchored to the latest observation tick, not wall clock — the
+  controller tightened the initial proposal, whose second clause still carried the
+  wall-clock hole (owner copy change, controller-confirmed). (b) The tooltip pin
+  inherited batch-1's exact-integer formatter while `HostTotalCredit` is a `double`:
+  a non-integral daily delta would be silently truncated by a tooltip claiming
+  exactness. Ruling: daily deltas get their own formatter — group separators, two
+  decimals when non-integral, integer otherwise — defined once and shared by tooltip and
+  accessible name; the batch-1 integer rule keeps governing the shipped cumulative
+  metrics only. (Raised by Codex review round 17.)
 
 ## Files
 
