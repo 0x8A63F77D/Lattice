@@ -111,24 +111,46 @@ GATING THE NO-CLIPPING BAN. This is the ONE assertion the geometry-only
 gate rule does not reach: clipping is a render-stage effect that leaves
 arranged geometry correct, so an ancestor `ClipToBounds` can cut the CJK
 glyphs while the box height and every absolute position still check out.
-It is therefore gated by an END-STATE RENDERED probe (headless Skia)
-asserting the overflow run's ink is PRESENT outside the label box, at
-the user-data sites, under a fallback-forcing mixed-script sample. The
-probe is a PRESENCE/ABSENCE check on ink and NEVER a position
-measurement — the ±0.05 DIP assertions stay on arranged layout, so the
-pixel noise the geometry-only rule guards against is not reintroduced.
-This is the only exception; no other clause of this contract is gated on
-pixels.
+It is gated by a DIFFERENTIAL END-STATE RENDER (headless Skia), at the
+user-data sites, under a fallback-forcing mixed-script sample:
 
-The probe scene must ISOLATE the label so the overflow ink's
-ATTRIBUTION is provable. Probed in a live view, a neighbouring control's
-ink feeds the assertion a false green — and the negative case (clipping
-happened, so the region is empty) cannot go red either. The asserted
-region — between the box bottom and the overflow run's lower ink edge —
-must be reachable ONLY by that label's overflow: a minimal
-isolated-label scene, or an attribution mask over the region. Per
-red-first discipline the probe must be observed FAILING against a
-deliberate `ClipToBounds` scene before it counts as a gate.
+      render the registered site TWICE — once AS SHIPPED, with its
+      complete production ancestor chain, and once with clipping
+      SUPPRESSED on that chain — and require the rendered ink BELOW the
+      label box bottom to be IDENTICAL between the two.
+
+The unclipped render is the reference, generated from the same scene
+rather than hand-maintained. TOTAL clipping shows up as ink missing,
+PARTIAL clipping as ink truncated; both make the two renders differ.
+Both renders are of the registered site with its full production
+ancestor chain — that chain IS the attack surface, so a standalone or
+minimal label-only scene is not an admissible probe scene. Attribution
+needs neither isolation nor a mask: unrelated neighbouring ink is
+identical in both renders and cancels in the comparison, so the
+differential PROVES attribution instead of assuming it.
+
+This is the only pixel-gated clause of this contract, and it is still
+not a sub-pixel position measurement. The two renders share hinting,
+snapping and antialiasing, which cancel; the assertion is the IDENTITY
+of two renders differing only by the clip. The ±0.05 DIP assertions stay
+on arranged layout, so the pixel noise the geometry-only rule guards
+against is not reintroduced.
+
+RED-FIRST for this probe: the red scene's deliberate clipping ancestor
+must cut MID-GLYPH, not at the box edge — a box-edge cut exercises only
+the all-or-none case and would leave partial clipping unfalsified. The
+red scene's clipping mechanism must also be the SAME KIND as a clipping
+source that actually occurs in the production templates (`ClipToBounds`,
+a rounded `Border`'s content clip — whatever is live), so red-first
+simultaneously proves the suppression lever really suppresses that kind
+of source.
+
+If a site's clipping source CANNOT be suppressed for the reference
+render, the two renders are identical by construction and the probe is
+blind — a false green undetectable from inside the gate. That site
+escalates for adjudication on its own. No fallback assertion is
+pre-authorized here: bolting per-symptom qualifiers back on is the shape
+this clause was restructured to leave behind.
 
 MECHANISM IS NOT PART OF THIS CONTRACT. Pinning `LineHeight`, or forcing
 the height in the label's own measure pass, is an implementation choice.

@@ -138,20 +138,35 @@ centerY(mark) = baseline − capHeight / 2
   - *Gating the no-clipping ban*: the **one** assertion the geometry-only gate
     rule cannot reach — clipping is a render-stage effect, so an ancestor
     `ClipToBounds` cuts the CJK glyphs while box height and every absolute
-    position still check out. Gated by an **end-state rendered probe**
-    (headless Skia): the overflow run's ink is **present outside the label
-    box**, at the user-data sites, under a fallback-forcing mixed-script
-    sample. It is a presence/absence check on ink, **never** a position
-    measurement, so the ±0.05 DIP assertions stay on arranged layout. This is
-    the only pixel-gated clause in the contract.
-    The probe scene must **isolate the label** so the ink's attribution is
-    provable: in a live view a neighbouring control's ink false-greens the
-    assertion, and the negative case (clipped ⇒ region empty) cannot go red
-    either. The asserted region — box bottom to the overflow run's lower ink
-    edge — must be reachable only by that label's overflow: a minimal
-    isolated-label scene, or an attribution mask. Red-first applies: the probe
-    must be observed failing against a deliberate `ClipToBounds` scene before
-    it counts as a gate.
+    position still check out. Gated by a **differential end-state render**
+    (headless Skia), at the user-data sites, under a fallback-forcing
+    mixed-script sample:
+
+    > render the registered site **twice** — once as shipped with its complete
+    > production ancestor chain, once with clipping **suppressed** on that
+    > chain — and require the ink **below the label box bottom** to be
+    > **identical** between the two.
+
+    The unclipped render is the reference, generated from the same scene
+    rather than hand-maintained. Total clipping shows as ink missing, partial
+    clipping as ink truncated — both make the renders differ. Both renders are
+    of the real site with its full ancestor chain, because that chain *is* the
+    attack surface; a standalone label-only scene is not an admissible probe
+    scene. Attribution needs no isolation and no mask: unrelated neighbouring
+    ink is identical in both renders and cancels, so the differential **proves**
+    attribution rather than assuming it.
+    Still not a sub-pixel position measurement — hinting, snapping and AA are
+    shared by both renders and cancel; the assertion is the identity of two
+    renders differing only by the clip. This is the only pixel-gated clause.
+    *Red-first*: the red scene's clipping ancestor must cut **mid-glyph**, not
+    at the box edge (a box-edge cut leaves partial clipping unfalsified), and
+    must use the **same kind** of clipping source that actually occurs in the
+    production templates — so red-first also proves the suppression lever
+    works on that kind of source.
+    If a site's clipping source **cannot** be suppressed for the reference
+    render, the two renders are identical by construction and the probe is
+    blind; that site escalates for adjudication. No fallback assertion is
+    pre-authorized.
   - *Mechanism is not part of the contract*: pinning `LineHeight` or forcing
     the height in the label's own measure pass is an implementation choice.
     The contract pins the result; the gate asserts (a) box height ==
@@ -286,10 +301,11 @@ R2  cornerRadius == 2
 - Assert on **arranged layout geometry**, not on rendered pixels — pixel
   snapping is platform noise and will make the gate flaky at this tolerance.
   **One exception, and only one:** the no-clipping ban is unreachable from
-  arranged geometry (clipping leaves it correct), so it is gated by an
-  end-state headless-Skia ink-presence probe — a presence/absence check, never
-  a position measurement. See the R1 bullet above for its scene-isolation and
-  red-first requirements.
+  arranged geometry (clipping leaves it correct), so it is gated by a
+  differential end-state headless-Skia render — the same site rendered with
+  and without clipping, asserting the ink below the box is identical. Not a
+  position measurement: the two renders share all pixel noise and it cancels.
+  See the R1 bullet above for the full clause and its red-first requirements.
 - Run every registered site × every registered UI font.
 - **The table above is a point-in-time census, not the gate's source of
   truth.** Three review rounds each surfaced a shipped in-class site the
