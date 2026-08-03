@@ -188,8 +188,10 @@ that outage renders as an ordinary hole (reason via label/hover).
 ### 5. States (issue #88 idiom)
 
 - **Cold start / first run:** the window is §3's `[end − preset, end]` as always; **data
-  starts at the store's first observation**, and the window's pre-observation portion
-  renders as bare canvas with caption `no history before {time}`; dashed accent marker at
+  starts at the store's first task-state observation** — backfilled completion
+  observations are excluded from every coverage anchor, or backfill would move the
+  coverage start and contradict backfill-never-changes-hole-geometry — and the window's
+  pre-observation portion renders as bare canvas with caption `no history before {time}`; dashed accent marker at
   connect time; status strip: `history starts 14:32`. The ≤1 h `get_old_results` backfill at connect
   yields **completion observations** (task finished at T with final elapsed E — point
   events, not intervals); they are written to the observation store, but the concurrency
@@ -199,7 +201,8 @@ that outage renders as an ordinary hole (reason via label/hover).
   backfill data and no new visual element may be added to consume it — but non-geometry
   predicates may read completion observations: the Empty state's `none observed
   completing in the last hour` claim is established from them.
-- **Pre-observation (configured hosts, zero observations in the store):** the time axis
+- **Pre-observation (configured hosts, zero task-state observations in the store —
+  backfilled completion events alone do not leave this state):** the time axis
   is **not rendered** — no data, no axis, so §3's observation-anchored `end` needs no
   substitute and the no-wall-clock pin is untouched. The lane area shows each
   unreachable host's §2 InfoBar and a centered caption
@@ -391,10 +394,11 @@ cases; (3) UI wiring that neither pixels nor the pure function witness — **eve
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
 accessibility assertions**. Currently that is: the bare-run node (presence, name,
 focusability; both the exact-total and omitted-total forms), the partial-day column's
-disclosure name, the timeline hole/group accessible names including the group member
-enumeration, and the `Other` overflow band's accessible name with its member/count
-enumeration (§1); any accessibility carrier a future revision mandates joins this track
-by rule, not by a new listing.
+disclosure name, the timeline hole/group accessible **names** plus the group's accessible
+**description** carrying the member enumeration (distinct automation properties — each is
+asserted on the property §2 assigns it, no duplication), and the `Other` overflow band's
+accessible name with its member/count enumeration (§1); any accessibility carrier a
+future revision mandates joins this track by rule, not by a new listing.
 Track 3 must assert against the **built accessibility tree itself** (the automation peer
 queried after a headless settle), never against a ViewModel exposing the right string —
 the classic false-green shape for wiring assertions (correct wiring code, absent end
@@ -729,6 +733,17 @@ canons, not this contract.
   and member/count enumeration — a list that claims completeness misleads even under a
   generic rule, so the omission is corrected in the listing rather than waved at the
   generic sentence. (Raised by Codex review round 23.)
+- **Coverage anchors exclude backfilled completions; track 3 asserts the property §2
+  assigns (round-24 review).** (a) "Data starts at the store's first observation" would
+  let a backfilled completion predating the first live observation move the coverage
+  start — contradicting backfill-never-changes-hole-geometry and making unobserved
+  pre-connect time appear covered. Coverage anchors (cold-start data origin, the
+  pre-observation state's trigger) now ride **task-state observations** only, conforming
+  to the round-1 backfill ruling. (b) Track 3 required the group member enumeration on
+  the accessible *name* while §2 assigns it to the accessible *description* — distinct
+  automation properties; the assertion now targets each property as §2 assigns it, no
+  duplication forced. Both conforming fixes to ruled semantics. (Raised by Codex review
+  round 24.)
 
 ## Files
 
