@@ -32,6 +32,16 @@ itself, reading the cap-height metric of the face Avalonia actually resolves —
 which the limitation note below makes authoritative anyway. Do not copy code
 from it.
 
+The page used to carry a "contract text preview" section claiming the final
+`RULING.md` text would be exactly that block. It was **deleted, not
+synchronized** — a second copy of the contract drifts the moment the ruling
+moves, and this one had gone stale in three ways at once (asserting R2 is
+font-independent, listing RAC as a digit-band site, and claiming the band is
+invariant under locale, all three since ruled the other way). Deleting the
+copy removes the failure mode; syncing it would only reschedule it. The
+page's measurements and specimens are unaffected and remain the ruling's
+evidence.
+
 **Known measurement limitation.** The page reads capHeight as the ink bounds of
 an `H` glyph (`measureText('H').actualBoundingBoxAscent`) because canvas
 TextMetrics exposes no cap-height font metric. That proxy was applied uniformly

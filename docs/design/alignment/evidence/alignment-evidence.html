@@ -77,62 +77,13 @@
   </section>
 
   <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:12px">
-    <h2 style="margin:0; font-size:18px; font-weight:600">合同正文预览(英文,定稿即此文本进 RULING.md)</h2>
-    <div style="background:#FAFAFA; border:1px solid #E0E0E0; border-radius:4px; padding:16px 20px; font-family:Consolas,'SF Mono',Menlo,monospace; font-size:12.5px; line-height:19px; white-space:pre-wrap; color:#242424">RULING #206 — chrome-mark vertical alignment
-Status: FINAL — 2026-08-02
-
-R1. Functional marks (any mark whose size is platform idiom, incl. 12 px
-    status icons, 16 px play, 12 px chevron, 20 px checkbox):
-    Philosophy (A) — optical centre on a fixed reference band, t = 0.
-      <span>bandTop</span>      = baseline − capHeight
-      <span>bandBottom</span>   = baseline
-      centerY(mark) = baseline − capHeight / 2
-    capHeight is a FONT METRIC at the label's resolved size — never
-    per-string ink, so the band is invariant under text, locale and
-    user data.
-    A label seating multiple marks centres every mark on that same band.
-    GATE: |centerY(mark) − centerY(band)| ≤ 0.05 DIP on arranged layout
-    geometry, at every registered site, in every registered UI font.
-
-    Registered UI fonts
-      Latin, pinned in tests : Inter
-      Latin, macOS runtime   : Helvetica
-      CJK, macOS             : PingFang SC
-      CJK, Windows           : Microsoft YaHei, Microsoft YaHei UI
-                               (distinct families, distinct vertical
-                               metrics — register both, not as one)
-      CJK, Linux             : Noto Sans SC
-
-    OPEN — blocks gate coverage, not the ruling:
-      1. Latin runtime faces on Windows and Linux were never measured. The
-         lab covered macOS runtime (Helvetica) plus the pinned test font
-         (Inter). Register and measure whatever the Windows and Linux
-         stacks actually resolve for Latin labels before claiming
-         three-platform gate coverage. R1 is unaffected in form: t = 0
-         reads capHeight from whichever face resolves, so adding faces is
-         mechanical.
-      2. PingFang SC figures come from a third-party webfont subset. Want
-         one confirmation run on real macOS hardware.
-
-R2. Statistics legend swatch (decorative; the one mark whose size is open):
-    <span>swatchHeight</span> = <span>swatchWidth</span> = capHeight(label font, resolved size)
-    <span>swatchTop</span> = baseline − capHeight;  <span>swatchBottom</span> = baseline
-    <span>cornerRadius</span> = 2  (= borderRadiusSmall)
-    Note: philosophies (A) and (B) coincide here by construction; position
-    is independent of label descender content and of font choice.
-    GATE: swatch edges equal cap-band edges ± 0.05 DIP; radius == 2.
-
-R3. Digit-only cells (deadlines, RAC) keep the digit band. No change;
-    restated so the gate's site registry is exhaustive.
-
-R4. Site exceptions: NONE. The legend needs no descender exception because
-    its only mark is the swatch, ruled by R2.
-
-Falsification: t = 0 is optimal for a repertoire in which descender-free and
-CJK labels dominate, and for any UI mixing scripts in one column. If the
-repertoire becomes predominantly Latin AND descender-carrying, AND
-mixed-script columns are eliminated, re-run the alignment lab; t = 0.5 then
-dominates and R1 is re-ruled by flipping the single constant.</div>
+    <h2 style="margin:0; font-size:18px; font-weight:600">合同正文预览 — 已作废(SUPERSEDED)</h2>
+    <div style="background:#FFF4CE; border:1px solid #F7D060; border-radius:4px; padding:16px 20px; font-size:13px; line-height:20px; color:#242424">
+      <p style="margin:0 0 8px">这里曾放着一份"定稿即此文本"的合同预览。它已被删除,而不是更新。</p>
+      <p style="margin:0 0 8px"><strong>唯一权威文本是 <code>docs/design/alignment/RULING.md</code>。</strong>本页是达成裁决所用的测量与证据页,属历史证据;它从不定义合同。</p>
+      <p style="margin:0 0 8px">删除的原因:那份预览是合同的第二份副本,评审过程中裁决持续演进,副本随即与权威文本相抵触——它仍要求 R2 的位置与字体无关、仍把 RAC 列为数字带站点、仍声称色带在 locale 变化下不变,而这三条在 RULING.md 中都已被明确推翻。同步一份副本只会让它在下一次改动后再次腐坏;删除副本则让这一类问题不再可能发生。</p>
+      <p style="margin:0">本页下方的测量数据与规格样本仍然有效,并且仍是裁决的证据基础 —— 失效的只是这一节的合同转述。</p>
+    </div>
   </section>
 
   <section style="background:#fff; border-radius:8px; box-shadow:0 0 2px rgba(0,0,0,.12), 0 2px 4px rgba(0,0,0,.14); padding:24px; display:flex; flex-direction:column; gap:16px">
