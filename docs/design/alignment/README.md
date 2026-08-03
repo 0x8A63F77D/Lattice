@@ -138,38 +138,33 @@ centerY(mark) = baseline − capHeight / 2
   - *Gating the no-clipping ban*: the **one** assertion the geometry-only gate
     rule cannot reach — clipping is a render-stage effect, so an ancestor clip
     cuts the CJK glyphs while box height and every absolute position still
-    check out. The contract states the **property** and the **falsification
-    obligations**; it deliberately does **not** design the probe (that is the
-    implementation's, and prose test-apparatus design is what put three rounds
-    of holes in this clause).
-    - *Property*: at every registered user-data site, under a fallback-forcing
-      mixed-script sample, the label's own rendered ink is **complete** —
-      identical to that label's ink with clipping removed from its entire
-      ancestor chain, over the **whole** overflow region, **above the box top
-      as well as below the box bottom**. The fallback run overflows the
-      normalized box at both edges (the box is `|ascent| + |descent|` of the
-      selected face; a Han glyph fills the em square), so a one-sided check is
-      half a check.
-    - *Attribution obligation*: pixels that removing the clipping changes for
-      any reason other than the target label's ink — a sibling, the
-      background, a rounded container's own content clip — are **outside** the
-      comparison, or a correctly unclipped label fails the gate. Mechanism is
-      open; masking to the target's ink, suppressing only the clip that governs
-      the target, and compositing the target's own layer are all admissible.
-    - *Falsification obligations*: the check counts as a gate only once
-      observed **red** against a cut above the box top, **red** against a cut
-      below the box bottom, and **red** against a mid-glyph cut — each using a
-      clipping source of a kind that actually occurs in the production
-      templates — and **green** under a perturbation of a sibling's rendering.
-      The reds cover false greens; the green covers the false-**red** direction,
-      a gate that blocks conforming implementations.
-    - Still the only pixel-gated clause, and still not a sub-pixel position
-      measurement: the compared renders share hinting, snapping and AA, which
-      cancel.
-    - If a site's clipping source **cannot** be removed for the reference
-      comparison, the two sides are identical by construction and the check is
-      blind; that site escalates for adjudication. No fallback assertion is
-      pre-authorized.
+    check out. It is gated on **rendered ink**, the contract's only
+    pixel-gated clause; still not a sub-pixel position measurement, since the
+    compared renders share hinting, snapping and AA.
+    - *Property* (normative in `RULING.md`): at every registered user-data
+      site, under a fallback-forcing mixed-script sample, the label's own
+      rendered ink is **complete** — identical to that label's ink with
+      clipping removed from its entire ancestor chain, over the **whole**
+      overflow region, **above the box top as well as below the box bottom**.
+      The fallback run overflows the normalized box at both edges (the box is
+      `|ascent| + |descent|` of the selected face; a Han glyph fills the em
+      square), so a top-edge cut violates it exactly as a bottom-edge cut does.
+    - *The check itself is designed in #216, not here.* This bundle does not
+      specify its construction, comparison region, how it separates the
+      target's ink from a sibling's, or its falsification scenes. Four review
+      rounds established why: a check specified in prose cannot be **run**, so
+      each stated apparatus was found to admit a case it missed and each
+      restatement acquired the next hole. It belongs where it can be executed
+      and observed failing — against real code.
+    - *Acceptance criteria #216 must evidence*: (1) it **decides** the property
+      at every registered user-data site; (2) it is **attributable** — pixels
+      that removing the clipping changes for reasons other than the target's
+      ink cannot fail it, since a gate blocking a conforming implementation is
+      as serious as one missing a violation; (3) it is **falsified in both
+      directions** and every falsification is **discriminating** — a scene a
+      check violating (1) or (2) would also pass is not evidence; (4) a site
+      whose clipping source cannot be handled **escalates** rather than being
+      dropped from coverage.
   - *Mechanism is not part of the contract*: pinning `LineHeight` or forcing
     the height in the label's own measure pass is an implementation choice.
     The contract pins the result; the gate asserts (a) box height ==
@@ -308,8 +303,8 @@ R2  cornerRadius == 2
   ink — the label's own ink must be complete, above and below the box, versus
   the same ink with clipping removed. Not a position measurement: the compared
   renders share all pixel noise and it cancels. The contract states that
-  property and the required falsifications, not the probe's construction; see
-  the R1 bullet above.
+  property and the check's acceptance criteria; the check itself is designed
+  and falsified in #216, against real code. See the R1 bullet above.
 - Run every registered site × every registered UI font.
 - **The table above is a point-in-time census, not the gate's source of
   truth.** Three review rounds each surfaced a shipped in-class site the

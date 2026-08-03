@@ -110,11 +110,11 @@ ruling's scope.
 GATING THE NO-CLIPPING BAN. This is the ONE assertion the geometry-only
 gate rule does not reach: clipping is a render-stage effect that leaves
 arranged geometry correct, so an ancestor clip can cut the CJK glyphs
-while the box height and every absolute position still check out. What
-follows states the PROPERTY and the FALSIFICATION OBLIGATIONS. It does
-NOT specify the probe's construction — that is the implementation's, and
-prose that designs the test apparatus is how this clause acquired three
-rounds of holes.
+while the box height and every absolute position still check out. It is
+therefore gated on RENDERED INK — the single pixel-gated clause of this
+contract, and still not a sub-pixel position measurement, since what is
+compared are renders sharing hinting, snapping and antialiasing. The
+±0.05 DIP assertions stay on arranged layout.
 
 THE PROPERTY. At every registered user-data site, under a
 fallback-forcing mixed-script sample, the label's own rendered ink is
@@ -123,46 +123,40 @@ ENTIRE ancestor chain, over the WHOLE overflow region — ABOVE THE BOX
 TOP as well as BELOW THE BOX BOTTOM. A fallback run overflows the
 normalized box at both edges (the box is |ascent| + |descent| of the
 SELECTED face, and a Han glyph fills the em square), so a top-edge cut
-is as much a violation as a bottom-edge one, and a check reading only
-one side is half a check.
+is as much a violation as a bottom-edge one.
 
-THE ATTRIBUTION OBLIGATION. The comparison must be attributable to that
-label. Any pixels that removing the clipping changes for a reason OTHER
-than the target label's ink — a sibling, the background, a rounded
-container's own content clip — are OUTSIDE the comparison; otherwise a
-correctly unclipped label fails the gate. The mechanism is open.
-Admissible: masking to the target's ink; suppressing only the clip that
-governs the target; compositing the target label's own layer. This
-contract does not choose among them.
+THE CHECK IS DESIGNED IN #216, NOT HERE. This contract does not specify
+the check's construction, its comparison region, how it separates the
+target's ink from a sibling's, or the scenes it is falsified against.
+Four review rounds established why: a check specified in prose cannot be
+RUN, so every apparatus stated here was in turn found to admit a case it
+did not cover, and each restatement acquired the next hole. The
+apparatus belongs where it can be executed and observed failing —
+against real code, in the implementation PR (#216).
 
-THE FALSIFICATION OBLIGATIONS. The check counts as a gate only once it
-has been observed:
+What this contract does require of that check, and what #216 must
+evidence:
 
-      RED   against a clip cutting the run ABOVE the box top
-      RED   against a clip cutting the run BELOW the box bottom
-      RED   against a MID-GLYPH cut
-              (each using a clipping source of a KIND that actually
-               occurs in the production templates — `ClipToBounds`, a
-               rounded `Border`'s content clip, whatever is live)
-      GREEN under a perturbation of a SIBLING's rendering
+  1. It DECIDES the property above, at every registered user-data site.
 
-The three reds cover the false-green direction, including the two edges
-a single-sided or box-edge-only red scene leaves unexercised. The green
-covers the false-red direction: a gate that blocks conforming
-implementations is a failure of the same seriousness, and it is not
-detectable from the red cases alone.
+  2. It is ATTRIBUTABLE. Pixels that removing the clipping changes for a
+     reason other than the target label's ink — a sibling, the
+     background, a rounded container's own content clip — must not be
+     able to fail it. A gate that blocks a conforming implementation is
+     a defect of the same seriousness as one that misses a violation.
 
-This remains the only pixel-gated clause of this contract, and it is
-still not a sub-pixel position measurement: the compared renders share
-hinting, snapping and antialiasing, which cancel. The ±0.05 DIP
-assertions stay on arranged layout.
+  3. It is FALSIFIED IN BOTH DIRECTIONS, and every falsification must be
+     DISCRIMINATING: a scene that a check violating (1) or (2) would
+     ALSO pass is not evidence. Red against a real violation of the
+     property; green under a perturbation that a check violating (2)
+     would go red on.
 
-If a site's clipping source CANNOT be removed for the reference
-comparison, the two sides are identical by construction and the check is
-blind — a false green undetectable from inside the gate. That site
-escalates for adjudication on its own. No fallback assertion is
-pre-authorized here: bolting per-symptom qualifiers back on is the shape
-this clause was restructured to leave behind.
+  4. If a site's clipping source cannot be handled at all, that site
+     ESCALATES for adjudication — it is not quietly dropped from
+     coverage.
+
+Points 1-4 are the acceptance criteria for #216's gate. Which scenes
+satisfy them is #216's to design, and to show red.
 
 MECHANISM IS NOT PART OF THIS CONTRACT. Pinning `LineHeight`, or forcing
 the height in the label's own measure pass, is an implementation choice.
