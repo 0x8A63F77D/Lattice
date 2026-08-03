@@ -185,9 +185,10 @@ that outage renders as an ordinary hole (reason via label/hover).
 
 ### 5. States (issue #88 idiom)
 
-- **Cold start / first run:** axis starts at store's first observation; left of it is bare
-  canvas with caption `no history before {time}`; dashed accent marker at connect time;
-  status strip: `history starts 14:32`. The ≤1 h `get_old_results` backfill at connect
+- **Cold start / first run:** the window is §3's `[end − preset, end]` as always; **data
+  starts at the store's first observation**, and the window's pre-observation portion
+  renders as bare canvas with caption `no history before {time}`; dashed accent marker at
+  connect time; status strip: `history starts 14:32`. The ≤1 h `get_old_results` backfill at connect
   yields **completion observations** (task finished at T with final elapsed E — point
   events, not intervals); they are written to the observation store, but the concurrency
   density band does **not** render them: the pre-connect window stays unobserved (a hole
@@ -196,6 +197,12 @@ that outage renders as an ordinary hole (reason via label/hover).
   backfill data and no new visual element may be added to consume it — but non-geometry
   predicates may read completion observations: the Empty state's `none completed in the
   last hour` claim is established from them.
+- **Pre-observation (configured hosts, zero observations in the store):** the time axis
+  is **not rendered** — no data, no axis, so §3's observation-anchored `end` needs no
+  substitute and the no-wall-clock pin is untouched. The lane area shows each
+  unreachable host's §2 InfoBar and a centered caption
+  `Waiting for the first observation…`; the first observation to arrive forms the axis
+  per §3. Not the No-hosts state — that is reserved for zero configured hosts.
 - **No hosts:** shown only when **zero hosts are configured** (an all-unreachable fleet
   renders its lanes — InfoBars plus retained history — never this state) — centered — `ServerMultiple`
   icon 28px `#C7C7C7`, `No hosts connected`, caption `Add a host to start observing task
@@ -336,7 +343,9 @@ including a sub-48px hole exaggerated to the minimum width, a compact merge — 
 span < 48px — and a mixed-reason merge) rendered at 1× and 2× DPI + a **dense-regime
 fixture** (30 d of nightly holes: true-geometry members under a `N holes · X h total`
 group label) + a **narrow-window equivalence pair** (the same dataset at 6 h / 24 h,
-where no chaining occurs, renders identically to the isolated-hole rules).
+where no chaining occurs, renders identically to the isolated-hole rules) + a
+**pre-observation fixture** (configured hosts, zero observations: no axis, waiting
+caption).
 Daily output: 2 themes × {12-day baseline containing a 3-day gap} + a **user ≠ host
 fixture** (account-wide and host totals diverge; the chart must follow `HostTotalCredit` —
 fixture values shaped from the BOINC reference implementation's `get_statistics` output,
@@ -593,6 +602,23 @@ substrate is the canon's business, not this contract's.
   without failing any gate. The policy-test track now requires cases for the partial-day
   disclosure alongside both span-total paths — a conforming completion of the ruled
   dual-track principle, not a new mechanism. (Raised by Codex review round 15.)
+- **Cold-start window clarified; pre-observation state defined (round-16 review).**
+  (a) "Axis starts at the store's first observation" contradicted §3's fixed
+  `[end − preset, end]` window whenever history is shorter than the preset; the owner
+  text's own "left of it is bare canvas" already implied the reconciling reading, now
+  stated: the window is §3's unconditionally, data starts at the first observation, and
+  the pre-observation portion is the captioned bare canvas (conforming clarification;
+  controller-confirmed wording change to owner text). (b) A configured-but-never-observed
+  fleet had no valid window: `end` is observation-anchored (wall clock explicitly
+  rejected) and the No-hosts state is reserved for zero configured hosts. Ruling: the
+  **pre-observation state** — zero observations render no time axis (no data, no axis;
+  the no-wall-clock pin untouched), the lane area carries the §2 unreachable InfoBars and
+  a centered `Waiting for the first observation…` caption, and the first observation
+  forms the axis per §3. Rejected: a wall-clock anchor special case (collides with the §3
+  pin) and reusing No-hosts (collides with the round-2 ruling). A new state, but its
+  shape is fully forced by existing pins — the only freedom is the caption presentation,
+  covered by the implementation PR's owner eyeball gate. (Raised by Codex review
+  round 16.)
 
 ## Files
 
