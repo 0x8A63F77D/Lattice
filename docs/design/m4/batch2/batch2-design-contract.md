@@ -121,8 +121,9 @@ transform):
 **Duration format — one definition, referenced by label, tooltip and accessible name (a
 single formatting function in code, never three copies; the intervals are mutually
 exclusive):** `≥ 0.1 h` → hours, one decimal (`8.2 h`); `1 m ≤ duration < 0.1 h` → whole
-minutes (`4 m`); `< 1 m` → whole seconds (`30 s`). Whole values round **half away from
-zero** (the same declared rule as the delta formatter). Boundaries land in the larger
+minutes (`4 m`); `< 1 m` → whole seconds (`30 s`). **Every numeric output of this
+formatter — the one-decimal hours value included — rounds half away from zero**
+(`8.25 h` → `8.3 h`; the same declared rule as the delta formatter). Boundaries land in the larger
 unit — exactly `1 m` formats as minutes, exactly `0.1 h` as hours — and a **rounded**
 value that reaches the next unit's boundary is represented in that larger unit too:
 `59.6 s` → `1 m`; `5 m 58 s` → `6 m` = `0.1 h` → `0.1 h`.
@@ -407,7 +408,9 @@ paths of predicate 3 — **including a fractional exact-total case** (the span t
 the delta formatter) — **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
 `partial day` tooltip/accessible-name content, equally pixel-invisible) must each have
 cases; the **shared duration formatter** likewise has unit-boundary cases (a sub-minute
-value, exactly `1 m`, exactly `0.1 h`, and a value that rounds up to a unit boundary),
+value, exactly `1 m`, exactly `0.1 h`, a value that rounds up to a unit boundary, and an
+**exact-halfway tie whose lower value is even** — `58.5 s` → `59 s`, the case that
+distinguishes the declared half-away-from-zero rule from .NET's banker's rounding),
 and the ladder fixture includes a **sub-minute-duration hole** so the rendered `30 s`
 label is pixel-gated end to end; (3) UI wiring that neither pixels nor the pure function witness — **every
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
@@ -795,6 +798,14 @@ canons, not this contract.
   sub-minute-duration hole so the rendered label is pixel-gated — the formerly
   overlapping implementation can no longer pass every named gate. (Raised by Codex
   review round 28.)
+- **Rounding rule closed over all outputs; tie case gated (round-29 review).** The
+  round-28 rule governed only whole minutes/seconds, leaving the one-decimal hours
+  branch ambiguous at midpoints (`8.25 h`); it now covers every numeric output of the
+  formatter. And none of the existing cases could distinguish half-away-from-zero from
+  .NET's default banker's rounding — an implementation on default `Math.Round` passed
+  every named gate while formatting `58.5 s` as `58 s`; the policy track now requires an
+  exact-halfway tie whose lower value is even (`58.5 s` → `59 s`). (Raised by Codex
+  review round 29.)
 
 ## Files
 
