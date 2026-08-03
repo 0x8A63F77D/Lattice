@@ -63,21 +63,33 @@ fills (invisible over a chart canvas). The neutral is reserved — never assigne
 **Minimum rendered width + label ladder** — treatment = f(hole width in **device px**), a
 pure function (no wall clock, no DPI-dependent branches beyond the device-px input):
 
-- **Minimum rendered width = 48 device px (the label threshold).** A hole whose true width
-  is `< 48` is exaggerated to 48, anchored on the centre of its true interval — so **every
-  rendered hole carries a duration label** and visibility rides the label, with the fill,
-  no-hairline and no-pattern rulings untouched. Accepted, explicit cost: **scale
-  distortion** — a short hole renders wider than its true share and may cover pixels of
-  adjacent observed data; the tooltip and accessible name always carry the true values.
-- **Merge rule.** If two holes' exaggerated render intervals overlap or touch, they merge
-  into one rendered hole. Its label shows the **sum of the member holes' true durations**;
-  at `≥ 170` the reason is shown only when all members share one (mixed reasons → duration
-  only). Hover lists each member hole's true range and reason (same style as the Daily
-  output gap-span tooltip). The merged hole's **accessible description enumerates every
-  member's true range · duration · reason** — hover is not an equivalent channel for
-  assistive technology, and the accessibility tree is not a visual element, so this sits
-  outside the no-new-visual-elements ruling. Visual channel = merged summary + hover
-  detail; accessible channel = full detail: two channels of the same true-values principle.
+- **Minimum rendered width = 48 device px (the label threshold).** An **isolated** hole
+  whose true width is `< 48` is exaggerated to 48, anchored on the centre of its true
+  interval — exaggeration exists to make room for the label — so the hole carries a
+  duration label, with the fill, no-hairline and no-pattern rulings untouched. Accepted,
+  explicit cost: **scale distortion** — a short hole renders wider than its true share and
+  may cover pixels of adjacent observed data; the tooltip and accessible name always carry
+  the true values.
+- **Grouping.** Holes whose exaggerated render intervals would overlap or touch (transitive
+  closure) form a **group**, dispatched by the group's **true span** (first member's true
+  start → last member's true end, in device px):
+  - **Compact merge (true span `< 48`):** the group merges into one 48px rendered hole;
+    its label shows the **sum of the member holes' true durations**; at `≥ 170` the reason
+    is shown only when all members share one (mixed reasons → duration only).
+  - **Dense regime (true span `≥ 48`):** per-hole exaggeration is **abandoned** — members
+    render at their **true geometry**, so observed data is never swallowed and nothing is
+    overpainted — and the group shares one summary label: `3 holes · 24.0 h total` (reason
+    appended when uniform across the group). Per-hole labels are geometrically impossible
+    where they would collide, so the visibility carrier shifts from per-hole label to
+    per-group label; sub-pixel members are witnessed by the count, the hover detail and
+    the accessible enumeration.
+- **Member detail (both group forms).** Hover lists each member hole's true range and
+  reason (same style as the Daily output gap-span tooltip). The group's **accessible
+  description enumerates every member's true range · duration · reason** — hover is not an
+  equivalent channel for assistive technology, and the accessibility tree is not a visual
+  element, so this sits outside the no-new-visual-elements ruling. Visual channel = group
+  summary + hover detail; accessible channel = full detail: two channels of the same
+  true-values principle.
 - `≥ 48` → duration label
 - `≥ 170` → reason + duration: `Lattice not running · 8.2 h` / `Host unreachable · 2.5 h`
 
@@ -85,9 +97,10 @@ pure function (no wall clock, no DPI-dependent branches beyond the device-px inp
 single formatting function in code, never three copies):** `≥ 0.1 h` → hours, one decimal
 (`8.2 h`); `< 0.1 h` → whole minutes (`4 m`); `< 1 m` → whole seconds (`30 s`).
 
-Every rendered hole carries its own label, regardless of lane position — no aligned-column
-deduplication. A fleet-wide outage column therefore repeats the label once per lane; that
-repetition is semantically truthful (each host was independently unobserved).
+Every rendered hole or hole group carries its own label, regardless of lane position — no
+aligned-column deduplication. A fleet-wide outage column therefore repeats the label once
+per lane; that repetition is semantically truthful (each host was independently
+unobserved).
 
 **Reason vocabulary — exactly two user-facing strings, no others:**
 `Lattice not running` (the app was off — routine) and `Host unreachable` (Lattice was
@@ -100,8 +113,9 @@ grey fill = no data.
 
 **Accessibility.** Every hole region carries an accessible name:
 `Lattice not running · 23:30 → 07:41 (8.2 h)`. WCAG 1.4.11 conformance rides the text
-channel: the minimum-width rule means every hole is a **labelled graphic** (exemption
-applies to all holes, none unlabelled) + tooltip/accessible name — see decision log.
+channel: every hole belongs to a **labelled graphic** — an isolated or compact-merged hole
+carries its own label, and a dense group is the labelled graphic for its members (none
+unlabelled) — + tooltip/accessible name — see decision log.
 
 **Live unreachable host:** batch-1 §5 InfoBar idiom (severity=Warning, not dismissable,
 `Retry` wired to reconnect): `rack-02 unreachable since 15:02.` The historical record of
@@ -232,10 +246,13 @@ Timeline: 2 themes × {24 h baseline (overnight hole as an aligned fleet-wide co
 every lane labelled — + historical unreachable + idle span),
 7 d dense (10 hosts, 41px true-width holes — exaggerated to the 48px minimum, labelled),
 cold start, no-hosts, empty} + a synthetic **ladder fixture** (one hole per width rung,
-including a sub-48px hole exaggerated to the minimum width, a two-hole merge, and a
-mixed-reason merge) rendered at 1× and 2× DPI.
+including a sub-48px hole exaggerated to the minimum width, a compact merge — group true
+span < 48px — and a mixed-reason merge) rendered at 1× and 2× DPI + a **dense-regime
+fixture** (30 d of nightly holes: true-geometry members under a `N holes · X h total`
+group label) + a **narrow-window equivalence pair** (the same dataset at 6 h / 24 h,
+where no chaining occurs, renders identically to the isolated-hole rules).
 Daily output: 2 themes × {12-day baseline containing a 3-day gap}.
-Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapshots.
+Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 22 snapshots.
 
 ## Decision log (owner rulings; where they diverge from the research report, recorded)
 
@@ -300,6 +317,24 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 20 snapsho
   The one-decimal-hours pin is therefore revised to the §2 adaptive format (`8.2 h` /
   `4 m` / `30 s`) — one formatting definition shared by label, tooltip and accessible
   name. (Raised by Codex review round 4.)
+- **Dense-regime rendering for chained holes (round-5 review; owner ruling).** At wide
+  windows the 48px exaggeration is transitive: in a 30 d window (~1,000 device px) a
+  nightly hole exaggerates to ~1.4 days, consecutive nights chain-overlap, and the round-1
+  merge rule would fuse a whole month into one near-full-width grey — swallowing observed
+  concurrency, categorically worse than the ruled adjacent-pixel distortion. Ruling: two
+  regimes dispatched by the group's true span. `< 48px` → compact merge (one 48px hole,
+  summed label). `≥ 48px` → members render at true geometry (nothing observed is
+  swallowed, nothing overpainted) under one group summary label (`N holes · X h total`,
+  reason appended when uniform); sub-pixel members are witnessed by the count, hover and
+  the accessible enumeration. Explicit accepted cost: individual holes in a dense group
+  are visually faint and narrow (their true share); the owner retains the right to rework
+  after seeing the implementation (the implementation PR carries the owner eyeball gate
+  regardless). Rejected alternatives: unmerged overpainting (same-colour rectangles fuse
+  visually anyway, with colliding labels); rendering the group at `max(48px, true span)`
+  (a nightly chain's true span is the whole month — still swallows observed data);
+  window-scaled minimum widths (violates the labelling ruling); accepting month-wide
+  fusion as a known cost (swallows observed facts — unacceptable). (Raised by Codex
+  review round 5.)
 
 ## Files
 
