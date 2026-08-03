@@ -236,8 +236,11 @@ that outage renders as an ordinary hole (reason via label/hover).
 - **Fifth `SegmentedControl` item** `Daily output`, after `Host average`. Batch-1 layout
   ruling (one chart, metric switcher) untouched; chips / Top-6 / `+N more` flyout / colour
   allocation / animation all inherited.
-- `StackedColumnSeries`, one column per observed day; segment colour = project. Y axis
-  compact labeler and axis styles inherited from batch-1 §2.
+- `StackedColumnSeries`, **one column per day in the axis span `[min, max]`** (the gap
+  predicates' N domain — a day unobserved by every visible project is a bare column, never
+  an omitted one; collapsing all-project gaps is exactly what implementer note 6 bans);
+  segment colour = project. Y axis compact labeler and axis styles inherited from
+  batch-1 §2.
 - **Data source [machine-gated]:** `total(P, N)` = project P's **`HostTotalCredit`** on
   day N for the host selected by the batch-1 host-scope rule (the Statistics page charts
   one host; on `All hosts` the command-bar ComboBox picks it) — never the account-wide
@@ -744,6 +747,12 @@ canons, not this contract.
   automation properties; the assertion now targets each property as §2 assigns it, no
   duplication forced. Both conforming fixes to ruled semantics. (Raised by Codex review
   round 24.)
+- **Column domain conformed to the predicates (round-25 review).** The original "one
+  column per observed day" wording predated the predicate normalization and permitted
+  omitting a day unobserved by every visible project — silently collapsing all-project
+  gaps, which the bare-column predicate, the maximal-run hover and implementer note 6
+  all forbid. Conforming rewrite: one column per day in the axis span `[min, max]`, the
+  predicates' N domain. (Raised by Codex review round 25.)
 
 ## Files
 
