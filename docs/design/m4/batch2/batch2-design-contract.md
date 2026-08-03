@@ -273,7 +273,10 @@ that outage renders as an ordinary hole (reason via label/hover).
      `No daily values · 07-15 → 07-17 (3 days) · 104,500 over the span`.
      Otherwise (staggered observations) the hover omits the total:
      `No daily values · 07-15 → 07-17 (3 days)`. The span total is never drawn,
-     estimated, or amortized — shown only when exact, hover only. Each maximal bare run
+     estimated, or amortized — shown only when exact, hover only. `spanTotal` is a
+     delta-valued quantity: it formats with the **delta formatter** defined at the
+     tooltip bullet below (declared rounding, `< 0.01` for positive sub-cent values) —
+     not the inherited integer cumulative format. Each maximal bare run
      also carries an **accessible node** whose name equals its hover content (range ·
      inclusive day count · span total when exact) — with no bar to focus, the run itself
      is the focusable node; hover is not an equivalent channel for assistive technology,
@@ -313,8 +316,9 @@ that outage renders as an ordinary hole (reason via label/hover).
   shows as an integer. A stated rounding rule is not fabrication; presenting invented
   values as observations is. A **positive** delta that would round to `0.00` displays
   `< 0.01` — real output is never asserted to be zero (the same family as
-  missing-data-is-not-a-negative-observation). One delta formatter, shared by tooltip and
-  accessible name (the §2 single-definition principle). The batch-1 §6 exact-integer rule
+  missing-data-is-not-a-negative-observation). One delta formatter, shared by tooltip,
+  accessible name, **and every other delta-valued display — including the bare-run
+  `spanTotal`** (the §2 single-definition principle). The batch-1 §6 exact-integer rule
   continues to govern the shipped cumulative metrics — not these deltas.
 
 ---
@@ -391,7 +395,8 @@ Culture pinned `en-US`; every fixture pins `end` and the dataset. ≈ 26 snapsho
 The gate has **three tracks**: (1) chart-surface pixels ride the snapshots above;
 (2) predicate paths that leave no mark on chart pixels are machine-gated by unit tests
 over the **extracted gap-semantics pure function** — the exact vs omitted span-total
-paths of predicate 3 **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
+paths of predicate 3 — **including a fractional exact-total case** (the span total rides
+the delta formatter) — **and** the partial-day disclosure of the `1 ∧ ¬2` path (the
 `partial day` tooltip/accessible-name content, equally pixel-invisible) must each have
 cases; (3) UI wiring that neither pixels nor the pure function witness — **every
 accessibility-tree carrier this contract mandates** — is machine-gated by **headless
@@ -753,6 +758,13 @@ canons, not this contract.
   gaps, which the bare-column predicate, the maximal-run hover and implementer note 6
   all forbid. Conforming rewrite: one column per day in the axis span `[min, max]`, the
   predicates' N domain. (Raised by Codex review round 25.)
+- **Span totals ride the delta formatter (round-26 review).** `spanTotal` is a sum of
+  `HostTotalCredit` deltas and can be fractional, but the delta formatter was scoped to
+  daily deltas and the span-total example read as integer-only — a fractional exact
+  total would have lost real output through the inherited integer format. Conforming
+  extension of the round-18 ruling: the single delta formatter covers every delta-valued
+  display, span totals included (with the `< 0.01` rule), and track 2 gains a fractional
+  exact-total case. (Raised by Codex review round 26.)
 
 ## Files
 
