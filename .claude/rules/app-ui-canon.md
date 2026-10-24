@@ -42,8 +42,9 @@ fresh ruling, not a quiet change. Framework behaviour behind them: `avalonia-fra
   and, where selection must survive scope round-trips, bind an identity key via `SelectedValue`.
   Never `Clear()` a list a selector is bound to just because it is hidden.
 - Icon-beside-label alignment uses the shared `Theming/InkAlignmentStyles.axaml` classes and the
-  `TextInkBox` collapse machinery; the design contract for the open optical-baseline work is
-  `docs/design` (#206/#216). Never "restore the old look" — it was a per-font accident.
+  `TextInkCollapseConverter` collapse machinery (`Views/TextInkBox.cs`); the design contract for
+  the open optical-baseline work (#206/#216) is `docs/design/alignment/RULING.md`. Never "restore
+  the old look" — it was a per-font accident.
 - Mica: nav + command-bar regions show the material; content is always opaque. Each data view
   wraps everything below its command bar in ONE opaque content region (per-element opacity leaks).
   The command-bar toggle overrides the dedicated `LatticeCommandBarSurfaceBrush`, never
