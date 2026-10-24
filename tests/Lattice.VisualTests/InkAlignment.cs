@@ -4,6 +4,8 @@ using System.Globalization;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.VisualTree;
 using Avalonia.Media;
 using Xunit;
 
@@ -139,6 +141,36 @@ internal static class InkAlignment
         // separate design question — the exclusion #180 already drew.
         && Sized(control.Width) && Sized(control.Height)
         && Math.Max(control.Width, control.Height) <= 2 * Math.Min(control.Width, control.Height);
+
+    /// <summary>
+    /// The glyph-sized box <paramref name="child"/> actually PAINTS, or null when it is not a mark
+    /// at all. Issue #204 — the Statistics overflow row seats a <c>CheckBox</c>, not a bare box.
+    ///
+    /// TWO SHAPES QUALIFY. A child that IS a box — the legend swatch, a PathIcon — is its own mark.
+    /// A child that WRAPS one resolves to the box its TEMPLATE paints: FluentAvalonia's CheckBox
+    /// draws a 20x20 <c>NormalRectangle</c> inside a 32 px control box, and that square is the only
+    /// thing the eye can seat on a band. Measuring the template's box rather than the control's is
+    /// deliberate even though the two centres coincide here (measured: box centre 16.000, control
+    /// centre 16.000) — the coincidence is the theme's to change, the painted square is not.
+    ///
+    /// WHAT THE WRAPPER MAY NOT DO is paint anything else: no text anywhere in its subtree, and
+    /// exactly one glyph-sized box in it. That is what keeps a toolbar button, a combo box and a
+    /// tinted pill — all of which carry content of their own, and whose boxes are theirs to lay out
+    /// — out of the net, which is the same exclusion the panel sweep states in prose.
+    /// </summary>
+    public static Control? MarkOf(Control child)
+    {
+        if (IsGlyphSizedMark(child))
+            return child;
+        if (child is not TemplatedControl)
+            return null;
+
+        var painted = child.GetVisualDescendants().OfType<Control>().Where(c => c.IsVisible).ToList();
+        if (painted.Any(c => c is TextBlock { Text.Length: > 0 }))
+            return null;
+        var marks = painted.Where(IsGlyphSizedMark).ToList();
+        return marks.Count == 1 ? marks[0] : null;
+    }
 
     private static bool Sized(double value) => value is >= 6 and <= 24;
 }

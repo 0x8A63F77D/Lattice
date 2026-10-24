@@ -12,6 +12,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Layout;
+using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -29,7 +30,7 @@ using static Lattice.Tests.HeadlessLayout;
 namespace Lattice.VisualTests;
 
 /// <summary>
-/// Issue #185 — the issue-#180 defect class OUTSIDE the data grids.
+/// Issues #185 and #204 — the issue-#180 defect class OUTSIDE the data grids.
 ///
 /// THE DEFECT is the one <see cref="StatusCellAlignmentTests"/> documents in full, and it is not
 /// specific to a grid cell: <c>VerticalAlignment="Center"</c> centres each child's LAYOUT box, and
@@ -45,20 +46,27 @@ namespace Lattice.VisualTests;
 /// Log has no freshness caption, which #185's site list assumed it did;</item>
 /// <item>the Tasks Computing button (a 16 px glyph and a 12 px chevron either side of a 13 px
 /// SemiBold label, so ONE label seats two marks of different sizes);</item>
-/// <item>the Statistics legend chips (a 12 px colour swatch beside the project name).</item>
+/// <item>the Statistics legend chips (a 12 px colour swatch beside the project name);</item>
+/// <item>the Statistics overflow flyout's rows (#204) — a checkbox and TWO text columns, which is
+/// a different question from all of the above and has its own assertion below.</item>
 /// </list>
 ///
 /// WHAT IS PROBED, AND WHY IT IS FOUND STRUCTURALLY. <see cref="Chrome.Probes"/> does not look for
-/// the marker class the fix applies; it looks for the CONSTRUCTION — a horizontal StackPanel,
-/// outside any grid row, whose visible children are glyph-sized marks and TextBlocks and nothing
-/// else. Every (mark, label) pairing in such a panel becomes a probe. So the sweep covers the
-/// defect class rather than the sites that were known to have it, and a new command bar built the
-/// same way joins the gate by existing. Panels holding a progress RULE are excluded by
-/// <see cref="InkAlignment.IsGlyphSizedMark"/> for the reason #180 gave: a 56x3 bar is not a
-/// glyph-sized mark and where it should sit against text is a separate design question.
+/// the marker class the fix applies; it looks for the CONSTRUCTION — a container laying glyph-sized
+/// marks out beside TextBlocks on one line, outside any data-grid row, holding nothing else. Every
+/// (mark, label) pairing in such a container becomes a probe. So the sweep covers the defect class
+/// rather than the sites that were known to have it, and a new command bar built the same way joins
+/// the gate by existing. Two container shapes are recognised, a horizontal StackPanel
+/// (<see cref="Chrome.PairPanels"/>) and a single grid ROW of columns
+/// (<see cref="Chrome.PairRows"/>, whose bounds that method justifies). Containers holding a
+/// progress RULE are excluded by <see cref="InkAlignment.IsGlyphSizedMark"/> for the reason #180
+/// gave: a 56x3 bar is not a glyph-sized mark and where it should sit against text is a separate
+/// design question.
 ///
-/// TWO LAYERS, as in the cell gate: an EXACT arranged assertion (no rasterizer in the loop, red
-/// pre-fix in every family) plus a rendered-ink sweep proving the painted pixels follow the layout.
+/// THREE LAYERS. An EXACT arranged assertion that each mark sits on its container's band (no
+/// rasterizer in the loop, red pre-fix in every family); the row-level assertion #204 added, that a
+/// container's text columns share ONE band; and a rendered-ink sweep proving the painted pixels
+/// follow the layout.
 ///
 /// NOT env-gated: these assert geometry, not committed screenshots, so they gate the fix in the
 /// normal <c>dotnet test</c> lane on every CI OS.
@@ -165,6 +173,49 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
     }
 
     /// <summary>
+    /// Issue #204's own invariant, and the one the #185 remedy would have broken: the text columns
+    /// of ONE ROW sit on ONE BAND. Their band boxes must coincide — same top, same bottom, in window
+    /// space — so they share a baseline whatever the face.
+    ///
+    /// THIS IS NOT RED PRE-FIX, and that is the point of writing it down. The overflow row's two
+    /// columns share a baseline today for the accidental reason that they share a LINE BOX: same
+    /// face, same size, both centred, so both are wrong by the same amount and the eye sees a level
+    /// row. That accident is exactly what the obvious fix destroys. Collapsing only the project name
+    /// onto its cap band would seat the checkbox correctly and leave the RAC column centring its
+    /// line box — one mark aligned, two columns of text at different heights. Giving each column its
+    /// OWN repertoire's band would do it again in the other direction: measured in Georgia, whose
+    /// old-style figures descend below the baseline and fall short of its capitals, a digit-banded
+    /// RAC sits 1.138 px off a cap-banded name.
+    ///
+    /// So this is a guard, deliberately, and it is falsifiable rather than decorative: swap
+    /// <c>wordAligned</c> for <c>digitAligned</c> on the RAC column in StatisticsView.axaml and it
+    /// goes red in Georgia.
+    /// </summary>
+    [AvaloniaFact]
+    public void Text_columns_of_a_row_share_one_band()
+    {
+        AssertAcrossFamilies((chrome, family, report) =>
+        {
+            foreach (var row in chrome.Rows)
+            {
+                string band = BandFor(row.Labels);
+                var first = BandBox(row.Labels[0], band, chrome.Root);
+                foreach (var column in row.Labels.Skip(1))
+                {
+                    var box = BandBox(column, band, chrome.Root);
+                    if (Math.Abs(box.Top - first.Top) > InkAlignment.ArrangedTolerance
+                        || Math.Abs(box.Bottom - first.Bottom) > InkAlignment.ArrangedTolerance)
+                        report($"{family} · '{row.Labels[0].Text}' | '{column.Text}': the row's columns " +
+                               $"do not share the '{band}' band — {first.Top:F3}..{first.Bottom:F3} " +
+                               $"against {box.Top:F3}..{box.Bottom:F3}, " +
+                               $"a {(box.Top + box.Bottom) / 2 - (first.Top + first.Bottom) / 2:+0.000;-0.000} px " +
+                               "baseline split. One row, one band.");
+                }
+            }
+        });
+    }
+
+    /// <summary>
     /// The rendered half: each mark's painted ink and its label's painted ink sit where the arranged
     /// band alignment says they should.
     ///
@@ -240,6 +291,11 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             $"  expected: {string.Join(", ", Chrome.ExpectedSites)}" + Environment.NewLine +
             $"  found:    {string.Join(", ", found)}");
 
+        // Same protection for the row sweep: with no multi-column row discovered the shared-band
+        // invariant (#204) would report a serene green over an empty set.
+        Assert.True(chrome.Rows.Count > 0,
+            "no multi-column row was discovered — the shared-band invariant would pass vacuously.");
+
         foreach (var family in InkAlignment.FamilyNames)
         {
             if (InkAlignment.Resolve(family) is not { } resolved)
@@ -270,18 +326,67 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         double MarkTop, double MarkBottom, double MarkCentre,
         double TextTop, double TextBottom, double TextCentre);
 
+    /// <summary>
+    /// A container laying marks and labels out on ONE line: the panel or grid row, every glyph-sized
+    /// mark it paints (with the child that owns each, for naming), and every label it lays out.
+    /// The unit of discovery, because the band question is the CONTAINER's, not any one pair's —
+    /// see <see cref="BandFor"/>.
+    /// </summary>
+    private readonly record struct Group(
+        Control Container,
+        IReadOnlyList<(Control Owner, Control Mark)> Marks,
+        IReadOnlyList<TextBlock> Labels);
+
+    /// <summary>
+    /// The band a container's text is read against — ONE band for the whole container, which is
+    /// issue #204's invariant and the reason it is asked here rather than of a single label.
+    ///
+    /// A row carrying words and figures side by side (the Statistics overflow row: a project name
+    /// and its RAC) has ONE baseline, so it has one band, and it is the WORD band whenever any
+    /// column carries words. Giving each column its own repertoire's band is what splits that
+    /// baseline: measured in Georgia, whose old-style figures descend below the baseline and fall
+    /// short of its capitals, a digit-banded RAC column sits 1.138 px off the cap-banded name
+    /// beside it — a mark misalignment traded for two columns of text at different heights.
+    ///
+    /// For a container with ONE label this is exactly the per-label rule the panel sweep has always
+    /// used: a label carrying no letter is figures and belongs on the digit band.
+    ///
+    /// DELIBERATELY NOT READ FROM THE CLASS the fix applies. An expectation taken from the class
+    /// would say "this site is aligned to the band it claims", which is true however wrongly the
+    /// class was chosen. Deriving it from the rendered repertoire keeps that choice under test.
+    /// </summary>
+    private static string BandFor(IEnumerable<TextBlock> labels) =>
+        labels.Any(label => (label.Text ?? "").Any(char.IsLetter))
+            ? TextInkCollapseConverter.WordBandFor(Strings.TaskStateRunning)
+            : TextInkCollapseConverter.DigitBand;
+
+    /// <summary>Window-space ink box of <paramref name="band"/> as <paramref name="text"/> would
+    /// draw it, at that label's own typeface and size.</summary>
+    private static (double Top, double Bottom) BandBox(TextBlock text, string band, Window window)
+    {
+        var ink = InkAlignment.InkOf(text, band);
+        double top = text.TranslatePoint(new Point(0, 0), window)!.Value.Y;
+        return (top + ink.Top, top + ink.Bottom);
+    }
+
     /// <summary>One mark-and-label pairing: the mark, the label, and the surface they are painted
-    /// on (the command bar, the pill, the chip) — which is the region the pixel sweep scans and
-    /// takes its background colour from.</summary>
+    /// on (the command bar, the pill, the chip, the flyout row) — which is the region the pixel
+    /// sweep scans and takes its background colour from.</summary>
     private sealed class Probe(
-        string label, Control mark, TextBlock text, StackPanel panel, Visual backdrop, Window window)
+        string label, Control mark, TextBlock text, IReadOnlyList<TextBlock> columns,
+        Control container, Visual backdrop, Window window)
     {
         public string Label { get; } = label;
         public Control Mark { get; } = mark;
         public TextBlock Text { get; } = text;
 
-        /// <summary>The panel holding the pair — the basis of the pixel sweep's scan band.</summary>
-        public StackPanel Panel { get; } = panel;
+        /// <summary>Every label the container lays out — this one included. The band is asked of
+        /// the whole set (<see cref="BandFor"/>), not of <see cref="Text"/> alone.</summary>
+        public IReadOnlyList<TextBlock> Columns { get; } = columns;
+
+        /// <summary>The panel or grid row holding the pair — the basis of the pixel sweep's scan
+        /// band.</summary>
+        public Control Container { get; } = container;
 
         public Visual Backdrop { get; } = backdrop;
 
@@ -292,26 +397,17 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
 
         public double MarkBoxCentre => Top(Mark) + Mark.Bounds.Height / 2;
 
-        /// <summary>
-        /// The band this site OUGHT to align to, derived from what is actually on screen: a label
-        /// carrying no letter is figures and belongs on the digit band, anything else is a word and
-        /// belongs on its UI script's band.
-        ///
-        /// DELIBERATELY NOT READ FROM THE CLASS the fix applies. An expectation taken from the class
-        /// would say "this site is aligned to the band it claims", which is true however wrongly the
-        /// class was chosen. Deriving it from the rendered repertoire keeps that choice under test.
-        /// </summary>
-        public string Band => (Text.Text ?? "").Any(char.IsLetter)
-            ? TextInkCollapseConverter.WordBandFor(Strings.TaskStateRunning)
-            : TextInkCollapseConverter.DigitBand;
+        /// <summary>The band this site OUGHT to align to — the CONTAINER's, see
+        /// <see cref="ChromeAlignmentTests.BandFor"/>.</summary>
+        public string Band => BandFor(Columns);
 
         /// <summary>Window-space centre of that band's ink, as arranged.</summary>
         public double BandCentre
         {
             get
             {
-                var ink = InkAlignment.InkOf(Text, Band);
-                return Top(Text) + (ink.Top + ink.Bottom) / 2;
+                var (top, bottom) = BandBox(Text, Band, window);
+                return (top + bottom) / 2;
             }
         }
 
@@ -343,6 +439,12 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             "EventLogView[IconCheckmarkFilled+Info]",
             "EventLogView[IconCheckmarkFilled+Warning]",
             "ProjectsView[IconWarningFilled+Updated 4 m ago]",
+            // The overflow flyout's rows (#204) — a Grid, not a StackPanel, and the construction the
+            // discovery sweep was extended to see. Each row pairs its checkbox with BOTH columns.
+            "StatisticsView[CheckBox+1,234]",
+            "StatisticsView[CheckBox+987]",
+            "StatisticsView[CheckBox+Rosetta@home]",
+            "StatisticsView[CheckBox+World Community Grid]",
             "StatisticsView[Panel+Einstein@Home]",
             "StatisticsView[Panel+LHC@home]",
             "TasksView[IconChevronDownRegular+Computing]",
@@ -354,10 +456,19 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             "TransfersView[IconWarningFilled+Updated 4 m ago]",
         ];
 
-        /// <summary>DIPs of scan band added above and below the holding panel. After the fix the
-        /// label's box IS its reference band, so its descenders paint outside the panel; six DIPs
-        /// clears them at every size these sites use (12-13 px text) without reaching a surface
-        /// edge. Clamped to the backdrop regardless, so it can never over-reach.</summary>
+        /// <summary>
+        /// DIPs of scan band added above and below the holding container. After the fix the label's
+        /// box IS its reference band, so its descenders paint outside the container; six DIPs clears
+        /// them at every size these sites use (12-14 px text) without reaching a surface edge.
+        /// Clamped to the backdrop regardless, so it can never over-reach.
+        ///
+        /// A STACKED container's NEIGHBOUR is the other thing this could over-reach into, and the
+        /// overflow flyout is the first site with one (#204): its rows are 3 DIPs of margin apart,
+        /// so a six-DIP inflation reaches exactly the next row's box edge — but a row's own ink
+        /// starts ~11 DIPs inside that box, and the scan only looks at the probed element's OWN
+        /// columns. Measured on the fixed tree, the widest extent read for a flyout row was
+        /// 9.502..23.000 against a 38 DIP pitch: no neighbour is in reach.
+        /// </summary>
         private const double Slack = 6;
 
         private const string StaleCaption = "Updated 4 m ago";
@@ -375,16 +486,24 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         private double _scaling = 1.0;
 
         private Chrome(Window window, HostStore store, HostMonitorManager manager, string[] tempFiles,
-            IReadOnlyList<Probe> probes)
+            IReadOnlyList<Probe> probes, IReadOnlyList<Group> rows)
         {
             _window = window;
             _store = store;
             _manager = manager;
             _tempFiles = tempFiles;
             Probes = probes;
+            Rows = rows;
         }
 
         public IReadOnlyList<Probe> Probes { get; }
+
+        /// <summary>Discovered containers laying out MORE THAN ONE label — the multi-column rows
+        /// whose shared baseline is issue #204's invariant.</summary>
+        public IReadOnlyList<Group> Rows { get; }
+
+        /// <summary>The window every probed element is measured against.</summary>
+        public Window Root => _window;
 
         /// <summary>Scripts this runner could not draw, so the caller can announce the gap.</summary>
         public IReadOnlyList<string> SkippedScripts => _skippedScripts;
@@ -468,51 +587,162 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
                 new StatisticsChipData("Einstein@Home", 0, 0)) { IsVisible = true });
             statistics.Chips.Add(new StatisticsLegendChip("https://lhcathome.cern.ch/",
                 new StatisticsChipData("LHC@home", 1, 1)) { IsVisible = true });
+
+            // Projects past the six-chip cap, which is what puts the "+N more" button on the legend
+            // row and rows in its flyout (#204's site). Two rows, and their text is chosen for ink
+            // shape rather than prose: one name without a descender and one with, so a band read off
+            // the live text could not survive the caption sweep.
+            statistics.HasOverflow = true;
+            statistics.OverflowLabel = "+2 more";
+            statistics.Overflow.Add(new StatisticsOverflowItem(
+                "https://boinc.bakerlab.org/rosetta/", new StatisticsOverflowData("Rosetta@home", "1,234", true)));
+            statistics.Overflow.Add(new StatisticsOverflowItem(
+                "https://www.worldcommunitygrid.org/", new StatisticsOverflowData("World Community Grid", "987", true)));
             Layout(window);
 
-            return new Chrome(window, store, manager, [hostsPath, uiPath], Discover(window));
+            // The overflow rows live in a FLYOUT, so nothing is realized — and nothing can be
+            // probed — until it is open. Headless popups render into the host window's own frame
+            // (MenuSeparatorVisualTests' finding), so the same capture that sweeps the five views
+            // sweeps these rows too. Settle, not a bare pump: the flyout opens with an entrance
+            // transition off the REAL clock.
+            var overflow = window.GetVisualDescendants().OfType<DropDownButton>()
+                .Single(button => button.IsEffectivelyVisible);
+            overflow.Flyout!.ShowAt(overflow);
+            Settle(window);
+
+            return new Chrome(window, store, manager, [hostsPath, uiPath], Discover(window),
+                Groups(window).Where(group => group.Labels.Count > 1).ToList());
         }
 
         /// <summary>
-        /// Every realized panel built as "glyph-sized marks and labels, laid out horizontally and
-        /// centred" — the construction under test, found structurally rather than by the class the
-        /// fix applies, so the gate covers the defect class and not just today's sites. Grid CELLS
-        /// are excluded: they are the same defect but they have their own fixture and their own
-        /// gate (<see cref="StatusCellAlignmentTests"/>), which drives row state this one does not.
+        /// Every realized container built as "glyph-sized marks and labels, laid out on one line
+        /// and centred" — the construction under test, found structurally rather than by the class
+        /// the fix applies, so the gate covers the defect class and not just today's sites. Grid
+        /// CELLS are excluded: they are the same defect but they have their own fixture and their
+        /// own gate (<see cref="StatusCellAlignmentTests"/>), which drives row state this one does
+        /// not.
         /// </summary>
         private static IReadOnlyList<Probe> Discover(Window window)
         {
             var probes = new List<Probe>();
             var icons = IconNames();
-            foreach (var panel in window.GetVisualDescendants().OfType<StackPanel>())
+            foreach (var group in Groups(window))
             {
-                if (panel.Orientation != Orientation.Horizontal) continue;
-                if (!panel.IsEffectivelyVisible) continue;
-                if (panel.GetVisualAncestors().OfType<DataGridRow>().Any()) continue;
-
-                var visible = panel.Children.Where(child => child.IsVisible).ToList();
-                var marks = visible.Where(InkAlignment.IsGlyphSizedMark).ToList();
-                var labels = visible.OfType<TextBlock>().ToList();
-                // Marks and labels and NOTHING else: a bar holding buttons and combo boxes is a
-                // toolbar, not this construction, and its children carry boxes of their own.
-                if (marks.Count == 0 || labels.Count == 0 || visible.Count != marks.Count + labels.Count)
-                    continue;
-
-                var view = panel.GetVisualAncestors().OfType<UserControl>().First();
-                var backdrop = Backdrop(panel);
-                foreach (var mark in marks)
-                    foreach (var label in labels)
+                var backdrop = Backdrop(group.Container);
+                foreach (var (owner, mark) in group.Marks)
+                    foreach (var label in group.Labels)
                         probes.Add(new Probe(
-                            $"{view.GetType().Name}[{Name(mark, icons)}+{label.Text}]",
-                            mark, label, panel, backdrop, window));
+                            $"{View(group.Container)}[{Name(owner, icons)}+{label.Text}]",
+                            mark, label, group.Labels, group.Container, backdrop, window));
             }
             return probes.OrderBy(p => p.Label, StringComparer.Ordinal).ToList();
         }
 
-        /// <summary>A mark's name for the failure message: the icon resource it draws, or its type
-        /// when it is a composed box (the legend swatch).</summary>
-        private static string Name(Control mark, Dictionary<Geometry, string> icons) =>
-            mark is PathIcon icon && icons.TryGetValue(icon.Data!, out var key) ? key : mark.GetType().Name;
+        /// <summary>
+        /// The view a container belongs to, for the site name. The VISUAL tree answers it for
+        /// everything laid out inside a view — and cannot answer it for a flyout: a popup is hosted
+        /// in the window's own overlay layer, which is a sibling of the view content, so the row's
+        /// visual ancestors run straight past every UserControl to the window. Its LOGICAL parent
+        /// chain still runs back through the flyout to the button that owns it, which is where the
+        /// view is (#204).
+        /// </summary>
+        private static string View(Control container) =>
+            (container.GetVisualAncestors().OfType<UserControl>().FirstOrDefault()
+             ?? container.GetLogicalAncestors().OfType<UserControl>().FirstOrDefault())
+            ?.GetType().Name
+            ?? throw new InvalidOperationException(
+                $"a discovered {container.GetType().Name} belongs to no view — neither its visual nor " +
+                "its logical ancestors reach a UserControl, so the site cannot be named.");
+
+        /// <summary>Every discovered container, panels and grid rows alike, in one sequence.</summary>
+        internal static IEnumerable<Group> Groups(Window window) => PairPanels(window).Concat(PairRows(window));
+
+        /// <summary>
+        /// The horizontal-StackPanel form of the construction: a bar, a pill, a chip.
+        /// </summary>
+        private static IEnumerable<Group> PairPanels(Window window)
+        {
+            foreach (var panel in window.GetVisualDescendants().OfType<StackPanel>())
+            {
+                if (panel.Orientation != Orientation.Horizontal) continue;
+                if (!Eligible(panel)) continue;
+                if (Partition(panel, panel.Children.Where(child => child.IsVisible).ToList()) is { } group)
+                    yield return group;
+            }
+        }
+
+        /// <summary>
+        /// The GRID form (issue #204): the Statistics overflow flyout lays its checkbox, project
+        /// name and RAC figure out as three columns of one grid row, so the StackPanel sweep above
+        /// never saw it and the fix would have shipped ungated.
+        ///
+        /// THE PREDICATE, and why each clause is in it. "A Grid row" on its own is a far broader net
+        /// than "a panel of marks and labels" — Grid is this app's general layout container, and an
+        /// unqualified sweep would drag in every view's page skeleton, every control template's
+        /// root, and the two grids inside each CheckBox's own template. What is wanted is a ROW OF
+        /// COLUMNS holding a mark beside text, so the net is exactly that:
+        ///
+        /// <list type="bullet">
+        /// <item>ONE ROW (<c>RowDefinitions</c> empty or single, every child in row 0, no row span)
+        /// — a multi-row grid is a page skeleton, and "what baseline does this row share" is not a
+        /// question one can ask of it;</item>
+        /// <item>TWO OR MORE COLUMNS, each child in its OWN column with no column span — this is
+        /// what makes it a row of columns rather than a stack of overlaid children, and it is what
+        /// excludes the CheckBox template's inner grids (which overlay their box and check glyph in
+        /// column 0);</item>
+        /// <item>marks and labels and NOTHING ELSE, exactly as the panel sweep requires — a row
+        /// holding a button or a combo box is a form, not this construction.</item>
+        /// </list>
+        ///
+        /// The net is deliberately not widened to grids whose children merely happen to sit side by
+        /// side without column definitions: that shape is a stack, and its own sweep already covers
+        /// it.
+        /// </summary>
+        private static IEnumerable<Group> PairRows(Window window)
+        {
+            foreach (var grid in window.GetVisualDescendants().OfType<Grid>())
+            {
+                if (!Eligible(grid)) continue;
+                if (grid.RowDefinitions.Count > 1 || grid.ColumnDefinitions.Count < 2) continue;
+
+                var visible = grid.Children.Where(child => child.IsVisible).ToList();
+                if (visible.Any(child =>
+                        Grid.GetRow(child) != 0 || Grid.GetRowSpan(child) != 1 || Grid.GetColumnSpan(child) != 1))
+                    continue;
+                if (visible.Select(Grid.GetColumn).Distinct().Count() != visible.Count) continue;
+
+                if (Partition(grid, visible) is { } group)
+                    yield return group;
+            }
+        }
+
+        /// <summary>Realized, on screen, and outside the data grids — which have their own gate.</summary>
+        private static bool Eligible(Control container) =>
+            container.IsEffectivelyVisible && !container.GetVisualAncestors().OfType<DataGridRow>().Any();
+
+        /// <summary>
+        /// Splits a container's visible children into marks and labels, or rejects the container.
+        /// Marks and labels and NOTHING else: a bar holding buttons and combo boxes is a toolbar,
+        /// not this construction, and its children carry boxes of their own.
+        /// </summary>
+        private static Group? Partition(Control container, IReadOnlyList<Control> visible)
+        {
+            var marks = new List<(Control Owner, Control Mark)>();
+            var labels = new List<TextBlock>();
+            foreach (var child in visible)
+            {
+                if (child is TextBlock label) labels.Add(label);
+                else if (InkAlignment.MarkOf(child) is { } mark) marks.Add((child, mark));
+                else return null;
+            }
+            return marks.Count > 0 && labels.Count > 0 ? new Group(container, marks, labels) : null;
+        }
+
+        /// <summary>A mark's name for the failure message: the icon resource it draws, or the type
+        /// of the child that owns it — the composed box for the legend swatch, the control for a
+        /// mark a template paints (the overflow row's CheckBox).</summary>
+        private static string Name(Control owner, Dictionary<Geometry, string> icons) =>
+            owner is PathIcon icon && icons.TryGetValue(icon.Data!, out var key) ? key : owner.GetType().Name;
 
         /// <summary>
         /// Reverse index of the shared icon dictionary, so a failure names the glyph the designer
@@ -557,8 +787,8 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
         /// band (see <see cref="MeasureRenderedInk"/>), which inflates around the panel and CLAMPS
         /// to this surface, not to the choice of surface.
         /// </summary>
-        private static Visual Backdrop(StackPanel panel) =>
-            panel.GetVisualAncestors().FirstOrDefault(v => v is Border or TemplatedControl) ?? panel;
+        private static Visual Backdrop(Control container) =>
+            container.GetVisualAncestors().FirstOrDefault(v => v is Border or TemplatedControl) ?? container;
 
         /// <summary>Re-renders every probed label in <paramref name="family"/>. Set on the text
         /// elements, so the margin binding sees the same change an inherited font change would
@@ -659,7 +889,7 @@ public class ChromeAlignmentTests(ITestOutputHelper output)
             foreach (var probe in Probes)
             {
                 var surface = Device(probe.Backdrop);
-                var band = Device(probe.Panel);
+                var band = Device(probe.Container);
 
                 // The scan band is the PANEL, inflated for the ink that paints outside it — after
                 // the fix the label's box IS its band, so descenders fall below the box and a
