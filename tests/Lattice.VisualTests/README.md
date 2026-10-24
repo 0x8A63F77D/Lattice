@@ -16,8 +16,10 @@ distributions needed to set a future enforcement threshold. Coverage is explicit
   render of a theme differs from later ones (dark: ~2628 px), so warming the caches makes captures
   bit-stable.
 - Verifies each theme's PNG through Verify's received/verified lifecycle, compared by a **tolerant
-  dual-tolerance comparer** ([`TolerantPngComparer`](TolerantPngComparer.cs)) built on
-  `Codeuctivity.ImageSharpCompare`: a mean-error band **and** a supra-tolerance pixel-error-count
+  dual-tolerance comparer** ([`TolerantPngComparer`](TolerantPngComparer.cs)) whose metrics
+  ([`GateMetrics`](GateMetrics.cs)) are computed on SkiaSharp with the definitions of
+  `Codeuctivity.ImageSharpCompare`, the engine it was calibrated on (replaced in #222): a
+  mean-error band **and** a supra-tolerance pixel-error-count
   guard (per-pixel shift tolerance ignores single-LSB AA noise). On a mismatch it emits a
   **diff-mask PNG** to the artifacts dir.
 - [`CalibrationHarness`](CalibrationHarness.cs) renders the view N times per theme and reports

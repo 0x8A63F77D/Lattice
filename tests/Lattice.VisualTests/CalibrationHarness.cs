@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using Avalonia.Headless.XUnit;
 using Avalonia.Styling;
-using SixLabors.ImageSharp;
 using Xunit;
 
 namespace Lattice.VisualTests;
@@ -58,7 +57,7 @@ public class CalibrationHarness
         // Pin geometry: every capture is exactly the expected device-pixel size.
         foreach (var png in renders)
         {
-            using var img = Image.Load(png);
+            var img = PngRaster.Decode(png);
             Assert.Equal(VisualFixture.Width, img.Width);
             Assert.Equal(VisualFixture.Height, img.Height);
         }
